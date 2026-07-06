@@ -29,7 +29,7 @@ class SettingsScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Cài đặt')),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 110), // chừa chỗ dock nổi
         children: [
           _ProfileCard(
               name: name,

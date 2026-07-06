@@ -44,15 +44,24 @@ class ChapterNotifier {
 
   void start() {
     stop();
-    _channel = sb
-        .channel('chapter-notify')
-        .onPostgresChanges(
+    final ch = sb.channel('chapter-notify').onPostgresChanges(
           event: PostgresChangeEvent.update,
           schema: 'public',
           table: 'chapters',
           callback: _onUpdate,
-        )
-        .subscribe();
+        );
+    _channel = ch;
+    // Kênh rớt (mạng chập chờn/app nền lâu) mà không nối lại = "không bao giờ
+    // thấy thông báo". Lỗi/đóng → thử nối lại sau 5s (chỉ khi chưa bị stop chủ động).
+    ch.subscribe((status, [_]) {
+      if ((status == RealtimeSubscribeStatus.channelError ||
+              status == RealtimeSubscribeStatus.closed) &&
+          identical(_channel, ch)) {
+        Future.delayed(const Duration(seconds: 5), () {
+          if (identical(_channel, ch)) start();
+        });
+      }
+    });
   }
 
   void stop() {

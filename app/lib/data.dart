@@ -532,6 +532,29 @@ final libraryProvider = FutureProvider.autoDispose<List<Rec>>((ref) async {
   );
 });
 
+/// Thông báo: chương của truyện trong TỦ SÁCH vừa dịch xong (7 ngày gần đây).
+/// Pull-based — luôn xem lại được, không phụ thuộc app có đang mở lúc dịch xong.
+final notificationsProvider = FutureProvider.autoDispose<List<Rec>>((ref) async {
+  ref.watch(authStateProvider);
+  if (sb.auth.currentUser == null) return [];
+  final lib = await sb.from('library').select('novel_id');
+  final ids = [for (final r in lib) r['novel_id'] as int];
+  if (ids.isEmpty) return [];
+  final since =
+      DateTime.now().toUtc().subtract(const Duration(days: 7)).toIso8601String();
+  return List<Rec>.from(
+    await sb
+        .from('chapters')
+        .select('chapter_index, translated_at, novel_id, '
+            'novels(title_vi, title_zh, cover_url)')
+        .inFilter('novel_id', ids)
+        .eq('translation_status', 'done')
+        .gte('translated_at', since)
+        .order('translated_at', ascending: false)
+        .limit(100),
+  );
+});
+
 final inLibraryProvider = FutureProvider.autoDispose.family<bool, int>((
   ref,
   novelId,

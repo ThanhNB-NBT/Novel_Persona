@@ -16,12 +16,12 @@ class QueueScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Hàng đợi dịch')),
       body: q.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
+        loading: () => const AppLoading(),
         error: (e, _) => Center(child: Text('Lỗi: $e')),
         data: (state) => RefreshIndicator(
           onRefresh: () async => ref.invalidate(translateQueueProvider),
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 110), // chừa chỗ dock nổi
             children: [
               _Summary(state),
               const SizedBox(height: 8),
@@ -34,11 +34,21 @@ class QueueScreen extends ConsumerWidget {
                   ),
                 )
               else ...[
-                for (final g in _groupByNovel(state.active))
+                if (state.active.isNotEmpty) ...[
+                  // header đồng kiểu với "Vừa dịch xong" bên dưới
                   Padding(
-                    padding: const EdgeInsets.only(top: 12),
-                    child: _NovelQueueCard(g),
+                    padding: const EdgeInsets.fromLTRB(4, 18, 0, 6),
+                    child: Row(children: [
+                      Icon(Icons.hourglass_bottom_rounded,
+                          size: 18, color: Theme.of(context).colorScheme.primary),
+                      const SizedBox(width: 8),
+                      Expanded(
+                          child: Text('Hàng đợi',
+                              style: Theme.of(context).textTheme.titleMedium)),
+                    ]),
                   ),
+                  for (final g in _groupByNovel(state.active)) _NovelQueueCard(g),
+                ],
                 if (state.recentDone.isNotEmpty) _RecentDone(state.recentDone),
               ],
             ],
@@ -232,49 +242,37 @@ class _NovelQueueCard extends StatelessWidget {
     // màu/icon theo trạng thái ưu thế: đang dịch > đang tải > chờ
     final accent = busy ? cs.primary : (loading ? cs.tertiary : cs.onSurfaceVariant);
 
+    // dòng phẳng đồng kiểu "Vừa dịch xong": bìa nhỏ + tên + trạng thái, không đóng khung
     return InkWell(
       onTap: () => _showChapters(context, g), // bấm → list chương đang dịch/chờ của truyện
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: cs.surface,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: cs.outlineVariant),
-        ),
-        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Cover(url: g.novel['cover_url'], width: 46, aspect: 1.36, label: title),
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Row(children: [
+          Cover(url: g.novel['cover_url'], width: 40, aspect: 1.36, label: title),
           const SizedBox(width: 12),
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: t.titleMedium),
-              const SizedBox(height: 4),
-              Row(children: [
-                if (busy) ...[
-                  SizedBox(
-                      width: 12, height: 12,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: cs.primary)),
-                ] else if (loading) ...[
-                  Icon(Icons.cloud_download_rounded, size: 15, color: cs.tertiary),
-                ] else ...[
-                  Icon(Icons.schedule_rounded, size: 14, color: cs.onSurfaceVariant),
-                ],
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(status,
-                      maxLines: 1, overflow: TextOverflow.ellipsis,
-                      style: t.labelMedium?.copyWith(
-                          color: accent, fontWeight: FontWeight.w600)),
-                ),
-              ]),
-              if (total > 0) ...[
-                const SizedBox(height: 10),
-                ProgressRibbon(done / total),
-                const SizedBox(height: 4),
-                Text('$done / $total chương đã dịch', style: t.bodySmall),
-              ],
+              Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: t.titleSmall),
+              const SizedBox(height: 2),
+              Text(status,
+                  maxLines: 1, overflow: TextOverflow.ellipsis,
+                  style: t.bodySmall?.copyWith(color: accent)),
             ]),
           ),
+          const SizedBox(width: 8),
+          if (busy)
+            SizedBox(
+                width: 14, height: 14,
+                child: CircularProgressIndicator(strokeWidth: 2, color: cs.primary))
+          else
+            Icon(loading ? Icons.cloud_download_rounded : Icons.schedule_rounded,
+                size: 16, color: accent),
+          if (total > 0) ...[
+            const SizedBox(width: 8),
+            Text('$done/$total',
+                style: t.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
+          ],
         ]),
       ),
     );

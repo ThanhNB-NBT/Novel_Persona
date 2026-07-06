@@ -269,9 +269,12 @@ class _NovelJobsRow extends StatelessWidget {
         .length;
     final pending = jobs.where((j) => j['status'] == 'pending').length - crawling;
     final failed = jobs.where((j) => j['status'] == 'failed').length;
+    // Tiến độ tải nguồn: chương có content_zh (running + pending thường) / tổng.
+    final haveSrc = running + pending;
+    final totalSrc = haveSrc + crawling;
     final parts = [
       if (running > 0) '$running đang dịch',
-      if (crawling > 0) '$crawling đang crawl nguồn',
+      if (crawling > 0) 'nguồn $haveSrc/$totalSrc',
       if (pending > 0) '$pending chờ dịch',
       if (failed > 0) '$failed lỗi',
     ];
@@ -285,7 +288,22 @@ class _NovelJobsRow extends StatelessWidget {
     return ListTile(
       leading: Icon(icon, color: color),
       title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: t.titleMedium),
-      subtitle: Text(parts.join(' · '), style: t.labelSmall),
+      subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(parts.join(' · '), style: t.labelSmall),
+        if (crawling > 0)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(2),
+              child: LinearProgressIndicator(
+                value: totalSrc > 0 ? haveSrc / totalSrc : null,
+                minHeight: 3,
+                color: cs.tertiary,
+                backgroundColor: cs.tertiary.withValues(alpha: 0.15),
+              ),
+            ),
+          ),
+      ]),
       trailing: const Icon(Icons.chevron_right_rounded),
       onTap: () => _showNovelJobs(context, ref, novelId, title),
     );
@@ -383,9 +401,31 @@ class _JobRow extends StatelessWidget {
       trailing: PopupMenuButton<String>(
         onSelected: (v) async {
           final id = j['id'] as int;
+          if (v == 'cancel') {
+            // dialog trước mọi await → không dùng context qua async gap
+            final ok = await showDialog<bool>(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                title: const Text('Huỷ job này?'),
+                content: const Text(
+                    'Job bị xoá khỏi hàng đợi, chương trở về "chưa dịch". '
+                    'Không mất gì đã dịch xong — có thể xếp dịch lại bất cứ lúc nào '
+                    'từ trang truyện.'),
+                actions: [
+                  TextButton(
+                      onPressed: () => Navigator.pop(ctx, false),
+                      child: const Text('Thôi')),
+                  FilledButton(
+                      onPressed: () => Navigator.pop(ctx, true),
+                      child: const Text('Huỷ job')),
+                ],
+              ),
+            );
+            if (ok != true) return;
+            await cancelJob(id, j['chapter_id'] as int?);
+          }
           if (v == 'retry') await retryJob(id);
           if (v == 'top') await reprioritizeJob(id, 1);
-          if (v == 'cancel') await cancelJob(id, j['chapter_id'] as int?);
           ref.invalidate(adminJobsProvider);
           ref.invalidate(translateQueueProvider); // hàng đợi đọc từ chapters → refetch cho khớp
         },

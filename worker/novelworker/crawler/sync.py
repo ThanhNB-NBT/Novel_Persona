@@ -8,7 +8,7 @@ import unicodedata
 
 from .. import db
 from ..config import settings
-from .base import SourceAdapter
+from .base import ChapterNotReady, SourceAdapter
 
 log = logging.getLogger(__name__)
 
@@ -96,6 +96,27 @@ def backfill_dedup_keys() -> int:
     return len(rows)
 
 
+def reader_fetch_waiting() -> bool:
+    """Có chương NGƯỜI ĐỌC chờ (job ưu tiên cao hơn nền) mà chưa tải nguồn → việc bảo trì
+    (discovery/refresh, có thể cả tiếng) phải NHƯỜNG: dừng sớm, chu kỳ sau làm nốt.
+    Không có guard này, vòng crawl 1 luồng để 'nguồn 0/1' treo suốt chu kỳ discovery."""
+    jobs = (
+        db.sb().table("translation_jobs").select("chapter_id")
+        .eq("type", "chapter").eq("status", "pending")
+        .lt("priority", settings.prio_idle)
+        .not_.is_("chapter_id", "null")
+        .limit(50).execute()
+    ).data or []
+    ids = [j["chapter_id"] for j in jobs]
+    if not ids:
+        return False
+    n = (
+        db.sb().table("chapters").select("id", count="exact")
+        .in_("id", ids).is_("content_zh", "null").limit(1).execute()
+    ).count or 0
+    return n > 0
+
+
 _STORAGE_COVERS_MARK = "/storage/v1/object/public/covers/"
 
 
@@ -160,6 +181,9 @@ def discover_latest(adapter: SourceAdapter, max_new: int = 50) -> None:
     for cand in cands:
         if added >= max_new:
             break
+        if reader_fetch_waiting():
+            log.info("Discovery %s: nhường chỗ tải chương người đọc (đã thêm %d)", adapter.name, added)
+            break
         if cand.source_novel_id in known:
             continue
         try:
@@ -209,6 +233,9 @@ def discover_ranking(adapter: SourceAdapter, max_new: int = 30) -> None:
             continue
         if added >= max_new:
             continue  # hết quota thêm mới nhưng vẫn quét nốt để cập nhật rank truyện đã có
+        if reader_fetch_waiting():
+            log.info("Ranking %s: nhường chỗ tải chương người đọc (đã thêm %d)", adapter.name, added)
+            break
         try:
             meta = adapter.fetch_novel_meta(source_novel_id)
         except Exception:
@@ -348,6 +375,9 @@ def sync_followed_novels(adapter: SourceAdapter) -> None:
         nv = row["novels"]
         if nv["id"] in seen:
             continue
+        if reader_fetch_waiting():
+            log.info("Sync tủ sách %s: nhường chỗ tải chương người đọc", adapter.name)
+            break
         seen.add(nv["id"])
         try:
             n = sync_chapter_list(adapter, nv["id"], nv["source_novel_id"])
@@ -375,8 +405,12 @@ def refresh_canonical_updates(adapter: SourceAdapter, limit: int) -> None:
         .order("last_checked_at", desc=False, nullsfirst=True)  # chưa soi/lâu nhất trước
         .limit(limit).execute()
     ).data or []
-    for nv in rows:
-        db.heartbeat("crawler", note=f"soi mục lục novel {nv['id']}")
+    for i, nv in enumerate(rows):
+        if reader_fetch_waiting():
+            log.info("Refresh %s: nhường chỗ tải chương người đọc (đã soi %d/%d)",
+                     adapter.name, i, len(rows))
+            break
+        db.heartbeat("crawler", note=f"soi mục lục novel {nv['id']} ({i + 1}/{len(rows)})")
         try:
             n = sync_chapter_list(adapter, nv["id"], nv["source_novel_id"])
             if n:
@@ -419,17 +453,28 @@ def ensure_chapters_fetched(adapter: SourceAdapter, novel_id: int) -> None:
         .order("chapter_index")
         .execute()
     ).data or []
-    for ch in rows:
+    for i, ch in enumerate(rows):
         if not ch["source_chapter_id"]:
             continue
-        db.heartbeat("crawler", note=f"tải chương {ch['chapter_index']} novel {novel_id}")
+        db.heartbeat("crawler",
+                     note=f"tải chương {ch['chapter_index']} novel {novel_id} ({i + 1}/{len(rows)})")
         try:
             content = adapter.fetch_chapter(ch["source_chapter_id"])
             db.save_chapter_raw(ch["id"], content)
             log.info("Đã tải chương %s (novel %s)", ch["chapter_index"], novel_id)
-        except Exception:
+        except ChapterNotReady as e:
+            # Lỗi TẠM: nguồn đã liệt kê chương nhưng trang chưa sinh → giữ queued,
+            # vòng crawl sau thử lại. ponytail: nếu nguồn không bao giờ sinh trang,
+            # chương treo queued mãi — cần TTL đánh failed sau N ngày nếu thành vấn đề.
+            log.info("Chương %s chưa sẵn trên nguồn — thử lại vòng sau (%s)", ch["id"], e)
+        except Exception as e:
             # Lỗi tải (đổi cấu trúc/mạng): đánh dấu failed để thôi retry mỗi vòng crawl.
             db.sb().table("chapters").update(
                 {"translation_status": "failed"}).eq("id", ch["id"]).execute()
+            # Job dịch kèm chương cũng phải failed — để pending là job "kẹt" mãi:
+            # translator không claim (thiếu content_zh), admin retry lại chỉ reset job failed.
+            db.sb().table("translation_jobs").update(
+                {"status": "failed", "error": f"crawl: {e}"[:500]}
+            ).eq("chapter_id", ch["id"]).eq("status", "pending").execute()
             log.exception("Lỗi tải chương %s → failed", ch["id"])
         time.sleep(1.5)

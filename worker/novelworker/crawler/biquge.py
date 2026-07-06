@@ -22,7 +22,7 @@ import re
 from datetime import datetime
 from html import unescape
 
-from .base import ChapterRef, NovelMeta, SourceAdapter
+from .base import ChapterNotReady, ChapterRef, NovelMeta, SourceAdapter
 
 log = logging.getLogger(__name__)
 
@@ -143,6 +143,12 @@ class BiqugeAdapter(SourceAdapter):
         cid = re.escape(self._content_id)
         m = re.search(r'<div[^>]*\bid=["\']' + cid + r'["\'][^>]*>(.*?)</div>', html, re.S)
         if not m:
+            # Chương mới nhất: mục lục đã liệt kê nhưng trang chưa sinh → site redirect
+            # về trang truyện (nhận diện qua div#list của mục lục). Lỗi TẠM, không phải
+            # đổi cấu trúc — kiểm chứng shuhaige 2026-07.
+            if re.search(r'<div[^>]*\bid=["\']list["\']', html):
+                raise ChapterNotReady(
+                    f"Chương {source_chapter_id} ({self.name}) chưa có trang trên nguồn")
             raise ValueError(f"Không thấy nội dung chương {source_chapter_id} ({self.name}) — đổi cấu trúc?")
         # <br> (shuhaige) hoặc <p>…</p> (vài clone) đều là ranh giới đoạn → đổi thành
         # xuống dòng trước khi strip tag, tránh dính đoạn thành khối chữ liền.

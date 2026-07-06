@@ -13,6 +13,7 @@ import 'screens/account/edit_profile.dart';
 import 'screens/admin/errors.dart';
 import 'screens/novel/glossary.dart';
 import 'screens/account/login.dart';
+import 'screens/library/notifications.dart';
 import 'screens/library/offline_library.dart';
 import 'screens/novel/novel_detail.dart';
 import 'screens/reader/reader.dart';
@@ -31,6 +32,8 @@ Future<void> main() async {
   AppErrorLog.install(); // bắt lỗi runtime → xem ở màn "Nhật ký lỗi"
   await initNotifications();
   chapterNotifier.start(); // thông báo khi chương trong tủ sách dịch xong
+  // đăng nhập/xuất → nối lại kênh realtime (kênh mở trước khi login không mang auth)
+  sb.auth.onAuthStateChange.listen((_) => chapterNotifier.start());
   runApp(const ProviderScope(child: NovelApp()));
 }
 
@@ -40,6 +43,7 @@ final _router = GoRouter(routes: [
   GoRoute(path: '/search', builder: (_, _) => const SearchScreen()),
   GoRoute(path: '/profile/edit', builder: (_, _) => const EditProfileScreen()),
   GoRoute(path: '/offline', builder: (_, _) => const OfflineLibraryScreen()),
+  GoRoute(path: '/notifications', builder: (_, _) => const NotificationsScreen()),
   GoRoute(path: '/errors', builder: (_, _) => const ErrorLogScreen()),
   GoRoute(path: '/admin', builder: (_, _) => const AdminScreen()),
   GoRoute(
@@ -90,7 +94,64 @@ class NovelApp extends ConsumerWidget {
       theme: lightTheme,
       darkTheme: darkTheme,
       themeMode: switch (mode) { 1 => ThemeMode.light, 2 => ThemeMode.dark, _ => ThemeMode.system },
+      // Đổi theme TỨC THỜI (1 frame) — lerp theme theo từng frame là nguồn khựng
+      // (cả cây rebuild mỗi frame). Cái "êm" giao cho lớp scrim bên dưới lo.
+      themeAnimationDuration: Duration.zero,
+      builder: (_, child) => _ThemeSwitchScrim(child: child!),
       routerConfig: _router,
     );
+  }
+}
+
+/// Che khoảnh khắc đổi sáng/tối: phủ lớp tối mờ lóe lên nhanh rồi tan chậm.
+/// Theme swap 1 frame dưới lớp phủ → không lóe trắng, không khựng kéo dài.
+class _ThemeSwitchScrim extends StatefulWidget {
+  final Widget child;
+  const _ThemeSwitchScrim({required this.child});
+  @override
+  State<_ThemeSwitchScrim> createState() => _ThemeSwitchScrimState();
+}
+
+class _ThemeSwitchScrimState extends State<_ThemeSwitchScrim>
+    with SingleTickerProviderStateMixin {
+  late final _ctrl =
+      AnimationController(vsync: this, duration: const Duration(milliseconds: 420));
+  late final _alpha = TweenSequence<double>([
+    TweenSequenceItem(
+        tween: Tween(begin: 0.0, end: 0.3).chain(CurveTween(curve: Curves.easeOut)),
+        weight: 30),
+    TweenSequenceItem(
+        tween: Tween(begin: 0.3, end: 0.0).chain(CurveTween(curve: Curves.easeIn)),
+        weight: 70),
+  ]).animate(_ctrl);
+  Brightness? _last;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final b = Theme.of(context).brightness;
+    if (_last != null && b != _last) _ctrl.forward(from: 0);
+    _last = b;
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(children: [
+      widget.child,
+      IgnorePointer(
+        child: AnimatedBuilder(
+          animation: _ctrl,
+          builder: (_, _) => _ctrl.isAnimating
+              ? Container(color: Colors.black.withValues(alpha: _alpha.value))
+              : const SizedBox.shrink(),
+        ),
+      ),
+    ]);
   }
 }

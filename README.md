@@ -105,7 +105,7 @@ flutter run -d emulator-5554 --dart-define-from-file=.env
 ```
 
 Máy thật: bật USB debugging, cắm cáp, `flutter devices` lấy device id rồi
-`flutter run -d <id> --dart-define-from-file=.env`.
+`flutter run -d 1e2fb47 --dart-define-from-file=.env`.
 
 Tài khoản demo: xem `worker/seed_users.py` (đăng ký trong app đã tắt).
 Tài khoản admin có màn **Quản trị** trong Cài đặt: thống kê kho, hàng đợi worker,

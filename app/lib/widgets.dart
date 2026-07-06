@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -127,6 +128,69 @@ void translateRangeDialog(BuildContext context, WidgetRef ref, int novelId,
       ],
     ),
   );
+}
+
+/// Logo GT (bản xoá nền) tự nhuộm theo theme: mực đậm khi sáng, sáng khi tối —
+/// một asset dùng được cả 2 chế độ, không cần đổi file.
+class BrandLogo extends StatelessWidget {
+  final double height;
+  const BrandLogo({super.key, this.height = 40});
+  @override
+  Widget build(BuildContext context) {
+    return Image.asset('assets/icon/gt_white.png',
+        height: height,
+        color: Theme.of(context).colorScheme.onSurface,
+        filterQuality: FilterQuality.medium);
+  }
+}
+
+/// Trạng thái đang tải toàn màn: logo xoá nền + vòng quay.
+class AppLoading extends StatelessWidget {
+  const AppLoading({super.key});
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        const BrandLogo(height: 64),
+        const SizedBox(height: 20),
+        SizedBox(
+            width: 22, height: 22,
+            child: CircularProgressIndicator(
+                strokeWidth: 2.5, color: Theme.of(context).colorScheme.primary)),
+      ]),
+    );
+  }
+}
+
+/// Ô bấm được kiểu NEO: co nhẹ khi nhấn (spring press) + haptic.
+class TapScale extends StatefulWidget {
+  final Widget child;
+  final VoidCallback onTap;
+  const TapScale({super.key, required this.child, required this.onTap});
+  @override
+  State<TapScale> createState() => _TapScaleState();
+}
+
+class _TapScaleState extends State<TapScale> {
+  bool _held = false;
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () {
+        HapticFeedback.selectionClick();
+        widget.onTap();
+      },
+      onTapDown: (_) => setState(() => _held = true),
+      onTapUp: (_) => setState(() => _held = false),
+      onTapCancel: () => setState(() => _held = false),
+      child: AnimatedScale(
+        scale: _held && !MediaQuery.of(context).disableAnimations ? 0.965 : 1,
+        duration: const Duration(milliseconds: 160),
+        curve: Curves.easeOut,
+        child: widget.child,
+      ),
+    );
+  }
 }
 
 /// Ảnh bìa truyện: bo góc 14, đổ bóng mềm (chiều sâu), placeholder gradient.
@@ -260,7 +324,6 @@ class NovelListRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).textTheme;
-    final cs = Theme.of(context).colorScheme;
     final title = n['title_vi'] ?? n['title_zh'] ?? '';
     final genres = (n['genres'] as List?)?.whereType<String>().toList() ?? const [];
     const coverW = 68.0;
@@ -283,8 +346,10 @@ class NovelListRow extends StatelessWidget {
                   Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     Text(title, maxLines: 2, overflow: TextOverflow.ellipsis, style: t.titleMedium),
                     const SizedBox(height: 3),
+                    // tác giả chữ thường, cùng tông nhạt với dòng thể loại
                     Text(n['author_vi'] ?? n['author_zh'] ?? '',
-                        maxLines: 1, overflow: TextOverflow.ellipsis, style: t.labelSmall),
+                        maxLines: 1, overflow: TextOverflow.ellipsis,
+                        style: t.labelMedium?.copyWith(letterSpacing: 0)),
                   ]),
                   if (genres.isNotEmpty) GenreChips(genres, max: 3),
                   // đáy: ngang chân ảnh — số chương (bỏ chip trạng thái cho gọn)
@@ -293,13 +358,7 @@ class NovelListRow extends StatelessWidget {
               ),
             ),
           ),
-          if (trailing != null) ...[const SizedBox(width: 8), trailing!]
-          else
-            SizedBox(
-              height: coverH,
-              child: Center(
-                child: Icon(Icons.chevron_right_rounded, color: cs.onSurfaceVariant, size: 20)),
-            ),
+          if (trailing != null) ...[const SizedBox(width: 8), trailing!],
         ]),
       ),
     );
@@ -315,7 +374,7 @@ class RowDivider extends StatelessWidget {
       color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.6));
 }
 
-/// Thể loại kiểu hashtag "#Huyền Huyễn" — màu nhạt hơn tên truyện (onSurfaceVariant).
+/// Thể loại kiểu NEO: "Huyền Huyễn · Đô Thị" — chữ nhạt, ngăn bằng chấm giữa.
 /// Dùng chung ở danh sách + chi tiết cho nhất quán. [max] null = hiện hết (tự wrap).
 class GenreChips extends StatelessWidget {
   final List<String> genres;
@@ -327,12 +386,12 @@ class GenreChips extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final t = Theme.of(context).textTheme;
     final show = max == null ? genres : genres.take(max!).toList();
-    final style = t.labelMedium?.copyWith(
-        color: cs.onSurfaceVariant, fontWeight: FontWeight.w500, letterSpacing: 0);
-    return Wrap(
-      spacing: 10,
-      runSpacing: 2,
-      children: [for (final g in show) Text('#$g', style: style)],
+    return Text(
+      show.join(' · '),
+      maxLines: max == null ? null : 1,
+      overflow: TextOverflow.ellipsis,
+      style: t.labelMedium?.copyWith(
+          color: cs.onSurfaceVariant, fontWeight: FontWeight.w500, letterSpacing: 0),
     );
   }
 }

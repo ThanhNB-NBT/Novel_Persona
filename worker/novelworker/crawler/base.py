@@ -11,6 +11,11 @@ from curl_cffi import requests as cffi_requests
 from ..config import settings
 
 
+class ChapterNotReady(Exception):
+    """Nguồn đã liệt kê chương trong mục lục nhưng trang chương CHƯA tồn tại
+    (redirect về trang truyện) — lỗi tạm, giữ hàng đợi thử lại, đừng đánh failed."""
+
+
 @dataclass
 class NovelMeta:
     source_novel_id: str
