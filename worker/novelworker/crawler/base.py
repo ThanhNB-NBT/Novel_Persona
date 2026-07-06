@@ -4,6 +4,11 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
+from typing import Any
+
+from curl_cffi import requests as cffi_requests
+
+from ..config import settings
 
 
 @dataclass
@@ -15,12 +20,8 @@ class NovelMeta:
     cover_url: str | None = None
     description_zh: str | None = None
     genres_zh: list[str] = field(default_factory=list)
-    tags_zh: list[str] = field(default_factory=list)
     status: str = "ongoing"          # ongoing | completed | hiatus
     chapter_count: int = 0
-    rating: float | None = None
-    rating_count: int | None = None
-    word_count: int | None = None
     last_chapter_at: datetime | None = None
 
 
@@ -31,19 +32,56 @@ class ChapterRef:
     title_zh: str | None = None
 
 
-@dataclass
-class CommentItem:
-    source_comment_id: str
-    username: str | None
-    content_zh: str
-    likes: int = 0
-    posted_at: datetime | None = None
-
-
 class SourceAdapter(ABC):
-    """Mỗi nguồn (fanqie/qidian/jjwxc) implement class này."""
+    """Mỗi nguồn (shuhaige/…) implement class này.
 
-    name: str  # phải khớp sources.name trong DB
+    Dựng động từ 1 dòng bảng `sources`: template quyết định class, base_url +
+    config (jsonb) quyết định URL/selector. Session curl_cffi (impersonate
+    chrome + proxy) dùng chung ở đây, adapter con chỉ lo parse HTML.
+    """
+
+    name: str  # = sources.name, gán lúc __init__ từ source_row
+
+    def __init__(
+        self,
+        base_url: str,
+        config: dict[str, Any] | None = None,
+        source_row: dict[str, Any] | None = None,
+    ) -> None:
+        self.base_url = base_url.rstrip("/")
+        self.config = config or {}
+        self.source_row = source_row or {}
+        self.name = self.source_row.get("name") or getattr(self, "name", "")
+        self.encoding = self.config.get("encoding", "utf-8")
+        # Đếm fetch của chu kỳ hiện tại → main.py đo sức khoẻ nguồn (toàn fail = chết).
+        self.fetch_ok = 0
+        self.fetch_err = 0
+        proxy = (settings.http_proxy_url or "").strip()
+        proxies = {"http": proxy, "https": proxy} if proxy.startswith(
+            ("http://", "https://", "socks5://")) else None
+        self._session = cffi_requests.Session(impersonate="chrome", proxies=proxies, timeout=20)
+
+    def reset_health_counters(self) -> None:
+        self.fetch_ok = self.fetch_err = 0
+
+    def fetch_bytes(self, url: str) -> tuple[bytes, str]:
+        """Tải nhị phân (bìa…) qua session impersonate → (data, content_type). KHÔNG
+        đụng bộ đếm sức khoẻ: bìa thường khác domain nguồn, fail không = nguồn chết."""
+        r = self._session.get(url)
+        r.raise_for_status()
+        return r.content, (r.headers.get("content-type") or "")
+
+    def _get(self, path: str) -> str:
+        """GET path tương đối (hoặc URL tuyệt đối) → text đã decode theo encoding nguồn."""
+        url = path if path.startswith("http") else f"{self.base_url}/{path.lstrip('/')}"
+        try:
+            r = self._session.get(url)
+            r.raise_for_status()
+        except Exception:
+            self.fetch_err += 1
+            raise
+        self.fetch_ok += 1
+        return r.content.decode(self.encoding, "ignore")
 
     @abstractmethod
     def fetch_latest(self, limit: int = 30) -> list[NovelMeta]:
@@ -60,7 +98,3 @@ class SourceAdapter(ABC):
     @abstractmethod
     def fetch_chapter(self, source_chapter_id: str) -> str:
         """Nội dung tiếng Trung của 1 chương (plain text)."""
-
-    @abstractmethod
-    def fetch_comments(self, source_novel_id: str, limit: int = 30) -> list[CommentItem]:
-        """Bình luận nổi bật của truyện."""

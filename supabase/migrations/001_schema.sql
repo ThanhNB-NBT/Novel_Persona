@@ -134,6 +134,14 @@ as $$
   where id = (
     select id from translation_jobs
     where status = 'pending'
+      and (
+        type <> 'chapter'
+        or exists (
+          select 1 from chapters c
+          where c.id = translation_jobs.chapter_id
+            and c.content_zh is not null
+        )
+      )
     order by priority, created_at
     limit 1
     for update skip locked
@@ -196,8 +204,10 @@ create table profiles (
   created_at timestamptz not null default now()
 );
 
+-- set search_path bắt buộc: Auth service gọi trigger này với search_path riêng,
+-- thiếu nó là "Database error creating new user" khi đăng ký
 create or replace function handle_new_user()
-returns trigger language plpgsql security definer as $$
+returns trigger language plpgsql security definer set search_path = public as $$
 begin
   insert into profiles (id, display_name, avatar_url)
   values (new.id,

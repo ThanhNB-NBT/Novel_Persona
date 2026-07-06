@@ -1,0 +1,18 @@
+# Backend worker chạy nền: 2 service dùng chung 1 image.
+#   crawler    — discovery + sync mục lục + tải nội dung chương gốc
+#   translator — kéo hàng đợi dịch, gọi LLM, ghi bản dịch
+# Bật:  docker compose up -d --build      (cần file .env cạnh đây — xem .env.example)
+# Log:  docker compose logs -f
+# Tắt:  docker compose down
+services:
+  crawler:
+    build: .
+    command: python -m novelworker.main crawl
+    env_file: .env
+    restart: unless-stopped
+
+  translator:
+    build: .
+    command: python -m novelworker.main translate
+    env_file: .env
+    restart: unless-stopped

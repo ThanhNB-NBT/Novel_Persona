@@ -1,8 +1,15 @@
 """Entry point.
 
-Chạy 2 tiến trình (2 terminal hoặc 2 service riêng):
+Backend chạy nền (Docker: 2 service crawler + translator — xem docker-compose.yml):
     python -m novelworker.main crawl        # crawler: discovery + sync + tải chương
     python -m novelworker.main translate    # translator: consumer hàng đợi dịch
+
+Lệnh vận hành:
+    python -m novelworker.main add --book-id 59979          # thêm truyện shuhaige (số trong URL)
+    python -m novelworker.main request --novel 1 --up-to 10  # giả lập app bấm "Đọc" (không cần app/auth)
+    python -m novelworker.main cost                          # thống kê token đã dùng theo model
+    python -m novelworker.main audit [--fix]                 # quét chương done hỏng (Trung/cụt/mất đoạn), --fix để dịch lại
+    python -m novelworker.main quality [--novel <id>]        # chấm điểm chất lượng dịch (metric: len, glossary, lặp cụm, mất đoạn)
 """
 from __future__ import annotations
 
@@ -12,51 +19,102 @@ import time
 
 from . import db
 from .config import settings
-from .crawler.fanqie import FanqieAdapter
+from .crawler.base import SourceAdapter
+from .crawler.registry import TEMPLATE_REGISTRY
 from .crawler import sync
 from .translator import worker as translator_worker
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("main")
 
-ADAPTERS = [FanqieAdapter()]  # thêm QidianAdapter(), JjwxcAdapter() ở P3
+
+def build_adapters() -> dict[str, SourceAdapter]:
+    """Dựng adapter từ bảng `sources` (enabled) theo template. Thêm nguồn biquge-clone
+    = 1 dòng INSERT vào sources, KHÔNG code. Template lạ → bỏ qua + cảnh báo."""
+    rows = db.sb().table("sources").select("*").eq("enabled", True).execute().data or []
+    out: dict[str, SourceAdapter] = {}
+    for s in rows:
+        cls = TEMPLATE_REGISTRY.get(s.get("template") or "")
+        if not cls:
+            log.warning("Chưa hỗ trợ template '%s' (nguồn %s) — bỏ qua", s.get("template"), s["name"])
+            continue
+        out[s["name"]] = cls(base_url=s["base_url"], config=s.get("config") or {}, source_row=s)
+    if not out:
+        log.warning("Không có nguồn enabled nào dựng được adapter — kiểm tra bảng sources")
+    return out
 
 
-def _novels_needing_fetch() -> list[int]:
-    """Novel có chương queued nhưng chưa tải content_zh."""
+def _novels_needing_fetch() -> list[dict]:
+    """Novel có chương queued chưa tải content_zh — trả kèm source_id/source_novel_id
+    trong 1 query gộp (trước đây 2 query/truyện mỗi vòng 10s)."""
     rows = (
         db.sb().table("chapters").select("novel_id")
         .eq("translation_status", "queued").is_("content_zh", "null")
         .limit(200).execute()
     ).data or []
-    return list({r["novel_id"] for r in rows})
+    ids = list({r["novel_id"] for r in rows})
+    if not ids:
+        return []
+    return (
+        db.sb().table("novels").select("id, source_id, source_novel_id")
+        .in_("id", ids).execute()
+    ).data or []
+
+
+def _eval_source_health(adapter: SourceAdapter) -> None:
+    """Cuối chu kỳ: có fetch OK → nguồn sống (reset fail); toàn fail → fail++ (tự tắt khi
+    vượt ngưỡng). Không fetch gì → bỏ qua. Rồi reset counter cho chu kỳ sau."""
+    sid = adapter.source_row.get("id")
+    if sid is None:
+        return
+    if adapter.fetch_ok > 0:
+        db.mark_source_ok(sid)
+    elif adapter.fetch_err > 0:
+        if db.mark_source_fail(sid, settings.source_fail_limit):
+            log.error("Đã TỰ TẮT nguồn '%s' (toàn fetch fail ≥%d chu kỳ). Restart worker "
+                      "sau khi nguồn hồi phục + bật lại trong bảng sources.",
+                      adapter.name, settings.source_fail_limit)
+    adapter.reset_health_counters()
 
 
 def run_crawler() -> None:
-    log.info("Crawler bắt đầu, chu kỳ discovery %d phút", settings.crawl_interval_min)
+    adapters = build_adapters()
+    log.info("Crawler bắt đầu (%d nguồn: %s), chu kỳ discovery %d phút",
+             len(adapters), ", ".join(adapters) or "—", settings.crawl_interval_min)
+    sync.backfill_dedup_keys()  # gán dedup_key cho truyện cũ (1 lần, tự lành)
     last_discovery = 0.0
     while True:
         now = time.time()
-        for adapter in ADAPTERS:
+        for adapter in adapters.values():
             try:
                 # 1) discovery + sync truyện được theo dõi — theo chu kỳ dài
                 if now - last_discovery > settings.crawl_interval_min * 60:
-                    sync.discover_latest(adapter, limit=30)
+                    # "Ít mà chất": nguồn có bảng xếp hạng → CHỈ lấy từ ranking (lượt đọc
+                    # = bộ lọc chất lượng); trang "mới cập nhật" toàn truyện mỏng chưa ai
+                    # đọc, chỉ dùng cho nguồn không có ranking (ddxs).
+                    sync.discover_ranking(adapter, max_new=settings.discover_new_per_cycle)
+                    if not getattr(adapter, "fetch_ranking", None):
+                        sync.discover_latest(adapter, max_new=settings.discover_new_per_cycle)
                     sync.sync_followed_novels(adapter)
+                    # truyện đã có ra chương mới → nổi "Mới cập nhật" (không chỉ truyện mới)
+                    sync.refresh_canonical_updates(adapter, limit=settings.refresh_per_cycle)
+                    _eval_source_health(adapter)
                 # 2) tải nội dung chương đang chờ dịch — chạy sát (vòng ngắn)
-                for novel_id in _novels_needing_fetch():
-                    # đảm bảo mục lục đã có (lần đầu user bấm Đọc, chapters có thể chưa đầy đủ)
-                    nv = (
-                        db.sb().table("novels").select("source_novel_id, source_id")
-                        .eq("id", novel_id).single().execute()
-                    ).data
-                    src_name = (
-                        db.sb().table("sources").select("name").eq("id", nv["source_id"]).single().execute()
-                    ).data["name"]
-                    if src_name != adapter.name:
-                        continue
-                    sync.sync_chapter_list(adapter, novel_id, nv["source_novel_id"])
-                    sync.ensure_chapters_fetched(adapter, novel_id)
+                sid = adapter.source_row.get("id")
+                for nv in _novels_needing_fetch():
+                    if nv["source_id"] != sid:
+                        continue  # để adapter đúng nguồn xử lý ở vòng lặp của nó
+                    # Mục lục chỉ cần sync khi có chương queued THIẾU stub nguồn (lần
+                    # đầu user bấm Đọc, RPC tạo row trước khi TOC về). Trước đây fetch
+                    # cả trang mục lục nguồn MỖI vòng 10s cho mọi truyện đang chờ dịch.
+                    missing_stub = (
+                        db.sb().table("chapters").select("id", count="exact")
+                        .eq("novel_id", nv["id"]).eq("translation_status", "queued")
+                        .is_("source_chapter_id", "null").limit(1).execute()
+                    ).count or 0
+                    if missing_stub:
+                        sync.sync_chapter_list(adapter, nv["id"], nv["source_novel_id"])
+                    sync.ensure_chapters_fetched(adapter, nv["id"])
             except Exception:
                 log.exception("Lỗi vòng crawl (%s)", adapter.name)
         if now - last_discovery > settings.crawl_interval_min * 60:
@@ -64,14 +122,207 @@ def run_crawler() -> None:
         time.sleep(10)
 
 
+def run_cost() -> None:
+    """Thống kê token đã dùng theo model (soi chi phí LLM).
+
+    Token lưu trong chapters khi dịch xong. NVIDIA NIM + OpenRouter free = $0;
+    chỉ Fireworks (tấm chắn cuối) trả phí — nhìn token model đó để ước tính.
+    """
+    from collections import defaultdict
+
+    rows = (
+        db.sb().table("chapters")
+        .select("model_used, prompt_tokens, completion_tokens")
+        .eq("translation_status", "done")
+        .execute()
+    ).data or []
+    agg: dict[str, list[int]] = defaultdict(lambda: [0, 0, 0])  # [số chương, prompt, completion]
+    for r in rows:
+        a = agg[r.get("model_used") or "(chưa rõ)"]
+        a[0] += 1
+        a[1] += r.get("prompt_tokens") or 0
+        a[2] += r.get("completion_tokens") or 0
+
+    print(f"{'model':<40} {'chương':>7} {'prompt':>12} {'output':>12} {'tổng tok':>12}")
+    print("-" * 86)
+    tot = [0, 0, 0]
+    for model, (n, pt, ct) in sorted(agg.items(), key=lambda kv: -kv[1][1] - kv[1][2]):
+        print(f"{model[:40]:<40} {n:>7} {pt:>12,} {ct:>12,} {pt + ct:>12,}")
+        tot[0] += n; tot[1] += pt; tot[2] += ct
+    print("-" * 86)
+    print(f"{'TỔNG':<40} {tot[0]:>7} {tot[1]:>12,} {tot[2]:>12,} {tot[1] + tot[2]:>12,}")
+    print("\nGhi chú: NVIDIA NIM + OpenRouter (model :free) = $0. Chỉ token model Fireworks mới tính phí.")
+
+
+def run_audit(fix: bool) -> None:
+    """Quét MỌI chương đã 'done', bắt bản dịch hỏng (còn tiếng Trung / cụt / mất đoạn)
+    mà lỡ lọt qua (chủ yếu chương cũ dịch bằng model kém trước khi có fuse). In danh sách
+    kèm lý do; `--fix` xếp lại hàng đợi để model hiện tại dịch lại.
+
+    Chương dịch MỚI đã được fuse (validate trong FallbackChain) chặn — không thành 'done'
+    nếu hỏng. Lệnh này để dọn nợ cũ + tự soi định kỳ cho yên tâm, không phải đợi vào đọc mới biết.
+    """
+    from .translator.worker import scan_bad_chapters, requeue_bad
+
+    bad = scan_bad_chapters()
+    print(f"Quét xong → {len(bad)} chương 'done' hỏng.")
+    for c, reason in bad:
+        nv = c.get("novels") or {}
+        title = nv.get("title_vi") or nv.get("title_zh") or f"#{c['novel_id']}"
+        print(f"  nv{c['novel_id']} ch{c['chapter_index']} [{c.get('model_used')}] {title}: {reason}")
+
+    if not bad:
+        return
+    if not fix:
+        print("\nThêm --fix để xếp lại hàng đợi dịch lại các chương này.")
+        return
+    requeue_bad(bad)
+    print(f"\nĐã xếp lại {len(bad)} chương để dịch lại (translator sẽ tự xử lý).")
+
+
+
+
+def _glossary_adherence(zh: str, vi: str, terms: list[dict]) -> tuple[int, int]:
+    """(số term tuân thủ, số term áp dụng được). Term áp dụng = term_zh xuất hiện trong zh.
+    Tuân thủ = correct_vi có trong vi VÀ (wrong_vi nếu có thì KHÔNG có trong vi)."""
+    ok = applicable = 0
+    for tm in terms:
+        tzh, cv, wv = tm.get("term_zh"), tm.get("correct_vi"), tm.get("wrong_vi")
+        if not tzh or not cv or tzh not in zh:
+            continue
+        applicable += 1
+        if cv in vi and (not wv or wv not in vi):
+            ok += 1
+    return ok, applicable
+
+
+def run_quality(novel_id: int | None) -> None:
+    """Chấm điểm chất lượng dịch (metric, KHÔNG tốn LLM) cho chương done → báo cáo.
+    Bắt: còn tiếng Trung, tỉ lệ độ dài bất thường, mất đoạn, lặp từ, lệch glossary."""
+    from collections import defaultdict
+    from .translator.worker import DUP_PHRASE, han_ratio
+
+    gloss_cache: dict[int, list[dict]] = {}
+    def gloss(nid: int) -> list[dict]:
+        if nid not in gloss_cache:
+            gloss_cache[nid] = db.get_glossary(nid)[0]
+        return gloss_cache[nid]
+
+    rows: list[dict] = []
+    frm = 0
+    while True:
+        q = (db.sb().table("chapters")
+             .select("id, novel_id, chapter_index, content_zh, content_vi, model_used, "
+                     "novels(title_vi, title_zh)")
+             .eq("translation_status", "done"))
+        if novel_id:
+            q = q.eq("novel_id", novel_id)
+        b = q.range(frm, frm + 299).execute().data or []
+        rows += b
+        if len(b) < 300:
+            break
+        frm += 300
+
+    agg: dict[str, list[float]] = defaultdict(lambda: [0, 0.0, 0.0, 0, 0, 0])  # n, sum_len, sum_adh, dup, no_para, han_bad
+    bad: list[tuple[float, str]] = []
+    for c in rows:
+        zh, vi = c.get("content_zh") or "", c.get("content_vi") or ""
+        if not vi:
+            continue
+        han = han_ratio(vi)
+        len_ratio = len(vi) / max(len(zh), 1)
+        dup = len(DUP_PHRASE.findall(vi))
+        lost_para = 1 if (zh.count("\n") >= 5 and vi.count("\n") == 0) else 0
+        ok, appl = _glossary_adherence(zh, vi, gloss(c["novel_id"]))
+        adh = ok / appl if appl else 1.0
+
+        a = agg[c.get("model_used") or "(?)"]
+        a[0] += 1; a[1] += len_ratio; a[2] += adh
+        a[3] += dup; a[4] += lost_para; a[5] += 1 if han > 0.02 else 0
+
+        # điểm "tệ" gộp để xếp chương cần soi (cao = tệ). zh→vi tính KÝ TỰ nên ~2.5-3.5x
+        # là BÌNH THƯỜNG; chỉ cờ khi <1.5x (cụt) hoặc >5x (phình/lặp).
+        score = (han * 100) + max(0, 1.5 - len_ratio) * 20 + (len_ratio > 5.0) * 20 + \
+                (1 - adh) * 30 + dup * 10 + lost_para * 30
+        if score >= 10:
+            nv = c.get("novels") or {}
+            title = nv.get("title_vi") or nv.get("title_zh") or f"#{c['novel_id']}"
+            reasons = []
+            if han > 0.02: reasons.append(f"Hán {han:.0%}")
+            if len_ratio < 1.5: reasons.append(f"cụt {len_ratio:.2f}x")
+            if len_ratio > 5.0: reasons.append(f"phình {len_ratio:.2f}x")
+            if adh < 1.0 and appl: reasons.append(f"glossary {adh:.0%}({ok}/{appl})")
+            if dup: reasons.append(f"lặp cụm {dup}")
+            if lost_para: reasons.append("mất đoạn")
+            bad.append((score, f"  nv{c['novel_id']} ch{c['chapter_index']} {title}: {', '.join(reasons)}"))
+
+    print(f"Đã chấm {len(rows)} chương done.\n")
+    print(f"{'model':<40}{'chương':>7}{'len TB':>8}{'glossary':>9}{'lặp':>6}{'mất đoạn':>9}{'còn Hán':>8}")
+    print("-" * 87)
+    for m, a in sorted(agg.items(), key=lambda kv: -kv[1][0]):
+        n = int(a[0]) or 1
+        print(f"{m[:40]:<40}{int(a[0]):>7}{a[1]/n:>8.2f}{a[2]/n*100:>8.0f}%{int(a[3]):>6}{int(a[4]):>9}{int(a[5]):>8}")
+    print("\nGhi chú: len TB ~2.5-3.5 là bình thường (zh→vi tính KÝ TỰ); "
+          "glossary nên ~100%; lặp cụm/mất đoạn/còn Hán nên 0.")
+    bad.sort(reverse=True)
+    if bad:
+        print(f"\n{len(bad)} chương cần soi (tệ nhất trước):")
+        for _, line in bad[:40]:
+            print(line)
+
+
+def run_request(novel_id: int, up_to: int) -> None:
+    """Bản service-role của RPC request_translation — test không cần app/đăng nhập."""
+    rows = (
+        db.sb().table("chapters").select("id, chapter_index")
+        .eq("novel_id", novel_id).lte("chapter_index", up_to)
+        .in_("translation_status", ["none", "failed"])
+        .order("chapter_index").execute()
+    ).data or []
+    for r in rows:
+        db.sb().table("chapters").update({"translation_status": "queued"}).eq("id", r["id"]).execute()
+        db.enqueue("chapter", novel_id, chapter_id=r["id"], priority=50)
+    print(f"Đã xếp hàng {len(rows)} chương (novel {novel_id}, tới chương {up_to}).")
+    print("Chạy `python -m novelworker.main crawl` để tải nội dung gốc"
+          " và `... translate` để dịch; theo dõi bảng chapters trong Supabase.")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="novelworker")
-    parser.add_argument("mode", choices=["crawl", "translate"])
+    parser.add_argument("mode",
+                        choices=["crawl", "translate", "request", "add", "cost", "audit", "quality"])
+    parser.add_argument("--book-id", help="add: id truyện (số trong URL nguồn)")
+    parser.add_argument("--source", default="shuhaige",
+                        help="add: sources.name của nguồn crawl (mặc định shuhaige)")
+    parser.add_argument("--novel", type=int, help="request: novels.id trong DB")
+    parser.add_argument("--up-to", type=int, default=10, help="request: dịch tới chương N")
+    parser.add_argument("--fix", action="store_true",
+                        help="audit: xếp lại hàng đợi các chương hỏng để dịch lại")
     args = parser.parse_args()
-    if args.mode == "crawl":
+    if args.mode == "cost":
+        run_cost()
+    elif args.mode == "quality":
+        run_quality(args.novel)  # --novel <id> để chấm 1 truyện; bỏ trống = tất cả
+    elif args.mode == "audit":
+        run_audit(args.fix)
+    elif args.mode == "crawl":
         run_crawler()
-    else:
+    elif args.mode == "translate":
         translator_worker.run_forever()
+    elif args.mode == "add":
+        if not args.book_id:
+            parser.error("add cần --book-id <id>")
+        adapters = build_adapters()
+        adapter = adapters.get(args.source)
+        if not adapter:
+            parser.error(f"--source phải là một trong: {', '.join(adapters) or '(không có nguồn enabled)'}")
+        novel = sync.add_novel(adapter, args.book_id)
+        print(f"Đã thêm truyện #{novel['id']} ({args.source}): {novel['title_zh']} — "
+              f"dùng `request --novel {novel['id']} --up-to N` để xếp hàng dịch.")
+    else:
+        if args.novel is None:
+            parser.error("request cần --novel <id>")
+        run_request(args.novel, args.up_to)
 
 
 if __name__ == "__main__":
