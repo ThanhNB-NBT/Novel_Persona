@@ -210,7 +210,7 @@ class _IntroTab extends StatelessWidget {
       div,
       cell('$done', 'Đã dịch'),
       div,
-      cell(n['status'] == 'completed' ? 'Hoàn' : 'Đang ra', 'Trạng thái'),
+      cell(n['status'] == 'completed' ? 'Hoàn thành' : 'Đang ra', 'Trạng thái'),
     ]);
   }
 }

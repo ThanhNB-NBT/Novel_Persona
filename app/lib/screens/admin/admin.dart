@@ -24,7 +24,7 @@ class AdminScreen extends ConsumerWidget {
           );
         }
         return DefaultTabController(
-          length: 5,
+          length: 6,
           child: Scaffold(
             appBar: AppBar(
               title: const Text('Quản trị'),
@@ -68,6 +68,7 @@ class AdminScreen extends ConsumerWidget {
                 tabAlignment: TabAlignment.start,
                 tabs: [
                   Tab(text: 'Worker'),
+                  Tab(text: 'Crawl'),
                   Tab(text: 'Đang đọc'),
                   Tab(text: 'Truyện'),
                   Tab(text: 'Token'),
@@ -77,6 +78,7 @@ class AdminScreen extends ConsumerWidget {
             ),
             body: const TabBarView(children: [
               _JobsTab(),
+              _CrawlTab(),
               _ReadingNowTab(),
               _NovelsTab(),
               _TokensTab(),
@@ -304,10 +306,50 @@ class _NovelJobsRow extends StatelessWidget {
             ),
           ),
       ]),
-      trailing: const Icon(Icons.chevron_right_rounded),
+      trailing: PopupMenuButton<String>(
+        onSelected: (v) {
+          if (v == 'delete') _confirmDeleteNovelFromJobs(context, ref, novelId, '$title');
+        },
+        itemBuilder: (_) => [
+          const PopupMenuItem(value: 'delete', child: Text('Xoá truyện vĩnh viễn')),
+        ],
+      ),
       onTap: () => _showNovelJobs(context, ref, novelId, title),
     );
   }
+}
+
+/// Xoá vĩnh viễn 1 truyện từ tab Worker (truyện chết nguồn, job lỗi mãi) —
+/// cùng cascade như tab Truyện, kèm xác nhận vì không hoàn tác được.
+void _confirmDeleteNovelFromJobs(
+    BuildContext context, WidgetRef ref, int novelId, String title) {
+  showDialog(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('Xoá vĩnh viễn?'),
+      content: Text('"$title" cùng TOÀN BỘ chương, glossary, tiến độ đọc và job '
+          'sẽ bị xoá — không hoàn tác được.'),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Huỷ')),
+        FilledButton(
+          style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(ctx).colorScheme.error),
+          onPressed: () async {
+            final messenger = ScaffoldMessenger.of(context);
+            await deleteNovel(novelId);
+            if (ctx.mounted) Navigator.pop(ctx);
+            ref.invalidate(adminJobsProvider);
+            ref.invalidate(translateQueueProvider);
+            ref.invalidate(adminNovelsProvider);
+            ref.invalidate(appStatsProvider);
+            ref.invalidate(homeSectionsProvider);
+            messenger.showSnackBar(SnackBar(content: Text('Đã xoá "$title"')));
+          },
+          child: const Text('Xoá'),
+        ),
+      ],
+    ),
+  );
 }
 
 /// Sheet list các job (chương) của 1 truyện — Consumer để retry/huỷ xong tự cập nhật.
@@ -452,6 +494,260 @@ void _showError(BuildContext context, Object? chIdx, String error) {
       ],
     ),
   );
+}
+
+// ---------------- Crawl: config + nguồn + truyện mới 24h ----------------
+class _CrawlTab extends ConsumerWidget {
+  const _CrawlTab();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = Theme.of(context).textTheme;
+    final cs = Theme.of(context).colorScheme;
+    final settings = ref.watch(crawlSettingsProvider).value ?? const <Rec>[];
+    final sources = ref.watch(crawlSourcesProvider).value ?? const <Rec>[];
+    final fresh = ref.watch(newNovels24hProvider);
+
+    Future<void> refresh() async {
+      ref.invalidate(crawlSettingsProvider);
+      ref.invalidate(crawlSourcesProvider);
+      ref.invalidate(newNovels24hProvider);
+    }
+
+    // thẻ bo tròn viền mảnh — cùng ngôn ngữ với thẻ thống kê các tab khác
+    Widget card(Widget child) => Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+            decoration: BoxDecoration(
+              color: cs.surface,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.7)),
+            ),
+            child: child,
+          ),
+        );
+
+    Widget sectionLabel(String s, {String? hint}) => Padding(
+          padding: const EdgeInsets.fromLTRB(20, 18, 20, 8),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(s,
+                style: t.labelSmall?.copyWith(letterSpacing: 1.5, color: cs.primary)),
+            if (hint != null) ...[
+              const SizedBox(height: 3),
+              Text(hint, style: t.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
+            ],
+          ]),
+        );
+
+    // 1 hàng cấu hình: tên + key mờ, giá trị trong pill bấm được
+    Widget settingRow(Rec s) => InkWell(
+          onTap: () => _editSetting(context, ref, s),
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            child: Row(children: [
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(s['note'] ?? s['key'], style: t.bodyMedium),
+                  const SizedBox(height: 2),
+                  Text('${s['key']}',
+                      style: t.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
+                ]),
+              ),
+              const SizedBox(width: 10),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                decoration: BoxDecoration(
+                  color: cs.primaryContainer.withValues(alpha: 0.5),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text('${s['value']}',
+                    style: t.titleSmall?.copyWith(color: cs.primary)),
+              ),
+              const SizedBox(width: 6),
+              Icon(Icons.edit_rounded, size: 15, color: cs.onSurfaceVariant),
+            ]),
+          ),
+        );
+
+    // 1 hàng nguồn: chấm sống/chết + tên + host gọn, switch bật/tắt
+    Widget sourceRow(Rec s) {
+      final enabled = s['enabled'] == true;
+      final failing = (s['fail_count'] ?? 0) > 0;
+      final host = Uri.tryParse('${s['base_url']}')?.host.replaceFirst('www.', '') ??
+          '${s['base_url']}';
+      final dot = !enabled
+          ? cs.outlineVariant
+          : failing
+              ? cs.error
+              : const Color(0xFF34C77B); // xanh "sống" — cùng màu nhịp tim tab Worker
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 2),
+        child: Row(children: [
+          Container(width: 8, height: 8,
+              decoration: BoxDecoration(color: dot, shape: BoxShape.circle)),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('${s['name']}',
+                  style: t.bodyMedium?.copyWith(
+                      color: enabled ? cs.onSurface : cs.onSurfaceVariant)),
+              const SizedBox(height: 2),
+              Text(
+                [
+                  host,
+                  if (failing) 'fail ${s['fail_count']} chu kỳ',
+                  if (enabled && s['last_ok_at'] != null)
+                    'OK ${_elapsed(s['last_ok_at'])} trước',
+                ].join(' · '),
+                maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: t.labelSmall?.copyWith(
+                    color: failing ? cs.error : cs.onSurfaceVariant),
+              ),
+            ]),
+          ),
+          Switch(
+            value: enabled,
+            onChanged: (v) async {
+              final messenger = ScaffoldMessenger.of(context);
+              await setSourceEnabled(s['id'] as int, v);
+              ref.invalidate(crawlSourcesProvider);
+              messenger.showSnackBar(SnackBar(
+                  content: Text(v
+                      ? 'Đã bật ${s['name']} — restart crawler để nhận nguồn mới'
+                      : 'Đã tắt ${s['name']}')));
+            },
+          ),
+        ]),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: refresh,
+      child: ListView(
+        padding: const EdgeInsets.only(bottom: 24),
+        children: [
+          sectionLabel('CẤU HÌNH CRAWLER',
+              hint: 'Sửa xong worker tự nhận ở chu kỳ kế — không cần restart.'),
+          card(Column(children: [
+            for (final (i, s) in settings.indexed) ...[
+              if (i > 0) Divider(height: 1, color: cs.outlineVariant.withValues(alpha: 0.5)),
+              settingRow(s),
+            ],
+          ])),
+          sectionLabel('NGUỒN CRAWL'),
+          card(Column(children: [
+            for (final (i, s) in sources.indexed) ...[
+              if (i > 0) Divider(height: 1, color: cs.outlineVariant.withValues(alpha: 0.5)),
+              sourceRow(s),
+            ],
+          ])),
+          fresh.when(
+            loading: () => const Padding(
+                padding: EdgeInsets.all(24),
+                child: Center(child: CircularProgressIndicator())),
+            error: (e, _) => Padding(
+                padding: const EdgeInsets.all(16), child: Text('Lỗi: $e')),
+            data: (list) => Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                sectionLabel('TRUYỆN MỚI VỀ · 24 GIỜ',
+                    hint: list.isEmpty
+                        ? null
+                        : '${list.length} truyện — Top #N = hạng trên bảng '
+                            'tổng lượt đọc của nguồn (nguồn không công bố con số).'),
+                if (list.isEmpty)
+                  const Padding(
+                      padding: EdgeInsets.fromLTRB(20, 12, 20, 0),
+                      child: Text('Chưa có truyện mới trong 24 giờ.'))
+                else
+                  for (final (i, n) in list.indexed) ...[
+                    if (i > 0) const Divider(height: 1, indent: 66),
+                    _FreshNovelRow(n),
+                  ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _editSetting(BuildContext context, WidgetRef ref, Rec s) {
+    final ctrl = TextEditingController(text: '${s['value']}');
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(s['note'] ?? s['key']),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          keyboardType: TextInputType.number,
+          decoration: InputDecoration(labelText: s['key']),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Huỷ')),
+          FilledButton(
+            onPressed: () async {
+              final v = int.tryParse(ctrl.text.trim());
+              if (v == null || v < 1) return; // chỉ nhận số dương
+              await updateCrawlSetting(s['key'] as String, '$v');
+              if (ctx.mounted) Navigator.pop(ctx);
+              ref.invalidate(crawlSettingsProvider);
+            },
+            child: const Text('Lưu'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 1 truyện mới về: bìa + tên + lúc về + "Top #N · nguồn" (nguồn KHÔNG công bố số
+/// lượt đọc — chỉ có thứ hạng trên bảng xếp hạng tổng lượt đọc của nguồn đó).
+class _FreshNovelRow extends StatelessWidget {
+  final Rec n;
+  const _FreshNovelRow(this.n);
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).textTheme;
+    final cs = Theme.of(context).colorScheme;
+    final title = n['title_vi'] ?? n['title_zh'] ?? 'Truyện #${n['id']}';
+    final src = (n['sources'] as Map?)?['name'];
+    final rank = n['source_rank'];
+    return ListTile(
+      contentPadding: const EdgeInsets.fromLTRB(16, 2, 12, 2),
+      leading: Cover(url: n['cover_url'], width: 38, aspect: 1.36, label: '$title'),
+      title: Text('$title',
+          maxLines: 1, overflow: TextOverflow.ellipsis, style: t.titleMedium),
+      subtitle: Text(
+        [
+          'về ${_elapsed(n['created_at'])} trước',
+          '${n['chapter_count_source'] ?? 0} chương',
+          n['status'] == 'completed' ? 'hoàn thành' : 'đang ra',
+        ].join(' · '),
+        maxLines: 1, overflow: TextOverflow.ellipsis,
+        style: t.labelSmall?.copyWith(color: cs.onSurfaceVariant),
+      ),
+      trailing: rank != null
+          ? Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: cs.primaryContainer.withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text('Top #${(rank as int) + 1}${src != null ? ' · $src' : ''}',
+                  style: t.labelSmall?.copyWith(
+                      color: cs.primary, fontWeight: FontWeight.w700)),
+            )
+          : (src != null
+              ? Text('$src', style: t.labelSmall?.copyWith(color: cs.onSurfaceVariant))
+              : null),
+      onTap: () => context.push('/admin/novel/${n['id']}'),
+    );
+  }
 }
 
 // ---------------- Đang đọc: truyện có reader gần đây (bám ưu tiên dịch) ----------------

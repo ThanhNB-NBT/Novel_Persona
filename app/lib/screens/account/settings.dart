@@ -63,7 +63,7 @@ class SettingsScreen extends ConsumerWidget {
           if (ref.watch(isAdminProvider).value == true) ...[
             const _SectionLabel('Quản trị'),
             _TileGroup(children: [
-              _Tile(Icons.admin_panel_settings_outlined, 'Bảng quản trị',
+              _Tile(Icons.admin_panel_settings_outlined, 'Quản lí',
                   onTap: () => context.push('/admin')),
               _Tile(Icons.bug_report_outlined, 'Nhật ký lỗi (app)',
                   onTap: () => context.push('/errors')),

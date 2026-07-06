@@ -353,47 +353,16 @@ class HomeSections {
 final homeSectionsProvider = FutureProvider.autoDispose<HomeSections>((
   ref,
 ) async {
-  final all = List<Rec>.from(
-    await sb
-        .from('novels')
-        .select(_novelCols)
-        .eq('hidden', false)
-        .eq('meta_translated', true) // chưa dịch metadata → tên tiếng Trung, ẩn khỏi Khám phá
-        .eq(
-          'is_canonical',
-          true,
-        ) // ẩn bản trùng từ nguồn khác (Phase 2 multi-source)
-        .order('last_chapter_at', ascending: false, nullsFirst: false)
-        .limit(60),
-  );
-  // "Mới cập nhật" chỉ truyện đang ra — truyện hoàn thành nằm ở mục "Đã hoàn thành".
-  List<Rec> byLatest = all.where((n) => n['status'] != 'completed').toList();
-  List<Rec> byTranslated = [...all]
-    ..sort(
-      (a, b) => (b['chapter_count_translated'] ?? 0).compareTo(
-        a['chapter_count_translated'] ?? 0,
-      ),
-    );
-  // Đề cử = xếp theo bảng xếp hạng nguồn (source_rank nhỏ = hot); chưa xếp hạng xuống cuối.
-  List<Rec> byRank = [...all]
-    ..sort((a, b) {
-      final ra = a['source_rank'] as int?, rb = b['source_rank'] as int?;
-      if (ra == null && rb == null) {
-        return (b['chapter_count_source'] ?? 0).compareTo(a['chapter_count_source'] ?? 0);
-      }
-      if (ra == null) return 1;
-      if (rb == null) return -1;
-      return ra.compareTo(rb);
-    });
-  final completed = all.where((n) => n['status'] == 'completed').toList();
-  return HomeSections(
-    byLatest.take(15).toList(),
-    byTranslated
-        .take(15)
-        .toList(), // nổi bật = nhiều chương đã dịch (đọc nhiều)
-    byRank.take(15).toList(), // đề cử = hot theo bảng xếp hạng nguồn
-    completed.take(15).toList(),
-  );
+  // Dùng CHUNG fetchNovelPage với màn "Xem tất cả" — trang chủ = trang 1 của từng
+  // mục, bấm vào xem tất cả thấy đúng danh sách nối dài, không lệch nhau nữa.
+  // (Trước đây trang chủ sort cục bộ trên 60 truyện mới nhất → khác hẳn xem-tất-cả.)
+  final r = await Future.wait([
+    fetchNovelPage(SectionKind.latest, 0, 15),
+    fetchNovelPage(SectionKind.featured, 0, 15),
+    fetchNovelPage(SectionKind.recommended, 0, 15),
+    fetchNovelPage(SectionKind.completed, 0, 15),
+  ]);
+  return HomeSections(r[0], r[1], r[2], r[3]);
 });
 
 /// Các mục Khám phá có màn "Xem tất cả" (cuộn tải dần). Mỗi mục 1 kiểu sort riêng.
@@ -416,10 +385,15 @@ Future<List<Rec>> fetchNovelPage(SectionKind kind, int offset, int limit) async 
       .eq('is_canonical', true);
   if (kind == SectionKind.completed) f = f.eq('status', 'completed');
   if (kind == SectionKind.latest) f = f.neq('status', 'completed'); // Mới cập nhật: chỉ đang ra
+  // Cả Nổi bật lẫn Đề cử đều theo BẢNG XẾP HẠNG NGUỒN (rank nhỏ = hot, số chương
+  // dịch không dùng để xếp hạng). Khác phạm vi: Nổi bật = toàn kho (đỉnh bảng đa số
+  // là truyện hoàn thành kinh điển); Đề cử = CHỈ truyện đang ra (hot còn ra chương).
+  // Lưu ý: đừng lọc theo last_chapter_at — crawler refresh bump mốc đó liên tục
+  // nên lọc "14 ngày" trúng cả kho, hai mục thành một.
+  if (kind == SectionKind.recommended) f = f.neq('status', 'completed');
   // sort đúng ngữ nghĩa từng mục (khớp cách chia ở homeSectionsProvider)
   final ordered = switch (kind) {
-    SectionKind.featured => f.order('chapter_count_translated', ascending: false),
-    // Đề cử = hot theo bảng xếp hạng nguồn (rank nhỏ trước; chưa xếp hạng xuống cuối)
+    SectionKind.featured ||
     SectionKind.recommended => f.order('source_rank', ascending: true, nullsFirst: false),
     SectionKind.latest ||
     SectionKind.completed => f.order('last_chapter_at',
@@ -873,6 +847,40 @@ Future<void> updateNovelFields(int id, Map<String, dynamic> fields) =>
 
 Future<void> retryJob(int id) =>
     sb.rpc('admin_retry_job', params: {'p_job_id': id});
+
+/// Config crawler (bảng worker_settings) — worker đọc lại mỗi chu kỳ discovery,
+/// sửa ở tab Crawl là ăn ngay không cần restart.
+final crawlSettingsProvider = FutureProvider.autoDispose<List<Rec>>((ref) async =>
+    List<Rec>.from(
+        await sb.from('worker_settings').select('key, value, note').order('key')));
+
+Future<void> updateCrawlSetting(String key, String value) => sb
+    .from('worker_settings')
+    .update({'value': value, 'updated_at': DateTime.now().toUtc().toIso8601String()})
+    .eq('key', key);
+
+/// Nguồn crawl (bật/tắt + sức khỏe) cho tab Crawl.
+final crawlSourcesProvider = FutureProvider.autoDispose<List<Rec>>((ref) async =>
+    List<Rec>.from(await sb
+        .from('sources')
+        .select('id, name, base_url, enabled, fail_count, last_ok_at')
+        .order('enabled', ascending: false)
+        .order('name')));
+
+Future<void> setSourceEnabled(int id, bool enabled) =>
+    sb.from('sources').update({'enabled': enabled}).eq('id', id);
+
+/// Truyện crawler mới đem về trong 24 giờ — tab Crawl (soi discovery có chạy không).
+final newNovels24hProvider = FutureProvider.autoDispose<List<Rec>>((ref) async {
+  final since =
+      DateTime.now().toUtc().subtract(const Duration(hours: 24)).toIso8601String();
+  return List<Rec>.from(await sb
+      .from('novels')
+      .select('id, title_vi, title_zh, cover_url, created_at, source_rank, '
+          'chapter_count_source, status, sources(name)')
+      .gte('created_at', since)
+      .order('created_at', ascending: false));
+});
 
 /// Nhịp tim worker (crawler/translator điểm danh định kỳ) — tab Worker hiện sống/chết.
 final workerHeartbeatProvider = FutureProvider.autoDispose<List<Rec>>((ref) async =>

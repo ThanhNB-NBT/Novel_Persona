@@ -83,9 +83,24 @@ def run_crawler() -> None:
              len(adapters), ", ".join(adapters) or "—", settings.crawl_interval_min)
     sync.backfill_dedup_keys()  # gán dedup_key cho truyện cũ (1 lần, tự lành)
     last_discovery = 0.0
+    interval_min = settings.crawl_interval_min
+    max_new = settings.discover_new_per_cycle
+    refresh_n = settings.refresh_per_cycle
     while True:
         now = time.time()
         db.heartbeat("crawler")  # điểm danh mỗi vòng 10s — app hiện sống/chết thật
+        due = now - last_discovery > interval_min * 60
+        if due:
+            # config chỉnh từ app (worker_settings) — đọc lại mỗi chu kỳ, đổi là ăn ngay
+            rs = db.runtime_settings()
+            def _num(key: str, cur: int) -> int:
+                try:
+                    return max(1, int(rs.get(key, cur)))
+                except (TypeError, ValueError):
+                    return cur
+            interval_min = _num("crawl_interval_min", interval_min)
+            max_new = _num("discover_new_per_cycle", max_new)
+            refresh_n = _num("refresh_per_cycle", refresh_n)
         for adapter in adapters.values():
             try:
                 # 1) tải nội dung chương đang chờ dịch — NGƯỜI ĐỌC TRƯỚC, chạy mỗi tick.
@@ -107,20 +122,20 @@ def run_crawler() -> None:
                         sync.sync_chapter_list(adapter, nv["id"], nv["source_novel_id"])
                     sync.ensure_chapters_fetched(adapter, nv["id"])
                 # 2) discovery + sync truyện được theo dõi — theo chu kỳ dài
-                if now - last_discovery > settings.crawl_interval_min * 60:
+                if due:
                     # "Ít mà chất": nguồn có bảng xếp hạng → CHỈ lấy từ ranking (lượt đọc
                     # = bộ lọc chất lượng); trang "mới cập nhật" toàn truyện mỏng chưa ai
                     # đọc, chỉ dùng cho nguồn không có ranking (ddxs).
-                    sync.discover_ranking(adapter, max_new=settings.discover_new_per_cycle)
+                    sync.discover_ranking(adapter, max_new=max_new)
                     if not getattr(adapter, "fetch_ranking", None):
-                        sync.discover_latest(adapter, max_new=settings.discover_new_per_cycle)
+                        sync.discover_latest(adapter, max_new=max_new)
                     sync.sync_followed_novels(adapter)
                     # truyện đã có ra chương mới → nổi "Mới cập nhật" (không chỉ truyện mới)
-                    sync.refresh_canonical_updates(adapter, limit=settings.refresh_per_cycle)
+                    sync.refresh_canonical_updates(adapter, limit=refresh_n)
                     _eval_source_health(adapter)
             except Exception:
                 log.exception("Lỗi vòng crawl (%s)", adapter.name)
-        if now - last_discovery > settings.crawl_interval_min * 60:
+        if due:
             last_discovery = now
         time.sleep(10)
 

@@ -225,7 +225,9 @@ def discover_ranking(adapter: SourceAdapter, max_new: int = 30) -> None:
         return
     sid = _source_id(adapter)
     added = 0
-    ranked = list(fetch(limit=max_new * 4))
+    # Quét HẾT bảng xếp hạng mỗi chu kỳ: rank mọi truyện đã có được cập nhật (top
+    # không cố định), truyện chưa có thì thêm dần max_new/chu kỳ tới khi vét cạn top.
+    ranked = list(fetch(limit=1000))
     known = _existing_novels(sid, [r[0] for r in ranked])  # check theo lô
     for source_novel_id, rank in ranked:
         if source_novel_id in known:
@@ -442,6 +444,12 @@ def _maybe_unhide_grown(nv: dict) -> None:
     log.info("Truyện %s đủ %d chương — tự hiện lại + dịch metadata", nv["id"], count)
 
 
+# Đếm số lần liên tiếp một chương "chưa sẵn trên nguồn" (in-memory, reset khi worker
+# restart — chấp nhận: restart chỉ kéo dài thêm vài vòng thử).
+_not_ready_count: dict[int, int] = {}
+NOT_READY_GIVE_UP = 10
+
+
 def ensure_chapters_fetched(adapter: SourceAdapter, novel_id: int) -> None:
     """Tải content_zh cho các chương đã queued dịch mà chưa có nội dung gốc."""
     rows = (
@@ -461,12 +469,25 @@ def ensure_chapters_fetched(adapter: SourceAdapter, novel_id: int) -> None:
         try:
             content = adapter.fetch_chapter(ch["source_chapter_id"])
             db.save_chapter_raw(ch["id"], content)
+            _not_ready_count.pop(ch["id"], None)
             log.info("Đã tải chương %s (novel %s)", ch["chapter_index"], novel_id)
         except ChapterNotReady as e:
-            # Lỗi TẠM: nguồn đã liệt kê chương nhưng trang chưa sinh → giữ queued,
-            # vòng crawl sau thử lại. ponytail: nếu nguồn không bao giờ sinh trang,
-            # chương treo queued mãi — cần TTL đánh failed sau N ngày nếu thành vấn đề.
-            log.info("Chương %s chưa sẵn trên nguồn — thử lại vòng sau (%s)", ch["id"], e)
+            # Lỗi TẠM: nguồn liệt kê chương nhưng trang chưa sinh → giữ queued thử lại.
+            # Nhưng quá NOT_READY_GIVE_UP lần liên tiếp = truyện bị GỠ khỏi nguồn (404
+            # cả trang truyện) → đánh failed kèm lý do, thôi lặp nóng mỗi vòng crawl.
+            n = _not_ready_count[ch["id"]] = _not_ready_count.get(ch["id"], 0) + 1
+            if n >= NOT_READY_GIVE_UP:
+                _not_ready_count.pop(ch["id"], None)
+                db.sb().table("chapters").update(
+                    {"translation_status": "failed"}).eq("id", ch["id"]).execute()
+                db.sb().table("translation_jobs").update(
+                    {"status": "failed",
+                     "error": f"crawl: trang chương không tồn tại sau {n} lần thử "
+                              f"— truyện có thể đã bị gỡ khỏi nguồn ({e})"[:500]}
+                ).eq("chapter_id", ch["id"]).eq("status", "pending").execute()
+                log.warning("Chương %s không sẵn sau %d lần — đánh failed", ch["id"], n)
+            else:
+                log.info("Chương %s chưa sẵn trên nguồn (lần %d) — thử lại vòng sau", ch["id"], n)
         except Exception as e:
             # Lỗi tải (đổi cấu trúc/mạng): đánh dấu failed để thôi retry mỗi vòng crawl.
             db.sb().table("chapters").update(

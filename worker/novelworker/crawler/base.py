@@ -1,6 +1,7 @@
 """Interface chung cho mọi nguồn crawl."""
 from __future__ import annotations
 
+import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -77,16 +78,24 @@ class SourceAdapter(ABC):
         return r.content, (r.headers.get("content-type") or "")
 
     def _get(self, path: str) -> str:
-        """GET path tương đối (hoặc URL tuyệt đối) → text đã decode theo encoding nguồn."""
+        """GET path tương đối (hoặc URL tuyệt đối) → text đã decode theo encoding nguồn.
+
+        Nguồn TQ hay chập chờn (curl 28 timeout, connection closed abruptly) —
+        thử lại 3 lần với backoff trước khi bỏ cuộc, đỡ đánh failed oan chương."""
         url = path if path.startswith("http") else f"{self.base_url}/{path.lstrip('/')}"
-        try:
-            r = self._session.get(url)
-            r.raise_for_status()
-        except Exception:
-            self.fetch_err += 1
-            raise
-        self.fetch_ok += 1
-        return r.content.decode(self.encoding, "ignore")
+        last: Exception | None = None
+        for attempt in range(3):
+            if attempt:
+                time.sleep(2 * attempt)  # 2s, 4s
+            try:
+                r = self._session.get(url)
+                r.raise_for_status()
+                self.fetch_ok += 1
+                return r.content.decode(self.encoding, "ignore")
+            except Exception as e:
+                last = e
+        self.fetch_err += 1
+        raise last  # type: ignore[misc]
 
     @abstractmethod
     def fetch_latest(self, limit: int = 30) -> list[NovelMeta]:

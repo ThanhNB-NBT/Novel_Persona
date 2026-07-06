@@ -21,6 +21,7 @@ TỰ NHIÊN — CHỐNG VĂN DỊCH MÁY (rất quan trọng, đọc kỹ)
 
 TÊN RIÊNG & THUẬT NGỮ
 - Tên người, môn phái, địa danh, chiêu thức, pháp bảo, cảnh giới tu luyện: PHIÊN ÂM Hán-Việt chuẩn (林松→Lâm Tùng; 筑基→Trúc Cơ; 金丹→Kim Đan; 元婴→Nguyên Anh). TUYỆT ĐỐI không dịch nghĩa tên riêng, không để sót ký tự Hán nào.
+- Tên riêng vốn viết bằng chữ LATIN/tiếng Anh trong bản gốc (tên nhân vật ngoại quốc, tổ chức, game, skill, code name... vd "Dragon Raja", "System", "SSS") → GIỮ NGUYÊN tiếng Anh, KHÔNG dịch sang tiếng Việt, KHÔNG phiên âm. Tên ngoại quốc viết bằng chữ Hán (安娜→Anna, 杰克→Jack, 伦敦→London) → chuyển về dạng Latin thông dụng, KHÔNG phiên âm Hán-Việt (không viết "An Na", "Kiệt Khắc", "Luân Đôn").
 - Mỗi tên giữ CỐ ĐỊNH một cách phiên âm xuyên suốt — bám bảng thuật ngữ và ngữ cảnh chương trước.
 - Thuật ngữ thể loại dùng từ quen thuộc với độc giả Việt (灵石→linh thạch, 系统→hệ thống, 修炼→tu luyện).
 
@@ -55,13 +56,14 @@ MAX_TERMS_IN_PROMPT = 80
 
 SYSTEM_ANALYZE = """Bạn là trợ lý phân tích tiểu thuyết mạng Trung. Đọc đoạn văn sau, TUYỆT ĐỐI KHÔNG dịch nội dung.
 Liệt kê MỌI tên riêng / thuật ngữ quan trọng xuất hiện (người, môn phái, địa danh, chiêu thức, pháp bảo, cảnh giới tu luyện) kèm phiên âm Hán-Việt chuẩn. Với "person" ghi thêm giới tính (nam/nữ) và vai vế nếu rõ, để dịch chọn đúng xưng hô.
+Tên vốn viết bằng chữ Latin/tiếng Anh → "vi" giữ nguyên tiếng Anh. Tên ngoại quốc viết bằng chữ Hán (安娜, 杰克, 伦敦) → "vi" là dạng Latin thông dụng (Anna, Jack, London), KHÔNG phiên âm Hán-Việt.
 Trả về DUY NHẤT một mảng JSON, không giải thích, không văn bản thừa:
 [{"zh": "林松", "vi": "Lâm Tùng", "type": "person", "note": "nam, sư huynh"}]
 type ∈ person|place|sect|item|skill|other. Nếu đoạn không có tên riêng, trả về [].
 """
 
 SYSTEM_METADATA = """Bạn là dịch giả tiểu thuyết mạng Trung → Việt. Dịch metadata truyện sau sang tiếng Việt.
-Tên truyện dịch hay, tự nhiên như tên truyện xuất bản ở VN. Tên tác giả phiên âm Hán-Việt.
+Tên truyện dịch hay, tự nhiên như tên truyện xuất bản ở VN; phần tên riêng gốc Latin/tiếng Anh trong tên truyện giữ nguyên (vd "Dragon Raja"). Tên tác giả phiên âm Hán-Việt.
 Thể loại dùng thuật ngữ quen thuộc với độc giả VN (玄幻→Huyền huyễn, 都市→Đô thị, 言情→Ngôn tình...).
 Trả về DUY NHẤT một JSON object, không giải thích:
 {"title_vi": "...", "author_vi": "...", "description_vi": "...", "genres_vi": ["..."]}"""

@@ -232,6 +232,17 @@ def heartbeat(name: str, note: str | None = None) -> None:
         log.debug("heartbeat lỗi (bỏ qua): %s", name)
 
 
+def runtime_settings() -> dict[str, str]:
+    """Config chỉnh từ app (bảng worker_settings) — đọc mỗi chu kỳ discovery,
+    đổi trong app là ăn ngay không cần restart. Lỗi/thiếu → {} (dùng default code)."""
+    try:
+        rows = sb().table("worker_settings").select("key, value").execute().data or []
+        return {r["key"]: r["value"] for r in rows}
+    except Exception:
+        log.warning("Không đọc được worker_settings — dùng default trong config.py")
+        return {}
+
+
 # ---------- cache bìa (Supabase Storage) ----------
 
 def upload_cover(path: str, data: bytes, content_type: str) -> None:

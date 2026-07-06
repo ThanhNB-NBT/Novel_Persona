@@ -130,8 +130,8 @@ void translateRangeDialog(BuildContext context, WidgetRef ref, int novelId,
   );
 }
 
-/// Logo GT (bản xoá nền) tự nhuộm theo theme: mực đậm khi sáng, sáng khi tối —
-/// một asset dùng được cả 2 chế độ, không cần đổi file.
+/// Logo GT trong app: chữ trần không nền — mực đen khi sáng, mực sáng khi tối
+/// (đen tuyền trên nền đêm sẽ tàng hình). Icon launcher lo phần nền trắng.
 class BrandLogo extends StatelessWidget {
   final double height;
   const BrandLogo({super.key, this.height = 40});
@@ -199,7 +199,9 @@ class Cover extends StatelessWidget {
   final double width;
   final double aspect; // cao / rộng
   final String? label; // chữ cái đầu cho placeholder khi thiếu bìa
-  const Cover({super.key, this.url, this.width = 108, this.aspect = 1.4, this.label});
+  final bool flat; // true = tắt bóng đổ (thumbnail nhỏ sát nhau bóng nhìn rối)
+  const Cover(
+      {super.key, this.url, this.width = 108, this.aspect = 1.4, this.label, this.flat = false});
 
   @override
   Widget build(BuildContext context) {
@@ -230,13 +232,15 @@ class Cover extends StatelessWidget {
         borderRadius: radius,
         // tech-minimal: viền 1px mờ + bóng rất nhẹ thay bóng nặng
         border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.7)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.08),
-            blurRadius: 8,
-            offset: const Offset(0, 3),
-          ),
-        ],
+        boxShadow: flat
+            ? null
+            : [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.08),
+                  blurRadius: 8,
+                  offset: const Offset(0, 3),
+                ),
+              ],
       ),
       child: ClipRRect(
         borderRadius: radius,
@@ -272,7 +276,7 @@ class SectionHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 24, 12, 14),
+      padding: const EdgeInsets.fromLTRB(20, 18, 12, 10),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [

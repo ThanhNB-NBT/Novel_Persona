@@ -63,22 +63,32 @@ class BiqugeAdapter(SourceAdapter):
         return []
 
     def fetch_ranking(self, limit: int = 100) -> list[tuple[str, int]]:
-        """Bảng xếp hạng nguồn → [(source_novel_id, rank)] (rank nhỏ = hot). shuhaige
-        `/top.html` (总点击...): mỗi mục là `<span class="num">N.</span><a href="/{id}/">`.
-        Rank = thứ tự XUẤT HIỆN đầu trang (mục 总点击 đứng đầu → hạng thấp nhất). Site khác
-        đổi qua config['ranking_path']."""
-        path = self.config.get("ranking_path", "/top.html")
-        try:
-            html = self._get(path)
-        except Exception:
-            log.warning("Không lấy được bảng xếp hạng %s (%s)", path, self.name)
-            return []
-        pat = re.compile(r'<span class="num">\d+\.</span><a href="/(\d+)/"')
+        """TOÀN BỘ bảng xếp hạng tổng lượt đọc → [(source_novel_id, rank)] (rank nhỏ
+        = hot). shuhaige `/allvisit/` phân trang (~20 trang × 30 truyện, xếp theo 总点击);
+        mỗi dòng `<span class="s2..."><a href="/{id}/">`. Rank = thứ tự xuất hiện toàn cục.
+        Nguồn KHÔNG công bố con số lượt đọc — chỉ có thứ hạng. Site khác đổi qua
+        config['ranking_path'] / config['ranking_pages']."""
+        base = self.config.get("ranking_path", "/allvisit/")
+        pages = int(self.config.get("ranking_pages", 20))
+        pat = re.compile(r'<span class="s2[^"]*"><a href="/(\d+)/"')
         best: dict[str, int] = {}
-        for order, m in enumerate(pat.finditer(html)):
-            sid = m.group(1)
-            if sid not in best:  # giữ lần xuất hiện ĐẦU = hạng cao nhất
-                best[sid] = order
+        order = 0
+        for p in range(1, pages + 1):
+            path = base if p == 1 else f"{base}{p}.html"
+            try:
+                html = self._get(path)
+            except Exception:
+                log.warning("Không lấy được bảng xếp hạng %s (%s)", path, self.name)
+                break  # trang sau cũng sẽ fail — giữ những gì đã có
+            found = pat.findall(html)
+            if not found:
+                break  # hết trang thật / nguồn đổi cấu trúc
+            for sid in found:
+                if sid not in best:  # giữ lần xuất hiện ĐẦU = hạng cao nhất
+                    best[sid] = order
+                    order += 1
+            if len(best) >= limit:
+                break
         return sorted(best.items(), key=lambda kv: kv[1])[:limit]
 
     def fetch_novel_meta(self, source_novel_id: str) -> NovelMeta:
