@@ -1,4 +1,3 @@
-import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
@@ -46,8 +45,8 @@ class _NeoShellState extends State<NeoShell> {
   }
 }
 
-/// Boot sequence ~1.2s: scanline quét + logo glitch, bỏ qua nếu tắt animation
-/// hoặc chạm màn hình.
+/// Intro ~0.9s: tên app hiện dần trên nền khí quyển rồi tan vào màn chính.
+/// Chạm để bỏ qua; tắt animation thì vào thẳng.
 class BootSequence extends StatefulWidget {
   final VoidCallback onDone;
   const BootSequence({super.key, required this.onDone});
@@ -59,7 +58,7 @@ class BootSequence extends StatefulWidget {
 class _BootSequenceState extends State<BootSequence>
     with SingleTickerProviderStateMixin {
   late final _ctrl = AnimationController(
-      vsync: this, duration: const Duration(milliseconds: 1200));
+      vsync: this, duration: const Duration(milliseconds: 900));
 
   @override
   void initState() {
@@ -85,64 +84,36 @@ class _BootSequenceState extends State<BootSequence>
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: widget.onDone, // đường tắt cho máy yếu / người vội
+      onTap: widget.onDone,
       child: Scaffold(
         body: AnimatedBuilder(
           animation: _ctrl,
-          builder: (_, _) => CustomPaint(
-            size: Size.infinite,
-            painter: _BootPainter(t: _ctrl.value),
-          ),
+          builder: (_, _) {
+            final t = Curves.easeOutCubic.transform(_ctrl.value);
+            return DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: RadialGradient(
+                  center: const Alignment(0, -0.3),
+                  radius: 1.2,
+                  colors: [
+                    Neo.plasma.withValues(alpha: 0.1 * (1 - t)),
+                    Neo.bg,
+                  ],
+                ),
+              ),
+              child: Center(
+                child: Opacity(
+                  opacity: (t * 1.6).clamp(0, 1) * (1 - (t - 0.75).clamp(0, 0.25) * 4),
+                  child: Transform.scale(
+                    scale: 0.94 + t * 0.06,
+                    child: Text('Truyện', style: Neo.display(52)),
+                  ),
+                ),
+              ),
+            );
+          },
         ),
       ),
     );
   }
-}
-
-class _BootPainter extends CustomPainter {
-  final double t;
-  _BootPainter({required this.t});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    // scanline quét từ trên xuống
-    final y = size.height * Curves.easeInOut.transform(t);
-    canvas.drawRect(
-      Rect.fromLTWH(0, y - 2, size.width, 4),
-      Paint()..color = Neo.cyan.withValues(alpha: 0.6 * (1 - t)),
-    );
-    // vài vệt scanline ngang mờ
-    final rnd = math.Random((t * 24).floor()); // đổi seed theo bước -> nhiễu giật
-    for (var i = 0; i < 5; i++) {
-      canvas.drawRect(
-        Rect.fromLTWH(0, rnd.nextDouble() * size.height, size.width, 1),
-        Paint()..color = Neo.cyan.withValues(alpha: 0.05),
-      );
-    }
-    // logo glitch: chữ NEO lệch RGB, ổn định dần về cuối
-    final jitter = (1 - t) * 6;
-    final center = Offset(size.width / 2, size.height / 2);
-    void draw(String s, Color c, Offset off, {double size = 44}) {
-      final tp = TextPainter(
-        text: TextSpan(text: s, style: Neo.display(size, color: c)),
-        textDirection: TextDirection.ltr,
-      )..layout();
-      tp.paint(canvas, center - Offset(tp.width / 2, tp.height / 2) + off);
-    }
-
-    if (t > 0.25) {
-      draw('NEO TERMINAL', Neo.plasma.withValues(alpha: 0.7),
-          Offset(rnd.nextDouble() * jitter - jitter / 2, 0));
-      draw('NEO TERMINAL', Neo.cyan.withValues(alpha: 0.7),
-          Offset(-rnd.nextDouble() * jitter + jitter / 2, 1));
-      draw('NEO TERMINAL', Neo.text, Offset.zero);
-    }
-    if (t > 0.5) {
-      draw('KHỞI ĐỘNG HỆ THỐNG ${(t * 100).round()}%', Neo.dim,
-          const Offset(0, 46), size: 12);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _BootPainter old) => old.t != t;
 }

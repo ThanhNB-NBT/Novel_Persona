@@ -87,7 +87,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                       children: [for (final e in avatarPresets) _avatarChoice(e)],
                     ),
                     const SizedBox(height: 32),
-                    NeoButton(label: 'LƯU', busy: _saving, onPressed: _save),
+                    NeoButton(label: 'Lưu', busy: _saving, onPressed: _save),
                   ],
                 );
               },
@@ -105,7 +105,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
       width: 96, height: 96,
       decoration: ShapeDecoration(
         color: Neo.surface2,
-        shape: const NeoCutBorder(side: BorderSide(color: Neo.cyan)),
+        shape: NeoCutBorder(side: BorderSide(color: Neo.cyan)),
         shadows: Neo.glow(Neo.cyan, blur: 24, alpha: 0.35),
       ),
       alignment: Alignment.center,

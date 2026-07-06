@@ -27,7 +27,7 @@ class SettingsScreen extends ConsumerWidget {
             child: Center(
               child: SizedBox(
                 width: 240,
-                child: NeoButton(label: 'ĐĂNG NHẬP', onPressed: () => context.push('/login')),
+                child: NeoButton(label: 'Đăng nhập', onPressed: () => context.push('/login')),
               ),
             ),
           ),
@@ -88,7 +88,7 @@ class _Header extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.fromLTRB(4, 14, 4, 14),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('NEO // HỆ THỐNG', style: Neo.mono(10, color: Neo.cyan, spacing: 3)),
+        Text('HỆ THỐNG', style: Neo.mono(10, color: Neo.cyan, spacing: 3)),
         const SizedBox(height: 2),
         Text('Điều khiển', style: Neo.display(28)),
       ]),
@@ -196,7 +196,7 @@ class _SectionLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Padding(
         padding: const EdgeInsets.fromLTRB(4, 22, 0, 10),
-        child: Text('// ${text.toUpperCase()}',
+        child: Text(text.toUpperCase(),
             style: Neo.mono(9, color: Neo.cyan, spacing: 3)),
       );
 }
@@ -209,7 +209,7 @@ class _TileGroup extends StatelessWidget {
     return Material(
       color: Neo.surface,
       clipBehavior: Clip.antiAlias,
-      shape: const NeoCutBorder(cut: Neo.cutSm, side: BorderSide(color: Neo.faint)),
+      shape: NeoCutBorder(cut: Neo.cutSm, side: BorderSide(color: Neo.faint)),
       child: Column(children: [
         for (var i = 0; i < children.length; i++) ...[
           if (i > 0)

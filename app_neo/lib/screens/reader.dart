@@ -250,7 +250,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
         elevation: 0,
         scrolledUnderElevation: 0,
         titleSpacing: 0,
-        title: Text('CH.${'$chapterIndex'.padLeft(4, '0')}',
+        title: Text('Chương $chapterIndex',
             style: Neo.mono(12, color: col.fg.withValues(alpha: 0.55), spacing: 2)),
         actions: [
           ValueListenableBuilder<double>(
@@ -272,11 +272,11 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
         ],
       ),
       body: chapter.when(
-        loading: () => const NeoLoading(label: 'GIẢI MÃ CHƯƠNG'),
+        loading: () => const NeoLoading(label: 'Đang tải chương…'),
         error: (e, _) => NeoMessage('Lỗi: $e', error: true),
         data: (c) {
           if (c == null) {
-            return NeoMessage('KHÔNG CÓ CHƯƠNG NÀY');
+            return NeoMessage('Không có chương này.');
           }
           final status = c['translation_status'];
           if (status != 'done') {
@@ -318,7 +318,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                       textAlign: TextAlign.center,
                       style: TextStyle(color: col.fg.withValues(alpha: 0.6), fontSize: 13)),
                   const SizedBox(height: 16),
-                  NeoButton(label: 'DỊCH LẠI CHƯƠNG', onPressed: _retranslate),
+                  NeoButton(label: 'Dịch lại chương', onPressed: _retranslate),
                 ]),
               ),
             );
@@ -627,7 +627,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(children: [
-                    Text('// SỬA BẢN DỊCH',
+                    Text('Sửa bản dịch',
                         style: Neo.mono(12, color: Neo.cyan, weight: FontWeight.w700, spacing: 2)),
                     const Spacer(),
                     InkWell(
@@ -698,7 +698,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                     decoration: const InputDecoration(labelText: 'SỬA THÀNH', isDense: true),
                   ),
                   const SizedBox(height: 12),
-                  NeoButton(label: 'LƯU', onPressed: () => _submitEdit(wrong)),
+                  NeoButton(label: 'Lưu', onPressed: () => _submitEdit(wrong)),
                 ]),
           ),
         ),
@@ -884,8 +884,8 @@ class _EndPanelState extends ConsumerState<_EndPanel> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: Neo.surface,
-        shape: const NeoCutBorder(side: BorderSide(color: Neo.faint)),
-        title: Text('BÁO CÁO CHƯƠNG LỖI',
+        shape: NeoCutBorder(side: BorderSide(color: Neo.faint)),
+        title: Text('Báo cáo chương lỗi',
             style: Neo.mono(13, color: Neo.text, weight: FontWeight.w700)),
         content: TextField(
           controller: reason,
@@ -897,9 +897,9 @@ class _EndPanelState extends ConsumerState<_EndPanel> {
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false),
-              child: Text('HUỶ', style: Neo.mono(11, color: Neo.dim))),
+              child: Text('Huỷ', style: Neo.mono(11, color: Neo.dim))),
           TextButton(onPressed: () => Navigator.pop(ctx, true),
-              child: Text('GỬI', style: Neo.mono(11, color: Neo.cyan, weight: FontWeight.w700))),
+              child: Text('Gửi', style: Neo.mono(11, color: Neo.cyan, weight: FontWeight.w700))),
         ],
       ),
     );
@@ -934,7 +934,7 @@ class _EndPanelState extends ConsumerState<_EndPanel> {
         shape: NeoCutBorder(side: BorderSide(color: fg.withValues(alpha: 0.2))),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('// 20 CHƯƠNG KẾ TIẾP',
+        Text('20 chương kế tiếp',
             style: Neo.mono(10, color: fg.withValues(alpha: 0.45), spacing: 2)),
         const SizedBox(height: 6),
         Text(
@@ -994,10 +994,10 @@ class _WaitingView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (label, showButton) = switch (status) {
-      'queued' => ('TRONG HÀNG ĐỢI DỊCH', false),
-      'translating' => ('ĐANG GIẢI MÃ / DỊCH', false),
-      'failed' => ('DỊCH LỖI', true),
-      _ => ('CHƯƠNG CHƯA ĐƯỢC DỊCH', true),
+      'queued' => ('Trong hàng đợi dịch…', false),
+      'translating' => ('Đang dịch…', false),
+      'failed' => ('Dịch lỗi', true),
+      _ => ('Chương chưa được dịch', true),
     };
     return Center(
       child: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -1010,7 +1010,7 @@ class _WaitingView extends StatelessWidget {
             child: SizedBox(
               width: 220,
               child: NeoButton(
-                  label: status == 'failed' ? 'DỊCH LẠI' : 'YÊU CẦU DỊCH',
+                  label: status == 'failed' ? 'Dịch lại' : 'Yêu cầu dịch',
                   onPressed: onRequest),
             ),
           ),

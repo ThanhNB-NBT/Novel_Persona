@@ -18,14 +18,14 @@ class QueueScreen extends ConsumerWidget {
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('NEO // HÀNG ĐỢI', style: Neo.mono(10, color: Neo.cyan, spacing: 3)),
+            Text('HÀNG ĐỢI', style: Neo.mono(10, color: Neo.cyan, spacing: 3)),
             const SizedBox(height: 2),
             Text('Tiến trình dịch', style: Neo.display(28)),
           ]),
         ),
         Expanded(
           child: q.when(
-            loading: () => const NeoLoading(label: 'ĐỒNG BỘ HÀNG ĐỢI'),
+            loading: () => const NeoLoading(label: 'Đang tải hàng đợi…'),
             error: (e, _) => NeoMessage('Lỗi: $e', error: true),
             data: (state) => RefreshIndicator(
               color: Neo.cyan,
@@ -94,9 +94,9 @@ void _showChapters(BuildContext context, _NovelGroup g) {
                   final c = items[i];
                   final st = c['translation_status'];
                   final (label, color) = switch (st) {
-                    'translating' => ('ĐANG DỊCH', Neo.cyan),
-                    'downloading' => ('ĐANG TẢI VỀ', Neo.plasma),
-                    _ => ('CHỜ DỊCH', Neo.dim),
+                    'translating' => ('Đang dịch', Neo.cyan),
+                    'downloading' => ('Đang tải về', Neo.plasma),
+                    _ => ('Chờ dịch', Neo.dim),
                   };
                   return ListTile(
                     dense: true,
@@ -259,7 +259,7 @@ class _NovelQueueCard extends StatelessWidget {
                 const SizedBox(height: 10),
                 HudProgress(value: (done / total).clamp(0, 1).toDouble()),
                 const SizedBox(height: 4),
-                Text('$done / $total CHƯƠNG ĐÃ DỊCH', style: Neo.mono(9, spacing: 1.5)),
+                Text('$done / $total chương đã dịch', style: Neo.mono(9, spacing: 1.5)),
               ],
             ]),
           ),
@@ -293,7 +293,7 @@ class _RecentDone extends ConsumerWidget {
           const Icon(Icons.check_circle, size: 16, color: Neo.cyan),
           const SizedBox(width: 8),
           Expanded(
-              child: Text('VỪA DỊCH XONG',
+              child: Text('Vừa dịch xong',
                   style: Neo.mono(11, color: Neo.text, weight: FontWeight.w700, spacing: 2))),
           TextButton.icon(
             onPressed: () async {
@@ -301,7 +301,7 @@ class _RecentDone extends ConsumerWidget {
               ref.invalidate(translateQueueProvider);
             },
             icon: const Icon(Icons.delete_sweep_outlined, size: 16, color: Neo.dim),
-            label: Text('XOÁ', style: Neo.mono(10, spacing: 1.5)),
+            label: Text('Xoá', style: Neo.mono(10, spacing: 1.5)),
           ),
         ]),
       ),

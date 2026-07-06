@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../data.dart';
 import '../neo_theme.dart';
 import '../neo_widgets.dart';
+import '../ambient.dart';
 import '../offline.dart';
 
 /// Chi tiết truyện — logic (offline, dịch, tủ sách) port nguyên từ app cũ, khung HUD mới.
@@ -19,32 +20,40 @@ class NovelDetailScreen extends ConsumerWidget {
     final novel = ref.watch(novelProvider(novelId));
     return NeoScaffold(
       body: novel.when(
-        loading: () => const NeoLoading(label: 'NẠP HỒ SƠ TRUYỆN'),
+        loading: () => const NeoLoading(label: 'Đang tải truyện…'),
         error: (e, _) => NeoMessage('Lỗi: $e', error: true),
-        data: (n) => Stack(children: [
-          DefaultTabController(
-            length: 2,
-            child: Column(children: [
-              _Header(n, novelId),
-              TabBar(
-                tabs: const [Tab(text: 'HỒ SƠ'), Tab(text: 'MỤC LỤC')],
-                labelStyle: Neo.mono(12, color: Neo.cyan, weight: FontWeight.w700, spacing: 2),
-                unselectedLabelStyle: Neo.mono(12, spacing: 2),
-                labelColor: Neo.cyan,
-                unselectedLabelColor: Neo.dim,
-                indicatorColor: Neo.cyan,
-                dividerColor: Neo.faint,
-              ),
-              Expanded(
-                child: TabBarView(children: [
-                  _IntroTab(n),
-                  _ChapterListTab(novelId: novelId),
+        data: (n) {
+          // khí quyển của truyện: màu trích từ bìa nhuộm nền/tab/nút
+          final amb = ref.watch(ambientProvider(n['cover_url'] as String?)).value ??
+              Ambient.fallback;
+          return AmbientBackdrop(
+            ambient: amb,
+            child: Stack(children: [
+              DefaultTabController(
+                length: 2,
+                child: Column(children: [
+                  _Header(n, novelId),
+                  TabBar(
+                    tabs: const [Tab(text: 'Giới thiệu'), Tab(text: 'Mục lục')],
+                    labelStyle: Neo.display(15, weight: FontWeight.w600),
+                    unselectedLabelStyle: Neo.display(15, weight: FontWeight.w500),
+                    labelColor: amb.accent,
+                    unselectedLabelColor: Neo.dim,
+                    indicatorColor: amb.accent,
+                    dividerColor: Neo.faint,
+                  ),
+                  Expanded(
+                    child: TabBarView(children: [
+                      _IntroTab(n),
+                      _ChapterListTab(novelId: novelId),
+                    ]),
+                  ),
                 ]),
               ),
+              Positioned(left: 0, right: 0, bottom: 0, child: _BottomBar(n, novelId, amb)),
             ]),
-          ),
-          Positioned(left: 0, right: 0, bottom: 0, child: _BottomBar(n, novelId)),
-        ]),
+          );
+        },
       ),
     );
   }
@@ -155,15 +164,15 @@ Future<void> toggleOffline(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: Neo.surface,
-        shape: const NeoCutBorder(side: BorderSide(color: Neo.faint)),
-        title: Text('XOÁ BẢN OFFLINE?', style: Neo.mono(14, color: Neo.text, weight: FontWeight.w700)),
+        shape: NeoCutBorder(side: BorderSide(color: Neo.faint)),
+        title: Text('Xoá bản offline?', style: Neo.mono(14, color: Neo.text, weight: FontWeight.w700)),
         content: Text('Xoá các chương đã tải của truyện này khỏi máy.',
             style: Neo.mono(12)),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false),
-              child: Text('HUỶ', style: Neo.mono(11, color: Neo.dim))),
+              child: Text('Huỷ', style: Neo.mono(11, color: Neo.dim))),
           TextButton(onPressed: () => Navigator.pop(ctx, true),
-              child: Text('XOÁ', style: Neo.mono(11, color: Neo.danger))),
+              child: Text('Xoá', style: Neo.mono(11, color: Neo.danger))),
         ],
       ),
     );
@@ -179,11 +188,11 @@ Future<void> toggleOffline(
     barrierDismissible: false,
     builder: (_) => AlertDialog(
       backgroundColor: Neo.surface,
-      shape: const NeoCutBorder(side: BorderSide(color: Neo.faint)),
+      shape: NeoCutBorder(side: BorderSide(color: Neo.faint)),
       content: Row(children: [
         const SizedBox(width: 90, child: HudProgress()),
         const SizedBox(width: 16),
-        Expanded(child: Text('ĐANG TẢI CHƯƠNG…', style: Neo.mono(11))),
+        Expanded(child: Text('Đang tải chương…', style: Neo.mono(11))),
       ]),
     ),
   );
@@ -227,8 +236,8 @@ void translateRangeDialog(BuildContext context, WidgetRef ref, int novelId,
     context: context,
     builder: (ctx) => AlertDialog(
       backgroundColor: Neo.surface,
-      shape: const NeoCutBorder(side: BorderSide(color: Neo.faint)),
-      title: Text('YÊU CẦU DỊCH', style: Neo.mono(14, color: Neo.cyan, weight: FontWeight.w700, spacing: 2)),
+      shape: NeoCutBorder(side: BorderSide(color: Neo.faint)),
+      title: Text('Yêu cầu dịch', style: Neo.mono(14, color: Neo.cyan, weight: FontWeight.w700, spacing: 2)),
       content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -251,7 +260,7 @@ void translateRangeDialog(BuildContext context, WidgetRef ref, int novelId,
                   backgroundColor: Neo.surface2,
                   side: const BorderSide(color: Neo.cyan),
                   shape: const RoundedRectangleBorder(),
-                  label: Text('ĐẾN HẾT', style: Neo.mono(11, color: Neo.cyan)),
+                  label: Text('Đến hết', style: Neo.mono(11, color: Neo.cyan)),
                   onPressed: () => submit(source),
                 ),
             ]),
@@ -270,13 +279,13 @@ void translateRangeDialog(BuildContext context, WidgetRef ref, int novelId,
           ]),
       actions: [
         TextButton(onPressed: () => Navigator.pop(ctx),
-            child: Text('ĐÓNG', style: Neo.mono(11, color: Neo.dim))),
+            child: Text('Đóng', style: Neo.mono(11, color: Neo.dim))),
         TextButton(
           onPressed: () {
             final to = int.tryParse(custom.text.trim());
             if (to != null) submit(to.clamp(0, source));
           },
-          child: Text('DỊCH', style: Neo.mono(11, color: Neo.cyan, weight: FontWeight.w700)),
+          child: Text('Dịch', style: Neo.mono(11, color: Neo.cyan, weight: FontWeight.w700)),
         ),
       ],
     ),
@@ -351,7 +360,7 @@ class _ChapterListTabState extends ConsumerState<_ChapterListTab> {
     final chapters = ref.watch(chapterListProvider(widget.novelId));
     final novel = ref.watch(novelProvider(widget.novelId)).value;
     return chapters.when(
-      loading: () => const NeoLoading(label: 'NẠP MỤC LỤC'),
+      loading: () => const NeoLoading(label: 'Đang tải mục lục…'),
       error: (e, _) => NeoMessage('Lỗi mục lục: $e', error: true),
       data: (list) {
         final ordered = _asc ? list : list.reversed.toList();
@@ -366,7 +375,7 @@ class _ChapterListTabState extends ConsumerState<_ChapterListTab> {
                     source: (novel?['chapter_count_source'] ?? 0) as int,
                     onDone: () => ref.invalidate(chapterListProvider(widget.novelId))),
                 icon: const Icon(Icons.playlist_add, size: 16, color: Neo.cyan),
-                label: Text('DỊCH', style: Neo.mono(10, color: Neo.cyan, spacing: 2)),
+                label: Text('Dịch', style: Neo.mono(10, color: Neo.cyan, spacing: 2)),
               ),
               TextButton.icon(
                 onPressed: () => setState(() => _asc = !_asc),
@@ -409,7 +418,7 @@ class _ChapterTile extends StatelessWidget {
         ),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         child: Row(children: [
-          Text('${c['chapter_index']}'.padLeft(4, '0'),
+          Text('${c['chapter_index']}',
               style: Neo.mono(10, color: done ? Neo.cyan : Neo.dim)),
           const SizedBox(width: 12),
           Expanded(
@@ -442,7 +451,8 @@ class _ChapterTile extends StatelessWidget {
 class _BottomBar extends ConsumerWidget {
   final Rec n;
   final int novelId;
-  const _BottomBar(this.n, this.novelId);
+  final Ambient amb;
+  const _BottomBar(this.n, this.novelId, this.amb);
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -472,17 +482,18 @@ class _BottomBar extends ConsumerWidget {
                 color: Neo.surface,
                 shape: NeoCutBorder(
                     cut: Neo.cutSm,
-                    side: BorderSide(color: inLib ? Neo.plasma : Neo.faint)),
-                shadows: inLib ? Neo.glow(Neo.plasma, blur: 16, alpha: 0.35) : null,
+                    side: BorderSide(color: inLib ? amb.accent : Neo.faint)),
+                shadows: inLib ? Neo.glow(amb.accent, blur: 16, alpha: 0.35) : null,
               ),
               child: Icon(inLib ? Icons.bookmark : Icons.bookmark_border,
-                  color: inLib ? Neo.plasma : Neo.dim),
+                  color: inLib ? amb.accent : Neo.dim),
             ),
           ),
           const SizedBox(width: 12),
           Expanded(
             child: NeoButton(
-              label: reading ? 'ĐỌC TIẾP CH.$chapter' : 'BẮT ĐẦU ĐỌC',
+              label: reading ? 'Đọc tiếp chương $chapter' : 'Bắt đầu đọc',
+              color: amb.accent,
               onPressed: () => context.push('/novel/$novelId/read/$chapter'),
             ),
           ),

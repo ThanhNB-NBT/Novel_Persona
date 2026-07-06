@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 
 import '../data.dart';
 import '../neo_theme.dart';
+import '../ambient.dart';
 import '../neo_widgets.dart';
 import 'filter.dart';
 import 'section.dart';
@@ -23,7 +24,7 @@ class HomeScreen extends ConsumerWidget {
     final sections = ref.watch(homeSectionsProvider);
     return SafeArea(
       child: sections.when(
-        loading: () => const NeoLoading(label: 'QUÉT KHO TRUYỆN'),
+        loading: () => const NeoLoading(label: 'Đang quét kho truyện…'),
         error: (e, _) => NeoMessage('Không tải được truyện.\n$e', error: true),
         data: (s) => RefreshIndicator(
           color: Neo.cyan,
@@ -59,7 +60,7 @@ class _Brand extends StatelessWidget {
       child: Row(children: [
         Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('NEO // KHÁM PHÁ', style: Neo.mono(10, color: Neo.cyan, spacing: 3)),
+            Text('KHÁM PHÁ', style: Neo.mono(10, color: Neo.cyan, spacing: 3)),
             const SizedBox(height: 2),
             Text('Kho truyện', style: Neo.display(28)),
           ]),
@@ -161,18 +162,21 @@ class _HeroCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cover = n['cover_url'] as String?;
-    return Padding(
+    return Consumer(builder: (context, ref, _) {
+      // khí quyển theo bìa: viền + ánh sáng + nút nhuộm màu riêng của truyện
+      final amb = ref.watch(ambientProvider(cover)).value ?? Ambient.fallback;
+      return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 6),
       child: NeoTapGlow(
         onTap: () => context.push('/novel/${n['id']}'),
         child: Container(
           decoration: ShapeDecoration(
             shape: NeoCutBorder(
-                side: BorderSide(color: Neo.plasma.withValues(alpha: 0.4))),
-            shadows: Neo.glow(Neo.plasma, blur: 22, alpha: 0.25),
+                side: BorderSide(color: amb.accent.withValues(alpha: 0.35))),
+            shadows: Neo.glow(amb.accent, blur: 30, alpha: 0.22),
           ),
           child: ClipPath(
-            clipper: ShapeBorderClipper(shape: const NeoCutBorder()),
+            clipper: ShapeBorderClipper(shape: NeoCutBorder()),
             child: Stack(children: [
               Positioned.fill(
                 child: (cover == null || cover.isEmpty)
@@ -217,16 +221,17 @@ class _HeroCard extends StatelessWidget {
                               style: Neo.mono(10)),
                           const Spacer(),
                           InkWell(
+                            borderRadius: BorderRadius.circular(20),
                             onTap: () => context.push('/novel/${n['id']}/read/1'),
                             child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 7),
+                              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
                               decoration: BoxDecoration(
-                                border: Border.all(color: Neo.cyan),
-                                color: Neo.cyan.withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(20),
+                                color: amb.accent,
                               ),
-                              child: Text('ĐỌC >',
-                                  style: Neo.mono(11, color: Neo.cyan,
-                                      weight: FontWeight.w700, spacing: 2)),
+                              child: Text('Đọc ngay',
+                                  style: Neo.mono(12, color: const Color(0xFF16130E),
+                                      weight: FontWeight.w700)),
                             ),
                           ),
                         ]),
@@ -238,6 +243,7 @@ class _HeroCard extends StatelessWidget {
         ),
       ),
     );
+    });
   }
 }
 

@@ -78,7 +78,7 @@ class _OfflineRow extends ConsumerWidget {
               Text(title, maxLines: 2, overflow: TextOverflow.ellipsis,
                   style: Neo.display(15, weight: FontWeight.w600)),
               const SizedBox(height: 3),
-              Text('${n['total'] ?? 0} CHƯƠNG ĐÃ TẢI', style: Neo.mono(9, spacing: 1.5)),
+              Text('${n['total'] ?? 0} chương đã tải', style: Neo.mono(9, spacing: 1.5)),
             ]),
           ),
           IconButton(

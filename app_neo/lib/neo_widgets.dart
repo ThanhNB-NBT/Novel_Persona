@@ -1,4 +1,4 @@
-import 'dart:math' as math;
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -6,49 +6,16 @@ import 'package:go_router/go_router.dart';
 
 import 'neo_theme.dart';
 
-// ponytail: Phase 1 vẽ hiệu ứng bằng CustomPainter (đủ 60fps, zero asset);
-// nâng lên FragmentShader .frag ở Phase 5 nếu cần grain/glow đắt hơn.
-
 bool reduceMotion(BuildContext context) => MediaQuery.of(context).disableAnimations;
 
-/// Góc vát (cắt 4 góc theo đường chéo) — ngôn ngữ hình khối của NEO.
-class NeoCutBorder extends OutlinedBorder {
-  final double cut;
-  const NeoCutBorder({this.cut = Neo.cut, super.side});
-
-  Path _path(Rect r) {
-    final c = math.min(cut, r.shortestSide / 2);
-    return Path()
-      ..moveTo(r.left + c, r.top)
-      ..lineTo(r.right - c, r.top)
-      ..lineTo(r.right, r.top + c)
-      ..lineTo(r.right, r.bottom - c)
-      ..lineTo(r.right - c, r.bottom)
-      ..lineTo(r.left + c, r.bottom)
-      ..lineTo(r.left, r.bottom - c)
-      ..lineTo(r.left, r.top + c)
-      ..close();
-  }
-
-  @override
-  Path getInnerPath(Rect rect, {TextDirection? textDirection}) =>
-      _path(rect.deflate(side.width));
-  @override
-  Path getOuterPath(Rect rect, {TextDirection? textDirection}) => _path(rect);
-  @override
-  void paint(Canvas canvas, Rect rect, {TextDirection? textDirection}) {
-    if (side.style == BorderStyle.none) return;
-    canvas.drawPath(_path(rect), side.toPaint());
-  }
-
-  @override
-  ShapeBorder scale(double t) => NeoCutBorder(cut: cut * t, side: side.scale(t));
-  @override
-  OutlinedBorder copyWith({BorderSide? side}) =>
-      NeoCutBorder(cut: cut, side: side ?? this.side);
+/// Bo mềm — giữ tên NeoCutBorder từ bản terminal, giờ là rounded border
+/// để mọi màn đang dùng khỏi sửa. [cut] = bán kính.
+class NeoCutBorder extends RoundedRectangleBorder {
+  NeoCutBorder({double cut = Neo.cut, super.side})
+      : super(borderRadius: BorderRadius.circular(cut));
 }
 
-/// Panel góc vát + hairline border, tuỳ chọn glow.
+/// Panel bo mềm + hairline, tuỳ chọn ánh sáng loãng.
 class NeoPanel extends StatelessWidget {
   final Widget child;
   final EdgeInsetsGeometry padding;
@@ -70,10 +37,11 @@ class NeoPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: ShapeDecoration(
+      decoration: BoxDecoration(
         color: color,
-        shape: NeoCutBorder(cut: cut, side: BorderSide(color: borderColor)),
-        shadows: glowColor == null ? null : Neo.glow(glowColor!),
+        borderRadius: BorderRadius.circular(cut),
+        border: Border.all(color: borderColor),
+        boxShadow: glowColor == null ? null : Neo.glow(glowColor!),
       ),
       padding: padding,
       child: child,
@@ -81,27 +49,30 @@ class NeoPanel extends StatelessWidget {
   }
 }
 
-/// Nút chính: khối vát phát sáng cyan.
+/// Nút chính: pill đầy màu accent, bóng mềm.
 class NeoButton extends StatelessWidget {
   final String label;
   final VoidCallback? onPressed;
   final bool busy;
-  const NeoButton({super.key, required this.label, this.onPressed, this.busy = false});
+  final Color? color; // cho phép nhuộm theo khí quyển truyện
+  const NeoButton(
+      {super.key, required this.label, this.onPressed, this.busy = false, this.color});
 
   @override
   Widget build(BuildContext context) {
     final enabled = onPressed != null && !busy;
+    final c = color ?? Neo.cyan;
     return Container(
-      height: 52,
-      decoration: ShapeDecoration(
-        color: enabled ? Neo.cyan : Neo.surface2,
-        shape: const NeoCutBorder(cut: Neo.cutSm),
-        shadows: enabled ? Neo.glow(Neo.cyan, blur: 24) : null,
+      height: 54,
+      decoration: BoxDecoration(
+        color: enabled ? c : Neo.surface2,
+        borderRadius: BorderRadius.circular(27),
+        boxShadow: enabled ? Neo.glow(c, blur: 28, alpha: 0.35) : null,
       ),
       child: Material(
         type: MaterialType.transparency,
         child: InkWell(
-          customBorder: const NeoCutBorder(cut: Neo.cutSm),
+          borderRadius: BorderRadius.circular(27),
           onTap: enabled
               ? () {
                   HapticFeedback.selectionClick();
@@ -112,10 +83,8 @@ class NeoButton extends StatelessWidget {
             child: busy
                 ? const SizedBox(width: 120, child: HudProgress())
                 : Text(label,
-                    style: Neo.mono(14,
-                        color: enabled ? const Color(0xFF001318) : Neo.dim,
-                        weight: FontWeight.w700,
-                        spacing: 3)),
+                    style: GoogleFontsProxy.button(
+                        color: enabled ? const Color(0xFF1C1710) : Neo.dim)),
           ),
         ),
       ),
@@ -123,11 +92,17 @@ class NeoButton extends StatelessWidget {
   }
 }
 
-/// Thanh tiến trình HUD dạng segment — thay CircularProgressIndicator.
-/// [value] null = indeterminate (segment chạy đuổi).
+/// Kiểu chữ nút — tách hàm để đồng bộ.
+abstract final class GoogleFontsProxy {
+  static TextStyle button({required Color color}) => Neo.display(15, color: color)
+      .copyWith(fontWeight: FontWeight.w700, letterSpacing: 0.2);
+}
+
+/// Thanh tiến trình: vạch mảnh bo tròn; indeterminate = dải sáng chạy.
 class HudProgress extends StatefulWidget {
   final double? value;
-  const HudProgress({super.key, this.value});
+  final Color? color;
+  const HudProgress({super.key, this.value, this.color});
 
   @override
   State<HudProgress> createState() => _HudProgressState();
@@ -136,7 +111,7 @@ class HudProgress extends StatefulWidget {
 class _HudProgressState extends State<HudProgress>
     with SingleTickerProviderStateMixin {
   late final _ctrl = AnimationController(
-      vsync: this, duration: const Duration(milliseconds: 1100));
+      vsync: this, duration: const Duration(milliseconds: 1300));
 
   @override
   void initState() {
@@ -152,72 +127,43 @@ class _HudProgressState extends State<HudProgress>
 
   @override
   Widget build(BuildContext context) {
-    const segs = 14;
+    final c = widget.color ?? Neo.cyan;
     return AnimatedBuilder(
       animation: _ctrl,
-      builder: (_, _) {
-        final v = widget.value;
-        return Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            for (var i = 0; i < segs; i++)
-              Expanded(
-                child: Container(
-                  height: 8,
-                  margin: const EdgeInsets.symmetric(horizontal: 1.2),
-                  color: _lit(i, segs, v)
-                      ? Neo.cyan
-                      : Neo.cyan.withValues(alpha: 0.12),
+      builder: (_, _) => ClipRRect(
+        borderRadius: BorderRadius.circular(3),
+        child: SizedBox(
+          height: 5,
+          child: LayoutBuilder(builder: (_, cons) {
+            final w = cons.maxWidth;
+            final v = widget.value;
+            return Stack(children: [
+              Container(color: c.withValues(alpha: 0.14)),
+              if (v != null)
+                Container(width: w * v.clamp(0, 1), color: c)
+              else
+                Positioned(
+                  left: (w + 90) * _ctrl.value - 90,
+                  child: Container(
+                    width: 90, height: 5,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(colors: [
+                        c.withValues(alpha: 0),
+                        c,
+                        c.withValues(alpha: 0),
+                      ]),
+                    ),
+                  ),
                 ),
-              ),
-            if (v != null) ...[
-              const SizedBox(width: 8),
-              Text('${(v * 100).round().toString().padLeft(3)}%',
-                  style: Neo.mono(11, color: Neo.cyan)),
-            ],
-          ],
-        );
-      },
+            ]);
+          }),
+        ),
+      ),
     );
   }
-
-  bool _lit(int i, int segs, double? v) {
-    if (v != null) return i < (v * segs).round();
-    final head = (_ctrl.value * segs * 1.6) % (segs + 4);
-    return (head - i).abs() < 2.5;
-  }
 }
 
-/// Nền blueprint: grid mờ + noise nhẹ. Đặt dưới cùng mọi Scaffold qua [NeoScaffold].
-class _BlueprintPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final grid = Paint()
-      ..color = Neo.cyan.withValues(alpha: 0.035)
-      ..strokeWidth = 1;
-    const step = 36.0;
-    for (double x = 0; x < size.width; x += step) {
-      canvas.drawLine(Offset(x, 0), Offset(x, size.height), grid);
-    }
-    for (double y = 0; y < size.height; y += step) {
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), grid);
-    }
-    // noise thưa — chấm tĩnh, seed cố định để không nhấp nháy mỗi frame
-    final rnd = math.Random(7);
-    final dot = Paint()..color = Colors.white.withValues(alpha: 0.03);
-    for (var i = 0; i < 260; i++) {
-      canvas.drawCircle(
-          Offset(rnd.nextDouble() * size.width, rnd.nextDouble() * size.height),
-          rnd.nextDouble() * 1.1,
-          dot);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _BlueprintPainter old) => false;
-}
-
-/// Scaffold chuẩn của NEO: nền đen + blueprint grid, body đè lên trên.
+/// Scaffold nền trung tính — khí quyển màu do màn tự thêm (AmbientBackdrop).
 class NeoScaffold extends StatelessWidget {
   final Widget body;
   final Widget? bottom;
@@ -227,7 +173,6 @@ class NeoScaffold extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       body: Stack(fit: StackFit.expand, children: [
-        CustomPaint(painter: _BlueprintPainter()),
         body,
         if (bottom != null) Align(alignment: Alignment.bottomCenter, child: bottom!),
       ]),
@@ -235,57 +180,31 @@ class NeoScaffold extends StatelessWidget {
   }
 }
 
-/// Chuyển trang "materialize": fade + scanline quét dọc thay slide mặc định.
+/// Chuyển trang: fade + nổi lên nhẹ (morph mềm, không slide cứng).
 class MaterializePage<T> extends CustomTransitionPage<T> {
   MaterializePage({required super.child, super.key})
       : super(
-          transitionDuration: const Duration(milliseconds: 320),
+          transitionDuration: const Duration(milliseconds: 340),
           transitionsBuilder: (context, animation, _, child) {
             if (reduceMotion(context)) return child;
-            final fade = CurvedAnimation(parent: animation, curve: Curves.easeOut);
+            final curve =
+                CurvedAnimation(parent: animation, curve: Curves.easeOutCubic);
             return FadeTransition(
-              opacity: fade,
-              child: AnimatedBuilder(
-                animation: fade,
-                builder: (_, w) => Stack(fit: StackFit.expand, children: [
-                  w!,
-                  if (fade.value < 1)
-                    IgnorePointer(
-                      child: CustomPaint(
-                          painter: _ScanlinePainter(progress: fade.value)),
-                    ),
-                ]),
-                child: child,
+              opacity: curve,
+              child: ScaleTransition(
+                scale: Tween(begin: 0.97, end: 1.0).animate(curve),
+                child: SlideTransition(
+                  position: Tween(begin: const Offset(0, 0.02), end: Offset.zero)
+                      .animate(curve),
+                  child: child,
+                ),
               ),
             );
           },
         );
 }
 
-class _ScanlinePainter extends CustomPainter {
-  final double progress;
-  _ScanlinePainter({required this.progress});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final y = size.height * progress;
-    final line = Paint()
-      ..shader = LinearGradient(colors: [
-        Neo.cyan.withValues(alpha: 0),
-        Neo.cyan.withValues(alpha: 0.5),
-        Neo.cyan.withValues(alpha: 0),
-      ]).createShader(Rect.fromLTWH(0, y - 1.5, size.width, 3));
-    canvas.drawRect(Rect.fromLTWH(0, y - 1.5, size.width, 3), line);
-    // phần chưa quét tới tối hơn
-    canvas.drawRect(Rect.fromLTWH(0, y, size.width, size.height - y),
-        Paint()..color = Neo.bg.withValues(alpha: 0.5 * (1 - progress)));
-  }
-
-  @override
-  bool shouldRepaint(covariant _ScanlinePainter old) => old.progress != progress;
-}
-
-/// Thanh đầu màn phụ: nút back + tiêu đề mono + actions. Không dùng AppBar Material.
+/// Thanh đầu màn phụ.
 class NeoAppBar extends StatelessWidget {
   final String title;
   final List<Widget> actions;
@@ -301,10 +220,10 @@ class NeoAppBar extends StatelessWidget {
           onPressed: () => Navigator.of(context).maybePop(),
         ),
         Expanded(
-          child: Text(title.toUpperCase(),
+          child: Text(title,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: Neo.mono(13, color: Neo.text, weight: FontWeight.w700, spacing: 2)),
+              style: Neo.display(18, weight: FontWeight.w600)),
         ),
         ...actions,
       ]),
@@ -312,7 +231,7 @@ class NeoAppBar extends StatelessWidget {
   }
 }
 
-/// Ảnh bìa truyện NEO: khung góc vát + hairline, placeholder chữ cái đầu.
+/// Ảnh bìa: bo mềm + bóng đổ sâu (nguồn sáng của cả giao diện).
 class NeoCover extends StatelessWidget {
   final String? url;
   final double width;
@@ -323,6 +242,7 @@ class NeoCover extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final h = width * aspect;
+    final r = BorderRadius.circular(width * 0.11);
     final initial = (label ?? '').trim();
     final fallback = Container(
       width: width,
@@ -332,15 +252,19 @@ class NeoCover extends StatelessWidget {
       child: initial.isEmpty
           ? const Icon(Icons.auto_stories_outlined, color: Neo.dim)
           : Text(initial.characters.first.toUpperCase(),
-              style: Neo.display(width * 0.4, color: Neo.cyan.withValues(alpha: 0.6))),
+              style: Neo.display(width * 0.4, color: Neo.cyan.withValues(alpha: 0.7))),
     );
     return Container(
-      decoration: ShapeDecoration(
-        shape: NeoCutBorder(
-            cut: Neo.cutSm, side: BorderSide(color: Neo.cyan.withValues(alpha: 0.25))),
+      decoration: BoxDecoration(
+        borderRadius: r,
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withValues(alpha: 0.45),
+              blurRadius: 22, offset: const Offset(0, 10)),
+        ],
       ),
-      child: ClipPath(
-        clipper: ShapeBorderClipper(shape: const NeoCutBorder(cut: Neo.cutSm)),
+      child: ClipRRect(
+        borderRadius: r,
         child: (url == null || url!.isEmpty)
             ? fallback
             : Image.network(url!,
@@ -356,7 +280,7 @@ class NeoCover extends StatelessWidget {
   }
 }
 
-/// Tag mono kiểu terminal: [ĐANG RA]
+/// Chip mềm.
 class NeoTag extends StatelessWidget {
   final String label;
   final Color color;
@@ -365,19 +289,18 @@ class NeoTag extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        border: Border.all(color: color.withValues(alpha: 0.45)),
+        color: color.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(20),
       ),
-      child: Text(label.toUpperCase(),
-          style: Neo.mono(9, color: color, weight: FontWeight.w700, spacing: 2)),
+      child: Text(label,
+          style: Neo.mono(11, color: color, weight: FontWeight.w600)),
     );
   }
 }
 
-/// Ô bọc bấm được: viền glow cyan sáng lên khi nhấn giữ (hiệu ứng bắt buộc §3.3).
-/// ponytail: parallax theo scroll để Phase 5 polish — glow long-press đã đủ "sống".
+/// Ô bấm được: co nhẹ khi nhấn (spring press) — thay glow terminal.
 class NeoTapGlow extends StatefulWidget {
   final Widget child;
   final VoidCallback onTap;
@@ -400,24 +323,17 @@ class _NeoTapGlowState extends State<NeoTapGlow> {
       onTapDown: (_) => setState(() => _held = true),
       onTapUp: (_) => setState(() => _held = false),
       onTapCancel: () => setState(() => _held = false),
-      onLongPressStart: (_) => setState(() => _held = true),
-      onLongPressEnd: (_) => setState(() => _held = false),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        decoration: ShapeDecoration(
-          shape: NeoCutBorder(
-              cut: Neo.cutSm,
-              side: BorderSide(
-                  color: _held ? Neo.cyan : Colors.transparent, width: 1)),
-          shadows: _held ? Neo.glow(Neo.cyan, blur: 20) : null,
-        ),
+      child: AnimatedScale(
+        scale: _held && !reduceMotion(context) ? 0.965 : 1,
+        duration: const Duration(milliseconds: 160),
+        curve: Curves.easeOut,
         child: widget.child,
       ),
     );
   }
 }
 
-/// Header mục: "// MỚI CẬP NHẬT" + nút xem tất cả.
+/// Header mục — editorial: chữ display lớn + link xem tất cả.
 class NeoSectionHeader extends StatelessWidget {
   final String title;
   final VoidCallback? onMore;
@@ -426,17 +342,16 @@ class NeoSectionHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 26, 12, 12),
-      child: Row(children: [
-        Text('//', style: Neo.mono(14, color: Neo.plasma, weight: FontWeight.w700)),
-        const SizedBox(width: 8),
-        Expanded(child: Text(title.toUpperCase(), style: Neo.mono(13, color: Neo.text, weight: FontWeight.w700, spacing: 2.5))),
+      padding: const EdgeInsets.fromLTRB(20, 28, 16, 12),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+        Expanded(child: Text(title, style: Neo.display(22))),
         if (onMore != null)
           InkWell(
             onTap: onMore,
+            borderRadius: BorderRadius.circular(14),
             child: Padding(
-              padding: const EdgeInsets.all(4),
-              child: Text('TẤT CẢ >', style: Neo.mono(10, color: Neo.cyan, spacing: 1.5)),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+              child: Text('Tất cả →', style: Neo.mono(12, color: Neo.cyan)),
             ),
           ),
       ]),
@@ -444,7 +359,7 @@ class NeoSectionHeader extends StatelessWidget {
   }
 }
 
-/// Một dòng truyện trong danh sách dọc (tìm kiếm / lọc / xem tất cả).
+/// Một dòng truyện trong danh sách dọc.
 class NeoNovelRow extends StatelessWidget {
   final Map<String, dynamic> n;
   final VoidCallback onTap;
@@ -458,26 +373,26 @@ class NeoNovelRow extends StatelessWidget {
     return NeoTapGlow(
       onTap: onTap,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
         child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
           NeoCover(url: n['cover_url'], width: 64, aspect: 1.36, label: title),
           const SizedBox(width: 14),
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(title, maxLines: 2, overflow: TextOverflow.ellipsis,
-                  style: Neo.display(15, weight: FontWeight.w600)),
+                  style: Neo.display(16, weight: FontWeight.w600)),
               const SizedBox(height: 4),
               Text(n['author_vi'] ?? n['author_zh'] ?? '',
-                  maxLines: 1, overflow: TextOverflow.ellipsis, style: Neo.mono(10)),
+                  maxLines: 1, overflow: TextOverflow.ellipsis, style: Neo.mono(11)),
               const SizedBox(height: 8),
               Row(children: [
-                Text('CH ${n['chapter_count_source'] ?? 0}',
-                    style: Neo.mono(10, color: Neo.cyan)),
+                Text('${n['chapter_count_source'] ?? 0} chương',
+                    style: Neo.mono(11, color: Neo.cyan)),
                 const SizedBox(width: 10),
                 if (genres.isNotEmpty)
                   Expanded(
-                    child: Text(genres.take(3).map((g) => '#$g').join(' '),
-                        maxLines: 1, overflow: TextOverflow.ellipsis, style: Neo.mono(10)),
+                    child: Text(genres.take(3).join(' · '),
+                        maxLines: 1, overflow: TextOverflow.ellipsis, style: Neo.mono(11)),
                   ),
               ]),
             ]),
@@ -489,31 +404,29 @@ class NeoNovelRow extends StatelessWidget {
   }
 }
 
-/// Đường kẻ hairline giữa các dòng.
 class NeoDivider extends StatelessWidget {
   const NeoDivider({super.key});
   @override
   Widget build(BuildContext context) =>
-      Container(height: 1, margin: const EdgeInsets.symmetric(horizontal: 16), color: Neo.faint);
+      Container(height: 1, margin: const EdgeInsets.symmetric(horizontal: 20), color: Neo.faint);
 }
 
-/// Trạng thái tải toàn màn: HUD progress + nhãn mono.
+/// Trạng thái tải toàn màn.
 class NeoLoading extends StatelessWidget {
   final String label;
-  const NeoLoading({super.key, this.label = 'ĐANG TẢI DỮ LIỆU'});
+  const NeoLoading({super.key, this.label = 'Đang tải…'});
   @override
   Widget build(BuildContext context) {
     return Center(
       child: Column(mainAxisSize: MainAxisSize.min, children: [
-        const SizedBox(width: 180, child: HudProgress()),
-        const SizedBox(height: 12),
-        Text(label, style: Neo.mono(10, spacing: 3)),
+        const SizedBox(width: 160, child: HudProgress()),
+        const SizedBox(height: 14),
+        Text(label, style: Neo.mono(12)),
       ]),
     );
   }
 }
 
-/// Lỗi / rỗng toàn màn.
 class NeoMessage extends StatelessWidget {
   final String text;
   final bool error;
@@ -523,15 +436,16 @@ class NeoMessage extends StatelessWidget {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
-        child: Text(error ? '! $text' : text,
+        child: Text(text,
             textAlign: TextAlign.center,
-            style: Neo.mono(12, color: error ? Neo.danger : Neo.dim)),
+            style: Neo.mono(13, color: error ? Neo.danger : Neo.dim)
+                .copyWith(height: 1.6)),
       ),
     );
   }
 }
 
-/// Dock HUD nổi — thay BottomNavigationBar. Icon phát sáng khi active, haptic khi chuyển.
+/// Dock nổi: kính mờ (frosted), pill chọn tab trượt mềm, haptic khi chuyển.
 class NeoDock extends StatelessWidget {
   final int index;
   final ValueChanged<int> onTap;
@@ -541,40 +455,50 @@ class NeoDock extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SafeArea(
-      minimum: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-      child: NeoPanel(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        color: Neo.surface.withValues(alpha: 0.92),
-        borderColor: Neo.cyan.withValues(alpha: 0.35),
-        glowColor: Neo.cyan,
-        child: Row(
-          children: [
-            for (var i = 0; i < items.length; i++)
-              Expanded(
-                child: InkWell(
-                  onTap: () {
-                    if (i != index) HapticFeedback.lightImpact();
-                    onTap(i);
-                  },
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    padding: const EdgeInsets.symmetric(vertical: 6),
-                    child: Column(mainAxisSize: MainAxisSize.min, children: [
-                      Icon(items[i].icon,
-                          size: 22,
-                          color: i == index ? Neo.cyan : Neo.dim,
-                          shadows: i == index
-                              ? [const Shadow(color: Neo.cyan, blurRadius: 14)]
-                              : null),
-                      const SizedBox(height: 3),
-                      Text(items[i].label.toUpperCase(),
-                          style: Neo.mono(9,
-                              color: i == index ? Neo.cyan : Neo.dim, spacing: 2)),
-                    ]),
+      minimum: const EdgeInsets.fromLTRB(24, 0, 24, 14),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(32),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+          child: Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: Neo.surface.withValues(alpha: 0.6),
+              borderRadius: BorderRadius.circular(32),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+            ),
+            child: Row(children: [
+              for (var i = 0; i < items.length; i++)
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () {
+                      if (i != index) HapticFeedback.lightImpact();
+                      onTap(i);
+                    },
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 260),
+                      curve: Curves.easeOutCubic,
+                      padding: const EdgeInsets.symmetric(vertical: 9),
+                      decoration: BoxDecoration(
+                        color: i == index
+                            ? Neo.text.withValues(alpha: 0.1)
+                            : Colors.transparent,
+                        borderRadius: BorderRadius.circular(26),
+                      ),
+                      child: Column(mainAxisSize: MainAxisSize.min, children: [
+                        Icon(items[i].icon,
+                            size: 22, color: i == index ? Neo.text : Neo.dim),
+                        const SizedBox(height: 2),
+                        Text(items[i].label,
+                            style: Neo.mono(10,
+                                color: i == index ? Neo.text : Neo.dim,
+                                weight: i == index ? FontWeight.w600 : FontWeight.w500)),
+                      ]),
+                    ),
                   ),
                 ),
-              ),
-          ],
+            ]),
+          ),
         ),
       ),
     );

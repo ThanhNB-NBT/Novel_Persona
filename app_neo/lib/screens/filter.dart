@@ -43,7 +43,7 @@ class _FilterFormState extends ConsumerState<_FilterForm> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(children: [
-                Text('// BỘ LỌC', style: Neo.mono(13, color: Neo.cyan, weight: FontWeight.w700, spacing: 2)),
+                Text('BỘ LỌC', style: Neo.mono(13, color: Neo.cyan, weight: FontWeight.w700, spacing: 2)),
                 const Spacer(),
                 InkWell(
                   onTap: () => setState(() {
@@ -51,7 +51,7 @@ class _FilterFormState extends ConsumerState<_FilterForm> {
                     _genre = null;
                     _status = null;
                   }),
-                  child: Text('ĐẶT LẠI', style: Neo.mono(10, color: Neo.plasma, spacing: 2)),
+                  child: Text('Đặt lại', style: Neo.mono(10, color: Neo.plasma, spacing: 2)),
                 ),
               ]),
               _label('SỐ CHƯƠNG TỐI THIỂU'),
@@ -76,7 +76,7 @@ class _FilterFormState extends ConsumerState<_FilterForm> {
               ],
               const SizedBox(height: 22),
               NeoButton(
-                label: 'XEM KẾT QUẢ',
+                label: 'Xem kết quả',
                 onPressed: () => Navigator.pop(context,
                     SearchFilter(minChapters: _min, genre: _genre, status: _status)),
               ),
@@ -166,7 +166,7 @@ class _FilterResultsScreenState extends ConsumerState<FilterResultsScreen> {
               loading: () => const NeoLoading(),
               error: (e, _) => NeoMessage('Lỗi: $e', error: true),
               data: (list) => list.isEmpty
-                  ? const NeoMessage('KHÔNG CÓ TRUYỆN PHÙ HỢP BỘ LỌC')
+                  ? const NeoMessage('Không có truyện phù hợp bộ lọc.')
                   : ListView.separated(
                       padding: const EdgeInsets.only(top: 4, bottom: 24),
                       itemCount: list.length,

@@ -20,7 +20,7 @@ class LibraryScreen extends ConsumerWidget {
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('NEO // TỦ TRUYỆN', style: Neo.mono(10, color: Neo.cyan, spacing: 3)),
+            Text('TỦ TRUYỆN', style: Neo.mono(10, color: Neo.cyan, spacing: 3)),
             const SizedBox(height: 2),
             Row(children: [
               Expanded(child: Text('Đang đọc', style: Neo.display(28))),
@@ -42,7 +42,7 @@ class LibraryScreen extends ConsumerWidget {
                   child: SizedBox(
                     width: 240,
                     child: NeoButton(
-                        label: 'ĐĂNG NHẬP', onPressed: () => context.push('/login')),
+                        label: 'Đăng nhập', onPressed: () => context.push('/login')),
                   ),
                 );
               }
@@ -97,7 +97,7 @@ class _ReadingRow extends ConsumerWidget {
                 _menu(context, ref),
               ]),
               const SizedBox(height: 2),
-              Text('ĐÃ ĐỌC $cur${total > 0 ? '/$total' : ''}',
+              Text('Đã đọc $cur${total > 0 ? '/$total' : ''}',
                   style: Neo.mono(10, spacing: 1.5)),
               const SizedBox(height: 8),
               HudProgress(value: progress.clamp(0, 1).toDouble()),
@@ -113,7 +113,7 @@ class _ReadingRow extends ConsumerWidget {
     return PopupMenuButton<String>(
       padding: EdgeInsets.zero,
       color: Neo.surface2,
-      shape: const NeoCutBorder(cut: Neo.cutSm, side: BorderSide(color: Neo.faint)),
+      shape: NeoCutBorder(cut: Neo.cutSm, side: BorderSide(color: Neo.faint)),
       constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
       icon: const Icon(Icons.more_vert, size: 20, color: Neo.dim),
       onSelected: (v) async {

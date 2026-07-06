@@ -48,7 +48,7 @@ class GlossaryScreen extends ConsumerWidget {
           ]),
           Expanded(
             child: terms.when(
-              loading: () => const NeoLoading(label: 'NẠP TỪ ĐIỂN'),
+              loading: () => const NeoLoading(label: 'Đang tải thuật ngữ…'),
               error: (e, _) => NeoMessage('Lỗi: $e', error: true),
               data: (list) {
                 if (sb.auth.currentUser == null) {
@@ -56,7 +56,7 @@ class GlossaryScreen extends ConsumerWidget {
                     child: SizedBox(
                       width: 260,
                       child: NeoButton(
-                          label: 'ĐĂNG NHẬP ĐỂ QUẢN LÝ',
+                          label: 'Đăng nhập để quản lý',
                           onPressed: () => context.push('/login')),
                     ),
                   );
@@ -119,8 +119,8 @@ class GlossaryScreen extends ConsumerWidget {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: Neo.surface,
-        shape: const NeoCutBorder(side: BorderSide(color: Neo.faint)),
-        title: Text('BÁO CÁO DỊCH SAI',
+        shape: NeoCutBorder(side: BorderSide(color: Neo.faint)),
+        title: Text('Báo cáo dịch sai',
             style: Neo.mono(13, color: Neo.text, weight: FontWeight.w700)),
         content: TextField(
           controller: reason,
@@ -132,7 +132,7 @@ class GlossaryScreen extends ConsumerWidget {
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx),
-              child: Text('HUỶ', style: Neo.mono(11, color: Neo.dim))),
+              child: Text('Huỷ', style: Neo.mono(11, color: Neo.dim))),
           TextButton(
             onPressed: () async {
               await reportTerm(termId, novelId, reason.text.trim());
@@ -142,7 +142,7 @@ class GlossaryScreen extends ConsumerWidget {
                     content: Text('Đã gửi báo cáo — admin sẽ xem lại')));
               }
             },
-            child: Text('GỬI', style: Neo.mono(11, color: Neo.cyan, weight: FontWeight.w700)),
+            child: Text('Gửi', style: Neo.mono(11, color: Neo.cyan, weight: FontWeight.w700)),
           ),
         ],
       ),
@@ -158,8 +158,8 @@ class GlossaryScreen extends ConsumerWidget {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: Neo.surface,
-        shape: const NeoCutBorder(side: BorderSide(color: Neo.faint)),
-        title: Text(term == null ? 'THÊM THUẬT NGỮ' : 'SỬA THUẬT NGỮ',
+        shape: NeoCutBorder(side: BorderSide(color: Neo.faint)),
+        title: Text(term == null ? 'Thêm thuật ngữ' : 'Sửa thuật ngữ',
             style: Neo.mono(13, color: Neo.cyan, weight: FontWeight.w700, spacing: 2)),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
           TextField(
@@ -203,10 +203,10 @@ class GlossaryScreen extends ConsumerWidget {
                 if (ctx.mounted) Navigator.pop(ctx);
                 onDone();
               },
-              child: Text('XÓA', style: Neo.mono(11, color: Neo.danger)),
+              child: Text('Xóa', style: Neo.mono(11, color: Neo.danger)),
             ),
           TextButton(onPressed: () => Navigator.pop(ctx),
-              child: Text('HỦY', style: Neo.mono(11, color: Neo.dim))),
+              child: Text('Hủy', style: Neo.mono(11, color: Neo.dim))),
           TextButton(
             onPressed: () async {
               if (vi.text.trim().isEmpty) return;
@@ -229,7 +229,7 @@ class GlossaryScreen extends ConsumerWidget {
               if (ctx.mounted) Navigator.pop(ctx);
               onDone();
             },
-            child: Text('LƯU', style: Neo.mono(11, color: Neo.cyan, weight: FontWeight.w700)),
+            child: Text('Lưu', style: Neo.mono(11, color: Neo.cyan, weight: FontWeight.w700)),
           ),
         ],
       ),

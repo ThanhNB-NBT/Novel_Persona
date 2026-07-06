@@ -92,7 +92,7 @@ class _SectionScreenState extends ConsumerState<SectionScreen> {
     if (_items.isEmpty) {
       if (_loading) return const NeoLoading();
       if (_error != null) return NeoMessage('Lỗi: $_error', error: true);
-      return const NeoMessage('CHƯA CÓ TRUYỆN NÀO');
+      return const NeoMessage('Chưa có truyện nào.');
     }
     return ListView.separated(
       controller: _scroll,
@@ -104,7 +104,7 @@ class _SectionScreenState extends ConsumerState<SectionScreen> {
         if (i >= _items.length) {
           return const Padding(
             padding: EdgeInsets.symmetric(vertical: 20),
-            child: NeoLoading(label: 'TẢI THÊM'),
+            child: NeoLoading(label: 'Đang tải thêm…'),
           );
         }
         final n = _items[i];

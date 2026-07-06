@@ -196,7 +196,7 @@ void showReaderSettingsSheet(BuildContext context, WidgetRef ref,
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('// CÀI ĐẶT ĐỌC',
+                  Text('Cài đặt đọc',
                       style: Neo.mono(13, color: Neo.cyan, weight: FontWeight.w700, spacing: 2)),
 
                   label('Chế độ đọc'),
@@ -283,7 +283,7 @@ void showReaderSettingsSheet(BuildContext context, WidgetRef ref,
                           shape: const RoundedRectangleBorder(),
                         ),
                         icon: const Icon(Icons.refresh, size: 18),
-                        label: Text('DỊCH LẠI CHƯƠNG NÀY', style: Neo.mono(11, color: Neo.plasma, spacing: 2)),
+                        label: Text('Dịch lại chương này', style: Neo.mono(11, color: Neo.plasma, spacing: 2)),
                         onPressed: () {
                           Navigator.pop(context);
                           onRetranslate();

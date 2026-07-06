@@ -37,7 +37,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                 icon: const Icon(Icons.arrow_back, color: Neo.dim),
                 onPressed: () => context.pop(),
               ),
-              Text('>', style: Neo.mono(16, color: Neo.cyan, weight: FontWeight.w700)),
+              const Icon(Icons.search, size: 20, color: Neo.dim),
               const SizedBox(width: 8),
               Expanded(
                 child: TextField(
@@ -47,7 +47,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                   style: Neo.mono(14, color: Neo.text),
                   cursorColor: Neo.cyan,
                   decoration: InputDecoration(
-                    hintText: 'TÌM TRUYỆN THEO TÊN_',
+                    hintText: 'Tìm truyện theo tên…',
                     hintStyle: Neo.mono(12),
                     border: InputBorder.none,
                     enabledBorder: InputBorder.none,
@@ -71,12 +71,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
           Container(height: 1, color: Neo.cyan.withValues(alpha: 0.35)),
           Expanded(
             child: results == null
-                ? const NeoMessage('NHẬP TÊN TRUYỆN ĐỂ TÌM')
+                ? const NeoMessage('Nhập tên truyện để tìm.')
                 : results.when(
-                    loading: () => const NeoLoading(label: 'ĐANG QUÉT'),
+                    loading: () => const NeoLoading(label: 'Đang tìm…'),
                     error: (e, _) => NeoMessage('Lỗi: $e', error: true),
                     data: (list) => list.isEmpty
-                        ? NeoMessage('KHÔNG TÌM THẤY "$_query"')
+                        ? NeoMessage('Không tìm thấy "$_query".')
                         : ListView.separated(
                             padding: const EdgeInsets.only(top: 4, bottom: 24),
                             itemCount: list.length,
