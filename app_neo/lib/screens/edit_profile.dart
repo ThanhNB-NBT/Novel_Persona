@@ -106,7 +106,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
       decoration: ShapeDecoration(
         color: Neo.surface2,
         shape: NeoCutBorder(side: BorderSide(color: Neo.cyan)),
-        shadows: Neo.glow(Neo.cyan, blur: 24, alpha: 0.35),
+        shadows: Neo.glow(Neo.cyan, blur: 14, alpha: 0.18),
       ),
       alignment: Alignment.center,
       child: _avatar != null

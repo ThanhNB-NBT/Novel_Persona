@@ -483,7 +483,7 @@ class _BottomBar extends ConsumerWidget {
                 shape: NeoCutBorder(
                     cut: Neo.cutSm,
                     side: BorderSide(color: inLib ? amb.accent : Neo.faint)),
-                shadows: inLib ? Neo.glow(amb.accent, blur: 16, alpha: 0.35) : null,
+                shadows: inLib ? Neo.glow(amb.accent, blur: 12, alpha: 0.18) : null,
               ),
               child: Icon(inLib ? Icons.bookmark : Icons.bookmark_border,
                   color: inLib ? amb.accent : Neo.dim),

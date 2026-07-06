@@ -67,7 +67,7 @@ class NeoButton extends StatelessWidget {
       decoration: BoxDecoration(
         color: enabled ? c : Neo.surface2,
         borderRadius: BorderRadius.circular(27),
-        boxShadow: enabled ? Neo.glow(c, blur: 28, alpha: 0.35) : null,
+        boxShadow: enabled ? Neo.glow(c, blur: 16, alpha: 0.2) : null,
       ),
       child: Material(
         type: MaterialType.transparency,
@@ -259,8 +259,8 @@ class NeoCover extends StatelessWidget {
         borderRadius: r,
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withValues(alpha: 0.45),
-              blurRadius: 22, offset: const Offset(0, 10)),
+              color: Colors.black.withValues(alpha: Neo.isDark ? 0.28 : 0.1),
+              blurRadius: 10, offset: const Offset(0, 4)),
         ],
       ),
       child: ClipRRect(

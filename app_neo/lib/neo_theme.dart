@@ -32,17 +32,17 @@ const neoDark = NeoPalette(
   faint: Color(0xFF2A2A32),
 );
 
-/// Ngày — giấy ấm, cùng ngôn ngữ, accent trầm xuống để đủ tương phản.
+/// Ngày — sáng và LẠNH: trắng xanh nhạt, accent xanh thép.
 const neoLight = NeoPalette(
-  bg: Color(0xFFF7F4EE),
+  bg: Color(0xFFF8FAFC),
   surface: Color(0xFFFFFFFF),
-  surface2: Color(0xFFEFEBE2),
-  accent: Color(0xFF8F6E35),
-  accent2: Color(0xFF6C5CA8),
-  danger: Color(0xFFBF3F58),
-  text: Color(0xFF25211B),
-  dim: Color(0xFF837D73),
-  faint: Color(0xFFE4E0D6),
+  surface2: Color(0xFFEDF1F6),
+  accent: Color(0xFF3D6B92),
+  accent2: Color(0xFF5F63B0),
+  danger: Color(0xFFC23B55),
+  text: Color(0xFF1D242D),
+  dim: Color(0xFF75808D),
+  faint: Color(0xFFE2E8EF),
 );
 
 abstract final class Neo {
@@ -78,12 +78,11 @@ abstract final class Neo {
       GoogleFonts.bricolageGrotesque(
           fontSize: size, color: color ?? text, fontWeight: weight, height: 1.08, letterSpacing: -0.3);
 
-  /// Ánh sáng loãng — ban ngày dịu bớt.
-  static List<BoxShadow> glow(Color c, {double blur = 36, double alpha = 0.25}) => [
+  /// Ánh sáng loãng — tiết chế: gợi khí quyển chứ không "toả hào quang".
+  static List<BoxShadow> glow(Color c, {double blur = 22, double alpha = 0.13}) => [
         BoxShadow(
-            color: c.withValues(alpha: isDark ? alpha : alpha * 0.55),
-            blurRadius: blur,
-            spreadRadius: 2)
+            color: c.withValues(alpha: isDark ? alpha : alpha * 0.5),
+            blurRadius: blur)
       ];
 }
 

@@ -426,7 +426,7 @@ Widget _swatches(int selected, ValueChanged<int> onPick) {
               border: Border.all(
                   color: i == selected ? Neo.cyan : Neo.faint,
                   width: i == selected ? 2 : 1),
-              boxShadow: i == selected ? Neo.glow(Neo.cyan, blur: 12, alpha: 0.35) : null,
+              boxShadow: i == selected ? Neo.glow(Neo.cyan, blur: 10, alpha: 0.2) : null,
             ),
             child: Text('A',
                 style: TextStyle(

@@ -173,7 +173,7 @@ class _HeroCard extends StatelessWidget {
           decoration: ShapeDecoration(
             shape: NeoCutBorder(
                 side: BorderSide(color: amb.accent.withValues(alpha: 0.35))),
-            shadows: Neo.glow(amb.accent, blur: 30, alpha: 0.22),
+            shadows: Neo.glow(amb.accent, blur: 18, alpha: 0.12),
           ),
           child: ClipPath(
             clipper: ShapeBorderClipper(shape: NeoCutBorder()),
