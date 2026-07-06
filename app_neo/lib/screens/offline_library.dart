@@ -33,7 +33,7 @@ class OfflineLibraryScreen extends ConsumerWidget {
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
                     child: Row(children: [
-                      const Icon(Icons.storage, size: 18, color: Neo.cyan),
+                      Icon(Icons.storage, size: 18, color: Neo.cyan),
                       const SizedBox(width: 10),
                       Text('${list.length} TRUYỆN · $mb MB',
                           style: Neo.mono(12, color: Neo.text, weight: FontWeight.w600, spacing: 1.5)),
@@ -83,7 +83,7 @@ class _OfflineRow extends ConsumerWidget {
           ),
           IconButton(
             tooltip: 'Xoá bản offline',
-            icon: const Icon(Icons.delete_outline, color: Neo.danger),
+            icon: Icon(Icons.delete_outline, color: Neo.danger),
             onPressed: () async {
               await offlineStore.deleteNovel(id);
               ref.invalidate(offlineNovelsProvider);

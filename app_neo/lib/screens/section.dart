@@ -71,7 +71,7 @@ class _SectionScreenState extends ConsumerState<SectionScreen> {
             actions: [
               IconButton(
                 tooltip: 'Lọc truyện',
-                icon: const Icon(Icons.tune, color: Neo.text, size: 22),
+                icon: Icon(Icons.tune, color: Neo.text, size: 22),
                 onPressed: () async {
                   final f = await showFilterSheet(context, const SearchFilter());
                   if (f != null && context.mounted) {

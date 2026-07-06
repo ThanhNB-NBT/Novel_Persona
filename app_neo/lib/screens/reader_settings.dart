@@ -120,7 +120,12 @@ class ReaderSettings {
 
 /// App NEO dark-first: chế độ "hệ thống" của reader coi app là tối
 /// (chế độ sáng của app là chuyện Phase 5).
-Brightness appBrightness(WidgetRef ref, BuildContext context) => Brightness.dark;
+Brightness appBrightness(WidgetRef ref, BuildContext context) {
+  final mode = ref.watch(appThemeModeProvider);
+  final sysDark = MediaQuery.platformBrightnessOf(context) == Brightness.dark;
+  final dark = switch (mode) { 1 => false, 2 => true, _ => sysDark };
+  return dark ? Brightness.dark : Brightness.light;
+}
 
 class ReaderSettingsNotifier extends Notifier<ReaderSettings> {
   @override
@@ -164,7 +169,7 @@ void showReaderSettingsSheet(BuildContext context, WidgetRef ref,
     context: context,
     isScrollControlled: true,
     backgroundColor: Neo.surface,
-    shape: const Border(top: BorderSide(color: Neo.cyan, width: 1)),
+    shape: Border(top: BorderSide(color: Neo.cyan, width: 1)),
     builder: (_) => Consumer(builder: (context, ref, _) {
       final s = ref.watch(readerSettingsProvider);
       final n = ref.read(readerSettingsProvider.notifier);
@@ -279,7 +284,7 @@ void showReaderSettingsSheet(BuildContext context, WidgetRef ref,
                       child: OutlinedButton.icon(
                         style: OutlinedButton.styleFrom(
                           foregroundColor: Neo.plasma,
-                          side: const BorderSide(color: Neo.plasma),
+                          side: BorderSide(color: Neo.plasma),
                           shape: const RoundedRectangleBorder(),
                         ),
                         icon: const Icon(Icons.refresh, size: 18),
@@ -361,7 +366,7 @@ Widget _colorRow(BuildContext context, ReaderColor col, VoidCallback onTap) {
         ),
         const SizedBox(width: 12),
         Expanded(child: Text('NỀN SÁNG · NỀN TỐI · CHẾ ĐỘ', style: Neo.mono(10, spacing: 1.5))),
-        const Icon(Icons.chevron_right, color: Neo.dim),
+        Icon(Icons.chevron_right, color: Neo.dim),
       ]),
     ),
   );

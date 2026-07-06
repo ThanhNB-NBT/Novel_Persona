@@ -12,7 +12,7 @@ Future<SearchFilter?> showFilterSheet(BuildContext context, SearchFilter initial
     context: context,
     isScrollControlled: true,
     backgroundColor: Neo.surface,
-    shape: const Border(top: BorderSide(color: Neo.cyan, width: 1)),
+    shape: Border(top: BorderSide(color: Neo.cyan, width: 1)),
     builder: (_) => _FilterForm(initial: initial),
   );
 }
@@ -156,7 +156,7 @@ class _FilterResultsScreenState extends ConsumerState<FilterResultsScreen> {
           NeoAppBar(title: 'Kết quả lọc', actions: [
             IconButton(
               tooltip: 'Chỉnh bộ lọc',
-              icon: const Icon(Icons.tune, color: Neo.text, size: 22),
+              icon: Icon(Icons.tune, color: Neo.text, size: 22),
               onPressed: _editFilter,
             ),
           ]),

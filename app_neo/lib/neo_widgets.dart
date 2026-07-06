@@ -19,28 +19,28 @@ class NeoCutBorder extends RoundedRectangleBorder {
 class NeoPanel extends StatelessWidget {
   final Widget child;
   final EdgeInsetsGeometry padding;
-  final Color borderColor;
+  final Color? borderColor;
   final Color? glowColor;
   final double cut;
-  final Color color;
+  final Color? color;
 
   const NeoPanel({
     super.key,
     required this.child,
     this.padding = const EdgeInsets.all(16),
-    this.borderColor = Neo.faint,
+    this.borderColor,
     this.glowColor,
     this.cut = Neo.cut,
-    this.color = Neo.surface,
+    this.color,
   });
 
   @override
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: color,
+        color: color ?? Neo.surface,
         borderRadius: BorderRadius.circular(cut),
-        border: Border.all(color: borderColor),
+        border: Border.all(color: borderColor ?? Neo.faint),
         boxShadow: glowColor == null ? null : Neo.glow(glowColor!),
       ),
       padding: padding,
@@ -84,7 +84,7 @@ class NeoButton extends StatelessWidget {
                 ? const SizedBox(width: 120, child: HudProgress())
                 : Text(label,
                     style: GoogleFontsProxy.button(
-                        color: enabled ? const Color(0xFF1C1710) : Neo.dim)),
+                        color: enabled ? Neo.onAccent(c) : Neo.dim)),
           ),
         ),
       ),
@@ -216,7 +216,7 @@ class NeoAppBar extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(4, 6, 8, 2),
       child: Row(children: [
         IconButton(
-          icon: const Icon(Icons.arrow_back, color: Neo.dim),
+          icon: Icon(Icons.arrow_back, color: Neo.dim),
           onPressed: () => Navigator.of(context).maybePop(),
         ),
         Expanded(
@@ -250,7 +250,7 @@ class NeoCover extends StatelessWidget {
       alignment: Alignment.center,
       color: Neo.surface2,
       child: initial.isEmpty
-          ? const Icon(Icons.auto_stories_outlined, color: Neo.dim)
+          ? Icon(Icons.auto_stories_outlined, color: Neo.dim)
           : Text(initial.characters.first.toUpperCase(),
               style: Neo.display(width * 0.4, color: Neo.cyan.withValues(alpha: 0.7))),
     );
@@ -283,19 +283,20 @@ class NeoCover extends StatelessWidget {
 /// Chip mềm.
 class NeoTag extends StatelessWidget {
   final String label;
-  final Color color;
-  const NeoTag(this.label, {super.key, this.color = Neo.cyan});
+  final Color? color;
+  const NeoTag(this.label, {super.key, this.color});
 
   @override
   Widget build(BuildContext context) {
+    final c = color ?? Neo.cyan;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.14),
+        color: c.withValues(alpha: 0.14),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Text(label,
-          style: Neo.mono(11, color: color, weight: FontWeight.w600)),
+          style: Neo.mono(11, color: c, weight: FontWeight.w600)),
     );
   }
 }

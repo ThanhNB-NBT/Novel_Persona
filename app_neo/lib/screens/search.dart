@@ -34,10 +34,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
             padding: const EdgeInsets.fromLTRB(4, 6, 16, 6),
             child: Row(children: [
               IconButton(
-                icon: const Icon(Icons.arrow_back, color: Neo.dim),
+                icon: Icon(Icons.arrow_back, color: Neo.dim),
                 onPressed: () => context.pop(),
               ),
-              const Icon(Icons.search, size: 20, color: Neo.dim),
+              Icon(Icons.search, size: 20, color: Neo.dim),
               const SizedBox(width: 8),
               Expanded(
                 child: TextField(

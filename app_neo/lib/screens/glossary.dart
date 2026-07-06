@@ -31,7 +31,7 @@ class GlossaryScreen extends ConsumerWidget {
           NeoAppBar(title: 'Thuật ngữ', actions: [
             IconButton(
               tooltip: 'Vá các chương đã dịch bằng thuật ngữ mới',
-              icon: const Icon(Icons.healing_outlined, color: Neo.text, size: 22),
+              icon: Icon(Icons.healing_outlined, color: Neo.text, size: 22),
               onPressed: () async {
                 await requestPatch(novelId);
                 if (context.mounted) {
@@ -42,7 +42,7 @@ class GlossaryScreen extends ConsumerWidget {
             ),
             IconButton(
               tooltip: 'Thêm thuật ngữ',
-              icon: const Icon(Icons.add, color: Neo.cyan, size: 24),
+              icon: Icon(Icons.add, color: Neo.cyan, size: 24),
               onPressed: () => _showTermDialog(context, onDone: refresh),
             ),
           ]),
@@ -77,7 +77,7 @@ class GlossaryScreen extends ConsumerWidget {
                     for (final t in approved)
                       ListTile(
                         title: Text('${t['term_zh'] ?? '(?)'} → ${t['correct_vi']}',
-                            style: const TextStyle(color: Neo.text, fontSize: 15)),
+                            style: TextStyle(color: Neo.text, fontSize: 15)),
                         subtitle: Text(
                             [
                               _typeLabels[t['term_type']] ?? t['term_type'],
@@ -88,12 +88,12 @@ class GlossaryScreen extends ConsumerWidget {
                         trailing: Row(mainAxisSize: MainAxisSize.min, children: [
                           IconButton(
                             tooltip: 'Báo cáo dịch sai',
-                            icon: const Icon(Icons.flag_outlined, size: 20, color: Neo.dim),
+                            icon: Icon(Icons.flag_outlined, size: 20, color: Neo.dim),
                             onPressed: () => _reportTerm(context, t['id']),
                           ),
                           IconButton(
                             tooltip: 'Sửa',
-                            icon: const Icon(Icons.edit_outlined, size: 20, color: Neo.dim),
+                            icon: Icon(Icons.edit_outlined, size: 20, color: Neo.dim),
                             onPressed: () =>
                                 _showTermDialog(context, term: t, onDone: refresh),
                           ),
@@ -125,7 +125,7 @@ class GlossaryScreen extends ConsumerWidget {
         content: TextField(
           controller: reason,
           autofocus: true,
-          style: const TextStyle(color: Neo.text),
+          style: TextStyle(color: Neo.text),
           decoration: const InputDecoration(
               labelText: 'Lý do (không bắt buộc)',
               hintText: 'vd: dịch sai nghĩa, sai tên nhân vật…'),
@@ -164,18 +164,18 @@ class GlossaryScreen extends ConsumerWidget {
         content: Column(mainAxisSize: MainAxisSize.min, children: [
           TextField(
             controller: zh,
-            style: const TextStyle(color: Neo.text),
+            style: TextStyle(color: Neo.text),
             decoration: const InputDecoration(labelText: 'Từ gốc (tiếng Trung)'),
           ),
           TextField(
             controller: vi,
-            style: const TextStyle(color: Neo.text),
+            style: TextStyle(color: Neo.text),
             decoration: const InputDecoration(labelText: 'Bản dịch đúng *'),
             autofocus: term != null,
           ),
           TextField(
             controller: wrong,
-            style: const TextStyle(color: Neo.text),
+            style: TextStyle(color: Neo.text),
             decoration: const InputDecoration(
                 labelText: 'Bản dịch sai (nếu có)',
                 helperText: 'Dùng để vá chương cũ: sai → đúng'),
@@ -185,7 +185,7 @@ class GlossaryScreen extends ConsumerWidget {
             builder: (_, setState) => DropdownButtonFormField<String>(
               initialValue: type,
               dropdownColor: Neo.surface2,
-              style: const TextStyle(color: Neo.text),
+              style: TextStyle(color: Neo.text),
               decoration: const InputDecoration(labelText: 'Loại'),
               items: [
                 for (final e in _typeLabels.entries)
@@ -256,13 +256,13 @@ class _PendingTile extends StatelessWidget {
         ),
         child: ListTile(
           title: Text('${term['term_zh'] ?? '(?)'} → ${term['correct_vi']}',
-              style: const TextStyle(color: Neo.text, fontSize: 15)),
+              style: TextStyle(color: Neo.text, fontSize: 15)),
           subtitle: Text(_typeLabels[term['term_type']] ?? '${term['term_type']}',
               style: Neo.mono(10)),
           trailing: Row(mainAxisSize: MainAxisSize.min, children: [
             IconButton(
               tooltip: 'Duyệt — dùng cho các chương dịch sau',
-              icon: const Icon(Icons.check_circle_outline, color: Neo.cyan),
+              icon: Icon(Icons.check_circle_outline, color: Neo.cyan),
               onPressed: () async {
                 await updateTerm(term['id'], {'approved': true});
                 onChanged();
@@ -270,7 +270,7 @@ class _PendingTile extends StatelessWidget {
             ),
             IconButton(
               tooltip: 'Bỏ gợi ý',
-              icon: const Icon(Icons.close, color: Neo.dim),
+              icon: Icon(Icons.close, color: Neo.dim),
               onPressed: () async {
                 await deleteTerm(term['id']);
                 onChanged();

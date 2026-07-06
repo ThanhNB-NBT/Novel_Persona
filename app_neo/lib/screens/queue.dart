@@ -73,7 +73,7 @@ void _showChapters(BuildContext context, _NovelGroup g) {
     context: context,
     isScrollControlled: true,
     backgroundColor: Neo.surface,
-    shape: const Border(top: BorderSide(color: Neo.cyan, width: 1)),
+    shape: Border(top: BorderSide(color: Neo.cyan, width: 1)),
     builder: (ctx) {
       return SafeArea(
         child: ConstrainedBox(
@@ -106,7 +106,7 @@ void _showChapters(BuildContext context, _NovelGroup g) {
                             st == 'downloading' ? Icons.cloud_download : Icons.schedule,
                             size: 18, color: color),
                     title: Text('Chương ${c['chapter_index']}',
-                        style: const TextStyle(color: Neo.text, fontSize: 14)),
+                        style: TextStyle(color: Neo.text, fontSize: 14)),
                     subtitle: c['title_vi'] != null
                         ? Text('${c['title_vi']}',
                             maxLines: 1, overflow: TextOverflow.ellipsis,
@@ -290,7 +290,7 @@ class _RecentDone extends ConsumerWidget {
       Padding(
         padding: const EdgeInsets.fromLTRB(4, 26, 0, 6),
         child: Row(children: [
-          const Icon(Icons.check_circle, size: 16, color: Neo.cyan),
+          Icon(Icons.check_circle, size: 16, color: Neo.cyan),
           const SizedBox(width: 8),
           Expanded(
               child: Text('Vừa dịch xong',
@@ -300,7 +300,7 @@ class _RecentDone extends ConsumerWidget {
               await clearQueueDone();
               ref.invalidate(translateQueueProvider);
             },
-            icon: const Icon(Icons.delete_sweep_outlined, size: 16, color: Neo.dim),
+            icon: Icon(Icons.delete_sweep_outlined, size: 16, color: Neo.dim),
             label: Text('Xoá', style: Neo.mono(10, spacing: 1.5)),
           ),
         ]),
@@ -330,7 +330,7 @@ class _DoneNovel extends StatelessWidget {
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text('$title', maxLines: 1, overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Neo.text, fontSize: 14, fontWeight: FontWeight.w600)),
+                  style: TextStyle(color: Neo.text, fontSize: 14, fontWeight: FontWeight.w600)),
               const SizedBox(height: 2),
               Text('${chapters.length} chương vừa dịch · mới nhất ch.$latest',
                   maxLines: 1, overflow: TextOverflow.ellipsis, style: Neo.mono(10)),

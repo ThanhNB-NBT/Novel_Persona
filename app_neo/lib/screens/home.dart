@@ -67,12 +67,12 @@ class _Brand extends StatelessWidget {
         ),
         IconButton(
           tooltip: 'Tìm kiếm',
-          icon: const Icon(Icons.search, color: Neo.text, size: 22),
+          icon: Icon(Icons.search, color: Neo.text, size: 22),
           onPressed: () => context.push('/search'),
         ),
         IconButton(
           tooltip: 'Lọc truyện',
-          icon: const Icon(Icons.tune, color: Neo.text, size: 22),
+          icon: Icon(Icons.tune, color: Neo.text, size: 22),
           onPressed: () async {
             final f = await showFilterSheet(context, const SearchFilter());
             if (f != null && context.mounted) {
@@ -230,7 +230,7 @@ class _HeroCard extends StatelessWidget {
                                 color: amb.accent,
                               ),
                               child: Text('Đọc ngay',
-                                  style: Neo.mono(12, color: const Color(0xFF16130E),
+                                  style: Neo.mono(12, color: Neo.onAccent(amb.accent),
                                       weight: FontWeight.w700)),
                             ),
                           ),

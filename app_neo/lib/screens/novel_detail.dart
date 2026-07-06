@@ -94,14 +94,14 @@ class _Header extends StatelessWidget {
           child: Column(children: [
             Row(children: [
               IconButton(
-                icon: const Icon(Icons.arrow_back, color: Neo.text),
+                icon: Icon(Icons.arrow_back, color: Neo.text),
                 onPressed: () => context.pop(),
               ),
               const Spacer(),
               _DownloadButton(n),
               IconButton(
                 tooltip: 'Thuật ngữ',
-                icon: const Icon(Icons.translate, color: Neo.text),
+                icon: Icon(Icons.translate, color: Neo.text),
                 onPressed: () => context.push('/novel/$novelId/glossary'),
               ),
               const SizedBox(width: 4),
@@ -250,7 +250,7 @@ void translateRangeDialog(BuildContext context, WidgetRef ref, int novelId,
                 if (translated + step <= source || translated < source)
                   ActionChip(
                     backgroundColor: Neo.surface2,
-                    side: const BorderSide(color: Neo.faint),
+                    side: BorderSide(color: Neo.faint),
                     shape: const RoundedRectangleBorder(),
                     label: Text('+$step', style: Neo.mono(11, color: Neo.text)),
                     onPressed: () => submit((translated + step).clamp(0, source)),
@@ -258,7 +258,7 @@ void translateRangeDialog(BuildContext context, WidgetRef ref, int novelId,
               if (translated < source)
                 ActionChip(
                   backgroundColor: Neo.surface2,
-                  side: const BorderSide(color: Neo.cyan),
+                  side: BorderSide(color: Neo.cyan),
                   shape: const RoundedRectangleBorder(),
                   label: Text('Đến hết', style: Neo.mono(11, color: Neo.cyan)),
                   onPressed: () => submit(source),
@@ -374,7 +374,7 @@ class _ChapterListTabState extends ConsumerState<_ChapterListTab> {
                     translated: (novel?['chapter_count_translated'] ?? 0) as int,
                     source: (novel?['chapter_count_source'] ?? 0) as int,
                     onDone: () => ref.invalidate(chapterListProvider(widget.novelId))),
-                icon: const Icon(Icons.playlist_add, size: 16, color: Neo.cyan),
+                icon: Icon(Icons.playlist_add, size: 16, color: Neo.cyan),
                 label: Text('Dịch', style: Neo.mono(10, color: Neo.cyan, spacing: 2)),
               ),
               TextButton.icon(
@@ -438,10 +438,10 @@ class _ChapterTile extends StatelessWidget {
 
   Widget _statusIcon(String? status) {
     return switch (status) {
-      'done' => const Icon(Icons.check, color: Neo.cyan, size: 16),
+      'done' => Icon(Icons.check, color: Neo.cyan, size: 16),
       'translating' => const SizedBox(width: 46, child: HudProgress()),
-      'queued' => const Icon(Icons.hourglass_empty, size: 15, color: Neo.dim),
-      'failed' => const Icon(Icons.error_outline, color: Neo.danger, size: 16),
+      'queued' => Icon(Icons.hourglass_empty, size: 15, color: Neo.dim),
+      'failed' => Icon(Icons.error_outline, color: Neo.danger, size: 16),
       _ => Icon(Icons.lock_outline, size: 14, color: Neo.dim.withValues(alpha: 0.5)),
     };
   }

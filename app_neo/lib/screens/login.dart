@@ -74,7 +74,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 Align(
                   alignment: Alignment.centerLeft,
                   child: IconButton(
-                    icon: const Icon(Icons.arrow_back, color: Neo.dim),
+                    icon: Icon(Icons.arrow_back, color: Neo.dim),
                     onPressed: () => context.pop(),
                   ),
                 ),

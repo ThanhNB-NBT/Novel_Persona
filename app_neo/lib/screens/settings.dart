@@ -6,9 +6,7 @@ import '../data.dart';
 import '../neo_theme.dart';
 import '../neo_widgets.dart';
 
-/// Tab Hệ thống — hồ sơ + số liệu đọc + lối vào quản trị.
-/// ponytail: NEO dark-only, bỏ segment chọn theme của app cũ; light mode
-/// "hologram trắng" cần token hoá lại toàn bộ Neo.* — làm khi thật sự cần.
+/// Tab Hệ thống — hồ sơ + số liệu đọc + chọn chế độ sáng/tối + lối vào quản trị.
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
 
@@ -56,6 +54,11 @@ class SettingsScreen extends ConsumerWidget {
             novels: stats?['novels'] ?? 0,
             chapters: stats?['chapters'] ?? 0,
             streak: liveStreak(profile),
+          ),
+          const _SectionLabel('Giao diện'),
+          _ThemeSegment(
+            value: ref.watch(appThemeModeProvider),
+            onChanged: (i) => ref.read(appThemeModeProvider.notifier).set(i),
           ),
           const _SectionLabel('Thư viện'),
           _TileGroup(children: [
@@ -133,7 +136,7 @@ class _ProfileCard extends StatelessWidget {
         ),
         IconButton(
           tooltip: 'Đăng xuất',
-          icon: const Icon(Icons.logout, size: 22, color: Neo.danger),
+          icon: Icon(Icons.logout, size: 22, color: Neo.danger),
           onPressed: onLogout,
         ),
       ]),
@@ -149,9 +152,9 @@ class _ReadingPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Widget cell(String v, String label, {Color c = Neo.text}) => Expanded(
+    Widget cell(String v, String label, {Color? c}) => Expanded(
           child: Column(children: [
-            Text(v, style: Neo.mono(22, color: c, weight: FontWeight.w600)),
+            Text(v, style: Neo.mono(22, color: c ?? Neo.text, weight: FontWeight.w600)),
             const SizedBox(height: 3),
             Text(label.toUpperCase(), style: Neo.mono(8, spacing: 2)),
           ]),
@@ -185,6 +188,48 @@ class _ReadingPanel extends StatelessWidget {
               color: i < streak ? Neo.plasma.withValues(alpha: 0.85) : Neo.faint,
             ),
         ]),
+      ]),
+    );
+  }
+}
+
+/// Chọn chế độ sáng/tối — segment pill mềm.
+class _ThemeSegment extends StatelessWidget {
+  final int value;
+  final ValueChanged<int> onChanged;
+  const _ThemeSegment({required this.value, required this.onChanged});
+
+  static const _labels = ['Hệ thống', 'Ban ngày', 'Ban đêm'];
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: Neo.surface,
+        borderRadius: BorderRadius.circular(26),
+        border: Border.all(color: Neo.faint),
+      ),
+      child: Row(children: [
+        for (var i = 0; i < _labels.length; i++)
+          Expanded(
+            child: GestureDetector(
+              onTap: () => onChanged(i),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 220),
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: i == value ? Neo.cyan : Colors.transparent,
+                  borderRadius: BorderRadius.circular(22),
+                ),
+                child: Text(_labels[i],
+                    style: Neo.mono(12,
+                        color: i == value ? Neo.onAccent(Neo.cyan) : Neo.dim,
+                        weight: FontWeight.w600)),
+              ),
+            ),
+          ),
       ]),
     );
   }
@@ -233,8 +278,8 @@ class _Tile extends StatelessWidget {
       dense: true,
       visualDensity: const VisualDensity(vertical: 1),
       leading: Icon(icon, size: 21, color: Neo.dim),
-      title: Text(label, style: const TextStyle(color: Neo.text, fontSize: 15)),
-      trailing: const Icon(Icons.chevron_right, size: 18, color: Neo.dim),
+      title: Text(label, style: TextStyle(color: Neo.text, fontSize: 15)),
+      trailing: Icon(Icons.chevron_right, size: 18, color: Neo.dim),
       onTap: onTap,
     );
   }

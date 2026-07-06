@@ -26,7 +26,7 @@ class LibraryScreen extends ConsumerWidget {
               Expanded(child: Text('Đang đọc', style: Neo.display(28))),
               IconButton(
                 tooltip: 'Bản offline',
-                icon: const Icon(Icons.download_done, color: Neo.text, size: 22),
+                icon: Icon(Icons.download_done, color: Neo.text, size: 22),
                 onPressed: () => context.push('/offline'),
               ),
             ]),
@@ -115,7 +115,7 @@ class _ReadingRow extends ConsumerWidget {
       color: Neo.surface2,
       shape: NeoCutBorder(cut: Neo.cutSm, side: BorderSide(color: Neo.faint)),
       constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
-      icon: const Icon(Icons.more_vert, size: 20, color: Neo.dim),
+      icon: Icon(Icons.more_vert, size: 20, color: Neo.dim),
       onSelected: (v) async {
         if (v == 'offline') {
           await toggleOffline(context, ref, n, downloaded);
@@ -139,10 +139,10 @@ class _ReadingRow extends ConsumerWidget {
                 downloaded ? Icons.download_done : Icons.download_for_offline_outlined,
                 color: Neo.text),
             title: Text(downloaded ? 'Xoá bản offline' : 'Tải truyện về máy',
-                style: const TextStyle(color: Neo.text, fontSize: 14)),
+                style: TextStyle(color: Neo.text, fontSize: 14)),
           ),
         ),
-        const PopupMenuItem(
+        PopupMenuItem(
           value: 'remove',
           child: ListTile(
             dense: true,

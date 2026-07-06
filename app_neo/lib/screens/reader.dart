@@ -611,7 +611,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
             offset: Offset(0, (1 - v) * 56),
             child: Opacity(opacity: v, child: child)),
         child: Container(
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             color: Neo.surface,
             border: Border(top: BorderSide(color: Neo.cyan)),
             boxShadow: [BoxShadow(color: Colors.black54, blurRadius: 18, offset: Offset(0, -4))],
@@ -632,7 +632,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                     const Spacer(),
                     InkWell(
                       onTap: _closeEdit,
-                      child: const Padding(
+                      child: Padding(
                         padding: EdgeInsets.all(4),
                         child: Icon(Icons.close, size: 20, color: Neo.dim),
                       ),
@@ -655,7 +655,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                         ),
                         child: Text(wrong,
                             maxLines: 1, overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
+                            style: TextStyle(
                                 color: Neo.danger, fontWeight: FontWeight.w600, fontSize: 15)),
                       ),
                     ),
@@ -693,7 +693,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                     controller: _correct,
                     focusNode: _correctFocus,
                     textInputAction: TextInputAction.done,
-                    style: const TextStyle(color: Neo.text, fontSize: 15),
+                    style: TextStyle(color: Neo.text, fontSize: 15),
                     onSubmitted: (_) => _submitEdit(wrong),
                     decoration: const InputDecoration(labelText: 'SỬA THÀNH', isDense: true),
                   ),
@@ -891,7 +891,7 @@ class _EndPanelState extends ConsumerState<_EndPanel> {
           controller: reason,
           autofocus: true,
           maxLines: 3,
-          style: const TextStyle(color: Neo.text),
+          style: TextStyle(color: Neo.text),
           decoration: const InputDecoration(
               labelText: 'Lỗi gì? (dịch sai, thiếu đoạn, trùng chương…)', isDense: true),
         ),

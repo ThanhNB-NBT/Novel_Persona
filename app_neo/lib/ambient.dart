@@ -5,12 +5,30 @@ import 'package:palette_generator/palette_generator.dart';
 import 'neo_theme.dart';
 
 /// Khí quyển của một truyện: màu trích từ bìa, dùng nhuộm nền/viền/nút.
+/// Giữ màu THÔ; accent/deep là getter chỉnh độ sáng theo chế độ hiện hành
+/// nên đổi sáng/tối không phải trích lại.
 class Ambient {
-  final Color accent; // màu nổi bật của bìa (đã nâng sáng để đọc được trên nền tối)
-  final Color deep; // màu trầm của bìa — nhuộm nền
-  const Ambient(this.accent, this.deep);
+  final Color _vivid;
+  final Color _dark;
+  const Ambient(this._vivid, this._dark);
 
-  static const fallback = Ambient(Neo.cyan, Color(0xFF1A1820));
+  static const fallback = Ambient(Color(0xFFC9A96E), Color(0xFF1A1820));
+
+  /// Màu nổi bật: nâng sáng trên nền tối, dìm xuống trên nền sáng.
+  Color get accent {
+    final hsl = HSLColor.fromColor(_vivid);
+    final l = Neo.isDark
+        ? hsl.lightness.clamp(0.62, 0.8)
+        : hsl.lightness.clamp(0.3, 0.44);
+    return hsl.withLightness(l).withSaturation(hsl.saturation.clamp(0.25, 0.75)).toColor();
+  }
+
+  /// Màu nhuộm nền: rất trầm khi tối, rất nhạt khi sáng.
+  Color get deep {
+    final hsl = HSLColor.fromColor(Neo.isDark ? _dark : _vivid);
+    final l = Neo.isDark ? hsl.lightness.clamp(0.06, 0.14) : 0.92;
+    return hsl.withLightness(l.toDouble()).toColor();
+  }
 }
 
 /// Trích màu từ URL bìa (cache theo URL — mỗi bìa chỉ tính 1 lần).
@@ -26,15 +44,10 @@ final ambientProvider = FutureProvider.family<Ambient, String?>((ref, url) async
     final vivid = p.vibrantColor?.color ??
         p.lightVibrantColor?.color ??
         p.dominantColor?.color ??
-        Neo.cyan;
-    final dark = p.darkMutedColor?.color ?? p.darkVibrantColor?.color ?? Ambient.fallback.deep;
-    // accent phải đủ sáng trên nền tối
-    final hsl = HSLColor.fromColor(vivid);
-    final accent = hsl.withLightness(hsl.lightness.clamp(0.62, 0.8)).toColor();
-    final deep = HSLColor.fromColor(dark)
-        .withLightness(HSLColor.fromColor(dark).lightness.clamp(0.06, 0.14))
-        .toColor();
-    return Ambient(accent, deep);
+        const Color(0xFFC9A96E);
+    final dark =
+        p.darkMutedColor?.color ?? p.darkVibrantColor?.color ?? const Color(0xFF1A1820);
+    return Ambient(vivid, dark);
   } catch (_) {
     return Ambient.fallback; // lỗi mạng/ảnh → khí quyển mặc định
   }

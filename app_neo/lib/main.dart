@@ -69,15 +69,42 @@ final _router = GoRouter(routes: [
   ),
 ]);
 
-class NeoApp extends StatelessWidget {
+/// Watch chế độ (0=hệ thống, 1=sáng, 2=tối — appThemeModeProvider, lưu prefs)
+/// + độ sáng OS, gán palette rồi rebuild cả cây.
+class NeoApp extends ConsumerStatefulWidget {
   const NeoApp({super.key});
 
   @override
+  ConsumerState<NeoApp> createState() => _NeoAppState();
+}
+
+class _NeoAppState extends ConsumerState<NeoApp> with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this); // nghe OS đổi sáng/tối
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangePlatformBrightness() => setState(() {});
+
+  @override
   Widget build(BuildContext context) {
+    final mode = ref.watch(appThemeModeProvider);
+    final sysDark = WidgetsBinding.instance.platformDispatcher.platformBrightness ==
+        Brightness.dark;
+    final dark = switch (mode) { 1 => false, 2 => true, _ => sysDark };
+    Neo.p = dark ? neoDark : neoLight;
     return MaterialApp.router(
-      title: 'NEO Terminal',
+      title: 'Truyện',
       debugShowCheckedModeBanner: false,
-      theme: neoTheme,
+      theme: buildNeoTheme(),
       routerConfig: _router,
     );
   }

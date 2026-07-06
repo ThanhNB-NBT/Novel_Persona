@@ -73,7 +73,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                     TextField(
                       controller: _name,
                       textInputAction: TextInputAction.done,
-                      style: const TextStyle(color: Neo.text),
+                      style: TextStyle(color: Neo.text),
                       onSubmitted: (_) => _save(),
                       decoration: const InputDecoration(
                           hintText: 'Ví dụ: Bạn đọc', isDense: true),
