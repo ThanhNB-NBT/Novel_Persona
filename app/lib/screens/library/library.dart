@@ -13,7 +13,19 @@ class LibraryScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final reading = ref.watch(readingProvider);
     return Scaffold(
-      appBar: AppBar(title: const Text('Tủ truyện')),
+      appBar: AppBar(title: const Text('Tủ truyện'), actions: [
+        IconButton(
+          tooltip: 'Bản offline',
+          icon: const Icon(Icons.download_done_rounded),
+          onPressed: () => context.push('/offline'),
+        ),
+        IconButton(
+          tooltip: 'Thông báo',
+          icon: const Icon(Icons.notifications_none_rounded),
+          onPressed: () => context.push('/notifications'),
+        ),
+        const SizedBox(width: 4),
+      ]),
       body: reading.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Lỗi: $e')),
@@ -38,7 +50,7 @@ class LibraryScreen extends ConsumerWidget {
           return RefreshIndicator(
             onRefresh: () async => ref.invalidate(readingProvider),
             child: ListView.separated(
-              padding: const EdgeInsets.symmetric(vertical: 6),
+              padding: const EdgeInsets.fromLTRB(0, 6, 0, 110), // chừa chỗ dock nổi
               itemCount: list.length,
               separatorBuilder: (_, _) => const RowDivider(),
               itemBuilder: (_, i) => _ReadingRow(list[i]),

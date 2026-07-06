@@ -190,8 +190,15 @@ ThemeData _build({required bool dark}) {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
     ),
+    // TabBar (quản trị, trang truyện): chỉ thanh indicator chạy, tắt màu lan ra khi bấm
+    tabBarTheme: const TabBarThemeData(
+      overlayColor: WidgetStatePropertyAll(Colors.transparent),
+      splashFactory: NoSplash.splashFactory,
+    ),
     snackBarTheme: SnackBarThemeData(
       behavior: SnackBarBehavior.floating,
+      // nổi lên trên dock (dock cao ~76 + lề 14) để không che menu bar
+      insetPadding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
       backgroundColor: dark ? Pal.dSurfaceAlt : Pal.ink,
       contentTextStyle: TextStyle(color: dark ? Pal.dInk : Colors.white),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),

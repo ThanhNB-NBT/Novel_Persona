@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../ambient.dart';
 import '../../data.dart';
 import '../../offline.dart';
 import '../../widgets.dart';
@@ -17,33 +18,37 @@ class NovelDetailScreen extends ConsumerWidget {
     final novel = ref.watch(novelProvider(novelId));
     return Scaffold(
       body: novel.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
+        loading: () => const AppLoading(),
         error: (e, _) => Center(child: Text('Lỗi: $e')),
-        data: (n) => Stack(children: [
-          DefaultTabController(
-            length: 2,
-            child: Column(children: [
-              _Header(n, novelId),
-              Material(
-                // nền thuần màu cho hàng tab — không cho màu banner lem vào
-                color: Theme.of(context).scaffoldBackgroundColor,
-                child: TabBar(
-                  tabs: const [Tab(text: 'Giới thiệu'), Tab(text: 'Danh sách chương')],
-                  labelStyle: Theme.of(context).textTheme.titleMedium,
-                  dividerColor: Theme.of(context).colorScheme.outlineVariant,
-                ),
-              ),
-              Expanded(
-                child: TabBarView(children: [
-                  _IntroTab(n),
-                  _ChapterListTab(novelId: novelId),
+        data: (n) {
+          // nền khí quyển kiểu NEO: màu trích từ bìa loãng dần vào nền chung
+          final amb = ref.watch(ambientProvider(n['cover_url'] as String?)).value ??
+              Ambient.fallback;
+          return AmbientBackdrop(
+            ambient: amb,
+            child: Stack(children: [
+              DefaultTabController(
+                length: 2,
+                child: Column(children: [
+                  _Header(n, novelId),
+                  TabBar(
+                    tabs: const [Tab(text: 'Giới thiệu'), Tab(text: 'Danh sách chương')],
+                    labelStyle: Theme.of(context).textTheme.titleMedium,
+                    dividerColor: Theme.of(context).colorScheme.outlineVariant,
+                  ),
+                  Expanded(
+                    child: TabBarView(children: [
+                      _IntroTab(n),
+                      _ChapterListTab(novelId: novelId),
+                    ]),
+                  ),
                 ]),
               ),
+              // Nút Lưu + Đọc nổi trên nội dung (bong bóng, đổ bóng)
+              Positioned(left: 0, right: 0, bottom: 0, child: _BottomBar(n, novelId)),
             ]),
-          ),
-          // Nút Lưu + Đọc nổi trên nội dung (bong bóng, đổ bóng)
-          Positioned(left: 0, right: 0, bottom: 0, child: _BottomBar(n, novelId)),
-        ]),
+          );
+        },
       ),
     );
   }
@@ -258,9 +263,9 @@ class _ChapterListTabState extends ConsumerState<_ChapterListTab> {
           ),
           Expanded(
             child: ListView.separated(
-              padding: const EdgeInsets.fromLTRB(20, 4, 20, 96), // chừa chỗ cho bong bóng nổi
+              padding: const EdgeInsets.only(top: 4, bottom: 96), // chừa chỗ cho bong bóng nổi
               itemCount: ordered.length,
-              separatorBuilder: (_, _) => const SizedBox(height: 8),
+              separatorBuilder: (_, _) => const RowDivider(),
               itemBuilder: (_, i) => _ChapterTile(ordered[i], widget.novelId),
             ),
           ),
@@ -279,31 +284,23 @@ class _ChapterTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final done = c['translation_status'] == 'done';
-    return Material(
-      color: cs.surface,
-      borderRadius: BorderRadius.circular(14),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(14),
-        onTap: () => context.push('/novel/$novelId/read/${c['chapter_index']}'),
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: cs.outlineVariant),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          child: Row(children: [
-            Expanded(
-              child: Text(
-                c['title_vi'] ?? 'Chương ${c['chapter_index']}',
-                maxLines: 1, overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    color: done ? null : cs.onSurfaceVariant),
-              ),
+    // dòng thường + kẻ mảnh — không đóng khung từng chương
+    return InkWell(
+      onTap: () => context.push('/novel/$novelId/read/${c['chapter_index']}'),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 13),
+        child: Row(children: [
+          Expanded(
+            child: Text(
+              c['title_vi'] ?? 'Chương ${c['chapter_index']}',
+              maxLines: 1, overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                  color: done ? null : cs.onSurfaceVariant),
             ),
-            const SizedBox(width: 8),
-            _statusIcon(context, c['translation_status']),
-          ]),
-        ),
+          ),
+          const SizedBox(width: 8),
+          _statusIcon(context, c['translation_status']),
+        ]),
       ),
     );
   }
@@ -339,9 +336,10 @@ class _BottomBar extends ConsumerWidget {
         // lề quanh để bong bóng "nổi" tách khỏi mép màn hình
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
         child: Row(children: [
-          _saveBubble(context, ref, inLib),
-          const SizedBox(width: 12),
+          // Đọc bên TRÁI, Lưu (tròn, dấu cộng) bên PHẢI — cả hai thu gọn nhưng vẫn nổi
           Expanded(child: _readBubble(context, reading ? progress : 1, reading)),
+          const SizedBox(width: 12),
+          _saveBubble(context, ref, inLib),
         ]),
       ),
     );
@@ -352,28 +350,28 @@ class _BottomBar extends ConsumerWidget {
     final cs = Theme.of(context).colorScheme;
     return Material(
       color: cs.primary,
-      borderRadius: BorderRadius.circular(26),
+      borderRadius: BorderRadius.circular(23),
       elevation: 6,
       shadowColor: cs.primary.withValues(alpha: 0.5),
       child: InkWell(
-        borderRadius: BorderRadius.circular(26),
+        borderRadius: BorderRadius.circular(23),
         onTap: () => context.push('/novel/$novelId/read/$chapter'),
         child: Container(
-          height: 52,
+          height: 46,
           alignment: Alignment.center,
           child: Row(mainAxisSize: MainAxisSize.min, children: [
-            Icon(Icons.menu_book_rounded, size: 20, color: cs.onPrimary),
+            Icon(Icons.menu_book_rounded, size: 18, color: cs.onPrimary),
             const SizedBox(width: 8),
             Text(reading ? 'Đọc tiếp chương $chapter' : 'Đọc truyện',
                 style: TextStyle(
-                    color: cs.onPrimary, fontWeight: FontWeight.w700, fontSize: 15)),
+                    color: cs.onPrimary, fontWeight: FontWeight.w700, fontSize: 14)),
           ]),
         ),
       ),
     );
   }
 
-  /// Bong bóng tròn Lưu tủ — nổi cạnh nút Đọc.
+  /// Nút tròn Lưu tủ — dấu cộng; đã lưu thì thành dấu tick nền nhấn nhạt.
   Widget _saveBubble(BuildContext context, WidgetRef ref, bool inLib) {
     final cs = Theme.of(context).colorScheme;
     return Material(
@@ -393,13 +391,13 @@ class _BottomBar extends ConsumerWidget {
           ref.invalidate(libraryProvider);
         },
         child: Container(
-          height: 52, width: 52,
+          height: 46, width: 46,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             border: Border.all(color: inLib ? cs.primary : cs.outlineVariant),
           ),
-          child: Icon(inLib ? Icons.bookmark : Icons.bookmark_border_rounded,
-              color: inLib ? cs.primary : cs.onSurfaceVariant),
+          child: Icon(inLib ? Icons.check_rounded : Icons.add_rounded,
+              size: 22, color: inLib ? cs.primary : cs.onSurfaceVariant),
         ),
       ),
     );

@@ -35,7 +35,7 @@ class _FilterFormState extends ConsumerState<_FilterForm> {
     final mins = minChapterThresholds(facets?.maxChapters ?? 0);
     final statuses = facets?.statuses ?? const <String>[];
     return SafeArea(
-      child: Padding(
+      child: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
@@ -64,10 +64,17 @@ class _FilterFormState extends ConsumerState<_FilterForm> {
           ),
           if (genres.isNotEmpty) ...[
             _label('Thể loại'),
-            _UnderlineTabs<String?>(
-              items: [(null, 'Tất cả'), for (final g in genres) (g as String?, g)],
-              selected: _genre,
-              onSelect: (v) => setState(() => _genre = v),
+            // thể loại nhiều → wrap nhiều hàng nhưng CHẶN cao ~3 hàng, dư thì cuộn
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 132),
+              child: SingleChildScrollView(
+                child: _UnderlineTabs<String?>(
+                  items: [(null, 'Tất cả'), for (final g in genres) (g as String?, g)],
+                  selected: _genre,
+                  onSelect: (v) => setState(() => _genre = v),
+                  wrap: true,
+                ),
+              ),
             ),
           ],
           const SizedBox(height: 20),
@@ -96,39 +103,54 @@ class _UnderlineTabs<T> extends StatelessWidget {
   final List<(T, String)> items; // (giá trị, nhãn)
   final T selected;
   final ValueChanged<T> onSelect;
+  final bool wrap; // true = xuống nhiều hàng (mục dài như thể loại)
   const _UnderlineTabs(
-      {required this.items, required this.selected, required this.onSelect});
+      {required this.items,
+      required this.selected,
+      required this.onSelect,
+      this.wrap = false});
+
+  Widget _item(BuildContext context, T value, String label) {
+    final cs = Theme.of(context).colorScheme;
+    final sel = value == selected;
+    return GestureDetector(
+      onTap: () => onSelect(value),
+      behavior: HitTestBehavior.opaque,
+      child: Column(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(label,
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    color: sel ? cs.primary : cs.onSurfaceVariant,
+                    fontWeight: sel ? FontWeight.w700 : FontWeight.w500)),
+            const SizedBox(height: 4),
+            Container(
+              height: 2.5,
+              width: sel ? 22 : 0,
+              decoration: BoxDecoration(
+                  color: cs.primary, borderRadius: BorderRadius.circular(2)),
+            ),
+          ]),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
+    if (wrap) {
+      return Wrap(
+        spacing: 18,
+        runSpacing: 10,
+        children: [for (final (v, l) in items) _item(context, v, l)],
+      );
+    }
     return SizedBox(
       height: 36,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         itemCount: items.length,
         separatorBuilder: (_, _) => const SizedBox(width: 18),
-        itemBuilder: (_, i) {
-          final (value, label) = items[i];
-          final cs = Theme.of(context).colorScheme;
-          final sel = value == selected;
-          return GestureDetector(
-            onTap: () => onSelect(value),
-            behavior: HitTestBehavior.opaque,
-            child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-              Text(label,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      color: sel ? cs.primary : cs.onSurfaceVariant,
-                      fontWeight: sel ? FontWeight.w700 : FontWeight.w500)),
-              const SizedBox(height: 4),
-              Container(
-                height: 2.5,
-                width: sel ? 22 : 0,
-                decoration: BoxDecoration(
-                    color: cs.primary, borderRadius: BorderRadius.circular(2)),
-              ),
-            ]),
-          );
-        },
+        itemBuilder: (_, i) => _item(context, items[i].$1, items[i].$2),
       ),
     );
   }
