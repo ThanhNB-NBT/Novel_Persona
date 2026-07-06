@@ -30,6 +30,24 @@ class AdminScreen extends ConsumerWidget {
               title: const Text('Quản trị'),
               actions: [
                 IconButton(
+                  tooltip: 'Chạy lại toàn bộ job lỗi + chương tải lỗi',
+                  icon: const Icon(Icons.restart_alt_rounded),
+                  onPressed: () async {
+                    final messenger = ScaffoldMessenger.of(context);
+                    try {
+                      final n = await retryAllFailed();
+                      ref.invalidate(adminJobsProvider);
+                      ref.invalidate(translateQueueProvider);
+                      messenger.showSnackBar(SnackBar(
+                          content: Text(n > 0
+                              ? 'Đã đẩy lại $n job lỗi vào hàng đợi'
+                              : 'Không có job lỗi nào')));
+                    } catch (e) {
+                      messenger.showSnackBar(SnackBar(content: Text('Lỗi: $e')));
+                    }
+                  },
+                ),
+                IconButton(
                   tooltip: 'Quét lỗi dịch (chương còn tiếng Trung / cụt / mất đoạn)',
                   icon: const Icon(Icons.fact_check_outlined),
                   onPressed: () async {

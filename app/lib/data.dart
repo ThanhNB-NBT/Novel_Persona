@@ -833,6 +833,11 @@ Future<void> updateNovelFields(int id, Map<String, dynamic> fields) =>
 Future<void> retryJob(int id) =>
     sb.rpc('admin_retry_job', params: {'p_job_id': id});
 
+/// Chạy lại TẤT CẢ job lỗi + trả chương crawl-lỗi về hàng tải (migration 026).
+/// Trả về số job được reset.
+Future<int> retryAllFailed() async =>
+    (await sb.rpc('admin_retry_all_failed')) as int? ?? 0;
+
 /// Quét lỗi (admin): xếp 1 job 'audit' → worker quét chương done hỏng (còn tiếng Trung/
 /// cụt/mất đoạn) và tự xếp lại dịch. Chống trùng ở RPC (chỉ 1 audit chạy 1 lúc).
 Future<void> requestAudit() => sb.rpc('request_audit');
