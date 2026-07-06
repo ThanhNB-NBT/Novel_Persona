@@ -38,14 +38,16 @@ class HomeScreen extends ConsumerWidget {
                 const _Brand(),
                 if (s.recommended.isNotEmpty)
                   _HeroCarousel(s.recommended.take(6).toList()),
+                // Mỗi mục một kiểu bày riêng để trang không lặp một dạng rail:
+                // spotlight → rail dọc → bảng xếp hạng → poster lớn.
                 if (s.latest.isNotEmpty)
-                  _Rail('Mới cập nhật', s.latest, SectionKind.latest),
+                  _Spotlight('Mới cập nhật', s.latest.take(8).toList(), SectionKind.latest),
                 if (s.recommended.length > 1)
                   _Rail('Đề cử', s.recommended.skip(1).toList(), SectionKind.recommended),
                 if (s.featured.isNotEmpty)
-                  _Rail('Nổi bật', s.featured, SectionKind.featured),
+                  _Ranking('Nổi bật', s.featured.take(6).toList(), SectionKind.featured),
                 if (s.completed.isNotEmpty)
-                  _Rail('Đã hoàn thành', s.completed, SectionKind.completed),
+                  _PosterRail('Đã hoàn thành', s.completed, SectionKind.completed),
                 if (s.latest.isEmpty)
                   const Padding(
                     padding: EdgeInsets.all(40),
@@ -264,9 +266,11 @@ class _HeroCard extends ConsumerWidget {
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.all(14),
+                padding: const EdgeInsets.all(11),
                 child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Hero(tag: 'cover-${n['id']}', child: Cover(url: cover, width: 102, label: _title(n))),
+                  // bìa cao kín thẻ (184 - 2×11 padding ≈ 162 = 115×1.4) — đáy
+                  // ngang hàng nút Đọc ngay, không còn hụt
+                  Hero(tag: 'cover-${n['id']}', child: Cover(url: cover, width: 115, label: _title(n))),
                   const SizedBox(width: 14),
                   Expanded(
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -279,23 +283,19 @@ class _HeroCard extends ConsumerWidget {
                       Text(_author(n), maxLines: 1, overflow: TextOverflow.ellipsis,
                           style: t.labelMedium),
                       const Spacer(),
-                      Material(
-                        color: accent,
-                        borderRadius: BorderRadius.circular(20),
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(20),
-                          onTap: () => context.push('/novel/${n['id']}/read/1'),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
-                            child: Text('Đọc ngay',
-                                style: t.labelLarge?.copyWith(
-                                    // chữ trên màu bìa: trắng/đen theo độ sáng màu
-                                    color: accent.computeLuminance() > 0.45
-                                        ? const Color(0xFF1D2129)
-                                        : Colors.white,
-                                    fontSize: 13)),
-                          ),
+                      // FilledButton theo theme (một kiểu nút toàn app), chỉ
+                      // nhuộm màu theo bìa; chữ trắng/đen theo độ sáng màu nền
+                      FilledButton(
+                        onPressed: () => context.push('/novel/${n['id']}/read/1'),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: accent,
+                          foregroundColor: accent.computeLuminance() > 0.45
+                              ? const Color(0xFF1D2129)
+                              : Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+                          textStyle: t.labelLarge?.copyWith(fontSize: 13),
                         ),
+                        child: const Text('Đọc ngay'),
                       ),
                     ]),
                   ),
@@ -306,6 +306,248 @@ class _HeroCard extends ConsumerWidget {
         )),
       ),
     );
+  }
+}
+
+/// Spotlight "Mới cập nhật": dải bìa nhỏ ở trên, bấm bìa nào thì thẻ chi tiết
+/// bên dưới đổi sang truyện đó (tên + thể loại + nút Đọc + bìa lớn).
+class _Spotlight extends StatefulWidget {
+  final String title;
+  final List<Rec> items;
+  final SectionKind kind;
+  const _Spotlight(this.title, this.items, this.kind);
+  @override
+  State<_Spotlight> createState() => _SpotlightState();
+}
+
+class _SpotlightState extends State<_Spotlight> {
+  int _sel = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final t = Theme.of(context).textTheme;
+    final sel = _sel.clamp(0, widget.items.length - 1);
+    final n = widget.items[sel];
+    final genres =
+        ((n['genres'] as List?) ?? const []).take(4).join(' + ');
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      SectionHeader(widget.title,
+          onMore: () => Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => SectionScreen(kind: widget.kind)))),
+      // dải bìa nhỏ — to, phẳng (không bóng), sát nhau; bìa đang chọn viền màu nhấn
+      SizedBox(
+        height: 96,
+        child: ListView.separated(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          itemCount: widget.items.length,
+          separatorBuilder: (_, _) => const SizedBox(width: 7),
+          itemBuilder: (_, i) => GestureDetector(
+            onTap: () => setState(() => _sel = i),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              padding: const EdgeInsets.all(2),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                    color: i == sel ? cs.primary : Colors.transparent,
+                    width: 2),
+              ),
+              child: Cover(
+                  url: widget.items[i]['cover_url'],
+                  width: 62,
+                  flat: true,
+                  label: _title(widget.items[i])),
+            ),
+          ),
+        ),
+      ),
+      const SizedBox(height: 12),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        child: TapScale(
+          onTap: () => context.push('/novel/${n['id']}'),
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 260),
+            child: Row(
+              key: ValueKey(n['id']),
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(_title(n),
+                            maxLines: 3,
+                            overflow: TextOverflow.ellipsis,
+                            style: t.titleLarge?.copyWith(height: 1.25)),
+                        if (genres.isNotEmpty) ...[
+                          const SizedBox(height: 6),
+                          Text('【$genres】',
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: t.labelMedium?.copyWith(color: cs.primary)),
+                        ],
+                        const SizedBox(height: 6),
+                        Text(
+                            '${n['chapter_count_source'] ?? 0} chương • '
+                            '${n['status'] == 'completed' ? 'Hoàn thành' : 'Đang ra'}',
+                            style: t.labelMedium),
+                        const SizedBox(height: 12),
+                        FilledButton(
+                          onPressed: () =>
+                              context.push('/novel/${n['id']}/read/1'),
+                          style: FilledButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 18, vertical: 8),
+                            textStyle: t.labelLarge?.copyWith(fontSize: 13),
+                          ),
+                          child: const Text('Đọc ngay'),
+                        ),
+                      ]),
+                ),
+                const SizedBox(width: 14),
+                Cover(url: n['cover_url'], width: 128, label: _title(n)),
+              ],
+            ),
+          ),
+        ),
+      ),
+    ]);
+  }
+}
+
+/// Bảng xếp hạng "Nổi bật": số thứ tự to, top 3 nhuộm màu nhấn.
+class _Ranking extends StatelessWidget {
+  final String title;
+  final List<Rec> items;
+  final SectionKind kind;
+  const _Ranking(this.title, this.items, this.kind);
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final t = Theme.of(context).textTheme;
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      SectionHeader(title,
+          onMore: () => Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => SectionScreen(kind: kind)))),
+      for (var i = 0; i < items.length; i++)
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+          child: TapScale(
+            onTap: () => context.push('/novel/${items[i]['id']}'),
+            child: Row(children: [
+              SizedBox(
+                width: 34,
+                child: Text('${i + 1}',
+                    style: t.headlineMedium?.copyWith(
+                        fontStyle: FontStyle.italic,
+                        fontWeight: FontWeight.w800,
+                        color: i < 3
+                            ? cs.primary
+                            : cs.onSurfaceVariant.withValues(alpha: 0.45))),
+              ),
+              Cover(url: items[i]['cover_url'], width: 46, label: _title(items[i])),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(_title(items[i]),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: t.titleMedium?.copyWith(fontSize: 14.5, height: 1.2)),
+                      const SizedBox(height: 3),
+                      Text(
+                          ((items[i]['genres'] as List?) ?? const [])
+                                  .take(3)
+                                  .join(' · ')
+                                  .toString(),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: t.labelSmall
+                              ?.copyWith(color: cs.onSurfaceVariant)),
+                    ]),
+              ),
+            ]),
+          ),
+        ),
+    ]);
+  }
+}
+
+/// Poster lớn "Đã hoàn thành": bìa to, tên đè lên chân bìa với gradient tối.
+class _PosterRail extends StatelessWidget {
+  final String title;
+  final List<Rec> items;
+  final SectionKind kind;
+  const _PosterRail(this.title, this.items, this.kind);
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).textTheme;
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      SectionHeader(title,
+          onMore: () => Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => SectionScreen(kind: kind)))),
+      SizedBox(
+        height: 186,
+        child: ListView.separated(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          itemCount: items.length,
+          separatorBuilder: (_, _) => const SizedBox(width: 14),
+          itemBuilder: (_, i) {
+            final n = items[i];
+            return TapScale(
+              onTap: () => context.push('/novel/${n['id']}'),
+              child: Stack(children: [
+                Cover(url: n['cover_url'], width: 130, label: _title(n)),
+                // gradient + tên ở chân bìa (bo theo góc Cover = 8)
+                Positioned.fill(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          stops: const [0.5, 1],
+                          colors: [
+                            Colors.transparent,
+                            Colors.black.withValues(alpha: 0.75),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  left: 8, right: 8, bottom: 8,
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(_title(n),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: t.labelMedium?.copyWith(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w700,
+                                height: 1.2)),
+                        const SizedBox(height: 2),
+                        Text('${n['chapter_count_source'] ?? 0} chương',
+                            style: t.labelSmall?.copyWith(
+                                color: Colors.white.withValues(alpha: 0.85))),
+                      ]),
+                ),
+              ]),
+            );
+          },
+        ),
+      ),
+    ]);
   }
 }
 

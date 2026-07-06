@@ -36,9 +36,15 @@ final ambientProvider = FutureProvider.family<Ambient, String?>((ref, url) async
       size: const Size(96, 128), // decode nhỏ — đủ để lấy màu, rẻ
       maximumColorCount: 12,
     );
-    final vivid = p.vibrantColor?.color ??
+    // Ưu tiên màu CHỦ ĐẠO của bìa (chiếm nhiều diện tích nhất) — trước lấy màu rực
+    // nhất nên hay lệch tông so với bìa. Chủ đạo quá xám (bìa trắng đen) mới rơi
+    // về màu rực để khí quyển không thành màu bùn.
+    final dom = p.dominantColor?.color;
+    final domUsable = dom != null && HSLColor.fromColor(dom).saturation >= 0.15;
+    final vivid = (domUsable ? dom : null) ??
+        p.vibrantColor?.color ??
         p.lightVibrantColor?.color ??
-        p.dominantColor?.color ??
+        dom ??
         const Color(0xFF3576F5);
     final dark =
         p.darkMutedColor?.color ?? p.darkVibrantColor?.color ?? const Color(0xFF16202E);

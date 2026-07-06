@@ -11,7 +11,7 @@ import 'library/queue.dart';
 import 'account/settings.dart';
 
 /// Khung 4 tab: Tủ truyện · Khám phá · Hàng đợi · Cài đặt.
-/// Mặc định mở Tủ truyện (chưa đăng nhập → Khám phá). Giữ trạng thái bằng IndexedStack.
+/// Mặc định mở Tủ truyện (chưa đăng nhập → Khám phá). Vuốt ngang đổi tab bằng PageView.
 /// Dock NỔI đè lên nội dung như NEO (Stack, không dùng slot bottomNavigationBar —
 /// slot đó chừa nguyên một dải nền phía sau).
 class RootShell extends ConsumerStatefulWidget {
@@ -22,6 +22,7 @@ class RootShell extends ConsumerStatefulWidget {
 
 class _RootShellState extends ConsumerState<RootShell> {
   late int _i;
+  late final _pc = PageController(initialPage: _i);
   static const _pages = [LibraryScreen(), HomeScreen(), QueueScreen(), SettingsScreen()];
 
   static const _tabs = [
@@ -38,64 +39,60 @@ class _RootShellState extends ConsumerState<RootShell> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: Stack(fit: StackFit.expand, children: [
-        _FadeIndexedStack(index: _i, children: _pages),
-        Align(
-          alignment: Alignment.bottomCenter,
-          child: _Dock(
-            index: _i,
-            onTap: (i) {
-              // Tab dùng IndexedStack (giữ sống) nên không tự fetch lại — mở tab thì làm
-              // mới dữ liệu để thấy thay đổi vừa gây ở màn khác (vd "dịch thêm" trong reader).
-              if (i == 0) ref.invalidate(readingProvider);
-              if (i == 2) ref.invalidate(translateQueueProvider);
-              setState(() => _i = i);
-            },
-          ),
-        ),
-      ]),
-    );
-  }
-}
-
-/// IndexedStack giữ trạng thái tab + hoạt ảnh fade/nổi lên nhẹ khi chuyển màn.
-class _FadeIndexedStack extends StatefulWidget {
-  final int index;
-  final List<Widget> children;
-  const _FadeIndexedStack({required this.index, required this.children});
-  @override
-  State<_FadeIndexedStack> createState() => _FadeIndexedStackState();
-}
-
-class _FadeIndexedStackState extends State<_FadeIndexedStack>
-    with SingleTickerProviderStateMixin {
-  late final _ctrl = AnimationController(
-      vsync: this, duration: const Duration(milliseconds: 280), value: 1);
-
-  @override
-  void didUpdateWidget(_FadeIndexedStack old) {
-    super.didUpdateWidget(old);
-    if (old.index != widget.index) _ctrl.forward(from: 0);
-  }
-
-  @override
   void dispose() {
-    _ctrl.dispose();
+    _pc.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final curve = CurvedAnimation(parent: _ctrl, curve: Curves.easeOutCubic);
-    return FadeTransition(
-      opacity: curve,
-      child: SlideTransition(
-        position: Tween(begin: const Offset(0, 0.015), end: Offset.zero).animate(curve),
-        child: IndexedStack(index: widget.index, children: widget.children),
-      ),
+    // Cả vuốt lẫn bấm dock đều đi qua onPageChanged → side effect một chỗ
+    void changed(int i) {
+      if (i == _i) return;
+      if (i == 0) ref.invalidate(readingProvider);
+      if (i == 2) ref.invalidate(translateQueueProvider);
+      HapticFeedback.lightImpact();
+      setState(() => _i = i);
+    }
+
+    void go(int i) {
+      if (i < 0 || i > 3 || i == _i) return;
+      _pc.animateToPage(i,
+          duration: const Duration(milliseconds: 320), curve: Curves.easeOutCubic);
+    }
+
+    return Scaffold(
+      body: Stack(fit: StackFit.expand, children: [
+        // PageView: trang bám ngón tay, trượt như thẻ (giống TabBarView bên Quản trị).
+        // Vùng có list cuộn ngang (carousel, rail) thì gesture của list thắng.
+        PageView(
+          controller: _pc,
+          onPageChanged: changed,
+          children: [for (final p in _pages) _KeepAlive(child: p)],
+        ),
+        // Tab dùng IndexedStack (giữ sống) nên không tự fetch lại — go() làm mới
+        // dữ liệu khi mở tab để thấy thay đổi vừa gây ở màn khác.
+        Align(alignment: Alignment.bottomCenter, child: _Dock(index: _i, onTap: go)),
+      ]),
     );
+  }
+}
+
+/// Giữ trạng thái từng tab trong PageView (thay vai trò IndexedStack cũ).
+class _KeepAlive extends StatefulWidget {
+  final Widget child;
+  const _KeepAlive({required this.child});
+  @override
+  State<_KeepAlive> createState() => _KeepAliveState();
+}
+
+class _KeepAliveState extends State<_KeepAlive> with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    return widget.child;
   }
 }
 
@@ -154,10 +151,19 @@ class _Dock extends StatelessWidget {
                         child: SizedBox(
                           width: w,
                           height: cons.maxHeight,
-                          child: AnimatedSlide(
-                            duration: const Duration(milliseconds: 320),
+                          child: TweenAnimationBuilder<double>(
+                            tween: Tween(end: index.toDouble()),
+                            duration: const Duration(milliseconds: 420),
                             curve: Curves.easeOutCubic,
-                            offset: Offset(index.toDouble(), 0), // x = bội số bề rộng pill
+                            builder: (_, x, child) {
+                              // "giọt nước": đang trôi thì giãn ngang + bẹt dọc
+                              // (bảo toàn thể tích), càng gần đích càng co về tròn
+                              final s = 1 + (x - index).abs().clamp(0.0, 1.0) * 0.45;
+                              return FractionalTranslation(
+                                translation: Offset(x, 0), // x = bội số bề rộng pill
+                                child: Transform.scale(scaleX: s, scaleY: 1 / s, child: child),
+                              );
+                            },
                             child: DecoratedBox(
                               decoration: BoxDecoration(
                                 color: cs.primary.withValues(alpha: 0.13),
@@ -173,10 +179,7 @@ class _Dock extends StatelessWidget {
                     for (var i = 0; i < n; i++)
                       Expanded(
                         child: GestureDetector(
-                          onTap: () {
-                            if (i != index) HapticFeedback.lightImpact();
-                            onTap(i);
-                          },
+                          onTap: () => onTap(i), // haptic do go() trong shell lo
                           behavior: HitTestBehavior.opaque,
                           child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,

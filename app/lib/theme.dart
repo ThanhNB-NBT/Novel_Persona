@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -75,6 +76,11 @@ ThemeData _build({required bool dark}) {
   return ThemeData(
     useMaterial3: true,
     brightness: dark ? Brightness.dark : Brightness.light,
+    // Chuyển trang kiểu iOS: trượt ngang + vuốt từ mép trái để back (cả Android)
+    pageTransitionsTheme: const PageTransitionsTheme(builders: {
+      TargetPlatform.android: CupertinoPageTransitionsBuilder(),
+      TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+    }),
     scaffoldBackgroundColor: bg,
     canvasColor: bg,
     colorScheme: ColorScheme(
@@ -144,7 +150,9 @@ ThemeData _build({required bool dark}) {
         backgroundColor: accent,
         foregroundColor: onAccent,
         textStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 15, letterSpacing: -0.1),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+        // pill (StadiumBorder) — ăn khớp dock pill + hệ bo tròn của app,
+        // bo 15 nửa vời nhìn "sao sao" đúng như cảm giác
+        shape: const StadiumBorder(),
         padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
       ),
     ),
