@@ -716,7 +716,7 @@ final appStatsProvider = FutureProvider.autoDispose<Map<String, int>>((ref) asyn
 
 /// Job đáng chú ý: đang chạy / lỗi / chờ (bỏ done). Kèm tên truyện + số chương.
 final adminJobsProvider = FutureProvider.autoDispose<List<Rec>>((ref) async {
-  return List<Rec>.from(
+  final jobs = List<Rec>.from(
     await sb
         .from('translation_jobs')
         .select(
@@ -729,6 +729,24 @@ final adminJobsProvider = FutureProvider.autoDispose<List<Rec>>((ref) async {
         .order('created_at', ascending: false)
         .limit(120),
   );
+  // Job pending mà chương CHƯA có content_zh = crawler đang tải nguồn → gắn cờ
+  // 'downloading' để tab Worker hiện "đang crawl" thay vì "chờ" chung chung.
+  final pendingIds = [
+    for (final j in jobs)
+      if (j['status'] == 'pending' && j['chapter_id'] != null) j['chapter_id'] as int
+  ];
+  if (pendingIds.isNotEmpty) {
+    final rows = List<Rec>.from(await sb
+        .from('chapters')
+        .select('id')
+        .inFilter('id', pendingIds)
+        .isFilter('content_zh', null));
+    final downloading = {for (final r in rows) r['id'] as int};
+    for (final j in jobs) {
+      j['downloading'] = downloading.contains(j['chapter_id']);
+    }
+  }
+  return jobs;
 });
 
 /// Chương của 1 truyện kèm thông tin SAU DỊCH (model, token, thời điểm) — cho màn quản trị.
