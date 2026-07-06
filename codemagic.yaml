@@ -1,0 +1,40 @@
+# Build iOS .ipa KHÔNG cần Mac, KHÔNG cần tài khoản Apple Developer $99.
+# Codemagic dựng Mac đám mây build hộ → tải .ipa về → sideload lên iPhone bằng
+# AltStore/Sideloadly (ký lại bằng Apple ID free, hết hạn 7 ngày).
+#
+# Cách dùng:
+#  1. Đẩy repo lên GitHub, kết nối vào codemagic.io.
+#  2. Trong Codemagic > Environment variables, thêm (group "supabase"):
+#       SUPABASE_URL, SUPABASE_ANON_KEY   (giá trị lấy từ app/.env)
+#  3. Chạy workflow "ios-unsigned" → tải artifact novel_reader.ipa.
+#
+# .ipa này KHÔNG ký phân phối — Sideloadly/AltStore sẽ tự ký lại bằng Apple ID của bạn.
+
+workflows:
+  ios-unsigned:
+    name: iOS unsigned IPA (sideload)
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    environment:
+      flutter: stable
+      groups:
+        - supabase   # chứa SUPABASE_URL + SUPABASE_ANON_KEY
+    scripts:
+      - name: Flutter pub get
+        working_directory: app
+        script: flutter pub get
+      - name: Build iOS (no codesign)
+        working_directory: app
+        script: |
+          flutter build ios --release --no-codesign \
+            --dart-define=SUPABASE_URL="$SUPABASE_URL" \
+            --dart-define=SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY"
+      - name: Đóng gói .app thành .ipa
+        working_directory: app
+        script: |
+          cd build/ios/iphoneos
+          mkdir -p Payload
+          cp -r Runner.app Payload/
+          zip -r novel_reader.ipa Payload
+    artifacts:
+      - app/build/ios/iphoneos/novel_reader.ipa
