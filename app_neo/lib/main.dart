@@ -10,6 +10,8 @@ import 'neo_theme.dart';
 import 'neo_widgets.dart';
 import 'notify.dart';
 import 'screens/login.dart';
+import 'screens/novel_detail.dart';
+import 'screens/search.dart';
 import 'screens/shell.dart';
 
 // Key trong app_neo/.env (gitignore), chạy:
@@ -31,7 +33,38 @@ Future<void> main() async {
 final _router = GoRouter(routes: [
   GoRoute(path: '/', pageBuilder: (_, _) => MaterializePage(child: const NeoShell())),
   GoRoute(path: '/login', pageBuilder: (_, _) => MaterializePage(child: const LoginScreen())),
+  GoRoute(path: '/search', pageBuilder: (_, _) => MaterializePage(child: const SearchScreen())),
+  GoRoute(
+    path: '/novel/:id',
+    pageBuilder: (_, s) => MaterializePage(
+        child: NovelDetailScreen(novelId: int.parse(s.pathParameters['id']!))),
+  ),
+  // Placeholder tới Phase 3 — tránh crash khi bấm từ chi tiết truyện.
+  GoRoute(
+    path: '/novel/:id/glossary',
+    pageBuilder: (_, _) => MaterializePage(child: const _ComingSoon('GLOSSARY // PHASE 3')),
+  ),
+  GoRoute(
+    path: '/novel/:id/read/:index',
+    pageBuilder: (_, _) => MaterializePage(child: const _ComingSoon('READER // PHASE 3')),
+  ),
 ]);
+
+class _ComingSoon extends StatelessWidget {
+  final String label;
+  const _ComingSoon(this.label);
+  @override
+  Widget build(BuildContext context) {
+    return NeoScaffold(
+      body: SafeArea(
+        child: Column(children: [
+          const NeoAppBar(title: 'Đang xây dựng'),
+          Expanded(child: NeoMessage(label)),
+        ]),
+      ),
+    );
+  }
+}
 
 class NeoApp extends StatelessWidget {
   const NeoApp({super.key});
