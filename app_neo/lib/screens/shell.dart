@@ -1,15 +1,13 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
-import '../data.dart';
 import '../neo_theme.dart';
 import '../neo_widgets.dart';
 import 'home.dart';
 import 'library.dart';
 import 'queue.dart';
+import 'settings.dart';
 
 /// Khung 4 tab của NEO. Phase 1: tab thật là placeholder HUD, sẽ thay dần
 /// ở Phase 2-5 (Explore, Library, Queue, Account).
@@ -41,56 +39,9 @@ class _NeoShellState extends State<NeoShell> {
         const LibraryScreen(),
         const HomeScreen(),
         const QueueScreen(),
-        _Placeholder(label: _tabs[3].label),
+        const SettingsScreen(),
       ]),
       bottom: NeoDock(index: _tab, items: _tabs, onTap: (i) => setState(() => _tab = i)),
-    );
-  }
-}
-
-/// Placeholder HUD cho tab chưa build — hiện trạng thái đăng nhập để chứng minh
-/// pipeline Supabase chạy. Thay bằng màn thật ở phase sau.
-class _Placeholder extends ConsumerWidget {
-  final String label;
-  const _Placeholder({required this.label});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    ref.watch(authStateProvider); // rebuild khi đăng nhập/đăng xuất
-    final user = sb.auth.currentUser;
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('NEO // ${label.toUpperCase()}', style: Neo.mono(11, color: Neo.cyan, spacing: 3)),
-          const SizedBox(height: 6),
-          Text(label, style: Neo.display(32)),
-          const SizedBox(height: 24),
-          NeoPanel(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('MODULE ĐANG XÂY DỰNG', style: Neo.mono(10, spacing: 3)),
-              const SizedBox(height: 10),
-              const HudProgress(),
-              const SizedBox(height: 18),
-              Text(
-                user == null ? 'PHIÊN: CHƯA ĐĂNG NHẬP' : 'PHIÊN: ${user.email}',
-                style: Neo.mono(12, color: user == null ? Neo.danger : Neo.cyan),
-              ),
-              const SizedBox(height: 14),
-              NeoButton(
-                label: user == null ? 'ĐĂNG NHẬP' : 'ĐĂNG XUẤT',
-                onPressed: () async {
-                  if (user == null) {
-                    context.push('/login');
-                  } else {
-                    await sb.auth.signOut();
-                  }
-                },
-              ),
-            ]),
-          ),
-        ]),
-      ),
     );
   }
 }

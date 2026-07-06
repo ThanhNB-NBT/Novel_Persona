@@ -9,6 +9,9 @@ import 'errorlog.dart';
 import 'neo_theme.dart';
 import 'neo_widgets.dart';
 import 'notify.dart';
+import 'screens/admin.dart';
+import 'screens/edit_profile.dart';
+import 'screens/errors.dart';
 import 'screens/glossary.dart';
 import 'screens/login.dart';
 import 'screens/novel_detail.dart';
@@ -38,6 +41,14 @@ final _router = GoRouter(routes: [
   GoRoute(path: '/login', pageBuilder: (_, _) => MaterializePage(child: const LoginScreen())),
   GoRoute(path: '/search', pageBuilder: (_, _) => MaterializePage(child: const SearchScreen())),
   GoRoute(path: '/offline', pageBuilder: (_, _) => MaterializePage(child: const OfflineLibraryScreen())),
+  GoRoute(path: '/profile/edit', pageBuilder: (_, _) => MaterializePage(child: const EditProfileScreen())),
+  GoRoute(path: '/errors', pageBuilder: (_, _) => MaterializePage(child: const ErrorLogScreen())),
+  GoRoute(path: '/admin', pageBuilder: (_, _) => MaterializePage(child: const AdminScreen())),
+  GoRoute(
+    path: '/admin/novel/:id',
+    pageBuilder: (_, s) => MaterializePage(
+        child: AdminNovelScreen(novelId: int.parse(s.pathParameters['id']!))),
+  ),
   GoRoute(
     path: '/novel/:id',
     pageBuilder: (_, s) => MaterializePage(
