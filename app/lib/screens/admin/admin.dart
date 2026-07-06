@@ -129,7 +129,10 @@ class _JobsTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return _Refreshable(
       async: ref.watch(adminJobsProvider),
-      onRefresh: () async => ref.invalidate(adminJobsProvider),
+      onRefresh: () async {
+        ref.invalidate(adminJobsProvider);
+        ref.invalidate(workerHeartbeatProvider);
+      },
       emptyText: 'Không có job đang chạy / chờ / lỗi.',
       builder: (jobs) {
         final running = jobs.where((j) => j['status'] == 'running').length;
@@ -164,17 +167,52 @@ class _JobsTab extends ConsumerWidget {
   }
 }
 
-/// Thống kê nhanh hàng đợi worker: đang dịch / chờ / lỗi (từ chính list job đã tải).
-class _JobStats extends StatelessWidget {
+/// Thống kê nhanh hàng đợi worker + NHỊP TIM (crawler/translator điểm danh định kỳ
+/// vào worker_heartbeat — biết chắc sống hay treo, không phải đoán qua job).
+class _JobStats extends ConsumerWidget {
   final int running, crawling, pending, failed;
   const _JobStats(
       {required this.running, required this.crawling,
        required this.pending, required this.failed});
 
-  @override
-  Widget build(BuildContext context) {
+  /// crawler beat mỗi ~10s (mịn hơn khi đang tải chương), translator mỗi 60s.
+  /// Quá 3 phút không điểm danh = coi như treo/tắt.
+  Widget _pulse(BuildContext context, List<Rec> beats, String name, String label) {
     final cs = Theme.of(context).colorScheme;
     final t = Theme.of(context).textTheme;
+    final row = beats.where((b) => b['name'] == name).firstOrNull;
+    String text;
+    Color dot;
+    if (row == null) {
+      text = '$label: chưa từng chạy';
+      dot = cs.error;
+    } else {
+      final age = DateTime.now().toUtc()
+          .difference(DateTime.parse(row['at'] as String).toUtc());
+      final alive = age.inSeconds < 180;
+      dot = alive ? const Color(0xFF34C77B) : cs.error;
+      final ago = age.inSeconds < 60 ? '${age.inSeconds}s' : _elapsed(row['at'] as String);
+      final note = alive ? (row['note'] as String?) : null;
+      text = alive
+          ? '$label: hoạt động $ago trước${note != null ? ' — $note' : ''}'
+          : '$label: KHÔNG phản hồi ($ago) — kiểm tra Docker';
+    }
+    return Row(children: [
+      Container(width: 8, height: 8,
+          decoration: BoxDecoration(color: dot, shape: BoxShape.circle)),
+      const SizedBox(width: 8),
+      Expanded(
+        child: Text(text, maxLines: 1, overflow: TextOverflow.ellipsis,
+            style: t.labelSmall),
+      ),
+    ]);
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final cs = Theme.of(context).colorScheme;
+    final t = Theme.of(context).textTheme;
+    final beats = ref.watch(workerHeartbeatProvider).value ?? const <Rec>[];
     Widget cell(String v, String label, Color? c) => Expanded(
           child: Column(children: [
             Text(v, style: t.headlineSmall?.copyWith(color: c)),
@@ -190,11 +228,22 @@ class _JobStats extends StatelessWidget {
           color: cs.primaryContainer.withValues(alpha: 0.4),
           borderRadius: BorderRadius.circular(18),
         ),
-        child: Row(children: [
-          cell('$running', 'đang dịch', cs.primary),
-          cell('$crawling', 'đang crawl', crawling > 0 ? cs.tertiary : null),
-          cell('$pending', 'chờ dịch', null),
-          cell('$failed', 'lỗi', failed > 0 ? cs.error : null),
+        child: Column(children: [
+          Row(children: [
+            cell('$running', 'đang dịch', cs.primary),
+            cell('$crawling', 'đang crawl', crawling > 0 ? cs.tertiary : null),
+            cell('$pending', 'chờ dịch', null),
+            cell('$failed', 'lỗi', failed > 0 ? cs.error : null),
+          ]),
+          const SizedBox(height: 14),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Column(children: [
+              _pulse(context, beats, 'crawler', 'Crawler'),
+              const SizedBox(height: 6),
+              _pulse(context, beats, 'translator', 'Translator'),
+            ]),
+          ),
         ]),
       ),
     );

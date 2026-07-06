@@ -85,6 +85,7 @@ def run_crawler() -> None:
     last_discovery = 0.0
     while True:
         now = time.time()
+        db.heartbeat("crawler")  # điểm danh mỗi vòng 10s — app hiện sống/chết thật
         for adapter in adapters.values():
             try:
                 # 1) discovery + sync truyện được theo dõi — theo chu kỳ dài

@@ -522,6 +522,7 @@ def run_forever(poll_seconds: float = 3.0) -> None:
     audit_since = db.utc_now()
     while True:
         try:
+            db.heartbeat("translator")  # điểm danh mỗi 60s
             db.requeue_stale_jobs(settings.stale_job_minutes)
             db.reset_orphan_chapters()  # dọn chương queued/translating không còn job (ghost Hàng đợi)
             # Audit định kỳ: tự quét chương done hỏng (Trung/cụt/mất đoạn lọt qua) → xếp lại dịch,

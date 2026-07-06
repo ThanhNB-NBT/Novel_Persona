@@ -376,6 +376,7 @@ def refresh_canonical_updates(adapter: SourceAdapter, limit: int) -> None:
         .limit(limit).execute()
     ).data or []
     for nv in rows:
+        db.heartbeat("crawler", note=f"soi mục lục novel {nv['id']}")
         try:
             n = sync_chapter_list(adapter, nv["id"], nv["source_novel_id"])
             if n:
@@ -421,6 +422,7 @@ def ensure_chapters_fetched(adapter: SourceAdapter, novel_id: int) -> None:
     for ch in rows:
         if not ch["source_chapter_id"]:
             continue
+        db.heartbeat("crawler", note=f"tải chương {ch['chapter_index']} novel {novel_id}")
         try:
             content = adapter.fetch_chapter(ch["source_chapter_id"])
             db.save_chapter_raw(ch["id"], content)

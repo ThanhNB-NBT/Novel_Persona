@@ -222,6 +222,16 @@ def record_model_call(model: str, latency_ms: int, ok: bool, error: str | None =
         log.debug("record_model_call lỗi (bỏ qua) model=%s", model)
 
 
+def heartbeat(name: str, note: str | None = None) -> None:
+    """Điểm danh định kỳ (crawler/translator) — tab Worker hiện sống/chết thật.
+    Best-effort: lỗi mạng thì bỏ qua, không được làm hỏng vòng chính."""
+    try:
+        sb().table("worker_heartbeat").upsert(
+            {"name": name, "at": utc_now(), "note": note}).execute()
+    except Exception:
+        log.debug("heartbeat lỗi (bỏ qua): %s", name)
+
+
 # ---------- cache bìa (Supabase Storage) ----------
 
 def upload_cover(path: str, data: bytes, content_type: str) -> None:
