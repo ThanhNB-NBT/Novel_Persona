@@ -133,7 +133,10 @@ class _JobsTab extends ConsumerWidget {
       emptyText: 'Không có job đang chạy / chờ / lỗi.',
       builder: (jobs) {
         final running = jobs.where((j) => j['status'] == 'running').length;
-        final pending = jobs.where((j) => j['status'] == 'pending').length;
+        final crawling = jobs
+            .where((j) => j['status'] == 'pending' && j['downloading'] == true)
+            .length;
+        final pending = jobs.where((j) => j['status'] == 'pending').length - crawling;
         final failed = jobs.where((j) => j['status'] == 'failed').length;
         // Gộp theo truyện: 1 dòng/truyện, bấm vào mới xem list chương (job) bên trong.
         final groups = <int, List<Rec>>{};
@@ -152,7 +155,8 @@ class _JobsTab extends ConsumerWidget {
           separatorBuilder: (_, i) =>
               i == 0 ? const SizedBox.shrink() : const Divider(height: 1),
           itemBuilder: (_, i) => i == 0
-              ? _JobStats(running: running, pending: pending, failed: failed)
+              ? _JobStats(running: running, crawling: crawling,
+                  pending: pending, failed: failed)
               : _NovelJobsRow(entries[i - 1].key, entries[i - 1].value, ref),
         );
       },
@@ -162,8 +166,10 @@ class _JobsTab extends ConsumerWidget {
 
 /// Thống kê nhanh hàng đợi worker: đang dịch / chờ / lỗi (từ chính list job đã tải).
 class _JobStats extends StatelessWidget {
-  final int running, pending, failed;
-  const _JobStats({required this.running, required this.pending, required this.failed});
+  final int running, crawling, pending, failed;
+  const _JobStats(
+      {required this.running, required this.crawling,
+       required this.pending, required this.failed});
 
   @override
   Widget build(BuildContext context) {
@@ -186,7 +192,8 @@ class _JobStats extends StatelessWidget {
         ),
         child: Row(children: [
           cell('$running', 'đang dịch', cs.primary),
-          cell('$pending', 'đang chờ', null),
+          cell('$crawling', 'đang crawl', crawling > 0 ? cs.tertiary : null),
+          cell('$pending', 'chờ dịch', null),
           cell('$failed', 'lỗi', failed > 0 ? cs.error : null),
         ]),
       ),
@@ -208,18 +215,24 @@ class _NovelJobsRow extends StatelessWidget {
     final novel = (jobs.first['novels'] as Map?) ?? const {};
     final title = novel['title_vi'] ?? novel['title_zh'] ?? 'Truyện #$novelId';
     final running = jobs.where((j) => j['status'] == 'running').length;
-    final pending = jobs.where((j) => j['status'] == 'pending').length;
+    final crawling = jobs
+        .where((j) => j['status'] == 'pending' && j['downloading'] == true)
+        .length;
+    final pending = jobs.where((j) => j['status'] == 'pending').length - crawling;
     final failed = jobs.where((j) => j['status'] == 'failed').length;
     final parts = [
       if (running > 0) '$running đang dịch',
-      if (pending > 0) '$pending chờ',
+      if (crawling > 0) '$crawling đang crawl nguồn',
+      if (pending > 0) '$pending chờ dịch',
       if (failed > 0) '$failed lỗi',
     ];
     final (icon, color) = failed > 0
         ? (Icons.error_outline, cs.error)
         : running > 0
             ? (Icons.sync_rounded, cs.primary)
-            : (Icons.schedule_rounded, cs.onSurfaceVariant);
+            : crawling > 0
+                ? (Icons.cloud_download_rounded, cs.tertiary)
+                : (Icons.schedule_rounded, cs.onSurfaceVariant);
     return ListTile(
       leading: Icon(icon, color: color),
       title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: t.titleMedium),
@@ -282,6 +295,7 @@ class _JobRow extends StatelessWidget {
     final title = novel['title_vi'] ?? novel['title_zh'] ?? 'Truyện #${j['novel_id']}';
     final sub = [
       j['type'],
+      if (status == 'pending' && j['downloading'] == true) 'đang crawl nguồn',
       _priorityLabel(j['priority'] as int),
       if ((j['attempts'] ?? 0) > 0) '${j['attempts']} lần thử',
       // Đang chạy → khoe thời gian đã chạy (token chỉ có khi dịch xong, ghi 1 lần ở cuối).
