@@ -253,12 +253,14 @@ class _TileGroup extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    return Container(
+    // Material chứ không phải Container-có-màu: ListTile vẽ splash lên Material gần
+    // nhất — bọc DecoratedBox sẽ che splash + Flutter bắn warning mỗi lần build.
+    return Material(
+      color: cs.surface,
       clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        color: cs.surface,
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: cs.outlineVariant),
+        side: BorderSide(color: cs.outlineVariant),
       ),
       child: Column(children: [
         for (var i = 0; i < children.length; i++) ...[
