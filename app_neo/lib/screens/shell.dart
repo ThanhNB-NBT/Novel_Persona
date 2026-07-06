@@ -8,6 +8,8 @@ import '../data.dart';
 import '../neo_theme.dart';
 import '../neo_widgets.dart';
 import 'home.dart';
+import 'library.dart';
+import 'queue.dart';
 
 /// Khung 4 tab của NEO. Phase 1: tab thật là placeholder HUD, sẽ thay dần
 /// ở Phase 2-5 (Explore, Library, Queue, Account).
@@ -36,9 +38,9 @@ class _NeoShellState extends State<NeoShell> {
     }
     return NeoScaffold(
       body: IndexedStack(index: _tab, children: [
-        _Placeholder(label: _tabs[0].label),
+        const LibraryScreen(),
         const HomeScreen(),
-        _Placeholder(label: _tabs[2].label),
+        const QueueScreen(),
         _Placeholder(label: _tabs[3].label),
       ]),
       bottom: NeoDock(index: _tab, items: _tabs, onTap: (i) => setState(() => _tab = i)),

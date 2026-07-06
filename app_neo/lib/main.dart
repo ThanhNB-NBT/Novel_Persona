@@ -12,6 +12,7 @@ import 'notify.dart';
 import 'screens/glossary.dart';
 import 'screens/login.dart';
 import 'screens/novel_detail.dart';
+import 'screens/offline_library.dart';
 import 'screens/reader.dart';
 import 'screens/search.dart';
 import 'screens/shell.dart';
@@ -36,6 +37,7 @@ final _router = GoRouter(routes: [
   GoRoute(path: '/', pageBuilder: (_, _) => MaterializePage(child: const NeoShell())),
   GoRoute(path: '/login', pageBuilder: (_, _) => MaterializePage(child: const LoginScreen())),
   GoRoute(path: '/search', pageBuilder: (_, _) => MaterializePage(child: const SearchScreen())),
+  GoRoute(path: '/offline', pageBuilder: (_, _) => MaterializePage(child: const OfflineLibraryScreen())),
   GoRoute(
     path: '/novel/:id',
     pageBuilder: (_, s) => MaterializePage(
