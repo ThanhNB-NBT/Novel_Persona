@@ -851,6 +851,10 @@ Future<void> updateNovelFields(int id, Map<String, dynamic> fields) =>
 Future<void> retryJob(int id) =>
     sb.rpc('admin_retry_job', params: {'p_job_id': id});
 
+/// Nhịp tim worker (crawler/translator điểm danh định kỳ) — tab Worker hiện sống/chết.
+final workerHeartbeatProvider = FutureProvider.autoDispose<List<Rec>>((ref) async =>
+    List<Rec>.from(await sb.from('worker_heartbeat').select('name, at, note')));
+
 /// Chạy lại TẤT CẢ job lỗi + trả chương crawl-lỗi về hàng tải (migration 026).
 /// Trả về số job được reset.
 Future<int> retryAllFailed() async =>
