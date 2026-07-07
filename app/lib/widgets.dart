@@ -330,7 +330,7 @@ class NovelListRow extends StatelessWidget {
     final t = Theme.of(context).textTheme;
     final title = n['title_vi'] ?? n['title_zh'] ?? '';
     final genres = (n['genres'] as List?)?.whereType<String>().toList() ?? const [];
-    const coverW = 68.0;
+    const coverW = 76.0; // bìa nhỉnh hơn khối chữ bên phải một chút cho cân mắt
     const coverH = coverW * 1.36; // ảnh to hơn + text căn theo chiều cao ảnh
     return InkWell(
       onTap: onTap,
