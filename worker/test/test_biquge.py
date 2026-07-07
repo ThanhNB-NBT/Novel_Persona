@@ -65,6 +65,22 @@ def main() -> None:
     c._get = lambda p: '<div id="chaptercontent">' + "内容" * 30 + "</div>"
     assert len(c.fetch_chapter("1/2")) >= 50
 
+    # chương bị site CHIA TRANG (123.html, 123_2.html…): tải nối hết các trang,
+    # lọc dòng nhắc "点击下一页" — bug chương cụt đuôi "mất liền mạch" 2026-07
+    d = _adapter()
+    pg1 = ('<div id="content">trang một' + "字" * 30 +
+           '<br>这章没有结束，请点击下一页继续阅读！</div><a href="/59979/123_2.html">下一页</a>')
+    pg2 = '<div id="content">trang hai' + "文" * 30 + '</div>'
+    fetched = []
+    def fake_get(p):
+        fetched.append(p)
+        return pg2 if "_2" in p else pg1
+    d._get = fake_get
+    txt = d.fetch_chapter("59979/123")
+    assert fetched == ["/59979/123.html", "/59979/123_2.html"], fetched
+    assert "trang một" in txt and "trang hai" in txt
+    assert "下一页" not in txt  # dòng nhắc phân trang phải bị lọc
+
 
 if __name__ == "__main__":
     main()

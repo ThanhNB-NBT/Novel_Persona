@@ -49,6 +49,9 @@ def main() -> None:
     assert _pop_title("TIÊU ĐỀ: Gió nổi\nThân chương.") == ("Gió nổi", "Thân chương.")
     assert _pop_title("## Tiêu đề chương: Gió nổi\nThân.") == ("Gió nổi", "Thân.")
     assert _pop_title("Gió nổi\nThân chương.") == ("Gió nổi", "Thân chương.")  # quên nhãn
+    # model bọc «»/quote quanh nhãn, hoặc tự chế "Chương N:" — phải dọn sạch (gặp thật 2026-07)
+    assert _pop_title("«TIÊU ĐỀ: Thế giới game bỗng hiện»\nThân.") == ("Thế giới game bỗng hiện", "Thân.")
+    assert _pop_title("Chương 2: Giết goblin\nThân.") == ("Giết goblin", "Thân.")
     long_first = "câu mở đầu rất dài " * 10
     assert _pop_title(f"{long_first}\nThân.") == (None, f"{long_first}\nThân.")
     assert _pop_title("chỉ một dòng") == (None, "chỉ một dòng")

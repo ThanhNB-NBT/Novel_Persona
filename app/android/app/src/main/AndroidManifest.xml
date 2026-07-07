@@ -1,4 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- bản release BẮT BUỘC khai báo INTERNET (debug được tự cấp) — thiếu là app trắng trơn -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <!-- flutter_local_notifications: hiện thông báo trên thanh hệ thống (Android 13+) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <application

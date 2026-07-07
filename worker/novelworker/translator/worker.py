@@ -163,9 +163,21 @@ def _tail(text: str | None, limit: int = 350) -> str | None:
     return t.strip() or None
 
 
-# khớp dòng tiêu đề theo khuôn «TIÊU ĐỀ: ...» prompt yêu cầu; nhận cả nhãn cũ model hay tự chế
+# khớp dòng tiêu đề theo khuôn «TIÊU ĐỀ: ...» prompt yêu cầu; nhận cả nhãn cũ model hay tự chế,
+# kể cả khi model bọc trong «»/quotes (đã gặp thật: «TIÊU ĐỀ: Thế giới game bỗng hiện»)
 TITLE_LINE = re.compile(
-    r"^\s*#{0,3}\s*(?:tiêu đề(?: chương)?|tieu de|nhan đề|title)\s*[:：]\s*(.+)$", re.I)
+    r"""^\s*[#>*«"'\[(]*\s*(?:tiêu đề(?: chương)?|tieu de|nhan đề|title)\s*[:：]\s*(.+)$""",
+    re.I)
+
+_TITLE_TRIM = "«»\"'“”‘’[]() \t#*"
+
+
+def _clean_title(t: str) -> str:
+    """Dọn tiêu đề model trả: bỏ ngoặc/quote bọc quanh, nhãn lặp, "Chương N:" tự chế."""
+    t = t.strip(_TITLE_TRIM)
+    t = re.sub(r"^(?:chương|chapter)\s*\d+\s*[:：.．\-–—]?\s*", "", t, flags=re.I)
+    t = re.sub(r"^(?:tiêu đề(?: chương)?|tieu de|nhan đề|title)\s*[:：]\s*", "", t, flags=re.I)
+    return t.strip(_TITLE_TRIM)
 
 
 def _pop_title(text: str) -> tuple[str | None, str]:
@@ -176,9 +188,9 @@ def _pop_title(text: str) -> tuple[str | None, str]:
         return None, text
     m = TITLE_LINE.match(first)
     if m:
-        return m.group(1).strip().strip("*#").strip(), rest.strip()
+        return _clean_title(m.group(1)) or None, rest.strip()
     if len(first) < 100:
-        return first.strip().lstrip("#*").strip(), rest.strip()
+        return _clean_title(first) or None, rest.strip()
     return None, text
 
 

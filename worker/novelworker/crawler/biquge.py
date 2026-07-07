@@ -145,28 +145,59 @@ class BiqugeAdapter(SourceAdapter):
             raise ValueError(f"Không lấy được mục lục {self.name} cho {source_novel_id}")
         return refs
 
-    def fetch_chapter(self, source_chapter_id: str) -> str:
-        # source_chapter_id = "book_id/chapter_id" (xem fetch_chapter_list)
-        book_id, _, chapter_id = source_chapter_id.rpartition("/")
-        html = self._get(self._chapter_url(book_id, chapter_id))
-        # id có thể không phải attr đầu (<div class="x" id="content">) → cho phép attr trước.
+    def _extract_content(self, html: str) -> str | None:
+        """Bóc text thô trong div nội dung; None nếu trang không có div đó.
+        id có thể không phải attr đầu (<div class="x" id="content">) → cho phép attr trước."""
         cid = re.escape(self._content_id)
         m = re.search(r'<div[^>]*\bid=["\']' + cid + r'["\'][^>]*>(.*?)</div>', html, re.S)
         if not m:
-            # Chương mới nhất: mục lục đã liệt kê nhưng trang chưa sinh → site redirect
-            # về trang truyện (nhận diện qua div#list của mục lục). Lỗi TẠM, không phải
-            # đổi cấu trúc — kiểm chứng shuhaige 2026-07.
-            if re.search(r'<div[^>]*\bid=["\']list["\']', html):
-                raise ChapterNotReady(
-                    f"Chương {source_chapter_id} ({self.name}) chưa có trang trên nguồn")
-            raise ValueError(f"Không thấy nội dung chương {source_chapter_id} ({self.name}) — đổi cấu trúc?")
+            return None
         # <br> (shuhaige) hoặc <p>…</p> (vài clone) đều là ranh giới đoạn → đổi thành
         # xuống dòng trước khi strip tag, tránh dính đoạn thành khối chữ liền.
         raw = re.sub(r"</p\s*>|<br\s*/?>", "\n", m.group(1), flags=re.I)
-        raw = re.sub(r"<[^>]+>", "", raw)
+        return re.sub(r"<[^>]+>", "", raw)
+
+    @staticmethod
+    def _is_pagination_junk(line: str) -> bool:
+        """Dòng nhắc phân trang nhồi cuối mỗi trang chương ("这章没有结束，请点击下一页
+        继续阅读！"…) — meta của site, không phải văn truyện."""
+        return "点击下一页" in line or ("下一页" in line and "继续阅读" in line)
+
+    def fetch_chapter(self, source_chapter_id: str) -> str:
+        # source_chapter_id = "book_id/chapter_id" (xem fetch_chapter_list)
+        book_id, _, chapter_id = source_chapter_id.rpartition("/")
+        first_path = self._chapter_url(book_id, chapter_id)
+        stem, dot, ext = first_path.rpartition(".")
+        # Chương DÀI bị site chia nhiều trang: 123.html, 123_2.html, … — chỉ tải trang 1
+        # là chương nào cũng cụt đuôi (bug "mất liền mạch" 2026-07). Tải nối tiếp khi
+        # trang hiện tại còn link sang trang kế ("{cid}_{n+1}."); trần 30 trang phòng loop.
+        pages: list[str] = []
+        page = 1
+        while True:
+            path = first_path if page == 1 else (
+                f"{stem}_{page}.{ext}" if dot else f"{first_path}_{page}")
+            html = self._get(path)
+            raw = self._extract_content(html)
+            if raw is None:
+                if page > 1:
+                    break  # trang sau lỗi/đổi khuôn — giữ phần đã tải được
+                # Chương mới nhất: mục lục đã liệt kê nhưng trang chưa sinh → site redirect
+                # về trang truyện (nhận diện qua div#list của mục lục). Lỗi TẠM, không phải
+                # đổi cấu trúc — kiểm chứng shuhaige 2026-07.
+                if re.search(r'<div[^>]*\bid=["\']list["\']', html):
+                    raise ChapterNotReady(
+                        f"Chương {source_chapter_id} ({self.name}) chưa có trang trên nguồn")
+                raise ValueError(f"Không thấy nội dung chương {source_chapter_id} ({self.name}) — đổi cấu trúc?")
+            pages.append(raw)
+            if page >= 30 or not re.search(
+                    re.escape(chapter_id) + r"_" + str(page + 1) + r"\.", html):
+                break
+            page += 1
         markers = [k.lower() for k in self._ad_markers]
-        lines = [ln.strip() for ln in unescape(raw).split("\n")]
-        lines = [ln for ln in lines if ln and not any(k in ln.lower() for k in markers)]
+        lines = [ln.strip() for ln in unescape("\n".join(pages)).split("\n")]
+        lines = [ln for ln in lines
+                 if ln and not self._is_pagination_junk(ln)
+                 and not any(k in ln.lower() for k in markers)]
         text = "\n".join(lines).strip()
         if len(text) < 50:
             raise ValueError(f"Chương {source_chapter_id} quá ngắn ({len(text)} ký tự)")
