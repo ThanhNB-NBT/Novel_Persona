@@ -98,20 +98,11 @@ class _ReadingRow extends ConsumerWidget {
                 children: [
                   // Tên truyện thấp hơn bìa một chút (nhìn như ngang nhau nhưng lệch nhẹ)
                   const SizedBox(height: 2),
-                  // Tên truyện + menu cùng một hàng
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          title,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: t.titleMedium,
-                        ),
-                      ),
-                      _menu(context, ref),
-                    ],
+                  Text(
+                    title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: t.titleMedium,
                   ),
                   const SizedBox(height: 2),
                   // Số chương nhỏ, một màu nhạt hơn tên truyện + chip chương mới
@@ -130,17 +121,19 @@ class _ReadingRow extends ConsumerWidget {
                 ],
               ),
             ),
-            // Đọc tiếp 1 chạm — vào thẳng chương đang dở, khỏi ghé trang thông tin
-            // (tap cả dòng vẫn mở trang thông tin như mọi nơi).
-            Padding(
-              padding: const EdgeInsets.only(left: 6, top: 18),
-              child: IconButton.filledTonal(
+            // Cột phải: menu 3 chấm trên, nút Đọc tiếp dưới — thẳng một trục dọc,
+            // không chen vào hàng tên truyện nữa (tên được cả bề ngang).
+            Column(children: [
+              _menu(context, ref),
+              IconButton.filledTonal(
                 tooltip: 'Đọc tiếp chương $cur',
                 visualDensity: VisualDensity.compact,
-                icon: const Icon(Icons.play_arrow_rounded, size: 22),
+                icon: const Icon(Icons.play_arrow_rounded, size: 20),
+                // Đọc tiếp 1 chạm — vào thẳng chương đang dở, khỏi ghé trang thông tin
+                // (tap cả dòng vẫn mở trang thông tin như mọi nơi).
                 onPressed: () => context.push('/novel/${n['id']}/read/$cur'),
               ),
-            ),
+            ]),
           ],
         ),
       ),
