@@ -634,6 +634,33 @@ Future<int> retranslateAll(int novelId) async =>
 Future<void> requestToc(int novelId) =>
     sb.rpc('request_toc', params: {'p_novel_id': novelId});
 
+// ---------- Yêu cầu truyện (nhập tên tiếng Trung → worker tìm nguồn crawl về) ----------
+
+/// Yêu cầu của TÔI, mới nhất trước. Worker xử lý trong ~10-30s (nguồn chặn search
+/// thì lâu hơn, tối đa 10 phút sẽ chốt kết quả).
+final myNovelRequestsProvider = FutureProvider.autoDispose<List<Rec>>((ref) async {
+  ref.watch(authStateProvider);
+  final uid = sb.auth.currentUser?.id;
+  if (uid == null) return [];
+  return List<Rec>.from(
+    await sb
+        .from('novel_requests')
+        .select('id, query, status, note, novel_id, created_at, novels(title_vi, title_zh)')
+        .eq('user_id', uid)
+        .order('created_at', ascending: false)
+        .limit(20),
+  );
+});
+
+Future<void> addNovelRequest(String query) async {
+  final uid = sb.auth.currentUser?.id;
+  if (uid == null) return;
+  await sb.from('novel_requests').insert({'user_id': uid, 'query': query.trim()});
+}
+
+Future<void> deleteNovelRequest(int id) =>
+    sb.from('novel_requests').delete().eq('id', id);
+
 // ---------- Bình luận chương ----------
 
 /// Bình luận của 1 chương, cũ → mới (đọc như hội thoại).

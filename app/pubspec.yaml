@@ -45,6 +45,8 @@ dependencies:
   sqflite: ^2.4.1
   sqflite_common_ffi: ^2.3.4
   path: ^1.9.0
+  # Nghe truyện: TTS hệ thống đọc bản dịch (iOS giọng Việt khá, Android tuỳ máy)
+  flutter_tts: ^4.2.0
 
 dev_dependencies:
   flutter_test:
