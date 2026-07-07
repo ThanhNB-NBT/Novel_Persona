@@ -128,6 +128,17 @@ class _ReadingRow extends ConsumerWidget {
                 ],
               ),
             ),
+            // Đọc tiếp 1 chạm — vào thẳng chương đang dở, khỏi ghé trang thông tin
+            // (tap cả dòng vẫn mở trang thông tin như mọi nơi).
+            Padding(
+              padding: const EdgeInsets.only(left: 6, top: 18),
+              child: IconButton.filledTonal(
+                tooltip: 'Đọc tiếp chương $cur',
+                visualDensity: VisualDensity.compact,
+                icon: const Icon(Icons.play_arrow_rounded, size: 22),
+                onPressed: () => context.push('/novel/${n['id']}/read/$cur'),
+              ),
+            ),
           ],
         ),
       ),
