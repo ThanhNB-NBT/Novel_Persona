@@ -1,0 +1,53 @@
+# Build .ipa KHÔNG cần Mac, KHÔNG cần tài khoản Apple Developer.
+# GitHub cho macOS runner miễn phí (repo public: không giới hạn;
+# repo private: 2000 phút/tháng nhưng macOS tính x10 => ~200 phút thật).
+#
+# Cách dùng:
+#  1. Vào GitHub repo > Settings > Secrets and variables > Actions, thêm 2 secret:
+#       SUPABASE_URL, SUPABASE_ANON_KEY   (giá trị lấy từ app/.env)
+#  2. Tab Actions > chọn workflow "iOS unsigned IPA" > Run workflow.
+#  3. Build xong, tải artifact "novel_reader-ipa" về, giải nén ra file .ipa.
+#  4. Cài 1 lần: iloader (github.com/nab138/iloader, chạy Windows) cài SideStore
+#     lên iPhone qua cáp. Từ đó cài/update .ipa bằng SideStore ngay trên máy;
+#     SideStore tự refresh chữ ký 7 ngày, không cần bật PC.
+
+name: iOS unsigned IPA (sideload)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          # ghim theo bản đang dev local — channel:stable trôi version, build lệch khó lần
+          flutter-version: 3.44.4
+          cache: true
+
+      - name: Flutter pub get
+        run: flutter pub get
+
+      - name: Build iOS (no codesign)
+        run: |
+          flutter build ios --release --no-codesign \
+            --dart-define=SUPABASE_URL="${{ secrets.SUPABASE_URL }}" \
+            --dart-define=SUPABASE_ANON_KEY="${{ secrets.SUPABASE_ANON_KEY }}"
+
+      - name: Đóng gói .app thành .ipa
+        run: |
+          cd build/ios/iphoneos
+          mkdir -p Payload
+          cp -r Runner.app Payload/
+          zip -r novel_reader.ipa Payload
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: novel_reader-ipa
+          path: app/build/ios/iphoneos/novel_reader.ipa
