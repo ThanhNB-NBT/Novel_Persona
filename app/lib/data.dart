@@ -435,16 +435,21 @@ final chapterListProvider = FutureProvider.autoDispose.family<List<Rec>, int>((
   novelId,
 ) async {
   // supabase-dart .order() mặc định DESCENDING → phải chỉ rõ ascending để "1 → hết".
-  // ponytail: limit 2000 (server cap ~1000 vẫn cho chương đầu); truyện siêu dài
-  // cần phân trang — để sau.
-  return List<Rec>.from(
-    await sb
+  // Kéo THEO TRANG qua trần 1000 dòng/query của PostgREST — phải đủ hết, vì
+  // list.length < chapter_count_source là tín hiệu "mục lục lười đang tải":
+  // truyện >1000 chương mà kéo thiếu thì banner tải mục lục hiện vĩnh viễn.
+  final all = <Rec>[];
+  for (var from = 0;; from += 1000) {
+    final page = await sb
         .from('chapters')
         .select('chapter_index, title_vi, title_zh, translation_status')
         .eq('novel_id', novelId)
         .order('chapter_index', ascending: true)
-        .limit(2000),
-  );
+        .range(from, from + 999);
+    all.addAll(List<Rec>.from(page));
+    if (page.length < 1000) break;
+  }
+  return all;
 });
 
 class ChapterKey {
