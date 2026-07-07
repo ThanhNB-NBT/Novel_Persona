@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -274,7 +275,17 @@ class _ChapterListTabState extends ConsumerState<_ChapterListTab> {
       error: (e, _) => Center(child: Text('Lỗi mục lục: $e')),
       data: (list) {
         final ordered = _asc ? list : list.reversed.toList();
+        // mục lục lười: truyện chưa ai đọc chỉ có vài stub mẫu — xin crawler tải đủ
+        final total = (novel?['chapter_count_source'] ?? 0) as int;
+        final tocLoading = list.length < total;
         return Column(children: [
+          if (tocLoading)
+            _TocLoadingBanner(
+              novelId: widget.novelId,
+              have: list.length,
+              total: total,
+              onTick: () => ref.invalidate(chapterListProvider(widget.novelId)),
+            ),
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 12, 12, 4),
             child: Row(children: [
@@ -315,6 +326,62 @@ class _ChapterListTabState extends ConsumerState<_ChapterListTab> {
           ),
         ]);
       },
+    );
+  }
+}
+
+/// Banner "đang tải mục lục": gọi request_toc lúc hiện, poll lại danh sách mỗi 5s
+/// tới khi đủ (widget bị gỡ khỏi cây khi list.length == total → timer tự huỷ).
+class _TocLoadingBanner extends StatefulWidget {
+  final int novelId;
+  final int have;
+  final int total;
+  final VoidCallback onTick;
+  const _TocLoadingBanner(
+      {required this.novelId, required this.have, required this.total, required this.onTick});
+  @override
+  State<_TocLoadingBanner> createState() => _TocLoadingBannerState();
+}
+
+class _TocLoadingBannerState extends State<_TocLoadingBanner> {
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    requestToc(widget.novelId); // báo crawler tải mục lục đầy đủ
+    _timer = Timer.periodic(const Duration(seconds: 5), (_) => widget.onTick());
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: cs.primaryContainer.withValues(alpha: 0.5),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(children: [
+          const SizedBox(
+              width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Đang tải mục lục (${widget.have}/${widget.total} chương)…',
+              style: Theme.of(context).textTheme.labelMedium,
+            ),
+          ),
+        ]),
+      ),
     );
   }
 }
