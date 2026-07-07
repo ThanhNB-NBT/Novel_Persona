@@ -74,6 +74,11 @@ class _ReadingRow extends ConsumerWidget {
     final total = (n['chapter_count_source'] ?? 0) as int;
     final progress = total > 0 ? cur / total : 0.0;
     final title = n['title_vi'] ?? n['title_zh'] ?? '';
+    // Đọc đuổi: nguồn ra chương mới SAU lần đọc gần nhất → chip báo. Worker tự dịch
+    // sẵn (queue_followed_new_chapters) nên bấm vào là đọc được luôn.
+    final lastCh = DateTime.tryParse(n['last_chapter_at'] as String? ?? '');
+    final readAt = DateTime.tryParse(n['read_at'] as String? ?? '');
+    final hasNew = lastCh != null && readAt != null && lastCh.isAfter(readAt);
     return InkWell(
       onTap: () => context.push(
         '/novel/${n['id']}',
@@ -107,11 +112,17 @@ class _ReadingRow extends ConsumerWidget {
                     ],
                   ),
                   const SizedBox(height: 2),
-                  // Số chương nhỏ, một màu nhạt hơn tên truyện
-                  Text(
-                    'Đã đọc $cur${total > 0 ? '/$total' : ''}',
-                    style: t.labelMedium?.copyWith(color: cs.onSurfaceVariant),
-                  ),
+                  // Số chương nhỏ, một màu nhạt hơn tên truyện + chip chương mới
+                  Row(children: [
+                    Text(
+                      'Đã đọc $cur${total > 0 ? '/$total' : ''}',
+                      style: t.labelMedium?.copyWith(color: cs.onSurfaceVariant),
+                    ),
+                    if (hasNew) ...[
+                      const SizedBox(width: 8),
+                      const TagChip('Chương mới'),
+                    ],
+                  ]),
                   const SizedBox(height: 8),
                   ProgressRibbon(progress),
                 ],
