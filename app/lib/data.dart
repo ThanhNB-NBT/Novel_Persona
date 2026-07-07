@@ -623,8 +623,9 @@ Future<void> retranslateChapter(int novelId, int chapterIndex) => sb.rpc(
 Future<int> retranslateAll(int novelId) async =>
     (await sb.rpc('retranslate_all', params: {'p_novel_id': novelId}) as int?) ?? 0;
 
-/// Mục lục lười: truyện chưa ai đọc chỉ có 3 stub chương mẫu — gọi cái này để
-/// crawler tải mục lục đầy đủ (xong trong ~10-20s, banner ở tab Danh sách chương).
+/// Mục lục lười: truyện chưa ai đọc chỉ có vài stub chương mẫu — reader gọi cái này
+/// lúc MỞ ĐỌC để crawler tải mục lục đầy đủ (~10-20s). No-op nếu đã có mục lục.
+/// Truyện bỏ đọc lâu ngày bị janitor (migration 035) trả về dạng lười.
 Future<void> requestToc(int novelId) =>
     sb.rpc('request_toc', params: {'p_novel_id': novelId});
 

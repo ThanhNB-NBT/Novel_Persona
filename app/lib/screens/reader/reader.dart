@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -106,6 +108,9 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   @override
   void initState() {
     super.initState();
+    // Mở reader = tín hiệu đọc thật → xin mục lục đầy đủ cho truyện lười.
+    // RPC tự no-op khi truyện đã có mục lục nên gọi mỗi lần mở cũng vô hại.
+    requestToc(novelId);
     _persistChapter(); // tiến độ cấp chương (server, cho "đọc tiếp")
     _percent.value = chapterPercent(novelId, chapterIndex);
     _scroll.addListener(_onScroll);
@@ -823,6 +828,13 @@ class _EndPanel extends ConsumerStatefulWidget {
 
 class _EndPanelState extends ConsumerState<_EndPanel> {
   bool _auto = prefs.getBool('auto_translate_ahead') ?? true;
+  Timer? _tocPoll; // poll mục lục lười đang tải (reader đã gọi request_toc lúc mở)
+
+  @override
+  void dispose() {
+    _tocPoll?.cancel();
+    super.dispose();
+  }
 
   String _eta(int chapters) {
     // ~40s/chương (model chính hiện tại) — ước lượng cho user chọn, không phải cam kết
@@ -865,6 +877,17 @@ class _EndPanelState extends ConsumerState<_EndPanel> {
     final fg = widget.fg;
     final list = ref.watch(chapterListProvider(widget.novelId)).value ?? const <Rec>[];
     final novel = ref.watch(novelProvider(widget.novelId)).value;
+    // Mục lục lười: truyện chưa ai đọc chỉ có vài stub mẫu; request_toc đã bắn lúc mở
+    // reader, crawler tải đủ trong ~10-20s — poll tới khi đủ thì timer tự tắt.
+    final total = (novel?['chapter_count_source'] ?? 0) as int;
+    final tocLoading = list.isNotEmpty && list.length < total;
+    if (tocLoading) {
+      _tocPoll ??= Timer.periodic(const Duration(seconds: 5),
+          (_) => ref.invalidate(chapterListProvider(widget.novelId)));
+    } else {
+      _tocPoll?.cancel();
+      _tocPoll = null;
+    }
     final next = [
       for (final c in list)
         if ((c['chapter_index'] as int) > widget.chapterIndex &&
@@ -894,9 +917,11 @@ class _EndPanelState extends ConsumerState<_EndPanel> {
                 letterSpacing: 0.8)),
         const SizedBox(height: 6),
         Text(
-          next.isEmpty
-              ? 'Đã tới chương mới nhất của nguồn.'
-              : '$ready sẵn sàng · $busy đang dịch/chờ'
+          tocLoading && next.isEmpty
+              ? 'Đang tải mục lục (${list.length}/$total chương)…'
+              : next.isEmpty
+                  ? 'Đã tới chương mới nhất của nguồn.'
+                  : '$ready sẵn sàng · $busy đang dịch/chờ'
                   '${missing > 0 ? ' · $missing chưa dịch (${_eta(missing)})' : ''}',
           style: TextStyle(color: fg.withValues(alpha: 0.85), fontSize: 14),
         ),

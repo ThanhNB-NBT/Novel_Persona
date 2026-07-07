@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -275,17 +274,13 @@ class _ChapterListTabState extends ConsumerState<_ChapterListTab> {
       error: (e, _) => Center(child: Text('Lỗi mục lục: $e')),
       data: (list) {
         final ordered = _asc ? list : list.reversed.toList();
-        // mục lục lười: truyện chưa ai đọc chỉ có vài stub mẫu — xin crawler tải đủ
+        // Mục lục lười: truyện chưa ai đọc chỉ giữ vài chương đọc thử. Xem thông tin
+        // KHÔNG tải mục lục (xem chưa chắc đọc) — chỉ khi bấm Đọc reader mới gọi
+        // request_toc; quay lại tab này list tự refetch (autoDispose) nên số tự nhích.
         final total = (novel?['chapter_count_source'] ?? 0) as int;
-        final tocLoading = list.length < total;
         return Column(children: [
-          if (tocLoading)
-            _TocLoadingBanner(
-              novelId: widget.novelId,
-              have: list.length,
-              total: total,
-              onTick: () => ref.invalidate(chapterListProvider(widget.novelId)),
-            ),
+          if (list.isNotEmpty && list.length < total)
+            _TocHint(have: list.length, total: total),
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 12, 12, 4),
             child: Row(children: [
@@ -330,34 +325,10 @@ class _ChapterListTabState extends ConsumerState<_ChapterListTab> {
   }
 }
 
-/// Banner "đang tải mục lục": gọi request_toc lúc hiện, poll lại danh sách mỗi 5s
-/// tới khi đủ (widget bị gỡ khỏi cây khi list.length == total → timer tự huỷ).
-class _TocLoadingBanner extends StatefulWidget {
-  final int novelId;
-  final int have;
-  final int total;
-  final VoidCallback onTick;
-  const _TocLoadingBanner(
-      {required this.novelId, required this.have, required this.total, required this.onTick});
-  @override
-  State<_TocLoadingBanner> createState() => _TocLoadingBannerState();
-}
-
-class _TocLoadingBannerState extends State<_TocLoadingBanner> {
-  Timer? _timer;
-
-  @override
-  void initState() {
-    super.initState();
-    requestToc(widget.novelId); // báo crawler tải mục lục đầy đủ
-    _timer = Timer.periodic(const Duration(seconds: 5), (_) => widget.onTick());
-  }
-
-  @override
-  void dispose() {
-    _timer?.cancel();
-    super.dispose();
-  }
+/// Hint mục lục lười: chỉ thông báo, KHÔNG tự tải (tải khi bấm Đọc — reader lo).
+class _TocHint extends StatelessWidget {
+  final int have, total;
+  const _TocHint({required this.have, required this.total});
 
   @override
   Widget build(BuildContext context) {
@@ -371,12 +342,12 @@ class _TocLoadingBannerState extends State<_TocLoadingBanner> {
           borderRadius: BorderRadius.circular(12),
         ),
         child: Row(children: [
-          const SizedBox(
-              width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
+          Icon(Icons.auto_stories_outlined, size: 16, color: cs.onSurfaceVariant),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              'Đang tải mục lục (${widget.have}/${widget.total} chương)…',
+              'Đang có $have chương đọc thử — mục lục đầy đủ ($total chương) '
+              'sẽ tự tải khi bạn bắt đầu đọc.',
               style: Theme.of(context).textTheme.labelMedium,
             ),
           ),
