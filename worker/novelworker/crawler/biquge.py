@@ -113,12 +113,15 @@ class BiqugeAdapter(SourceAdapter):
                 last_at = datetime.strptime(raw_time.strip(), "%Y-%m-%d %H:%M")
             except ValueError:
                 pass
+        cover = self._meta(html, "og:image")
+        if cover and cover.startswith("//"):  # xbiquge để og:image thiếu scheme
+            cover = f"https:{cover}"
         return NovelMeta(
             source_novel_id=source_novel_id,
             source_url=f"{self.base_url}{self._novel_url(source_novel_id)}",
             title_zh=title,
             author_zh=self._meta(html, "og:novel:author"),
-            cover_url=self._meta(html, "og:image"),
+            cover_url=cover,
             description_zh=desc,
             genres_zh=[cat] if cat else [],
             status=status,
@@ -202,4 +205,82 @@ class BiqugeAdapter(SourceAdapter):
         if len(text) < 50:
             raise ValueError(f"Chương {source_chapter_id} quá ngắn ({len(text)} ký tự)")
         return text
+
+
+class XinBiqugeAdapter(BiqugeAdapter):
+    """Khuôn 新笔趣阁 ("书友最值得收藏的免费小说阅读网"): xbiquge.com.cn, uuxs.org,
+    xslou.net… Probe thật 2026-07-07, lệch biquge gốc đúng 3 chỗ:
+
+    - book_id 2 tầng "107/107771", URL /book/{book_id}/ → set qua config
+      novel_path/chapter_path trong bảng sources, KHÔNG hardcode ở đây.
+    - Mục lục PHÂN TRANG /book/{id}/index_{p}.html (trang truyện chỉ ~110 link
+      cuối) → lặp trang tới khi không còn chương mới.
+    - Nội dung trong <article class="font_max">; mỗi trang chương nhét dòng rác
+      "第(1/3)页" ở đầu + cuối.
+
+    Ranking /top/ chỉ 30 truyện hot + /full/ 30 truyện hoàn thành — ít mà chất,
+    hợp discover_min_chapters. Gộp trang chương {cid}_2.html dùng lại của cha.
+    """
+
+    def fetch_ranking(self, limit: int = 100) -> list[tuple[str, int]]:
+        best: dict[str, int] = {}
+        order = 0
+        for path in self.config.get("ranking_paths", ["/top/", "/full/"]):
+            try:
+                html = self._get(path)
+            except Exception:
+                log.warning("Không lấy được ranking %s (%s)", path, self.name)
+                continue
+            for bid in re.findall(r'href="/book/(\d+/\d+)/"', html):
+                if bid not in best:
+                    best[bid] = order
+                    order += 1
+        return sorted(best.items(), key=lambda kv: kv[1])[:limit]
+
+    def fetch_novel_meta(self, source_novel_id: str) -> NovelMeta:
+        meta = super().fetch_novel_meta(source_novel_id)
+        # og:title của khuôn này = "Tên truyện最新章节" → cắt đuôi SEO
+        meta.title_zh = re.sub(r"最新章节$", "", meta.title_zh).strip()
+        return meta
+
+    def fetch_chapter_list(self, source_novel_id: str) -> list[ChapterRef]:
+        # Trang 1 = trang truyện, trang p ≥ 2 = index_{p}.html; các trang xếp 1→N.
+        # MỌI trang đều lặp block 最新章节 (div.book_list) TRƯỚC list đầy đủ
+        # (div.book_list2) → chỉ parse từ book_list2 trở đi, khỏi loạn thứ tự.
+        # Trang quá cuối được site trả về = trang 1 → không có chương mới → dừng.
+        pattern = re.compile(
+            r'<a href="[^"]*?/' + re.escape(source_novel_id) + r'/(\d+)\.html"[^>]*>([^<]+)</a>')
+        base_path = self._novel_url(source_novel_id)
+        seen: dict[str, str] = {}   # cid -> title, dict giữ thứ tự xuất hiện
+        for p in range(1, 301):  # trần 300 trang ≈ 30k chương, phòng loop
+            html = self._get(base_path if p == 1 else f"{base_path}index_{p}.html")
+            body = html.split("book_list2", 1)[-1]  # thiếu marker → dùng cả trang
+            fresh = 0
+            for m in pattern.finditer(body):
+                cid = m.group(1)
+                if cid not in seen:
+                    seen[cid] = unescape(m.group(2)).strip()
+                    fresh += 1
+            if not fresh:
+                break
+        refs = [
+            ChapterRef(index=i + 1, source_chapter_id=f"{source_novel_id}/{cid}", title_zh=title)
+            for i, (cid, title) in enumerate(seen.items())
+        ]
+        if not refs:
+            raise ValueError(f"Không lấy được mục lục {self.name} cho {source_novel_id}")
+        return refs
+
+    def _extract_content(self, html: str) -> str | None:
+        m = re.search(
+            r'<article[^>]*class="[^"]*font_max[^"]*"[^>]*>(.*?)</article>', html, re.S)
+        if not m:
+            return None
+        raw = re.sub(r"</p\s*>|<br\s*/?>", "\n", m.group(1), flags=re.I)
+        return re.sub(r"<[^>]+>", "", raw)
+
+    @staticmethod
+    def _is_pagination_junk(line: str) -> bool:
+        return (BiqugeAdapter._is_pagination_junk(line)
+                or re.fullmatch(r"第\s*\(\d+/\d+\)\s*页", line) is not None)
 

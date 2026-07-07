@@ -433,12 +433,46 @@ def sync_followed_novels(adapter: SourceAdapter) -> None:
             break
         seen.add(nv["id"])
         try:
-            _, n = sync_chapter_list(adapter, nv["id"], nv["source_novel_id"])
+            total, n = sync_chapter_list(adapter, nv["id"], nv["source_novel_id"])
             if n:
                 log.info("Truyện %s có %d chương mới", nv["id"], n)
+                queued = queue_followed_new_chapters(nv["id"], total, n)
+                if queued:
+                    log.info("Tủ sách: tự dịch đón %d chương mới truyện %s", queued, nv["id"])
         except Exception:
             log.exception("Lỗi sync truyện %s", nv["id"])
         time.sleep(2.0)
+
+
+def queue_followed_new_chapters(novel_id: int, total: int, n_new: int) -> int:
+    """Truyện trong tủ sách ra chương mới → tự xếp dịch luôn, người đọc đuổi mở app
+    là có sẵn (không phải bấm rồi ngồi chờ). Chỉ khi bản dịch đã ĐUỔI KỊP gần cuối
+    truyện trước đợt chương mới — đang cày giữa truyện thì tự-dịch-trước lúc đọc lo,
+    nhảy cóc dịch mấy chương cuối là thừa.
+    ponytail: n_new lớn = đợt sync đầu sau khi thêm tủ sách (truyện lười vừa có đủ
+    mục lục), không phải chương mới thật → bỏ qua."""
+    if n_new > 20:
+        return 0
+    last_done = (
+        db.sb().table("chapters").select("chapter_index")
+        .eq("novel_id", novel_id).eq("translation_status", "done")
+        .order("chapter_index", desc=True).limit(1).execute()
+    ).data
+    if not last_done or last_done[0]["chapter_index"] < total - n_new - 3:
+        return 0
+    rows = (
+        db.sb().table("chapters").select("id")
+        .eq("novel_id", novel_id).gt("chapter_index", last_done[0]["chapter_index"])
+        .in_("translation_status", ["none", "failed"])
+        .order("chapter_index").limit(20).execute()
+    ).data or []
+    if not rows:
+        return 0
+    db.sb().table("chapters").update({"translation_status": "queued"}).in_(
+        "id", [r["id"] for r in rows]).execute()
+    for r in rows:
+        db.enqueue("chapter", novel_id, chapter_id=r["id"], priority=settings.prio_follow)
+    return len(rows)
 
 
 def refresh_canonical_updates(adapter: SourceAdapter, limit: int) -> None:

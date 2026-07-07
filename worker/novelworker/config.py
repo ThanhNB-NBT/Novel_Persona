@@ -56,6 +56,7 @@ class Settings(BaseSettings):
     # Ưu tiên dịch theo người đang đọc (nhỏ = làm trước):
     active_read_hours: int = 8   # truyện có reader trong ngần này giờ = "đang đọc"
     prio_read: int = 5           # chương của truyện đang đọc — cực cao
+    prio_follow: int = 30        # chương MỚI của truyện trong tủ sách — dịch đón trước
     prio_idle: int = 75          # chương đọc thử + chương truyện không ai đọc — nền
     sample_chapters: int = 1     # số chương dịch sẵn "đọc thử" khi có truyện mới
     # Timeout 1 call LLM (giây) — quá là fail nhanh để fallback sang provider kế
