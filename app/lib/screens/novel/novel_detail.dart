@@ -226,6 +226,44 @@ class _ChapterListTab extends ConsumerStatefulWidget {
 class _ChapterListTabState extends ConsumerState<_ChapterListTab> {
   bool _asc = true;
 
+  /// Xác nhận rồi xếp lại MỌI chương đã dịch để dịch lại (prompt/glossary mới).
+  Future<void> _retranslateAll({required int translated}) async {
+    if (sb.auth.currentUser == null) {
+      context.push('/login');
+      return;
+    }
+    final messenger = ScaffoldMessenger.of(context);
+    if (translated == 0) {
+      messenger.showSnackBar(
+          const SnackBar(content: Text('Chưa có chương nào đã dịch để dịch lại')));
+      return;
+    }
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Dịch lại tất cả?'),
+        content: Text('Xếp lại $translated chương đã dịch để dịch lại từ đầu bằng '
+            'bản dịch mới. Bản cũ vẫn đọc được cho tới khi bản mới thay thế. '
+            'Truyện dài sẽ mất nhiều thời gian.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Huỷ')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true), child: const Text('Dịch lại')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      final n = await retranslateAll(widget.novelId);
+      if (!mounted) return;
+      ref.invalidate(chapterListProvider(widget.novelId));
+      ref.invalidate(translateQueueProvider);
+      messenger.showSnackBar(SnackBar(content: Text('Đã xếp lại $n chương để dịch lại')));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Lỗi: $e')));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final chapters = ref.watch(chapterListProvider(widget.novelId));
@@ -253,6 +291,12 @@ class _ChapterListTabState extends ConsumerState<_ChapterListTab> {
                     onDone: () => ref.invalidate(chapterListProvider(widget.novelId))),
                 icon: const Icon(Icons.playlist_add_rounded, size: 18),
                 label: const Text('Dịch'),
+              ),
+              IconButton(
+                tooltip: 'Dịch lại tất cả chương đã dịch',
+                icon: const Icon(Icons.restart_alt_rounded, size: 20),
+                onPressed: () => _retranslateAll(
+                    translated: (novel?['chapter_count_translated'] ?? 0) as int),
               ),
               TextButton.icon(
                 onPressed: () => setState(() => _asc = !_asc),

@@ -34,6 +34,24 @@ def main() -> None:
     assert "mất hết xuống dòng" in (check_translation(zh5, "một khối chữ liền dài " * 3) or "")
     assert check_translation("原文本", "Bản dịch ổn.\nĐủ dòng.") is None
     assert check_translation("", "Chỉ soi tỷ lệ Hán khi thiếu bản gốc.") is None
+    # gốc dài mà bản dịch < 1.2x → dịch sót (ngưỡng 0.3 cũ chỉ bắt cụt thảm họa)
+    assert "quá ngắn" in (check_translation("字" * 400, "v" * 450) or "")
+    assert check_translation("字" * 400, "v" * 500) is None
+    # gốc ≥10 đoạn mà bản dịch mất >40% số đoạn → model nuốt đoạn
+    zh12 = "\n".join("第几行内容在这里" * 8 for _ in range(12))
+    vi5_du_dai = "\n".join("dòng dịch đủ dài để qua kiểm tra độ dài tổng thể nhé " * 8 for _ in range(5))
+    assert "mất đoạn" in (check_translation(zh12, vi5_du_dai) or "")
+    vi12 = "\n".join("dòng dịch đủ dài để qua kiểm tra độ dài tổng thể nhé " * 4 for _ in range(12))
+    assert check_translation(zh12, vi12) is None
+
+    # _pop_title: khuôn «TIÊU ĐỀ: ...», nhãn biến thể, fallback dòng đầu ngắn, dòng đầu dài → không bóc
+    from novelworker.translator.worker import _pop_title
+    assert _pop_title("TIÊU ĐỀ: Gió nổi\nThân chương.") == ("Gió nổi", "Thân chương.")
+    assert _pop_title("## Tiêu đề chương: Gió nổi\nThân.") == ("Gió nổi", "Thân.")
+    assert _pop_title("Gió nổi\nThân chương.") == ("Gió nổi", "Thân chương.")  # quên nhãn
+    long_first = "câu mở đầu rất dài " * 10
+    assert _pop_title(f"{long_first}\nThân.") == (None, f"{long_first}\nThân.")
+    assert _pop_title("chỉ một dòng") == (None, "chỉ một dòng")
 
     body, s = _pop_summary("Bản dịch dài.\nĐoạn hai.\nSUMMARY: Lâm Tùng gặp sư phụ.")
     assert body == "Bản dịch dài.\nĐoạn hai." and s == "Lâm Tùng gặp sư phụ."
@@ -60,17 +78,17 @@ def main() -> None:
     # merge tên: chỉ thêm tên mới có đủ zh+vi, bỏ trùng/thiếu; đếm đúng số tên mới
     terms = [{"term_zh": "林松", "correct_vi": "Lâm Tùng"}]
     existing = {t["term_zh"] for t in terms}
-    n = _merge_names(terms, existing, [
+    added = _merge_names(terms, existing, [
         {"zh": "苏雨", "vi": "Tô Vũ", "type": "person", "note": "nữ"},  # mới
         {"zh": "林松", "vi": "Lâm Tùng"},                               # trùng → bỏ
         {"zh": "无名", "vi": ""},                                        # thiếu vi → bỏ
         {"vi": "Thiếu zh"},                                             # thiếu zh → bỏ
         "không phải dict",                                              # rác → bỏ
     ])
-    assert n == 1 and len(terms) == 2
+    assert [nm["zh"] for nm in added] == ["苏雨"] and len(terms) == 2
     assert terms[-1]["term_zh"] == "苏雨" and terms[-1]["note"] == "nữ"
     # gọi lại với chính tên đó → không thêm nữa
-    assert _merge_names(terms, existing, [{"zh": "苏雨", "vi": "Tô Vũ"}]) == 0
+    assert _merge_names(terms, existing, [{"zh": "苏雨", "vi": "Tô Vũ"}]) == []
 
     # _tail: cắt đuôi tại ranh giới đoạn, ngắn thì giữ nguyên, rỗng → None
     from novelworker.translator.worker import _tail

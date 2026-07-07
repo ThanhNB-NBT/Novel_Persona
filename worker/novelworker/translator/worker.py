@@ -70,7 +70,8 @@ def check_translation(content_zh: str, content_vi: str) -> str | None:
     output) VÀ lệnh `audit` quét chương đã lưu (content_zh vs content_vi).
 
     - còn >5% ký tự Hán → trả nguyên văn tiếng Trung.
-    - ngắn <30% gốc (zh→vi thường dài ra) → bản dịch cụt/rỗng.
+    - ngắn <120% gốc (zh→vi bình thường 2.5-3.5x) → dịch sót đoạn; chương ngắn ngưỡng 30%.
+    - gốc ≥10 đoạn mà bản dịch mất >40% số đoạn → model nuốt đoạn.
     - gốc nhiều đoạn nhưng bản dịch mất hết xuống dòng → gộp thành 1 khối chữ liền.
     (content_zh rỗng thì bỏ qua 2 kiểm tra cần đối chiếu gốc — chỉ soi tỷ lệ Hán.)
     """
@@ -79,8 +80,17 @@ def check_translation(content_zh: str, content_vi: str) -> str | None:
     r = han_ratio(content_vi)
     if r > 0.05:
         return f"còn {r:.0%} ký tự Hán (trả nguyên văn tiếng Trung)"
-    if content_zh and len(content_vi) < 0.3 * len(content_zh):
-        return f"quá ngắn ({len(content_vi)}/{len(content_zh)} ký tự)"
+    # zh→vi bình thường phình 2.5-3.5x (tính KÝ TỰ) → dưới 1.2x là dịch sót đoạn.
+    # Ngưỡng 0.3 cũ chỉ bắt được cụt thảm họa; chương ngắn (lời tác giả) giữ ngưỡng lỏng.
+    if content_zh:
+        ratio_min = 1.2 if len(content_zh) > 300 else 0.3
+        if len(content_vi) < ratio_min * len(content_zh):
+            return f"quá ngắn ({len(content_vi)}/{len(content_zh)} ký tự)"
+    # prompt yêu cầu mỗi dòng gốc ↔ một dòng dịch → mất >40% số đoạn = model nuốt đoạn
+    zh_lines = sum(1 for line in content_zh.split("\n") if line.strip())
+    vi_lines = sum(1 for line in content_vi.split("\n") if line.strip())
+    if zh_lines >= 10 and vi_lines < 0.6 * zh_lines:
+        return f"mất đoạn (dịch {vi_lines}/{zh_lines} đoạn gốc)"
     # phình bất thường (bình thường ~2.5-3.5x vì zh→vi tính KÝ TỰ) → nghi chèn rác/bịa thêm;
     # chỉ soi khi gốc đủ dài, chương ngắn (lời nhắn tác giả…) tỉ lệ nhiễu
     if content_zh and len(content_zh) > 400 and len(content_vi) > 4.5 * len(content_zh):
@@ -153,6 +163,25 @@ def _tail(text: str | None, limit: int = 350) -> str | None:
     return t.strip() or None
 
 
+# khớp dòng tiêu đề theo khuôn «TIÊU ĐỀ: ...» prompt yêu cầu; nhận cả nhãn cũ model hay tự chế
+TITLE_LINE = re.compile(
+    r"^\s*#{0,3}\s*(?:tiêu đề(?: chương)?|tieu de|nhan đề|title)\s*[:：]\s*(.+)$", re.I)
+
+
+def _pop_title(text: str) -> tuple[str | None, str]:
+    """Bóc tiêu đề đã dịch khỏi đầu bản dịch. Ưu tiên dòng «TIÊU ĐỀ: ...» (định dạng
+    prompt yêu cầu); fallback: dòng đầu ngắn <100 ký tự (model quên nhãn — heuristic cũ)."""
+    first, _, rest = text.partition("\n")
+    if not rest.strip():
+        return None, text
+    m = TITLE_LINE.match(first)
+    if m:
+        return m.group(1).strip().strip("*#").strip(), rest.strip()
+    if len(first) < 100:
+        return first.strip().lstrip("#*").strip(), rest.strip()
+    return None, text
+
+
 def _pop_summary(text: str) -> tuple[str, str | None]:
     """Bóc dòng 'SUMMARY: ...' ở cuối bản dịch (sau khi đã bóc GLOSSARY_JSON)."""
     idx = text.rfind("\nSUMMARY:")
@@ -172,10 +201,10 @@ NEW_NAME_LOW = 2        # chương ra ≤ ngần này tên mới coi là "ít"
 LOW_STREAK_LIMIT = 3    # đủ ngần này chương "ít" liên tiếp → tắt 2-pass cho truyện
 
 
-def _merge_names(terms: list[dict], existing_zh: set[str], names: list[dict]) -> int:
+def _merge_names(terms: list[dict], existing_zh: set[str], names: list[dict]) -> list[dict]:
     """Thêm tên mới (chưa có term_zh) vào `terms` để chunk/chương sau dùng ngay.
-    Trả về số tên THẬT SỰ mới (dùng cho logic tắt 2-pass)."""
-    added = 0
+    Trả về danh sách tên THẬT SỰ mới (đếm cho logic tắt 2-pass + lưu DB làm gợi ý)."""
+    added: list[dict] = []
     for nm in names or []:
         if not isinstance(nm, dict):
             continue
@@ -187,7 +216,7 @@ def _merge_names(terms: list[dict], existing_zh: set[str], names: list[dict]) ->
             "term_zh": zh, "correct_vi": vi,
             "term_type": nm.get("type"), "note": nm.get("note"),
         })
-        added += 1
+        added.append(nm)
     return added
 
 
@@ -311,6 +340,9 @@ def handle_chapter(job: dict, llm) -> None:
         novel_line = f"{title}" + (f" — thể loại: {genres}" if genres else "")
     twopass = nv.get("twopass_active", True)
     existing_zh = {t["term_zh"] for t in terms if t.get("term_zh")}
+    # snapshot TRƯỚC khi merge tên mới: chỉ insert gợi ý chưa có trong DB, tránh nhân bản
+    # (bảng không có unique constraint — try/except dưới chỉ là phòng hờ)
+    preexisting_zh = set(existing_zh)
     new_names_this_chapter = 0
 
     chunks = _split_chunks(ch["content_zh"])
@@ -324,7 +356,9 @@ def handle_chapter(job: dict, llm) -> None:
         # để mọi lần tên xuất hiện trong chunk này đều dùng đúng một cách phiên âm.
         if twopass:
             names = _analyze_names(llm, chunk)
-            new_names_this_chapter += _merge_names(terms, existing_zh, names)
+            added = _merge_names(terms, existing_zh, names)
+            new_names_this_chapter += len(added)
+            detected += added  # tên pass-1 cũng phải vào DB — trước đây chỉ nằm RAM, chương sau mất
 
         res = llm.complete(
             # chỉ chèn term xuất hiện trong chunk này → prompt gọn, model bám sát hơn
@@ -363,14 +397,9 @@ def handle_chapter(job: dict, llm) -> None:
 
     text = "\n\n".join(parts)
 
-    # dịch tiêu đề: dòng đầu nếu LLM có kèm, không thì dịch nhanh riêng — đơn giản: lấy title từ text nếu match
     title_vi = None
     if ch.get("title_zh"):
-        first, _, rest = text.partition("\n")
-        if len(first) < 100 and rest:
-            # bỏ '#'/'*' markdown + nhãn "Tiêu đề chương:" model đôi khi lặp lại vào dòng tiêu đề
-            first = re.sub(r"^\s*#*\s*(tiêu đề( chương)?|nhan đề)\s*[:：]\s*", "", first, flags=re.I)
-            title_vi, text = first.strip().lstrip("#*").strip(), rest.strip()
+        title_vi, text = _pop_title(text)
 
     db.save_chapter_translation(
         ch["id"], title_vi, text, model, prompt_tokens, completion_tokens,
@@ -379,8 +408,12 @@ def handle_chapter(job: dict, llm) -> None:
     db.bump_translated_count(ch["novel_id"])
 
     # lưu tên riêng phát hiện được làm term "gợi ý" (approved=false, scope=novel)
+    # — get_glossary lấy cả gợi ý nên chương sau dùng lại ngay, giữ phiên âm nhất quán
+    inserted_zh: set[str] = set()
     for t in detected:
-        if t.get("zh") and t.get("vi"):
+        zh = t.get("zh")
+        if zh and t.get("vi") and zh not in preexisting_zh and zh not in inserted_zh:
+            inserted_zh.add(zh)
             try:
                 db.sb().table("glossary_terms").insert({
                     "novel_id": ch["novel_id"], "term_zh": t["zh"], "correct_vi": t["vi"],

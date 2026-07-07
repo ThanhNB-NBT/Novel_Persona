@@ -281,7 +281,13 @@ def mark_source_fail(source_id: int, fail_limit: int) -> bool:
 # ---------- glossary ----------
 
 def get_glossary(novel_id: int) -> tuple[list[dict], int]:
-    """Trả về (terms, version). Gồm term của truyện + term global đã duyệt."""
+    """Trả về (terms, version). Gồm term đã duyệt (truyện + global) VÀ term gợi ý
+    (approved=false) của truyện.
+
+    Gợi ý phải được dùng lại NGAY ở chương sau — trước đây chỉ lấy approved=true nên
+    tên LLM tự phát hiện không bao giờ quay lại prompt, mỗi chương phiên âm một kiểu
+    (bug "Lao Sen/Lâm Tùng"). Term duyệt tay thắng khi trùng term_zh; giữa các gợi ý,
+    gợi ý CŨ nhất thắng (giữ cách phiên âm xuất hiện đầu tiên)."""
     terms = (
         sb().table("glossary_terms")
         .select("term_zh,wrong_vi,correct_vi,term_type,note")
@@ -289,6 +295,19 @@ def get_glossary(novel_id: int) -> tuple[list[dict], int]:
         .or_(f"novel_id.eq.{novel_id},novel_id.is.null")
         .execute()
     ).data or []
+    seen = {t["term_zh"] for t in terms if t.get("term_zh")}
+    pending = (
+        sb().table("glossary_terms")
+        .select("term_zh,wrong_vi,correct_vi,term_type,note")
+        .eq("approved", False).eq("novel_id", novel_id)
+        .order("created_at")
+        .execute()
+    ).data or []
+    for t in pending:
+        zh = t.get("term_zh")
+        if zh and zh not in seen:
+            seen.add(zh)
+            terms.append(t)
     ver_rows = (
         sb().table("novel_glossary_version").select("version").eq("novel_id", novel_id).execute()
     ).data

@@ -14,37 +14,59 @@ const _typeLabels = {
   'other': 'Khác',
 };
 
-class GlossaryScreen extends ConsumerWidget {
+class GlossaryScreen extends ConsumerStatefulWidget {
   final int novelId;
   const GlossaryScreen({super.key, required this.novelId});
+  @override
+  ConsumerState<GlossaryScreen> createState() => _GlossaryScreenState();
+}
+
+class _GlossaryScreenState extends ConsumerState<GlossaryScreen> {
+  // chế độ chọn hàng loạt để xoá (LLM có thể gợi ý cả trăm term sai — xoá tay từng cái quá cực)
+  bool _selecting = false;
+  final Set<int> _sel = {};
+
+  int get novelId => widget.novelId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final terms = ref.watch(glossaryProvider(novelId));
     void refresh() => ref.invalidate(glossaryProvider(novelId));
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Thuật ngữ'),
-        actions: [
-          IconButton(
-            tooltip: 'Vá các chương đã dịch bằng thuật ngữ mới',
-            icon: const Icon(Icons.healing_outlined),
-            onPressed: () async {
-              await requestPatch(novelId);
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                    content: Text('Đã xếp hàng vá chương — worker sẽ xử lý sớm')));
-              }
-            },
-          ),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton(
-        tooltip: 'Thêm thuật ngữ',
-        onPressed: () => _showTermDialog(context, onDone: refresh),
-        child: const Icon(Icons.add),
-      ),
+      appBar: _selecting
+          ? _selectAppBar(terms.value ?? const [])
+          : AppBar(
+              title: const Text('Thuật ngữ'),
+              actions: [
+                IconButton(
+                  tooltip: 'Vá các chương đã dịch bằng thuật ngữ mới',
+                  icon: const Icon(Icons.healing_outlined),
+                  onPressed: () async {
+                    await requestPatch(novelId);
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                          content: Text('Đã xếp hàng vá chương — worker sẽ xử lý sớm')));
+                    }
+                  },
+                ),
+                IconButton(
+                  tooltip: 'Chọn để xoá hàng loạt',
+                  icon: const Icon(Icons.checklist_rounded),
+                  onPressed: () => setState(() {
+                    _selecting = true;
+                    _sel.clear();
+                  }),
+                ),
+              ],
+            ),
+      floatingActionButton: _selecting
+          ? null
+          : FloatingActionButton(
+              tooltip: 'Thêm thuật ngữ',
+              onPressed: () => _showTermDialog(context, onDone: refresh),
+              child: const Icon(Icons.add),
+            ),
       body: terms.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Lỗi: $e')),
@@ -69,10 +91,17 @@ class GlossaryScreen extends ConsumerWidget {
             children: [
               if (pending.isNotEmpty) ...[
                 SectionHeader('Gợi ý chờ duyệt (${pending.length})'),
-                for (final t in pending) _PendingTile(term: t, onChanged: refresh),
+                for (final t in pending)
+                  if (_selecting)
+                    _checkTile(t)
+                  else
+                    _PendingTile(term: t, onChanged: refresh),
               ],
               SectionHeader('Đã áp dụng (${approved.length})'),
               for (final t in approved)
+                if (_selecting)
+                  _checkTile(t)
+                else
                 ListTile(
                   title: Text('${t['term_zh'] ?? '(?)'} → ${t['correct_vi']}'),
                   subtitle: Text([
@@ -99,6 +128,76 @@ class GlossaryScreen extends ConsumerWidget {
         },
       ),
     );
+  }
+
+  /// AppBar chế độ chọn: đếm số đã chọn + Chọn tất cả + Xoá.
+  AppBar _selectAppBar(List<Rec> all) => AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.close),
+          onPressed: () => setState(() {
+            _selecting = false;
+            _sel.clear();
+          }),
+        ),
+        title: Text('Đã chọn ${_sel.length}'),
+        actions: [
+          IconButton(
+            tooltip: 'Chọn tất cả',
+            icon: const Icon(Icons.select_all_rounded),
+            onPressed: () =>
+                setState(() => _sel.addAll(all.map((t) => t['id'] as int))),
+          ),
+          IconButton(
+            tooltip: 'Xoá đã chọn',
+            icon: const Icon(Icons.delete_outline_rounded),
+            onPressed: _sel.isEmpty ? null : _deleteSelected,
+          ),
+        ],
+      );
+
+  Widget _checkTile(Rec t) {
+    final id = t['id'] as int;
+    return CheckboxListTile(
+      value: _sel.contains(id),
+      onChanged: (_) => setState(
+          () => _sel.contains(id) ? _sel.remove(id) : _sel.add(id)),
+      controlAffinity: ListTileControlAffinity.leading,
+      title: Text('${t['term_zh'] ?? '(?)'} → ${t['correct_vi']}'),
+      subtitle: Text(_typeLabels[t['term_type']] ?? '${t['term_type']}'),
+      dense: true,
+    );
+  }
+
+  Future<void> _deleteSelected() async {
+    final n = _sel.length;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Xoá $n thuật ngữ?'),
+        content: const Text(
+            'Chương đã dịch giữ nguyên; các chương dịch sau sẽ không dùng những term này nữa.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false), child: const Text('Huỷ')),
+          FilledButton(
+            style: FilledButton.styleFrom(
+                backgroundColor: Theme.of(ctx).colorScheme.error),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Xoá'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    await deleteTerms(_sel.toList());
+    if (!mounted) return;
+    setState(() {
+      _selecting = false;
+      _sel.clear();
+    });
+    ref.invalidate(glossaryProvider(novelId));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text('Đã xoá $n thuật ngữ')));
   }
 
   /// Báo cáo term dịch sai (góp ý auto-duyệt; admin chỉ soi khi có báo cáo).

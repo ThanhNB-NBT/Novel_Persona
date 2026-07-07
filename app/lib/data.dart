@@ -618,6 +618,11 @@ Future<void> retranslateChapter(int novelId, int chapterIndex) => sb.rpc(
   params: {'p_novel_id': novelId, 'p_index': chapterIndex},
 );
 
+/// Dịch lại TẤT CẢ chương đã dịch (done/failed) của truyện bằng prompt + glossary
+/// hiện tại. Bản dịch cũ giữ nguyên cho tới khi bản mới đè lên. Trả số chương xếp lại.
+Future<int> retranslateAll(int novelId) async =>
+    (await sb.rpc('retranslate_all', params: {'p_novel_id': novelId}) as int?) ?? 0;
+
 // ---------- Glossary ----------
 
 /// Term của truyện + term global; gồm cả gợi ý chưa duyệt (cần login mới thấy).
@@ -640,6 +645,10 @@ Future<void> updateTerm(int id, Map<String, dynamic> fields) =>
 
 Future<void> deleteTerm(int id) =>
     sb.from('glossary_terms').delete().eq('id', id);
+
+/// Xoá nhiều term một lượt (chọn hàng loạt trong màn Thuật ngữ).
+Future<void> deleteTerms(List<int> ids) =>
+    sb.from('glossary_terms').delete().inFilter('id', ids);
 
 Future<void> addTerm(int novelId, String zh, String vi, {String? wrongVi}) =>
     sb.from('glossary_terms').insert({

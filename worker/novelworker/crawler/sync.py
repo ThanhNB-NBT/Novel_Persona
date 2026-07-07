@@ -72,6 +72,20 @@ def recompute_canonical(key: str) -> None:
             db.sb().table("novels").update({"is_canonical": want}).eq("id", n["id"]).execute()
 
 
+def _blacklist(sid: int) -> tuple[set[str], set[str]]:
+    """Truyện admin đã xoá vĩnh viễn (trigger ghi vào crawl_blacklist, migration 032)
+    → discovery bỏ qua. Trả (source_novel_ids của nguồn này, dedup_keys mọi nguồn —
+    chặn cả bản clone của truyện đã xoá trồi lên từ nguồn khác)."""
+    rows = (
+        db.sb().table("crawl_blacklist")
+        .select("source_id, source_novel_id, dedup_key").execute()
+    ).data or []
+    ids = {r["source_novel_id"] for r in rows
+           if r["source_id"] == sid and r.get("source_novel_id")}
+    keys = {r["dedup_key"] for r in rows if r.get("dedup_key")}
+    return ids, keys
+
+
 def _source_priority() -> dict[int, int]:
     rows = db.sb().table("sources").select("id, meta_priority").execute().data or []
     return {r["id"]: r["meta_priority"] for r in rows}
@@ -178,13 +192,14 @@ def discover_latest(adapter: SourceAdapter, max_new: int = 50) -> None:
     added = 0
     cands = adapter.fetch_latest(limit=max_new * 4)  # quét dư vì nhiều truyện đã có
     known = _existing_novels(sid, [c.source_novel_id for c in cands])  # check theo lô
+    bl_ids, bl_keys = _blacklist(sid)
     for cand in cands:
         if added >= max_new:
             break
         if reader_fetch_waiting():
             log.info("Discovery %s: nhường chỗ tải chương người đọc (đã thêm %d)", adapter.name, added)
             break
-        if cand.source_novel_id in known:
+        if cand.source_novel_id in known or cand.source_novel_id in bl_ids:
             continue
         try:
             meta = adapter.fetch_novel_meta(cand.source_novel_id)
@@ -192,6 +207,8 @@ def discover_latest(adapter: SourceAdapter, max_new: int = 50) -> None:
             log.exception("Discovery: lỗi lấy metadata %s (%s)", cand.source_novel_id, adapter.name)
             continue
         key = dedup_key(meta.title_zh, meta.author_zh)
+        if key in bl_keys:
+            continue  # bản clone của truyện admin đã xoá vĩnh viễn
         novel = db.upsert_novel({
             "source_id": sid,
             "source_novel_id": meta.source_novel_id,
@@ -229,10 +246,13 @@ def discover_ranking(adapter: SourceAdapter, max_new: int = 30) -> None:
     # không cố định), truyện chưa có thì thêm dần max_new/chu kỳ tới khi vét cạn top.
     ranked = list(fetch(limit=1000))
     known = _existing_novels(sid, [r[0] for r in ranked])  # check theo lô
+    bl_ids, bl_keys = _blacklist(sid)
     for source_novel_id, rank in ranked:
         if source_novel_id in known:
             db.sb().table("novels").update({"source_rank": rank}).eq("id", known[source_novel_id]).execute()
             continue
+        if source_novel_id in bl_ids:
+            continue  # admin đã xoá vĩnh viễn — không crawl lại dù vẫn trong top
         if added >= max_new:
             continue  # hết quota thêm mới nhưng vẫn quét nốt để cập nhật rank truyện đã có
         if reader_fetch_waiting():
@@ -244,6 +264,8 @@ def discover_ranking(adapter: SourceAdapter, max_new: int = 30) -> None:
             log.exception("Ranking: lỗi metadata %s (%s)", source_novel_id, adapter.name)
             continue
         key = dedup_key(meta.title_zh, meta.author_zh)
+        if key in bl_keys:
+            continue  # bản clone của truyện admin đã xoá vĩnh viễn
         novel = db.upsert_novel({
             "source_id": sid,
             "source_novel_id": meta.source_novel_id,
@@ -271,9 +293,13 @@ def discover_ranking(adapter: SourceAdapter, max_new: int = 30) -> None:
 
 
 def add_novel(adapter: SourceAdapter, source_novel_id: str) -> dict:
-    """Thêm 1 truyện theo book_id (luồng chính: nguồn không có discovery tự động)."""
+    """Thêm 1 truyện theo book_id (luồng chính: nguồn không có discovery tự động).
+    Thêm TAY là chủ đích → gỡ khỏi crawl_blacklist nếu từng bị xoá vĩnh viễn."""
     meta = adapter.fetch_novel_meta(source_novel_id)
     key = dedup_key(meta.title_zh, meta.author_zh)
+    db.sb().table("crawl_blacklist").delete().eq(
+        "source_id", _source_id(adapter)).eq("source_novel_id", source_novel_id).execute()
+    db.sb().table("crawl_blacklist").delete().eq("dedup_key", key).execute()
     novel = db.upsert_novel({
         "source_id": _source_id(adapter),
         "source_novel_id": meta.source_novel_id,
@@ -450,6 +476,70 @@ _not_ready_count: dict[int, int] = {}
 NOT_READY_GIVE_UP = 10
 
 
+def _fail_chapter(ch: dict, msg: str) -> None:
+    db.sb().table("chapters").update(
+        {"translation_status": "failed"}).eq("id", ch["id"]).execute()
+    db.sb().table("translation_jobs").update(
+        {"status": "failed", "error": msg[:500]}
+    ).eq("chapter_id", ch["id"]).eq("status", "pending").execute()
+
+
+def _refresh_chapter_ids(novel_id: int, refs: list) -> int:
+    """Nguồn đánh lại id trang chương → cập nhật source_chapter_id các stub bị lệch
+    theo mục lục mới (khớp theo chapter_index). Trả số stub đã làm mới."""
+    by_index = {r.index: r for r in refs}
+    updated = 0
+    frm = 0
+    while True:
+        rows = (
+            db.sb().table("chapters").select("id, chapter_index, source_chapter_id")
+            .eq("novel_id", novel_id).range(frm, frm + 999).execute()
+        ).data or []
+        for row in rows:
+            ref = by_index.get(row["chapter_index"])
+            if ref and ref.source_chapter_id != row["source_chapter_id"]:
+                db.sb().table("chapters").update(
+                    {"source_chapter_id": ref.source_chapter_id}).eq("id", row["id"]).execute()
+                updated += 1
+        if len(rows) < 1000:
+            break
+        frm += 1000
+    return updated
+
+
+def _rescue_stale_chapter(adapter: SourceAdapter, novel_id: int, ch: dict, err) -> bool:
+    """Chương vẫn 404 sau NOT_READY_GIVE_UP lần: KIỂM CHỨNG trước khi kết luận, vì
+    "trang chương chết" ≠ "truyện bị gỡ" — truyện trong top nguồn vẫn sống nhăn răng,
+    thường chỉ là nguồn ĐÁNH LẠI id chương làm stub của ta stale.
+
+    - Trang truyện cũng chết → đánh failed "truyện có thể đã bị gỡ" (như cũ, giờ có kiểm chứng).
+    - Truyện còn + id chương trong mục lục mới KHÁC stub → làm mới toàn bộ id, giữ queued
+      thử lại. Trả True để dừng chu kỳ này của truyện (các chương sau cũng stale).
+    - Truyện còn + id không đổi → nguồn thật sự thiếu trang chương này → failed với lý do đúng.
+    """
+    nv = (
+        db.sb().table("novels").select("source_novel_id")
+        .eq("id", novel_id).single().execute()
+    ).data or {}
+    try:
+        refs = adapter.fetch_chapter_list(nv.get("source_novel_id") or "")
+    except Exception:
+        _fail_chapter(ch, f"crawl: trang chương lẫn trang truyện đều không truy cập được "
+                          f"sau {NOT_READY_GIVE_UP} lần thử — truyện có thể đã bị gỡ khỏi nguồn ({err})")
+        log.warning("Chương %s + trang truyện novel %s đều chết — đánh failed", ch["id"], novel_id)
+        return False
+    ref = next((r for r in refs if r.index == ch["chapter_index"]), None)
+    if ref and ref.source_chapter_id != ch["source_chapter_id"]:
+        n = _refresh_chapter_ids(novel_id, refs)
+        log.warning("Novel %s: nguồn đánh lại id chương — làm mới %d stub, thử lại vòng sau",
+                    novel_id, n)
+        return True
+    _fail_chapter(ch, f"crawl: truyện vẫn còn trên nguồn nhưng trang chương "
+                      f"{ch['chapter_index']} không tồn tại sau {NOT_READY_GIVE_UP} lần thử ({err})")
+    log.warning("Chương %s không có trang dù truyện %s còn sống — đánh failed", ch["id"], novel_id)
+    return False
+
+
 def ensure_chapters_fetched(adapter: SourceAdapter, novel_id: int) -> None:
     """Tải content_zh cho các chương đã queued dịch mà chưa có nội dung gốc."""
     rows = (
@@ -473,19 +563,12 @@ def ensure_chapters_fetched(adapter: SourceAdapter, novel_id: int) -> None:
             log.info("Đã tải chương %s (novel %s)", ch["chapter_index"], novel_id)
         except ChapterNotReady as e:
             # Lỗi TẠM: nguồn liệt kê chương nhưng trang chưa sinh → giữ queued thử lại.
-            # Nhưng quá NOT_READY_GIVE_UP lần liên tiếp = truyện bị GỠ khỏi nguồn (404
-            # cả trang truyện) → đánh failed kèm lý do, thôi lặp nóng mỗi vòng crawl.
+            # Quá NOT_READY_GIVE_UP lần liên tiếp → kiểm chứng trang truyện rồi mới kết luận.
             n = _not_ready_count[ch["id"]] = _not_ready_count.get(ch["id"], 0) + 1
             if n >= NOT_READY_GIVE_UP:
                 _not_ready_count.pop(ch["id"], None)
-                db.sb().table("chapters").update(
-                    {"translation_status": "failed"}).eq("id", ch["id"]).execute()
-                db.sb().table("translation_jobs").update(
-                    {"status": "failed",
-                     "error": f"crawl: trang chương không tồn tại sau {n} lần thử "
-                              f"— truyện có thể đã bị gỡ khỏi nguồn ({e})"[:500]}
-                ).eq("chapter_id", ch["id"]).eq("status", "pending").execute()
-                log.warning("Chương %s không sẵn sau %d lần — đánh failed", ch["id"], n)
+                if _rescue_stale_chapter(adapter, novel_id, ch, e):
+                    return  # id đã làm mới — chương còn lại cũng stale, để chu kỳ sau tải bằng id mới
             else:
                 log.info("Chương %s chưa sẵn trên nguồn (lần %d) — thử lại vòng sau", ch["id"], n)
         except Exception as e:
