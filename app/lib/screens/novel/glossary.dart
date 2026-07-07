@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../data.dart';
+import '../../hanviet.dart';
 import '../../widgets.dart';
 
 const _typeLabels = {
@@ -336,7 +337,14 @@ class _PendingTile extends StatelessWidget {
         child: ListTile(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: Text('${term['term_zh'] ?? '(?)'} → ${term['correct_vi']}'),
-          subtitle: Text(_typeLabels[term['term_type']] ?? '${term['term_type']}'),
+          // kèm phiên âm tra bảng khi LỆCH với gợi ý — người không biết tiếng Trung
+          // vẫn phát hiện được LLM phiên sai trước khi duyệt
+          subtitle: Text([
+            _typeLabels[term['term_type']] ?? '${term['term_type']}',
+            if (hanVietOf('${term['term_zh'] ?? ''}') case final hv?
+                when hv != '${term['correct_vi']}')
+              'tra bảng: $hv',
+          ].join(' · ')),
           trailing: Row(mainAxisSize: MainAxisSize.min, children: [
             IconButton(
               tooltip: 'Duyệt — dùng cho các chương dịch sau',

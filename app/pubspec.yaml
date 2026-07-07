@@ -83,6 +83,7 @@ flutter:
   assets:
     - assets/icon/gt_ink.png     # logo GT mực đậm — chế độ sáng
     - assets/icon/gt_white.png   # logo GT trắng — chế độ tối
+    - assets/hanviet.tsv         # bảng tra Hán-Việt (đồng bộ từ worker/novelworker/data/)
 
   # To add assets to your application, add an assets section, like this:
   # assets:

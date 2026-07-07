@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../data.dart';
+import '../../hanviet.dart';
 import '../../widgets.dart';
 import 'reader_settings.dart';
 
@@ -674,11 +675,13 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                 if (nb != b) _sel.value = (block: block, start: a, end: nb);
               }),
             ]),
-            // gợi ý bản đúng từ glossary (chữ Trung → Hán-Việt) — bấm để điền
+            // gợi ý bản đúng từ glossary (chữ Trung → Hán-Việt) — bấm để điền.
+            // Kèm chip "tra bảng ⇒" khi phiên âm Hán-Việt theo bảng KHÁC bản trong
+            // glossary — người không biết tiếng Trung vẫn đối chiếu được chuẩn.
             if (sug.isNotEmpty) ...[
               const SizedBox(height: 10),
               Wrap(spacing: 8, runSpacing: 6, children: [
-                for (final m in sug)
+                for (final m in sug) ...[
                   ActionChip(
                     visualDensity: VisualDensity.compact,
                     label: Text('${m['term_zh']} → ${m['correct_vi']}', style: t.labelMedium),
@@ -689,6 +692,21 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                       _correctFocus.requestFocus();
                     },
                   ),
+                  if (hanVietOf('${m['term_zh']}') case final hv?
+                      when hv != '${m['correct_vi']}')
+                    ActionChip(
+                      visualDensity: VisualDensity.compact,
+                      side: BorderSide(color: cs.primary.withValues(alpha: 0.6)),
+                      label: Text('tra bảng ⇒ $hv',
+                          style: t.labelMedium?.copyWith(color: cs.primary)),
+                      onPressed: () {
+                        _correct.text = hv;
+                        _correct.selection =
+                            TextSelection.collapsed(offset: _correct.text.length);
+                        _correctFocus.requestFocus();
+                      },
+                    ),
+                ],
               ]),
             ],
             const SizedBox(height: 10),
