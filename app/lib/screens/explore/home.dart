@@ -365,7 +365,9 @@ class _SpotlightState extends State<_Spotlight> {
       ),
       const SizedBox(height: 12),
       Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20),
+        // phải 12 (không phải 20): bìa lớn nằm thẳng mép với dải bìa phía trên —
+        // dải trên có viền chọn 2px + bìa cuối thường sát mép nên 20 nhìn bị thụt vào
+        padding: const EdgeInsets.fromLTRB(20, 0, 12, 0),
         child: TapScale(
           onTap: () => context.push('/novel/${n['id']}'),
           child: AnimatedSwitcher(
