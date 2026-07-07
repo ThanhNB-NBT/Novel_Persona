@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'data.dart';
 import 'errorlog.dart';
+import 'hanviet.dart';
 import 'notify.dart';
 import 'theme.dart';
 import 'screens/admin/admin.dart';
@@ -31,6 +32,7 @@ Future<void> main() async {
   prefs = await SharedPreferences.getInstance();
   AppErrorLog.install(); // bắt lỗi runtime → xem ở màn "Nhật ký lỗi"
   await initNotifications();
+  loadHanViet(); // bảng tra Hán-Việt cho form sửa dịch — nạp nền, không chặn khởi động
   chapterNotifier.start(); // thông báo khi chương trong tủ sách dịch xong
   // đăng nhập/xuất → nối lại kênh realtime (kênh mở trước khi login không mang auth)
   sb.auth.onAuthStateChange.listen((_) => chapterNotifier.start());
