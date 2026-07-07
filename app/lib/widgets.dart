@@ -337,7 +337,11 @@ class NovelListRow extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Cover(url: n['cover_url'], width: coverW, aspect: 1.36, label: title),
+          // Hero cùng tag với trang thông tin → bìa bay mượt khi mở truyện
+          Hero(
+            tag: 'cover-${n['id']}',
+            child: Cover(url: n['cover_url'], width: coverW, aspect: 1.36, label: title),
+          ),
           const SizedBox(width: 14),
           Expanded(
             child: SizedBox(
@@ -414,6 +418,16 @@ class IconStat extends StatelessWidget {
       Text(value, style: monoStyle(context)), // số liệu dùng mono — chất "tech"
     ]);
   }
+}
+
+/// "vừa xong" / "5 phút trước" / "2 giờ trước" / "3 ngày trước" từ mốc ISO.
+String timeAgo(Object? iso) {
+  if (iso == null) return '';
+  final d = DateTime.now().toUtc().difference(DateTime.parse('$iso').toUtc());
+  if (d.inMinutes < 1) return 'vừa xong';
+  if (d.inMinutes < 60) return '${d.inMinutes} phút trước';
+  if (d.inHours < 24) return '${d.inHours} giờ trước';
+  return '${d.inDays} ngày trước';
 }
 
 /// Chip trạng thái nhỏ (Hoàn thành / Đang ra…).
