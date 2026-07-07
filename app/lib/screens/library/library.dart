@@ -90,7 +90,7 @@ class _ReadingRow extends ConsumerWidget {
           children: [
             // KHÔNG Hero ở đây: các tab sống chung 1 route (PageView keep-alive),
             // truyện nằm cả ở carousel Khám phá sẽ trùng tag 'cover-id' → crash.
-            Cover(url: n['cover_url'], width: 58, aspect: 1.36, label: title),
+            Cover(url: n['cover_url'], width: 64, aspect: 1.36, label: title),
             const SizedBox(width: 14),
             Expanded(
               child: Column(

@@ -162,7 +162,7 @@ class _HeroCarouselState extends State<_HeroCarousel> {
       padding: const EdgeInsets.only(top: 12, bottom: 4),
       child: Column(children: [
         SizedBox(
-          height: 184,
+          height: 196,
           child: PageView.builder(
             controller: _ctrl,
             itemCount: _loop ? null : n, // null = vô hạn 2 chiều
@@ -268,9 +268,9 @@ class _HeroCard extends ConsumerWidget {
               Padding(
                 padding: const EdgeInsets.all(11),
                 child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  // bìa cao kín thẻ (184 - 2×11 padding ≈ 162 = 115×1.4) — đáy
+                  // bìa cao kín thẻ (196 - 2×11 padding ≈ 174 = 124×1.4) — đáy
                   // ngang hàng nút Đọc ngay, không còn hụt
-                  Hero(tag: 'cover-${n['id']}', child: Cover(url: cover, width: 115, label: _title(n))),
+                  Hero(tag: 'cover-${n['id']}', child: Cover(url: cover, width: 124, label: _title(n))),
                   const SizedBox(width: 14),
                   Expanded(
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -335,19 +335,20 @@ class _SpotlightState extends State<_Spotlight> {
       SectionHeader(widget.title,
           onMore: () => Navigator.of(context).push(MaterialPageRoute(
               builder: (_) => SectionScreen(kind: widget.kind)))),
-      // dải bìa nhỏ — to, phẳng (không bóng), sát nhau; bìa đang chọn viền màu nhấn
+      // dải bìa nhỏ — to, phẳng (không bóng), sát nhau; bìa đang chọn viền màu nhấn.
+      // padding trong 1 + separator 4: viền chọn vẫn có chỗ thở mà dải không hở rãnh to.
       SizedBox(
-        height: 96,
+        height: 102,
         child: ListView.separated(
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.symmetric(horizontal: 20),
           itemCount: widget.items.length,
-          separatorBuilder: (_, _) => const SizedBox(width: 7),
+          separatorBuilder: (_, _) => const SizedBox(width: 4),
           itemBuilder: (_, i) => GestureDetector(
             onTap: () => setState(() => _sel = i),
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 200),
-              padding: const EdgeInsets.all(2),
+              padding: const EdgeInsets.all(1),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(
@@ -356,7 +357,7 @@ class _SpotlightState extends State<_Spotlight> {
               ),
               child: Cover(
                   url: widget.items[i]['cover_url'],
-                  width: 62,
+                  width: 68,
                   flat: true,
                   label: _title(widget.items[i])),
             ),
