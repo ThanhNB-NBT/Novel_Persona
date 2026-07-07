@@ -315,11 +315,14 @@ def process_novel_requests(adapters: list[SourceAdapter], limit: int = 3) -> Non
                 except Exception:
                     blocked = True  # (shuhaige chặn tần suất search) — thử lại tick sau
                     continue
-                if not hits:
-                    continue
-                # trang kết quả có thể lẫn khối đề cử → ưu tiên khớp tên chính xác
+                # Trang kết quả (shuhaige) lẫn cả khối đề cử → CHỈ nhận tựa khớp đúng
+                # hoặc chứa chuỗi tìm; không thì coi như nguồn này không có (bug thật
+                # 2026-07-07: từng lấy nhầm truyện đề cử đầu trang).
                 exact = [h for h in hits if h[1] == q]
-                novel = add_novel(a, (exact or hits)[0][0])
+                cand = exact or [h for h in hits if q in h[1]]
+                if not cand:
+                    continue
+                novel = add_novel(a, cand[0][0])
                 log.info("Yêu cầu truyện #%s '%s' → novel %s (%s)",
                          r["id"], q, novel["id"], a.name)
                 break
