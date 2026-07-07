@@ -169,7 +169,10 @@ def _queue_canonical_work(adapter: SourceAdapter, novel: dict, meta, prio_meta: 
     if not (novel.get("is_canonical") and not novel.get("meta_translated")):
         return
     try:
-        total = sync_chapter_list(adapter, novel["id"], meta.source_novel_id)
+        # mục lục lười: truyện mới chỉ giữ stub cho chương mẫu; user mở truyện thì
+        # request_toc mới tải đủ (đỡ ~1.7k dòng stub/truyện không ai đọc)
+        total, _ = sync_chapter_list(adapter, novel["id"], meta.source_novel_id,
+                                     limit_stubs=settings.sample_chapters)
         if meta.status != "completed" and total < settings.discover_min_chapters:
             db.sb().table("novels").update({"hidden": True}).eq("id", novel["id"]).execute()
             log.info("Bỏ qua truyện mỏng %s (%s): %d chương < %d",
@@ -343,51 +346,73 @@ def queue_sample_chapters(novel_id: int, count: int, priority: int) -> int:
     return len(rows)
 
 
-def sync_chapter_list(adapter: SourceAdapter, novel_id: int, source_novel_id: str) -> int:
-    """Cập nhật mục lục 1 truyện; trả về số chương mới phát hiện.
+def sync_chapter_list(
+    adapter: SourceAdapter, novel_id: int, source_novel_id: str,
+    limit_stubs: int | None = None,
+) -> tuple[int, int]:
+    """Cập nhật mục lục 1 truyện; trả (tổng chương trên nguồn, số stub mới upsert).
+
+    MỤC LỤC LƯỜI (tiết kiệm DB — stub từng chiếm 92% dung lượng):
+    - limit_stubs=None → sync ĐẦY ĐỦ + đánh dấu novels.toc_synced_at (truyện active).
+    - limit_stubs=N    → chỉ giữ N stub đầu (chương mẫu của truyện chưa ai đọc).
+    - limit_stubs=0    → không đụng stub, chỉ cập nhật số chương/last_chapter_at
+      (refresh định kỳ truyện lười).
 
     Chỉ upsert phần CHƯA có: trường hợp thường gặp nhất khi soi định kỳ là "không
     đổi gì" → 1 query count là xong, khỏi kéo 4000 index + re-upsert 4000 stub.
     ponytail: chương đã có KHÔNG được refresh title/source_chapter_id — nguồn đánh
-    lại số chương (cực hiếm) thì xoá chapters của truyện đó rồi để sync tự lấp."""
+    lại số chương thì _rescue_stale_chapter tự làm mới khi phát hiện."""
     refs = adapter.fetch_chapter_list(source_novel_id)
-    existing_count = (
-        db.sb().table("chapters").select("id", count="exact")
-        .eq("novel_id", novel_id).limit(1).execute()
-    ).count or 0
-    if existing_count >= len(refs):
-        return 0
-    # kéo index đã có THEO TRANG — PostgREST trần 1000 dòng/query; kéo 1 lần với
-    # truyện 4000 chương → have thiếu → tưởng nhầm +3000 chương mới, bump nhiễu.
-    have: set[int] = set()
-    frm = 0
-    while True:
-        b = (
-            db.sb().table("chapters").select("chapter_index")
-            .eq("novel_id", novel_id).range(frm, frm + 999).execute()
-        ).data or []
-        have.update(r["chapter_index"] for r in b)
-        if len(b) < 1000:
-            break
-        frm += 1000
-    new_refs = [ref for ref in refs if ref.index not in have]
-    if not new_refs:
-        return 0
-    db.upsert_chapter_stubs([
-        {
-            "novel_id": novel_id,
-            "chapter_index": ref.index,
-            "source_chapter_id": ref.source_chapter_id,
-            "title_zh": ref.title_zh,
-        }
-        for ref in new_refs
-    ])
-    # CHỈ bump khi thật có chương mới → "Mới cập nhật" phản ánh đúng, không nhiễu.
-    now = db.utc_now()
-    db.sb().table("novels").update(
-        {"chapter_count_source": len(refs), "last_chapter_at": now, "updated_at": now}
-    ).eq("id", novel_id).execute()
-    return len(new_refs)
+    total = len(refs)
+    if limit_stubs is not None:
+        refs = refs[:limit_stubs]
+    added = 0
+    if refs:
+        existing_count = (
+            db.sb().table("chapters").select("id", count="exact")
+            .eq("novel_id", novel_id).limit(1).execute()
+        ).count or 0
+        if existing_count < len(refs):
+            # kéo index đã có THEO TRANG — PostgREST trần 1000 dòng/query; kéo 1 lần với
+            # truyện 4000 chương → have thiếu → tưởng nhầm +3000 chương mới, bump nhiễu.
+            have: set[int] = set()
+            frm = 0
+            while True:
+                b = (
+                    db.sb().table("chapters").select("chapter_index")
+                    .eq("novel_id", novel_id).range(frm, frm + 999).execute()
+                ).data or []
+                have.update(r["chapter_index"] for r in b)
+                if len(b) < 1000:
+                    break
+                frm += 1000
+            new_refs = [ref for ref in refs if ref.index not in have]
+            if new_refs:
+                db.upsert_chapter_stubs([
+                    {
+                        "novel_id": novel_id,
+                        "chapter_index": ref.index,
+                        "source_chapter_id": ref.source_chapter_id,
+                        "title_zh": ref.title_zh,
+                    }
+                    for ref in new_refs
+                ])
+                added = len(new_refs)
+    # bump khi TỔNG trên nguồn tăng so với số đã lưu → "Mới cập nhật" đúng cả với
+    # truyện lười (không có stub để so)
+    row = (
+        db.sb().table("novels").select("chapter_count_source")
+        .eq("id", novel_id).single().execute()
+    ).data or {}
+    fields: dict = {}
+    if total > (row.get("chapter_count_source") or 0):
+        now = db.utc_now()
+        fields = {"chapter_count_source": total, "last_chapter_at": now, "updated_at": now}
+    if limit_stubs is None:
+        fields["toc_synced_at"] = db.utc_now()  # đã có mục lục đầy đủ → refresh giữ tiếp
+    if fields:
+        db.sb().table("novels").update(fields).eq("id", novel_id).execute()
+    return total, added
 
 
 def sync_followed_novels(adapter: SourceAdapter) -> None:
@@ -408,7 +433,7 @@ def sync_followed_novels(adapter: SourceAdapter) -> None:
             break
         seen.add(nv["id"])
         try:
-            n = sync_chapter_list(adapter, nv["id"], nv["source_novel_id"])
+            _, n = sync_chapter_list(adapter, nv["id"], nv["source_novel_id"])
             if n:
                 log.info("Truyện %s có %d chương mới", nv["id"], n)
         except Exception:
@@ -428,7 +453,8 @@ def refresh_canonical_updates(adapter: SourceAdapter, limit: int) -> None:
     chu kỳ / tăng limit."""
     sid = _source_id(adapter)
     rows = (
-        db.sb().table("novels").select("id, source_novel_id, hidden, meta_translated, status")
+        db.sb().table("novels")
+        .select("id, source_novel_id, hidden, meta_translated, status, toc_synced_at")
         .eq("source_id", sid).eq("is_canonical", True)
         .order("last_checked_at", desc=False, nullsfirst=True)  # chưa soi/lâu nhất trước
         .limit(limit).execute()
@@ -440,9 +466,13 @@ def refresh_canonical_updates(adapter: SourceAdapter, limit: int) -> None:
             break
         db.heartbeat("crawler", note=f"soi mục lục novel {nv['id']} ({i + 1}/{len(rows)})")
         try:
-            n = sync_chapter_list(adapter, nv["id"], nv["source_novel_id"])
+            # truyện lười (chưa ai đọc) → limit_stubs=0: chỉ cập nhật số chương, không đẻ stub
+            total, n = sync_chapter_list(
+                adapter, nv["id"], nv["source_novel_id"],
+                limit_stubs=None if nv.get("toc_synced_at") else 0)
             if n:
                 log.info("Truyện %s +%d chương mới", nv["id"], n)
+            if n or total:
                 _maybe_unhide_grown(nv)
         except Exception:
             log.exception("Lỗi refresh truyện %s", nv["id"])

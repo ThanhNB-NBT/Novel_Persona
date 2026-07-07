@@ -623,6 +623,11 @@ Future<void> retranslateChapter(int novelId, int chapterIndex) => sb.rpc(
 Future<int> retranslateAll(int novelId) async =>
     (await sb.rpc('retranslate_all', params: {'p_novel_id': novelId}) as int?) ?? 0;
 
+/// Mục lục lười: truyện chưa ai đọc chỉ có 3 stub chương mẫu — gọi cái này để
+/// crawler tải mục lục đầy đủ (xong trong ~10-20s, banner ở tab Danh sách chương).
+Future<void> requestToc(int novelId) =>
+    sb.rpc('request_toc', params: {'p_novel_id': novelId});
+
 // ---------- Glossary ----------
 
 /// Term của truyện + term global; gồm cả gợi ý chưa duyệt (cần login mới thấy).

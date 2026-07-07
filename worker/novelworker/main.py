@@ -111,6 +111,24 @@ def run_crawler() -> None:
                 # Discovery/refresh (bước 2, có thể cả tiếng) cũng tự nhường giữa chừng
                 # khi có chương ưu tiên cao chờ tải (sync.reader_fetch_waiting).
                 sid = adapter.source_row.get("id")
+                # 0) mục lục lười: app xin tải mục lục đầy đủ (request_toc) — ưu tiên vì
+                # user đang đứng chờ ở màn danh sách chương; tối đa 3 truyện/tick
+                toc_reqs = (
+                    db.sb().table("novels").select("id, source_id, source_novel_id")
+                    .eq("source_id", sid).is_("toc_synced_at", "null")
+                    .not_.is_("toc_requested_at", "null")
+                    .order("toc_requested_at").limit(3).execute()
+                ).data or []
+                for nv in toc_reqs:
+                    try:
+                        total, n = sync.sync_chapter_list(adapter, nv["id"], nv["source_novel_id"])
+                        log.info("TOC lười: novel %s đủ mục lục (%d chương, +%d stub)",
+                                 nv["id"], total, n)
+                    except Exception:
+                        # gỡ cờ xin để không hammer mỗi tick; user mở lại truyện sẽ xin lại
+                        db.sb().table("novels").update(
+                            {"toc_requested_at": None}).eq("id", nv["id"]).execute()
+                        log.exception("TOC lười: lỗi novel %s — gỡ cờ chờ xin lại", nv["id"])
                 for nv in pending_fetch:
                     if nv["source_id"] != sid:
                         continue  # để adapter đúng nguồn xử lý ở vòng lặp của nó
