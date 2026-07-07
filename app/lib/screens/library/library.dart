@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -14,6 +16,22 @@ class LibraryScreen extends ConsumerWidget {
     final reading = ref.watch(readingProvider);
     return Scaffold(
       appBar: AppBar(title: const Text('Tủ truyện'), actions: [
+        IconButton(
+          tooltip: 'Yêu cầu truyện mới',
+          icon: const Icon(Icons.travel_explore_rounded),
+          onPressed: () {
+            if (sb.auth.currentUser == null) {
+              context.push('/login');
+              return;
+            }
+            showModalBottomSheet(
+              context: context,
+              isScrollControlled: true,
+              showDragHandle: true,
+              builder: (_) => const _RequestSheet(),
+            );
+          },
+        ),
         IconButton(
           tooltip: 'Bản offline',
           icon: const Icon(Icons.download_done_rounded),
@@ -185,6 +203,165 @@ class _ReadingRow extends ConsumerWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Sheet "Yêu cầu truyện mới": nhập TÊN TIẾNG TRUNG → worker tìm trên các nguồn có
+/// search rồi crawl về + tự vào tủ sách. Poll 5s khi còn yêu cầu đang tìm.
+class _RequestSheet extends ConsumerStatefulWidget {
+  const _RequestSheet();
+  @override
+  ConsumerState<_RequestSheet> createState() => _RequestSheetState();
+}
+
+class _RequestSheetState extends ConsumerState<_RequestSheet> {
+  final _input = TextEditingController();
+  Timer? _poll;
+  bool _sending = false;
+
+  @override
+  void dispose() {
+    _poll?.cancel();
+    _input.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final q = _input.text.trim();
+    if (q.isEmpty || _sending) return;
+    setState(() => _sending = true);
+    try {
+      await addNovelRequest(q);
+      _input.clear();
+      ref.invalidate(myNovelRequestsProvider);
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final t = Theme.of(context).textTheme;
+    final reqs = ref.watch(myNovelRequestsProvider).value ?? const <Rec>[];
+    // còn yêu cầu chờ → poll; xong hết → tắt (kể cả tủ sách cũng cần làm mới)
+    final waiting = reqs.any((r) => r['status'] == 'pending');
+    if (waiting) {
+      _poll ??= Timer.periodic(const Duration(seconds: 5), (_) {
+        ref.invalidate(myNovelRequestsProvider);
+        ref.invalidate(readingProvider);
+      });
+    } else {
+      _poll?.cancel();
+      _poll = null;
+    }
+    return Padding(
+      // đẩy sheet lên trên bàn phím
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('Yêu cầu truyện mới', style: t.titleLarge),
+            const SizedBox(height: 6),
+            Text(
+              'Nhập TÊN GỐC TIẾNG TRUNG của truyện (dán từ nơi khác). Hệ thống tìm '
+              'trên các nguồn, crawl về và tự thêm vào tủ sách của bạn — thường xong '
+              'trong dưới 1 phút.',
+              style: t.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+            ),
+            const SizedBox(height: 14),
+            Row(children: [
+              Expanded(
+                child: TextField(
+                  controller: _input,
+                  autofocus: true,
+                  maxLength: 100,
+                  decoration: const InputDecoration(
+                      counterText: '', hintText: '例如：剑来', isDense: true),
+                  onSubmitted: (_) => _submit(),
+                ),
+              ),
+              const SizedBox(width: 10),
+              FilledButton(
+                onPressed: _sending ? null : _submit,
+                child: _sending
+                    ? const SizedBox(
+                        width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Text('Tìm'),
+              ),
+            ]),
+            if (reqs.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              Text('YÊU CẦU CỦA BẠN',
+                  style: t.labelSmall
+                      ?.copyWith(color: cs.onSurfaceVariant, letterSpacing: 1.5)),
+              const SizedBox(height: 4),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 320),
+                child: ListView(shrinkWrap: true, children: [
+                  for (final r in reqs) _requestRow(context, r),
+                ]),
+              ),
+            ],
+          ]),
+        ),
+      ),
+    );
+  }
+
+  Widget _requestRow(BuildContext context, Rec r) {
+    final cs = Theme.of(context).colorScheme;
+    final t = Theme.of(context).textTheme;
+    final novel = r['novels'] as Map?;
+    final (chip, color) = switch (r['status']) {
+      'pending' => ('Đang tìm…', cs.primary),
+      'done' => ('Đã thêm', const Color(0xFF2E9E5B)),
+      'notfound' => ('Không nguồn nào có', cs.error),
+      _ => ('Lỗi', cs.error),
+    };
+    return InkWell(
+      // xong rồi thì bấm mở thẳng trang truyện
+      onTap: r['status'] == 'done' && r['novel_id'] != null
+          ? () => context.push('/novel/${r['novel_id']}')
+          : null,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Row(children: [
+          if (r['status'] == 'pending') ...[
+            const SizedBox(
+                width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
+            const SizedBox(width: 10),
+          ],
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(
+                (novel?['title_vi'] ?? r['query']) as String,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: t.bodyMedium,
+              ),
+              Text('${r['query']} · ${timeAgo(r['created_at'])}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: t.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
+            ]),
+          ),
+          const SizedBox(width: 8),
+          TagChip(chip, color: color),
+          if (r['status'] != 'pending')
+            IconButton(
+              tooltip: 'Xoá yêu cầu',
+              visualDensity: VisualDensity.compact,
+              icon: Icon(Icons.close_rounded, size: 16, color: cs.onSurfaceVariant),
+              onPressed: () async {
+                await deleteNovelRequest(r['id'] as int);
+                ref.invalidate(myNovelRequestsProvider);
+              },
+            ),
+        ]),
+      ),
     );
   }
 }

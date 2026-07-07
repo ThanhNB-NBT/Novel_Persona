@@ -105,6 +105,12 @@ def run_crawler() -> None:
             max_new = _num("discover_new_per_cycle", max_new)
             refresh_n = _num("refresh_per_cycle", refresh_n)
         pending_fetch = _novels_needing_fetch()  # 1 query/tick dùng chung mọi adapter
+        # 0) yêu cầu truyện từ app: tìm tên trên các nguồn có search → crawl + vào tủ sách.
+        # Chạy mỗi tick (user đang ngóng), 1 query khi không có yêu cầu nào.
+        try:
+            sync.process_novel_requests(list(adapters.values()))
+        except Exception:
+            log.exception("Lỗi xử lý yêu cầu truyện")
         for adapter in adapters.values():
             try:
                 # 1) tải nội dung chương đang chờ dịch — NGƯỜI ĐỌC TRƯỚC, chạy mỗi tick.

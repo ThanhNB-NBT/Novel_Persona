@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../data.dart';
 import '../../hanviet.dart';
+import '../../tts.dart';
 import '../../widgets.dart';
 import 'reader_settings.dart';
 
@@ -287,6 +288,19 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
               ),
             ),
           ),
+          // Nghe truyện: TTS hệ thống đọc từ chương đang mở; điều khiển ở thanh đáy
+          ValueListenableBuilder<TtsState>(
+            valueListenable: TtsPlayer.i.state,
+            builder: (_, ts, _) => IconButton(
+              tooltip: ts.active ? 'Dừng nghe' : 'Nghe chương này',
+              icon: Icon(
+                  ts.active ? Icons.headset_off_rounded : Icons.headset_rounded,
+                  size: 19),
+              onPressed: () => ts.active
+                  ? TtsPlayer.i.stop()
+                  : TtsPlayer.i.start(novelId, chapterIndex),
+            ),
+          ),
           IconButton(
             tooltip: 'Cài đặt đọc',
             icon: const Icon(Icons.settings_rounded, size: 19),
@@ -294,6 +308,13 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
           ),
           const SizedBox(width: 2),
         ],
+      ),
+      // Thanh điều khiển nghe — chỉ hiện khi máy đọc đang chạy cho truyện này
+      bottomNavigationBar: ValueListenableBuilder<TtsState>(
+        valueListenable: TtsPlayer.i.state,
+        builder: (_, ts, _) => ts.novelId == novelId
+            ? _TtsBar(state: ts, fg: col.fg, bg: col.bg)
+            : const SizedBox.shrink(),
       ),
       body: chapter.when(
         loading: () => const Center(child: CircularProgressIndicator()),
@@ -961,6 +982,68 @@ class _EndPanelState extends ConsumerState<_EndPanel> {
             },
           ),
         ]),
+      ]),
+    );
+  }
+}
+
+/// Thanh điều khiển nghe truyện: play/pause + chương đang đọc + tốc độ + tắt.
+class _TtsBar extends StatelessWidget {
+  final TtsState state;
+  final Color fg, bg;
+  const _TtsBar({required this.state, required this.fg, required this.bg});
+
+  // flutter_tts: 0.5 = tốc độ chuẩn → nhãn quy về 1×
+  static const _rates = [(0.4, '0.8×'), (0.5, '1×'), (0.65, '1.3×'), (0.8, '1.6×')];
+
+  @override
+  Widget build(BuildContext context) {
+    final soft = fg.withValues(alpha: 0.6);
+    return Container(
+      padding: EdgeInsets.fromLTRB(12, 4, 8, 4 + MediaQuery.paddingOf(context).bottom),
+      decoration: BoxDecoration(
+        color: bg,
+        border: Border(top: BorderSide(color: fg.withValues(alpha: 0.12))),
+      ),
+      child: Row(children: [
+        IconButton(
+          tooltip: state.playing ? 'Dừng tạm' : 'Đọc tiếp',
+          icon: Icon(
+              state.playing ? Icons.pause_circle_filled_rounded : Icons.play_circle_fill_rounded,
+              size: 32,
+              color: fg.withValues(alpha: 0.8)),
+          onPressed: () => state.playing ? TtsPlayer.i.pause() : TtsPlayer.i.resume(),
+        ),
+        const SizedBox(width: 4),
+        Expanded(
+          child: Text(
+            'Đang nghe · chương ${state.chapterIndex}',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(color: soft, fontSize: 13),
+          ),
+        ),
+        // bấm xoay vòng tốc độ — StatefulBuilder khỏi kéo cả reader rebuild
+        StatefulBuilder(
+          builder: (_, setLocal) {
+            final idx = _rates
+                .indexWhere((r) => (r.$1 - TtsPlayer.i.rate).abs() < 0.01)
+                .clamp(0, 3);
+            return TextButton(
+              onPressed: () async {
+                await TtsPlayer.i.setRate(_rates[(idx + 1) % _rates.length].$1);
+                setLocal(() {});
+              },
+              child: Text(_rates[idx].$2,
+                  style: TextStyle(color: soft, fontWeight: FontWeight.w700)),
+            );
+          },
+        ),
+        IconButton(
+          tooltip: 'Tắt nghe',
+          icon: Icon(Icons.close_rounded, size: 20, color: soft),
+          onPressed: () => TtsPlayer.i.stop(),
+        ),
       ]),
     );
   }

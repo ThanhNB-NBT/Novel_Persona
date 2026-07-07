@@ -5,6 +5,7 @@ import logging
 import re
 import time
 import unicodedata
+from datetime import datetime, timezone
 
 from .. import db
 from ..config import settings
@@ -293,6 +294,55 @@ def discover_ranking(adapter: SourceAdapter, max_new: int = 30) -> None:
         time.sleep(1.0)
     if added:
         log.info("Ranking %s: thêm %d truyện hot", adapter.name, added)
+
+
+def process_novel_requests(adapters: list[SourceAdapter], limit: int = 3) -> None:
+    """User nhập TÊN TIẾNG TRUNG trong app (bảng novel_requests) → tìm lần lượt trên
+    các nguồn có search, thấy thì crawl như thêm tay + bỏ vào tủ sách người xin.
+    Truyện crawl về hiển thị chung ở Khám phá như mọi truyện khác."""
+    reqs = (
+        db.sb().table("novel_requests").select("id, user_id, query, created_at")
+        .eq("status", "pending").order("created_at").limit(limit).execute()
+    ).data or []
+    for r in reqs:
+        q = (r["query"] or "").strip()
+        novel = None
+        blocked = False  # có nguồn đang chặn search → chưa thể kết luận "không có"
+        try:
+            for a in adapters:
+                try:
+                    hits = a.search(q)
+                except Exception:
+                    blocked = True  # (shuhaige chặn tần suất search) — thử lại tick sau
+                    continue
+                if not hits:
+                    continue
+                # trang kết quả có thể lẫn khối đề cử → ưu tiên khớp tên chính xác
+                exact = [h for h in hits if h[1] == q]
+                novel = add_novel(a, (exact or hits)[0][0])
+                log.info("Yêu cầu truyện #%s '%s' → novel %s (%s)",
+                         r["id"], q, novel["id"], a.name)
+                break
+        except Exception as e:
+            log.exception("Yêu cầu truyện #%s lỗi", r["id"])
+            db.sb().table("novel_requests").update(
+                {"status": "failed", "note": str(e)[:300]}).eq("id", r["id"]).execute()
+            continue
+        if novel is None:
+            # nguồn đang chặn → giữ pending thử lại, nhưng tối đa 10 phút thì chốt
+            age_sec = (datetime.now(timezone.utc)
+                       - datetime.fromisoformat(r["created_at"])).total_seconds()
+            if blocked and age_sec < 600:
+                continue
+            db.sb().table("novel_requests").update(
+                {"status": "notfound", "note": "Không nguồn nào có truyện này"}
+            ).eq("id", r["id"]).execute()
+        else:
+            # vào thẳng tủ sách người xin — yêu cầu riêng thì kết quả phải nằm trong tầm tay
+            db.sb().table("library").upsert(
+                {"user_id": r["user_id"], "novel_id": novel["id"]}).execute()
+            db.sb().table("novel_requests").update(
+                {"status": "done", "novel_id": novel["id"]}).eq("id", r["id"]).execute()
 
 
 def add_novel(adapter: SourceAdapter, source_novel_id: str) -> dict:

@@ -97,6 +97,11 @@ class SourceAdapter(ABC):
         self.fetch_err += 1
         raise last  # type: ignore[misc]
 
+    def search(self, keyword: str) -> list[tuple[str, str]]:
+        """Tìm truyện theo tên trên nguồn → [(source_novel_id, title_zh)].
+        Mặc định []: nguồn không có search dùng được (ddxs render kết quả bằng JS)."""
+        return []
+
     @abstractmethod
     def fetch_latest(self, limit: int = 30) -> list[NovelMeta]:
         """Danh sách truyện mới đăng / mới cập nhật (metadata tiếng Trung)."""

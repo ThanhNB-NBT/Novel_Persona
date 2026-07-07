@@ -21,6 +21,7 @@ import logging
 import re
 from datetime import datetime
 from html import unescape
+from urllib.parse import quote
 
 from .base import ChapterNotReady, ChapterRef, NovelMeta, SourceAdapter
 
@@ -90,6 +91,31 @@ class BiqugeAdapter(SourceAdapter):
             if len(best) >= limit:
                 break
         return sorted(best.items(), key=lambda kv: kv[1])[:limit]
+
+    def search(self, keyword: str) -> list[tuple[str, str]]:
+        """shuhaige: POST /search.html (probe 2026-07-07). Trang kết quả có cả khối
+        đề cử → dedupe giữ lần đầu, caller tự ưu tiên khớp tên chính xác."""
+        try:
+            r = self._session.post(
+                f"{self.base_url}/search.html", data={"searchkey": keyword},
+                headers={"Referer": f"{self.base_url}/"})
+            r.raise_for_status()
+            html = r.content.decode(self.encoding, "ignore")
+        except Exception:
+            log.warning("Search lỗi (%s): %s", self.name, keyword)
+            return []
+        # site chặn tần suất search → trang 错误提示; raise để caller giữ yêu cầu
+        # lại thử tick sau, không kết luận nhầm "không có truyện"
+        if "错误提示" in html:
+            raise RuntimeError(f"search {self.name} bị chặn tần suất, thử lại sau")
+        out: dict[str, str] = {}
+        # tựa có thể lồng trong tag con (trang "chuyên đề" khi trúng truyện hot) → bóc tag
+        for m in re.finditer(r'<a href="/(\d+)/"[^>]*>(.*?)</a>', html, re.S):
+            sid = m.group(1)
+            title = unescape(re.sub(r"<[^>]+>", "", m.group(2))).strip()
+            if 2 <= len(title) <= 60 and sid not in out:
+                out[sid] = title
+        return list(out.items())
 
     def fetch_novel_meta(self, source_novel_id: str) -> NovelMeta:
         html = self._get(self._novel_url(source_novel_id))
@@ -242,6 +268,21 @@ class XinBiqugeAdapter(BiqugeAdapter):
         # og:title của khuôn này = "Tên truyện最新章节" → cắt đuôi SEO
         meta.title_zh = re.sub(r"最新章节$", "", meta.title_zh).strip()
         return meta
+
+    def search(self, keyword: str) -> list[tuple[str, str]]:
+        """GET /search.php?q= (probe 2026-07-07); tựa kết quả dạng "[言情]恨姐症"."""
+        try:
+            html = self._get(f"/search.php?q={quote(keyword)}")
+        except Exception:
+            log.warning("Search lỗi (%s): %s", self.name, keyword)
+            return []
+        out: dict[str, str] = {}
+        for m in re.finditer(r'href="/book/(\d+/\d+)/"[^>]*>([^<]+)</a>', html):
+            sid = m.group(1)
+            title = re.sub(r"^\[[^\]]{1,8}\]", "", unescape(m.group(2)).strip()).strip()
+            if title and sid not in out:
+                out[sid] = title
+        return list(out.items())
 
     def fetch_chapter_list(self, source_novel_id: str) -> list[ChapterRef]:
         # Trang 1 = trang truyện, trang p ≥ 2 = index_{p}.html; các trang xếp 1→N.
