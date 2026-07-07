@@ -279,15 +279,6 @@ class _NovelQueueCard extends StatelessWidget {
   }
 }
 
-/// "vừa xong" / "5 phút trước" / "2 giờ trước" từ mốc ISO.
-String _ago(Object? iso) {
-  if (iso == null) return '';
-  final d = DateTime.now().toUtc().difference(DateTime.parse('$iso').toUtc());
-  if (d.inMinutes < 1) return 'vừa xong';
-  if (d.inMinutes < 60) return '${d.inMinutes} phút trước';
-  return '${d.inHours} giờ trước';
-}
-
 /// Mục "Vừa dịch xong" — GỘP THEO TRUYỆN (như Quản trị nhưng gọn), có nút Xoá lịch sử.
 /// Chỉ là thông báo → "Xoá" chỉ ẩn hiển thị trên máy, không đụng dữ liệu dịch.
 class _RecentDone extends ConsumerWidget {
@@ -355,7 +346,7 @@ class _DoneNovel extends StatelessWidget {
             ]),
           ),
           const SizedBox(width: 8),
-          Text(_ago(chapters.first['translated_at']),
+          Text(timeAgo(chapters.first['translated_at']),
               style: t.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
         ]),
       ),

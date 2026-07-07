@@ -47,16 +47,6 @@ class NotificationsScreen extends ConsumerWidget {
   }
 }
 
-/// "vừa xong" / "5 phút trước" / "2 giờ trước" / "3 ngày trước" từ mốc ISO.
-String _ago(Object? iso) {
-  if (iso == null) return '';
-  final d = DateTime.now().toUtc().difference(DateTime.parse('$iso').toUtc());
-  if (d.inMinutes < 1) return 'vừa xong';
-  if (d.inMinutes < 60) return '${d.inMinutes} phút trước';
-  if (d.inHours < 24) return '${d.inHours} giờ trước';
-  return '${d.inDays} ngày trước';
-}
-
 class _NovelDone extends StatelessWidget {
   final List<Rec> chapters; // các chương của 1 truyện (mới → cũ)
   const _NovelDone(this.chapters);
@@ -88,7 +78,7 @@ class _NovelDone extends StatelessWidget {
             ]),
           ),
           const SizedBox(width: 8),
-          Text(_ago(chapters.first['translated_at']),
+          Text(timeAgo(chapters.first['translated_at']),
               style: t.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
         ]),
       ),

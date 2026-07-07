@@ -424,6 +424,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
           ),
           const SizedBox(height: 16),
           _EndPanel(novelId: novelId, chapterIndex: chapterIndex, fg: col.fg),
+          _CommentsPanel(novelId: novelId, chapterIndex: chapterIndex, fg: col.fg),
         ],
       ),
     );
@@ -496,6 +497,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                 ),
                 const SizedBox(height: 16),
                 _EndPanel(novelId: novelId, chapterIndex: chapterIndex, fg: col.fg),
+                _CommentsPanel(novelId: novelId, chapterIndex: chapterIndex, fg: col.fg),
                 const SizedBox(height: 16),
                 Center(
                   child: Text('vuốt tiếp để sang chương sau →',
@@ -959,6 +961,158 @@ class _EndPanelState extends ConsumerState<_EndPanel> {
             },
           ),
         ]),
+      ]),
+    );
+  }
+}
+
+/// Bình luận cuối chương — nhóm bạn đọc chung thả cảm nghĩ, người đọc sau tới
+/// chương này thì thấy. Dùng màu fg của reader (không lấy ColorScheme của app).
+class _CommentsPanel extends ConsumerStatefulWidget {
+  final int novelId;
+  final int chapterIndex;
+  final Color fg;
+  const _CommentsPanel({required this.novelId, required this.chapterIndex, required this.fg});
+  @override
+  ConsumerState<_CommentsPanel> createState() => _CommentsPanelState();
+}
+
+class _CommentsPanelState extends ConsumerState<_CommentsPanel> {
+  final _input = TextEditingController();
+  bool _sending = false;
+
+  @override
+  void dispose() {
+    _input.dispose();
+    super.dispose();
+  }
+
+  Future<void> _send() async {
+    final text = _input.text.trim();
+    if (text.isEmpty || _sending) return;
+    setState(() => _sending = true);
+    try {
+      await addChapterComment(widget.novelId, widget.chapterIndex, text);
+      _input.clear();
+      ref.invalidate(
+          chapterCommentsProvider(ChapterKey(widget.novelId, widget.chapterIndex)));
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final fg = widget.fg;
+    final key = ChapterKey(widget.novelId, widget.chapterIndex);
+    final comments = ref.watch(chapterCommentsProvider(key)).value ?? const <Rec>[];
+    final uid = sb.auth.currentUser?.id;
+    final admin = ref.watch(isAdminProvider).value == true;
+    final soft = TextStyle(color: fg.withValues(alpha: 0.45), fontSize: 11);
+    return Container(
+      margin: const EdgeInsets.only(top: 12),
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      decoration: BoxDecoration(
+        border: Border.all(color: fg.withValues(alpha: 0.15)),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(
+          comments.isEmpty ? 'BÌNH LUẬN' : 'BÌNH LUẬN (${comments.length})',
+          style: TextStyle(
+              color: fg.withValues(alpha: 0.45),
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.8),
+        ),
+        if (comments.isEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text('Chưa ai bình luận chương này.',
+                style: TextStyle(color: fg.withValues(alpha: 0.55), fontSize: 13)),
+          ),
+        for (final c in comments)
+          Padding(
+            padding: const EdgeInsets.only(top: 10),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                Expanded(
+                  child: Text(
+                    '${c['display_name'] ?? 'Ẩn danh'} · ${timeAgo(c['created_at'])}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: soft.copyWith(fontWeight: FontWeight.w600),
+                  ),
+                ),
+                if (c['user_id'] == uid || admin)
+                  GestureDetector(
+                    onTap: () async {
+                      await deleteChapterComment(c['id'] as int);
+                      ref.invalidate(chapterCommentsProvider(key));
+                    },
+                    child: Icon(Icons.close_rounded,
+                        size: 14, color: fg.withValues(alpha: 0.4)),
+                  ),
+              ]),
+              const SizedBox(height: 3),
+              Text(c['content'] ?? '',
+                  style: TextStyle(color: fg.withValues(alpha: 0.85), fontSize: 14, height: 1.45)),
+            ]),
+          ),
+        const SizedBox(height: 12),
+        if (uid == null)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: OutlinedButton(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: fg.withValues(alpha: 0.85),
+                side: BorderSide(color: fg.withValues(alpha: 0.3)),
+              ),
+              onPressed: () => context.push('/login'),
+              child: const Text('Đăng nhập để bình luận'),
+            ),
+          )
+        else
+          Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+            Expanded(
+              child: TextField(
+                controller: _input,
+                maxLines: 3,
+                minLines: 1,
+                maxLength: 2000,
+                style: TextStyle(color: fg.withValues(alpha: 0.9), fontSize: 14),
+                cursorColor: fg.withValues(alpha: 0.7),
+                decoration: InputDecoration(
+                  counterText: '', // khỏi hiện 0/2000 chật chỗ
+                  isDense: true,
+                  hintText: 'Cảm nghĩ về chương này…',
+                  hintStyle: TextStyle(color: fg.withValues(alpha: 0.4), fontSize: 14),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: fg.withValues(alpha: 0.25)),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: fg.withValues(alpha: 0.55)),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            IconButton(
+              tooltip: 'Gửi',
+              onPressed: _sending ? null : _send,
+              icon: _sending
+                  ? SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: fg.withValues(alpha: 0.6)))
+                  : Icon(Icons.send_rounded, size: 20, color: fg.withValues(alpha: 0.7)),
+            ),
+          ]),
       ]),
     );
   }

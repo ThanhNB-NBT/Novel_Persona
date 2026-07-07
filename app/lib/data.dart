@@ -634,6 +634,39 @@ Future<int> retranslateAll(int novelId) async =>
 Future<void> requestToc(int novelId) =>
     sb.rpc('request_toc', params: {'p_novel_id': novelId});
 
+// ---------- Bình luận chương ----------
+
+/// Bình luận của 1 chương, cũ → mới (đọc như hội thoại).
+final chapterCommentsProvider =
+    FutureProvider.autoDispose.family<List<Rec>, ChapterKey>((ref, k) async {
+  return List<Rec>.from(
+    await sb
+        .from('chapter_comments')
+        .select('id, user_id, display_name, content, created_at')
+        .eq('novel_id', k.novelId)
+        .eq('chapter_index', k.index)
+        .order('created_at', ascending: true),
+  );
+});
+
+Future<void> addChapterComment(int novelId, int index, String content) async {
+  final u = sb.auth.currentUser;
+  if (u == null) return;
+  // snapshot tên hiển thị — RLS profiles không cho người khác đọc tên mình sau này
+  final prof =
+      await sb.from('profiles').select('display_name').eq('id', u.id).maybeSingle();
+  await sb.from('chapter_comments').insert({
+    'novel_id': novelId,
+    'chapter_index': index,
+    'user_id': u.id,
+    'display_name': prof?['display_name'] ?? u.email,
+    'content': content,
+  });
+}
+
+Future<void> deleteChapterComment(int id) =>
+    sb.from('chapter_comments').delete().eq('id', id);
+
 // ---------- Glossary ----------
 
 /// Term của truyện + term global; gồm cả gợi ý chưa duyệt (cần login mới thấy).
