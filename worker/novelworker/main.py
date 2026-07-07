@@ -25,6 +25,9 @@ from .crawler import sync
 from .translator import worker as translator_worker
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+# httpx INFO log MỌI request Supabase (~10 dòng/10s/container) → log Docker phình
+# chiếm đĩa VPS; chỉ giữ cảnh báo/lỗi. Log nghiệp vụ của worker không bị ảnh hưởng.
+logging.getLogger("httpx").setLevel(logging.WARNING)
 log = logging.getLogger("main")
 
 
@@ -101,13 +104,14 @@ def run_crawler() -> None:
             interval_min = _num("crawl_interval_min", interval_min)
             max_new = _num("discover_new_per_cycle", max_new)
             refresh_n = _num("refresh_per_cycle", refresh_n)
+        pending_fetch = _novels_needing_fetch()  # 1 query/tick dùng chung mọi adapter
         for adapter in adapters.values():
             try:
                 # 1) tải nội dung chương đang chờ dịch — NGƯỜI ĐỌC TRƯỚC, chạy mỗi tick.
                 # Discovery/refresh (bước 2, có thể cả tiếng) cũng tự nhường giữa chừng
                 # khi có chương ưu tiên cao chờ tải (sync.reader_fetch_waiting).
                 sid = adapter.source_row.get("id")
-                for nv in _novels_needing_fetch():
+                for nv in pending_fetch:
                     if nv["source_id"] != sid:
                         continue  # để adapter đúng nguồn xử lý ở vòng lặp của nó
                     # Mục lục chỉ cần sync khi có chương queued THIẾU stub nguồn (lần

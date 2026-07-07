@@ -204,9 +204,9 @@ def _pop_summary(text: str) -> tuple[str, str | None]:
     return text[:idx].rstrip(), summary or None
 
 
-# Trần chunk theo TRẦN OUTPUT chứ không phải context: 6k chữ Hán → bản Việt ~3.4x ≈ 20k
-# ký tự ≈ sát max_tokens 8192. Chunk 10k cũ có thể bị cắt ngầm ở chương dài.
-CHUNK_LIMIT = 6_000
+# Trần chunk theo TRẦN OUTPUT chứ không phải context: bản Việt ~3.4x số ký tự Hán.
+# 6k từng sát max_tokens 8192 (đã gặp "Output bị cắt" trên model fallback) → 5k cho có biên.
+CHUNK_LIMIT = 5_000
 
 # 2-pass thích ứng: chốt tên riêng trước khi dịch ở arc mở đầu, tự tắt khi hết tên mới.
 NEW_NAME_LOW = 2        # chương ra ≤ ngần này tên mới coi là "ít"
@@ -514,6 +514,7 @@ def _consume_loop(worker_id: str, slot: int, paused: threading.Event, poll_secon
     """Vòng lặp 1 luồng dịch. `slot` chọn key nvidia (2 key → 2 lane song song).
     `paused` set = đã chạm trần chi phí ngày → nghỉ."""
     llm = build_chain(slot)  # ghim 1 key nvidia cho luồng này, tái dùng suốt vòng đời
+    idle_sleep = poll_seconds
     while True:
         if paused.is_set():
             time.sleep(30)
@@ -524,8 +525,12 @@ def _consume_loop(worker_id: str, slot: int, paused: threading.Event, poll_secon
         try:
             job = db.claim_next_job(worker_id)
             if not job:
-                time.sleep(poll_seconds)
+                # hàng đợi trống → giãn dần poll tới 15s (đỡ ~50k RPC/ngày lúc rảnh);
+                # có job lại về poll_seconds ngay — người đọc không phải chờ thêm
+                time.sleep(idle_sleep)
+                idle_sleep = min(idle_sleep + poll_seconds, 15.0)
                 continue
+            idle_sleep = poll_seconds
             log.info("[%s] Nhận job #%s type=%s novel=%s", worker_id, job["id"], job["type"], job["novel_id"])
             try:
                 HANDLERS[job["type"]](job, llm)

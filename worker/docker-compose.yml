@@ -4,15 +4,25 @@
 # Bật:  docker compose up -d --build      (cần file .env cạnh đây — xem .env.example)
 # Log:  docker compose logs -f
 # Tắt:  docker compose down
+# Log Docker giới hạn 10MB×3/service — không giới hạn là log ăn dần hết đĩa VPS.
+x-common: &common
+  image: novelworker
+  env_file: .env
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
 services:
   crawler:
-    build: .
+    <<: *common
+    build: .          # chỉ crawler build; translator tái dùng image → build 1 lần thay vì 2
     command: python -m novelworker.main crawl
-    env_file: .env
-    restart: unless-stopped
 
   translator:
-    build: .
+    <<: *common
     command: python -m novelworker.main translate
-    env_file: .env
-    restart: unless-stopped
+    depends_on:
+      - crawler       # đảm bảo image đã build trước khi translator chạy
