@@ -54,3 +54,7 @@ out/
 *.pyo
 
 .codegraph/
+
+# so tay VPS chua IP/ha tang — repo public, khong commit
+worker/VPS.md
+worker/vps.bat
