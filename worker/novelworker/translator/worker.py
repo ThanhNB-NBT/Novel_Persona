@@ -9,7 +9,7 @@ import time
 
 from .. import db
 from ..config import settings
-from . import prompts
+from . import hanviet, prompts
 from .providers import build_chain
 
 log = logging.getLogger(__name__)
@@ -223,6 +223,9 @@ def _merge_names(terms: list[dict], existing_zh: set[str], names: list[dict]) ->
         zh, vi = nm.get("zh"), nm.get("vi")
         if not zh or not vi or zh in existing_zh:
             continue
+        # LLM nhỏ hay phiên âm bừa kiểu pinyin (罗森→"Lao Sen") → đối chiếu bảng tra
+        # Hán-Việt, sai thì thay ("La Sâm") TRƯỚC khi vào prompt/DB
+        vi = nm["vi"] = hanviet.reconcile(zh, vi, nm.get("type")) or vi
         existing_zh.add(zh)
         terms.append({
             "term_zh": zh, "correct_vi": vi,
