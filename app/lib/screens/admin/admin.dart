@@ -819,7 +819,7 @@ class _NovelsTabState extends ConsumerState<_NovelsTab> {
       },
       emptyText: 'Chưa có truyện nào.',
       builder: (novels) {
-        // lọc client-side trên 200 truyện đã tải — đủ nhanh, khỏi query
+        // lọc client-side trên toàn bộ truyện đã tải (provider page đủ) — đủ nhanh, khỏi query
         final q = _q.trim().toLowerCase();
         final list = q.isEmpty
             ? novels
@@ -916,7 +916,9 @@ class _StatsCard extends ConsumerWidget {
         ),
         child: Column(children: [
           Row(children: [
-            cell(_fmt(s['visible'] ?? 0), 'truyện hiện', color: cs.primary),
+            // "hiện ở Khám phá" = canonical + không ẩn (mỗi truyện 1 bản) — KHÁC chip
+            // "Hiển thị" bên dưới (đếm mọi bản ghi không ẩn, kể cả bản trùng nguồn khác)
+            cell(_fmt(s['visible'] ?? 0), 'hiện ở Khám phá', color: cs.primary),
             cell(_fmt(s['novels'] ?? 0), 'tổng bản ghi'),
             cell(_fmt(s['completed'] ?? 0), 'hoàn thành'),
             cell(_fmt(s['metaPending'] ?? 0), 'chờ dịch tên',

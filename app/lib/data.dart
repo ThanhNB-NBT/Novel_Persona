@@ -681,17 +681,24 @@ final isAdminProvider = FutureProvider.autoDispose<bool>((ref) async {
 
 /// Danh sách truyện cho màn quản trị — GỒM cả truyện đã ẩn.
 final adminNovelsProvider = FutureProvider.autoDispose<List<Rec>>((ref) async {
-  return List<Rec>.from(
-    await sb
-        .from('novels')
-        .select(
-          'id, title_vi, title_zh, author_vi, status, hidden, source_id, is_canonical, '
-          'meta_translated, source_rank, last_chapter_at, updated_at, '
-          'chapter_count_source, chapter_count_translated, cover_url, sources(name)',
-        )
-        .order('updated_at', ascending: false)
-        .limit(200),
-  );
+  // tải ĐỦ mọi truyện, page qua trần 1000 dòng/query của PostgREST — limit(200) cũ
+  // làm số đếm chip Tất cả/Hiển thị/Ẩn lệch với thống kê (đếm count toàn DB)
+  final out = <Rec>[];
+  for (var from = 0;; from += 1000) {
+    final batch = List<Rec>.from(
+      await sb
+          .from('novels')
+          .select(
+            'id, title_vi, title_zh, author_vi, status, hidden, source_id, is_canonical, '
+            'meta_translated, source_rank, last_chapter_at, updated_at, '
+            'chapter_count_source, chapter_count_translated, cover_url, sources(name)',
+          )
+          .order('updated_at', ascending: false)
+          .range(from, from + 999),
+    );
+    out.addAll(batch);
+    if (batch.length < 1000) return out;
+  }
 });
 
 /// Thống kê toàn app cho tab Truyện (admin): đếm bằng count head — không kéo dữ liệu.
