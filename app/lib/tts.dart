@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 
@@ -42,11 +44,23 @@ class TtsPlayer {
     if (_inited) return;
     _inited = true;
     await _tts.awaitSpeakCompletion(true); // speak() trả về khi ĐỌC XONG
-    await _tts.setLanguage('vi-VN');
-    await _tts.setSpeechRate(rate);
-    // iOS: phát cả khi máy gạt im lặng + duy trì audio session nền
-    await _tts.setIosAudioCategory(IosTextToSpeechAudioCategory.playback,
-        [IosTextToSpeechAudioCategoryOptions.mixWithOthers]);
+    // Từng bước config bọc riêng: máy thiếu giọng vi-VN / lệnh không có trên nền
+    // tảng đó thì vẫn đọc bằng giọng mặc định — đừng để chết im trước khi speak
+    // (bug 2026-07-08: setIosAudioCategory gọi trên Android nổ → không ra tiếng).
+    try {
+      await _tts.setLanguage('vi-VN');
+    } catch (_) {}
+    try {
+      await _tts.setSpeechRate(rate);
+      await _tts.setVolume(1.0);
+    } catch (_) {}
+    if (!kIsWeb && Platform.isIOS) {
+      // iOS: phát cả khi máy gạt im lặng + duy trì audio session nền
+      try {
+        await _tts.setIosAudioCategory(IosTextToSpeechAudioCategory.playback,
+            [IosTextToSpeechAudioCategoryOptions.mixWithOthers]);
+      } catch (_) {}
+    }
   }
 
   Future<void> start(int novelId, int chapterIndex) async {
@@ -115,7 +129,12 @@ class TtsPlayer {
       state.value = TtsState(novelId: novelId, chapterIndex: index, playing: true);
       for (_at = from; _at < _paras.length; _at++) {
         if (gen != _gen) return;
-        await _tts.speak(_paras[_at]);
+        try {
+          await _tts.speak(_paras[_at]);
+        } catch (_) {
+          await stop(); // engine TTS lỗi giữa chừng → tắt gọn thay vì kẹt im
+          return;
+        }
       }
       if (gen != _gen) return;
       index += 1; // hết chương → đọc tiếp chương sau
