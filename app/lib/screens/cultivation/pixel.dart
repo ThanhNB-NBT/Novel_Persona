@@ -363,6 +363,36 @@ const _sprites = <String, List<String>>{
     '............',
     '............',
   ],
+  // y phục / đạo bào (đai lưng sáng giữa)
+  'robe': [
+    '............',
+    '...kk..kk...',
+    '..kABkkBAk..',
+    '.kAABBBBAAk.',
+    '.kAkBBBBkAk.',
+    '.kkkBwwBkkk.',
+    '...kBBBBk...',
+    '...kBBBBk...',
+    '..kABBBBAk..',
+    '..kABBBBAk..',
+    '..kkkkkkkk..',
+    '............',
+  ],
+  // hài / ngoa (nhìn nghiêng, đế sẫm)
+  'boot': [
+    '............',
+    '....kkkk....',
+    '...kABBAk...',
+    '...kABBAk...',
+    '...kABBAk...',
+    '...kABBAkk..',
+    '...kABBBBkk.',
+    '...kABBBBBk.',
+    '..kkkkkkkkk.',
+    '..kCCCCCCk..',
+    '...kkkkkk...',
+    '............',
+  ],
   // rương quà trong chương
   'gift': [
     '............',
