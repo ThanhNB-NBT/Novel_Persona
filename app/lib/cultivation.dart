@@ -43,7 +43,24 @@ String linhCanTier(int lc) => switch (lc) {
 
 const cultTypeNames = {
   'congphap': 'Công pháp', 'danduoc': 'Đan dược', 'linhthach': 'Linh thạch',
-  'vukhi': 'Vũ khí', 'phapbao': 'Pháp bảo', 'phapchu': 'Pháp chú',
+  'vukhi': 'Vũ khí', 'yphuc': 'Y phục', 'giay': 'Hài',
+  'phapbao': 'Pháp bảo', 'phapchu': 'Pháp chú',
+};
+
+/// Chủng tộc — chọn MỘT lần khi bắt đầu tu (migration 044).
+/// (tên, thiên hướng hiển thị trong sheet chọn tộc)
+const raceNames = {'nhan': 'Nhân tộc', 'yeu': 'Yêu tộc', 'ma': 'Ma tộc', 'linh': 'Linh tộc'};
+const raceDescs = {
+  'nhan': 'Đạo tâm kiên định — tỷ lệ đột phá +5%.',
+  'yeu': 'Thể phách cường hãn — công kích & khí huyết ×1.3.',
+  'ma': 'Tu luyện tà tốc — tốc độ ×1.10, đột phá −5%.',
+  'linh': 'Linh hồn thanh tịnh — thần thức ×1.3, thất bại đột phá chỉ mất nửa tu vi.',
+};
+
+/// Tên chỉ số (khớp key trong cult_stats).
+const statNames = {
+  'atk': 'Công Kích', 'def': 'Phòng Ngự', 'hp': 'Khí Huyết',
+  'agi': 'Thân Pháp', 'than_thuc': 'Thần Thức',
 };
 
 /// Lời dẫn cơ duyên khi nhận quà — chọn tất định theo giftHash, mỗi chương một câu.
@@ -103,6 +120,12 @@ String cultEffectText(Rec it) {
   final e = (it['effect'] as Map?) ?? const {};
   if (e['rate_pct'] != null) return '+${e['rate_pct']}% tốc độ tu luyện';
   if (e['bt_pct'] != null) return '+${e['bt_pct']}% tỷ lệ đột phá';
+  if (e['atk'] != null) return 'công kích +${e['atk']}';
+  if (e['def'] != null) {
+    return 'phòng ngự +${e['def']}'
+        '${e['hp'] != null ? ' · khí huyết +${e['hp']}' : ''}';
+  }
+  if (e['agi'] != null) return 'thân pháp +${e['agi']}';
   return switch (e['kind']) {
     'linhcan' => 'linh căn +${e['add']} vĩnh viễn',
     'buff' => '+${e['pct']}% tốc độ trong ${e['hours']} giờ',
@@ -146,3 +169,8 @@ Future<Rec> cultEquip(int itemId) async =>
 
 Future<Rec> cultAdvance() async =>
     Map<String, dynamic>.from(await sb.rpc('cult_advance') as Map);
+
+/// Chọn chủng tộc — server chặn đổi lại sau khi đã chọn.
+Future<Rec> cultSetRace(String race) async =>
+    Map<String, dynamic>.from(
+        await sb.rpc('cult_set_race', params: {'p_race': race}) as Map);

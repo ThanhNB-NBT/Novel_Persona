@@ -1393,15 +1393,17 @@ class _CultTab extends ConsumerWidget {
           children: [
             Text('${items.length} vật phẩm trong catalog',
                 style: t.labelMedium?.copyWith(color: cs.onSurfaceVariant)),
+            // thu gọn theo loại — catalog ~90 món, trải phẳng cuộn mỏi tay
             for (final type in cultTypeNames.keys)
-              if (byType[type] case final list?) ...[
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(2, 16, 2, 6),
-                  child: Text(
+              if (byType[type] case final list?)
+                ExpansionTile(
+                  tilePadding: const EdgeInsets.symmetric(horizontal: 4),
+                  shape: const Border(), // bỏ viền mặc định lúc mở cho đỡ rối
+                  title: Text(
                       '${cultTypeNames[type]!.toUpperCase()} (${list.length})',
                       style: t.labelMedium?.copyWith(
                           color: cs.onSurfaceVariant, letterSpacing: 0.8)),
-                ),
+                  children: [
                 for (final it in list)
                   Card(
                     margin: const EdgeInsets.only(bottom: 6),
@@ -1453,7 +1455,8 @@ class _CultTab extends ConsumerWidget {
                       ]),
                     ),
                   ),
-              ],
+                  ],
+                ),
           ],
         );
       },

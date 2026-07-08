@@ -94,9 +94,20 @@ class _CultivationScreenState extends ConsumerState<CultivationScreen> {
             child: ListView(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 120), // né dock
               children: [
+                // chưa chọn chủng tộc → mời chọn (một lần duy nhất, server chặn đổi)
+                if (st['race'] == null) ...[
+                  _RacePickerCard(),
+                  const SizedBox(height: 16),
+                ],
                 _RealmCard(st: st, exp: _exp, onAdvance: () => _advance(st)),
                 const SizedBox(height: 16),
                 _EquipRow(st: st),
+                const SizedBox(height: 16),
+                Text('CHỈ SỐ',
+                    style: t.labelMedium?.copyWith(
+                        color: cs.onSurfaceVariant, letterSpacing: 0.8)),
+                const SizedBox(height: 8),
+                _StatsRow(stats: (st['stats'] as Map?) ?? const {}),
                 const SizedBox(height: 16),
                 Text('KHO ĐỒ',
                     style: t.labelMedium?.copyWith(
@@ -208,10 +219,13 @@ class _RealmCard extends StatelessWidget {
           const SizedBox(height: 10),
           Text('${realmNames[realm - 1]} · tầng $stage',
               style: t.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
-          // đạo hiệu + phẩm linh căn + hệ ngũ hành
+          // đạo hiệu + chủng tộc + phẩm linh căn + hệ ngũ hành
           Text(
-              '「${daoTitles[realm - 1]}」 · ${linhCanTier((st['linh_can'] as num).toInt())}'
+              '「${daoTitles[realm - 1]}」'
+              '${st['race'] != null ? ' · ${raceNames[st['race']]}' : ''}'
+              ' · ${linhCanTier((st['linh_can'] as num).toInt())}'
               '${st['element'] != null ? ' · hệ ${elementNames[st['element']]}' : ''}',
+              textAlign: TextAlign.center,
               style: t.labelMedium?.copyWith(color: cs.onSurfaceVariant)),
           Builder(builder: (_) {
             // công pháp hợp hệ linh căn (hoặc hệ Vạn Pháp) → server đã ×1.3, báo cho user biết
@@ -1015,70 +1029,157 @@ class _BuffCountdownState extends State<_BuffCountdown> {
   }
 }
 
-/// Hàng 4 slot trang bị: công pháp / vũ khí / pháp bảo / pháp chú.
+/// Mời chọn chủng tộc (hiện khi race null) — chọn MỘT lần, server chặn đổi.
+class _RacePickerCard extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final cs = Theme.of(context).colorScheme;
+    final t = Theme.of(context).textTheme;
+    return Card(
+      color: cs.primaryContainer,
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('Chọn xuất thân',
+              style: t.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700, color: cs.onPrimaryContainer)),
+          Text('Chủng tộc định thiên hướng cả đời tu — chọn rồi không đổi được.',
+              style: t.bodyMedium?.copyWith(color: cs.onPrimaryContainer)),
+          const SizedBox(height: 10),
+          for (final r in raceNames.keys)
+            Card(
+              margin: const EdgeInsets.only(bottom: 6),
+              child: ListTile(
+                dense: true,
+                title: Text(raceNames[r]!,
+                    style: t.bodyMedium?.copyWith(fontWeight: FontWeight.w700)),
+                subtitle: Text(raceDescs[r]!, style: t.labelMedium),
+                trailing: const Icon(Icons.chevron_right_rounded),
+                onTap: () async {
+                  final messenger = ScaffoldMessenger.of(context);
+                  try {
+                    await cultSetRace(r);
+                    ref.invalidate(cultStateProvider);
+                    messenger.showSnackBar(SnackBar(
+                        content: Text('Đã nhập ${raceNames[r]} — bắt đầu tu hành!')));
+                  } catch (e) {
+                    messenger.showSnackBar(SnackBar(content: Text('$e')));
+                  }
+                },
+              ),
+            ),
+        ]),
+      ),
+    );
+  }
+}
+
+/// 5 chỉ số cơ bản: nền theo cảnh giới + tộc + trang bị (server tính, cult_stats).
+class _StatsRow extends StatelessWidget {
+  final Map stats;
+  const _StatsRow({required this.stats});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final t = Theme.of(context).textTheme;
+    return Row(children: [
+      for (final key in statNames.keys) ...[
+        Expanded(
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            decoration: BoxDecoration(
+              color: cs.surface,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: cs.outlineVariant),
+            ),
+            child: Column(children: [
+              Text('${stats[key] ?? '—'}',
+                  style: t.labelLarge?.copyWith(
+                      fontWeight: FontWeight.w800, color: cs.primary)),
+              Text(statNames[key]!,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: t.labelSmall
+                      ?.copyWith(fontSize: 8.5, color: cs.onSurfaceVariant)),
+            ]),
+          ),
+        ),
+        if (key != 'than_thuc') const SizedBox(width: 6),
+      ],
+    ]);
+  }
+}
+
+/// 6 slot trang bị (2 hàng): công pháp/vũ khí/pháp bảo · pháp chú/y phục/hài.
 /// Dưới tên hiện bonus của món đó; tap món đang đeo → popup chi tiết.
 class _EquipRow extends ConsumerWidget {
   final Rec st;
   const _EquipRow({required this.st});
 
-  /// Bonus ngắn gọn cho từng món: công pháp ×N, vũ khí/pháp bảo +N%, pháp chú +N% ĐP.
+  /// Bonus ngắn gọn: công pháp ×N, pháp bảo +N%, pháp chú +N% ĐP, đồ chỉ số +N.
   static String _bonus(Rec it) {
     final e = (it['effect'] as Map?) ?? const {};
     if (e['rate_pct'] != null) return '+${e['rate_pct']}%';
     if (e['bt_pct'] != null) return '+${e['bt_pct']}% ĐP';
+    if (e['atk'] != null) return '+${e['atk']} Công';
+    if (e['def'] != null) return '+${e['def']} Thủ';
+    if (e['agi'] != null) return '+${e['agi']} Thân';
     return '×${const {1: 1.5, 2: 3, 3: 6, 4: 12, 5: 24}[it['grade']] ?? 1}';
+  }
+
+  Widget _slot(BuildContext context, WidgetRef ref, String type) {
+    final cs = Theme.of(context).colorScheme;
+    final t = Theme.of(context).textTheme;
+    final it = ((st['equipped'] as Rec?) ?? const {})[type] as Rec?;
+    return InkWell(
+      borderRadius: BorderRadius.circular(14),
+      onTap: it == null ? null : () => _showItemSheet(context, ref, it, null),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: BoxDecoration(
+          color: cs.surface,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+              color: it != null
+                  ? gradeColor(it['grade'] as int).withValues(alpha: 0.7)
+                  : cs.outlineVariant),
+        ),
+        child: Column(children: [
+          it != null
+              ? PixelIcon(it['pixel'] as String, grade: it['grade'] as int, size: 34)
+              : Icon(Icons.add_rounded, size: 34, color: cs.outlineVariant),
+          const SizedBox(height: 4),
+          Text(it?['name'] as String? ?? cultTypeNames[type]!,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: t.labelSmall?.copyWith(
+                  fontSize: 9.5,
+                  color: it != null ? cs.onSurface : cs.onSurfaceVariant)),
+          if (it != null)
+            Text(_bonus(it),
+                style: t.labelSmall?.copyWith(
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w800,
+                    color: gradeColor(it['grade'] as int))),
+        ]),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final cs = Theme.of(context).colorScheme;
-    final t = Theme.of(context).textTheme;
-    final eq = (st['equipped'] as Rec?) ?? const {};
-    return Row(children: [
-      for (final type in ['congphap', 'vukhi', 'phapbao', 'phapchu']) ...[
-        Expanded(
-          child: Builder(builder: (context) {
-            final it = eq[type] as Rec?;
-            return InkWell(
-              borderRadius: BorderRadius.circular(14),
-              onTap: it == null ? null : () => _showItemSheet(context, ref, it, null),
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 10),
-                decoration: BoxDecoration(
-                  color: cs.surface,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(
-                      color: it != null
-                          ? gradeColor(it['grade'] as int).withValues(alpha: 0.7)
-                          : cs.outlineVariant),
-                ),
-                child: Column(children: [
-                  it != null
-                      ? PixelIcon(it['pixel'] as String,
-                          grade: it['grade'] as int, size: 34)
-                      : Icon(Icons.add_rounded,
-                          size: 34, color: cs.outlineVariant),
-                  const SizedBox(height: 4),
-                  Text(it?['name'] as String? ?? cultTypeNames[type]!,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      textAlign: TextAlign.center,
-                      style: t.labelSmall?.copyWith(
-                          fontSize: 9.5,
-                          color: it != null ? cs.onSurface : cs.onSurfaceVariant)),
-                  if (it != null)
-                    Text(_bonus(it),
-                        style: t.labelSmall?.copyWith(
-                            fontSize: 9.5,
-                            fontWeight: FontWeight.w800,
-                            color: gradeColor(it['grade'] as int))),
-                ]),
-              ),
-            );
-          }),
-        ),
-        if (type != 'phapchu') const SizedBox(width: 8),
-      ],
+    Widget row(List<String> types) => Row(children: [
+          for (final type in types) ...[
+            Expanded(child: _slot(context, ref, type)),
+            if (type != types.last) const SizedBox(width: 8),
+          ],
+        ]);
+    return Column(children: [
+      row(const ['congphap', 'vukhi', 'phapbao']),
+      const SizedBox(height: 8),
+      row(const ['phapchu', 'yphuc', 'giay']),
     ]);
   }
 }
