@@ -1,3 +1,4 @@
+import 'dart:async' show unawaited;
 import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart';
@@ -40,13 +41,40 @@ class TtsPlayer {
     await _tts.setSpeechRate(r);
   }
 
-  Future<void> _init() async {
-    if (_inited) return;
-    _inited = true;
-    await _tts.awaitSpeakCompletion(true); // speak() trả về khi ĐỌC XONG
+  /// null = ổn; chuỗi = cảnh báo cho user (thiếu giọng Việt, engine hỏng...).
+  /// Trả về từ _init để reader hiện snackbar — TTS "câm" thường do máy thiếu
+  /// giọng vi-VN chứ không phải code, phải nói ra chứ đừng im.
+  Future<String?> _init() async {
+    if (_inited) return null;
     // Từng bước config bọc riêng: máy thiếu giọng vi-VN / lệnh không có trên nền
     // tảng đó thì vẫn đọc bằng giọng mặc định — đừng để chết im trước khi speak
     // (bug 2026-07-08: setIosAudioCategory gọi trên Android nổ → không ra tiếng).
+    String? warn;
+    try {
+      await _tts.awaitSpeakCompletion(true); // speak() trả về khi ĐỌC XONG
+    } catch (_) {}
+    if (!kIsWeb && Platform.isAndroid) {
+      // Máy Android hay câm vì: engine mặc định (Samsung TTS...) không có giọng
+      // tiếng Việt. Thử engine hiện tại → không có vi thì ép sang Google TTS →
+      // vẫn không có thì báo user cài giọng Việt.
+      try {
+        var ok = await _tts.isLanguageAvailable('vi-VN') == true;
+        if (!ok) {
+          final engines = List.from(await _tts.getEngines as List? ?? const []);
+          if (engines.contains('com.google.android.tts')) {
+            await _tts.setEngine('com.google.android.tts');
+            ok = await _tts.isLanguageAvailable('vi-VN') == true;
+          }
+        }
+        if (!ok) {
+          warn = 'Máy chưa có giọng đọc tiếng Việt. Cài "Giọng nói Google" '
+              '(Google TTS) rồi tải dữ liệu giọng Tiếng Việt trong '
+              'Cài đặt > Trợ năng > Chuyển văn bản thành giọng nói.';
+        }
+      } catch (e) {
+        warn = 'Không kiểm tra được engine TTS: $e';
+      }
+    }
     try {
       await _tts.setLanguage('vi-VN');
     } catch (_) {}
@@ -61,14 +89,19 @@ class TtsPlayer {
             [IosTextToSpeechAudioCategoryOptions.mixWithOthers]);
       } catch (_) {}
     }
+    _inited = warn == null; // còn cảnh báo thì lần sau kiểm lại (user vừa cài giọng)
+    return warn;
   }
 
-  Future<void> start(int novelId, int chapterIndex) async {
-    await _init();
+  /// Bắt đầu đọc; trả về cảnh báo (nếu có) để UI hiện — vẫn thử phát bằng
+  /// giọng mặc định chứ không chặn.
+  Future<String?> start(int novelId, int chapterIndex) async {
+    final warn = await _init();
     await stop();
     final gen = ++_gen;
     state.value = TtsState(novelId: novelId, chapterIndex: chapterIndex, playing: true);
-    await _playLoop(gen, novelId, chapterIndex, fromPara: 0);
+    unawaited(_playLoop(gen, novelId, chapterIndex, fromPara: 0));
+    return warn;
   }
 
   /// Dừng tạm — giữ vị trí để resume.
@@ -130,7 +163,9 @@ class TtsPlayer {
       for (_at = from; _at < _paras.length; _at++) {
         if (gen != _gen) return;
         try {
-          await _tts.speak(_paras[_at]);
+          // flutter_tts: 1 = ok, 0 = engine từ chối (thiếu giọng/engine chết)
+          final r = await _tts.speak(_paras[_at]);
+          if (r == 0) throw Exception('engine từ chối đọc');
         } catch (_) {
           await stop(); // engine TTS lỗi giữa chừng → tắt gọn thay vì kẹt im
           return;

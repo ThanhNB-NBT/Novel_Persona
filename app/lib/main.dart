@@ -11,6 +11,7 @@ import 'notify.dart';
 import 'theme.dart';
 import 'screens/admin/admin.dart';
 import 'screens/account/edit_profile.dart';
+import 'screens/cultivation/cultivation.dart';
 import 'screens/admin/errors.dart';
 import 'screens/novel/glossary.dart';
 import 'screens/account/login.dart';
@@ -48,6 +49,7 @@ final _router = GoRouter(routes: [
   GoRoute(path: '/notifications', builder: (_, _) => const NotificationsScreen()),
   GoRoute(path: '/errors', builder: (_, _) => const ErrorLogScreen()),
   GoRoute(path: '/admin', builder: (_, _) => const AdminScreen()),
+  GoRoute(path: '/cultivation', builder: (_, _) => const CultivationScreen()),
   GoRoute(
     path: '/admin/novel/:id',
     builder: (_, s) => AdminNovelScreen(novelId: int.parse(s.pathParameters['id']!)),
