@@ -3,8 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../data.dart';
+import '../cultivation/pixel.dart';
 
-/// Sửa hồ sơ: tên hiển thị + chọn avatar preset (emoji, không cần upload ảnh).
+/// Sửa hồ sơ: tên hiển thị + chọn avatar preset (emoji, không cần upload ảnh)
+/// + chọn biểu tượng xoay của tab Tu Tiên (lưu cục bộ, đổi ngay tức thì).
 class EditProfileScreen extends ConsumerStatefulWidget {
   const EditProfileScreen({super.key});
   @override
@@ -82,6 +84,24 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                 runSpacing: 12,
                 children: [for (final e in avatarPresets) _avatarChoice(e, cs)],
               ),
+              const SizedBox(height: 24),
+              Text('Biểu tượng tab Tu Tiên',
+                  style: Theme.of(context).textTheme.labelLarge),
+              const SizedBox(height: 4),
+              Text('Đĩa xoay giữa thanh điều hướng — đổi là thấy ngay.',
+                  style: Theme.of(context).textTheme.bodySmall),
+              const SizedBox(height: 12),
+              // đổi ngay (lưu cục bộ) — không đợi nút Lưu như tên/avatar (server)
+              Consumer(builder: (context, ref, _) {
+                final cur = ref.watch(tabEmblemProvider);
+                return Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: [
+                    for (final e in tabEmblems) _emblemChoice(e, cur, cs, ref),
+                  ],
+                );
+              }),
               const SizedBox(height: 32),
               FilledButton(
                 onPressed: _saving ? null : _save,
@@ -134,6 +154,37 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
         ),
         alignment: Alignment.center,
         child: Text(emoji, style: const TextStyle(fontSize: 26)),
+      ),
+    );
+  }
+
+  /// Ô chọn emblem: đĩa nhấn giống hệt dock (xem trước), vòng nhấn khi chọn.
+  Widget _emblemChoice(String key, String cur, ColorScheme cs, WidgetRef ref) {
+    final sel = cur == key;
+    return InkWell(
+      customBorder: const CircleBorder(),
+      onTap: () => ref.read(tabEmblemProvider.notifier).set(key),
+      child: Container(
+        padding: const EdgeInsets.all(3),
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(
+              color: sel ? cs.primary : Colors.transparent, width: 2),
+        ),
+        child: Container(
+          width: 50,
+          height: 50,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [cs.primary, cs.primary.withValues(alpha: 0.8)]),
+            border: Border.all(color: cs.surface.withValues(alpha: 0.9), width: 2),
+          ),
+          alignment: Alignment.center,
+          child: PixelIcon(key, grade: 5, size: 26),
+        ),
       ),
     );
   }
