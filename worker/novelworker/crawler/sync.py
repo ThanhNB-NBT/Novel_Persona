@@ -463,8 +463,11 @@ def sync_chapter_list(
     if total > (row.get("chapter_count_source") or 0):
         now = db.utc_now()
         fields = {"chapter_count_source": total, "last_chapter_at": now, "updated_at": now}
-    if limit_stubs is None:
-        fields["toc_synced_at"] = db.utc_now()  # đã có mục lục đầy đủ → refresh giữ tiếp
+    if limit_stubs is None and total > 0:
+        # đã có mục lục đầy đủ → refresh giữ tiếp. total=0 (nguồn chặn/đổi layout)
+        # thì KHÔNG đánh dấu — đánh dấu là request_toc no-op vĩnh viễn, truyện kẹt
+        # không bao giờ có mục lục dù nguồn sống lại.
+        fields["toc_synced_at"] = db.utc_now()
     if fields:
         db.sb().table("novels").update(fields).eq("id", novel_id).execute()
     return total, added

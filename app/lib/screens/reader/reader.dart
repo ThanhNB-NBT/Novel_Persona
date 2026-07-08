@@ -114,6 +114,12 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     // Mở reader = tín hiệu đọc thật → xin mục lục đầy đủ cho truyện lười.
     // RPC tự no-op khi truyện đã có mục lục nên gọi mỗi lần mở cũng vô hại.
     requestToc(novelId);
+    // Tự dịch TRƯỚC 15 chương ngay từ chương ĐANG mở (trước đây chỉ gọi lúc
+    // chuyển chương → đọc chương 1 xong không có gì dịch sẵn). pushReplacement
+    // tạo state mới nên initState chạy mỗi lần đổi chương — một chỗ này là đủ.
+    if (sb.auth.currentUser != null && (prefs.getBool('auto_translate_ahead') ?? true)) {
+      requestTranslation(novelId, chapterIndex + 15, priority: 5);
+    }
     _persistChapter(); // tiến độ cấp chương (server, cho "đọc tiếp")
     _percent.value = chapterPercent(novelId, chapterIndex);
     _scroll.addListener(_onScroll);
@@ -172,10 +178,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   void _goChapter(int index) {
     if (index < 1 || _navigating) return;
     _navigating = true; // chặn nhảy 2 lần; pushReplacement tạo state mới nên cờ tự reset
-    // Đang đọc → tự dịch TRƯỚC 15 chương ở ưu tiên cực cao (tắt được ở panel cuối chương).
-    if (sb.auth.currentUser != null && (prefs.getBool('auto_translate_ahead') ?? true)) {
-      requestTranslation(novelId, index + 15, priority: 5);
-    }
+    // tự dịch trước 15 chương: initState của màn mới lo (một chỗ duy nhất)
     context.pushReplacement('/novel/$novelId/read/$index');
   }
 
