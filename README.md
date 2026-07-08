@@ -107,6 +107,19 @@ flutter run -d emulator-5554 --dart-define-from-file=.env
 Máy thật: bật USB debugging, cắm cáp, `flutter devices` lấy device id rồi
 `flutter run -d 1e2fb47 --dart-define-from-file=.env`.
 
+**Cài bản release lên máy Android đang cắm cáp** (dùng hằng ngày, không cần PC chạy kèm):
+
+```bash
+cd app
+flutter run --release --dart-define-from-file=.env
+```
+
+Lệnh trên build + cài + mở app luôn; rút cáp thoải mái, app nằm lại máy như cài từ store.
+(Nhiều thiết bị thì thêm `-d <device-id>`. Chỉ muốn lấy file APK: `flutter build apk --release --dart-define-from-file=.env` → `build/app/outputs/flutter-apk/app-release.apk`.)
+
+**iPhone**: xem `app/IPHONE.md` — build IPA bằng GitHub Actions (workflow "iOS unsigned IPA",
+bấm Run workflow trên tab Actions) rồi cài qua SideStore.
+
 Tài khoản demo: xem `worker/seed_users.py` (đăng ký trong app đã tắt).
 Tài khoản admin có màn **Quản trị** trong Cài đặt: thống kê kho, hàng đợi worker,
 tìm/ẩn/xoá truyện, sức khỏe model LLM, báo cáo lỗi từ người đọc.
