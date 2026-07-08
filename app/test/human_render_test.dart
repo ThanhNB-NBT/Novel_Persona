@@ -20,11 +20,12 @@ void main() {
             child: Container(
               color: const Color(0xFF101826),
               padding: const EdgeInsets.all(12),
-              // 3 mốc cảnh giới = 3 kiểu chỗ ngồi: đá / đài sen / kiếm bay
+              // 4 tộc × mốc cảnh giới: Nhân/đá · Yêu/sen · Ma/sen · Linh/kiếm
               child: const Row(mainAxisSize: MainAxisSize.min, children: [
-                CultivatorPreview(realm: 2, cpCode: null),
-                CultivatorPreview(realm: 5, cpCode: 'cp_huyen_bang'),
-                CultivatorPreview(realm: 9, cpCode: 'cp_thien_cang'),
+                CultivatorPreview(realm: 2, race: 'nhan', cpCode: null),
+                CultivatorPreview(realm: 5, race: 'yeu', cpCode: 'cp_huyen_bang'),
+                CultivatorPreview(realm: 6, race: 'ma', cpCode: 'cp_liet_hoa'),
+                CultivatorPreview(realm: 9, race: 'linh', cpCode: 'cp_thai_co'),
               ]),
             ),
           ),
