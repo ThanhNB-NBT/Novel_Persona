@@ -666,10 +666,21 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
       final wv = (tm['wrong_vi'] ?? '').toString();
       final hit = cv == sel0 ||
           wv == sel0 ||
+          sel0.contains(zh) || // chọn trúng chữ Hán còn sót → term của chính nó
           (cv.isNotEmpty && (sel0.contains(cv) || cv.contains(sel0))) ||
           (wv.isNotEmpty && sel0.contains(wv));
       if (hit) sug.add(tm);
       if (sug.length >= 4) break;
+    }
+
+    // Chọn trúng chữ Hán sót trong bản dịch → tra bảng ra thẳng âm Hán-Việt để điền,
+    // kể cả khi glossary chưa có term (trước đây chọn chữ Hán là form trơ, không gợi gì).
+    String? hanFill;
+    if (sel0.isNotEmpty) {
+      final filled = sel0.replaceAllMapped(
+          RegExp(r'[㐀-䶿一-鿿]+'),
+          (m) => hanVietOf(m.group(0)!) ?? m.group(0)!);
+      if (filled != sel0) hanFill = filled;
     }
 
     Widget extend(IconData icon, String tip, VoidCallback onTap) => IconButton.filledTonal(
@@ -741,9 +752,22 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
             // gợi ý bản đúng từ glossary (chữ Trung → Hán-Việt) — bấm để điền.
             // Kèm chip "tra bảng ⇒" khi phiên âm Hán-Việt theo bảng KHÁC bản trong
             // glossary — người không biết tiếng Trung vẫn đối chiếu được chuẩn.
-            if (sug.isNotEmpty) ...[
+            if (sug.isNotEmpty || hanFill != null) ...[
               const SizedBox(height: 10),
               Wrap(spacing: 8, runSpacing: 6, children: [
+                if (hanFill case final hf?)
+                  ActionChip(
+                    visualDensity: VisualDensity.compact,
+                    side: BorderSide(color: cs.primary.withValues(alpha: 0.6)),
+                    label: Text('tra bảng ⇒ $hf',
+                        style: t.labelMedium?.copyWith(color: cs.primary)),
+                    onPressed: () {
+                      _correct.text = hf;
+                      _correct.selection =
+                          TextSelection.collapsed(offset: _correct.text.length);
+                      _correctFocus.requestFocus();
+                    },
+                  ),
                 for (final m in sug) ...[
                   ActionChip(
                     visualDensity: VisualDensity.compact,
