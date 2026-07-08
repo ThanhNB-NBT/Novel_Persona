@@ -578,11 +578,15 @@ final progressProvider = FutureProvider.autoDispose.family<int?, int>((
   novelId,
 ) async {
   ref.watch(authStateProvider);
-  if (sb.auth.currentUser == null) return null;
+  final uid = sb.auth.currentUser?.id;
+  if (uid == null) return null;
   final r = await sb
       .from('reading_progress')
       .select('chapter_index')
       .eq('novel_id', novelId)
+      // PHẢI lọc user: admin có policy đọc tiến độ mọi người → không lọc thì
+      // maybeSingle dính nhiều dòng → nổ → nút "Đọc tiếp" tụt về chương 1
+      .eq('user_id', uid)
       .maybeSingle();
   return r?['chapter_index'] as int?;
 });

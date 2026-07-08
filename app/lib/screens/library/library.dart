@@ -143,10 +143,11 @@ class _ReadingRow extends ConsumerWidget {
             // không chen vào hàng tên truyện nữa (tên được cả bề ngang).
             Column(children: [
               _menu(context, ref),
-              IconButton.filledTonal(
+              IconButton(
                 tooltip: 'Đọc tiếp chương $cur',
                 visualDensity: VisualDensity.compact,
-                icon: const Icon(Icons.play_arrow_rounded, size: 20),
+                // trần icon tam giác, không nền — nhẹ mắt, thẳng trục với 3 chấm
+                icon: Icon(Icons.play_arrow_rounded, size: 26, color: cs.primary),
                 // Đọc tiếp 1 chạm — vào thẳng chương đang dở, khỏi ghé trang thông tin
                 // (tap cả dòng vẫn mở trang thông tin như mọi nơi).
                 onPressed: () => context.push('/novel/${n['id']}/read/$cur'),
