@@ -412,6 +412,14 @@ def handle_chapter(job: dict, llm) -> None:
 
     text = "\n\n".join(parts)
 
+    # Lưới an toàn: tên/thuật ngữ trong glossary còn SÓT dạng chữ Hán trong bản dịch
+    # (lọt fuse vì dưới ngưỡng 5%) → thay thẳng bằng bản dịch chuẩn. Dài trước để
+    # không đè cụm con (幻妖王 phải thay trước 幻妖).
+    for t in sorted(terms, key=lambda t: -len(t.get("term_zh") or "")):
+        zh = t.get("term_zh")
+        if zh and t.get("correct_vi") and zh in text:
+            text = text.replace(zh, t["correct_vi"])
+
     title_vi = None
     if ch.get("title_zh"):
         title_vi, text = _pop_title(text)
@@ -460,7 +468,12 @@ def handle_chapter(job: dict, llm) -> None:
 def handle_patch(job: dict, llm=None) -> None:
     """Vá chương đã dịch bằng string-replace các term có wrong_vi (không tốn LLM)."""
     terms, _ = db.get_glossary(job["novel_id"])
-    repls = [(t["wrong_vi"], t["correct_vi"]) for t in terms if t.get("wrong_vi")]
+    repls = [(t["wrong_vi"], t["correct_vi"]) for t in terms
+             if t.get("wrong_vi") and t.get("correct_vi")]
+    # + tên còn SÓT dạng chữ Hán trong bản dịch cũ → thay bằng bản chuẩn luôn thể
+    repls += [(t["term_zh"], t["correct_vi"]) for t in terms
+              if t.get("term_zh") and t.get("correct_vi")]
+    repls.sort(key=lambda p: -len(p[0]))  # cụm dài thay trước, không đè cụm con
     if not repls:
         return
     # page qua trần 1000 dòng PostgREST — truyện 4000 chương phải vá ĐỦ, không chỉ 1000 đầu

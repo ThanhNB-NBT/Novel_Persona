@@ -284,6 +284,28 @@ def mark_source_fail(source_id: int, fail_limit: int) -> bool:
 
 # ---------- glossary ----------
 
+def heal_glossary_terms(terms: list[dict]) -> list[dict]:
+    """User sửa bản dịch qua form ("Hoan Yêu"→"Huyễn Yêu", term thường KHÔNG có term_zh)
+    nhưng gợi ý LLM mang đúng cái sai đó (幻妖→"Hoan Yêu") vẫn nằm trong glossary → prompt
+    tiếp tục ÉP model dịch sai ở mọi chương sau. Áp các cặp sửa (wrong_vi→correct_vi) lên
+    correct_vi của những term khác, sửa IN-PLACE; bản cũ ghi vào wrong_vi (prompt nhắc
+    "KHÔNG dịch thành ..." + job patch vá được chương cũ). Trả list term đã đổi."""
+    repls = [(t["wrong_vi"], t["correct_vi"]) for t in terms
+             if t.get("wrong_vi") and t.get("correct_vi") and t["wrong_vi"] != t["correct_vi"]]
+    changed: list[dict] = []
+    for t in terms:
+        cv = t.get("correct_vi") or ""
+        new = cv
+        for w, c in repls:
+            new = new.replace(w, c)
+        if new != cv:
+            if not t.get("wrong_vi"):
+                t["wrong_vi"] = cv
+            t["correct_vi"] = new
+            changed.append(t)
+    return changed
+
+
 def get_glossary(novel_id: int) -> tuple[list[dict], int]:
     """Trả về (terms, version). Gồm term đã duyệt (truyện + global) VÀ term gợi ý
     (approved=false) của truyện.
@@ -294,7 +316,7 @@ def get_glossary(novel_id: int) -> tuple[list[dict], int]:
     gợi ý CŨ nhất thắng (giữ cách phiên âm xuất hiện đầu tiên)."""
     terms = (
         sb().table("glossary_terms")
-        .select("term_zh,wrong_vi,correct_vi,term_type,note")
+        .select("id,novel_id,term_zh,wrong_vi,correct_vi,term_type,note")
         .eq("approved", True)
         .or_(f"novel_id.eq.{novel_id},novel_id.is.null")
         .execute()
@@ -302,7 +324,7 @@ def get_glossary(novel_id: int) -> tuple[list[dict], int]:
     seen = {t["term_zh"] for t in terms if t.get("term_zh")}
     pending = (
         sb().table("glossary_terms")
-        .select("term_zh,wrong_vi,correct_vi,term_type,note")
+        .select("id,novel_id,term_zh,wrong_vi,correct_vi,term_type,note")
         .eq("approved", False).eq("novel_id", novel_id)
         .order("created_at")
         .execute()
@@ -312,6 +334,16 @@ def get_glossary(novel_id: int) -> tuple[list[dict], int]:
         if zh and zh not in seen:
             seen.add(zh)
             terms.append(t)
+    # lành hoá gợi ý mang bản dịch đã bị user sửa; persist để màn Thuật ngữ cũng thấy
+    # bản đúng (chỉ term của truyện này — không đụng term global từ sửa cục bộ)
+    for t in heal_glossary_terms(terms):
+        if t.get("id") and t.get("novel_id") == novel_id:
+            try:
+                sb().table("glossary_terms").update(
+                    {"correct_vi": t["correct_vi"], "wrong_vi": t["wrong_vi"]}
+                ).eq("id", t["id"]).execute()
+            except Exception:
+                log.debug("heal glossary term %s lỗi (bỏ qua)", t.get("id"))
     ver_rows = (
         sb().table("novel_glossary_version").select("version").eq("novel_id", novel_id).execute()
     ).data

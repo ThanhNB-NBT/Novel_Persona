@@ -17,6 +17,7 @@ VĂN PHONG — các lỗi convert PHẢI tránh (sai → đúng):
 - Lặp đại từ kiểu Hán ("hắn... hắn... hắn..." mỗi câu) → lược chủ ngữ khi đã rõ ai.
 - Không lặp cùng một từ/cụm sát nhau; gốc cố ý lặp để nhấn thì diễn đạt lại cho tự nhiên.
 - Thành ngữ/quán ngữ Trung → lối nói Việt tương đương, không dịch từng chữ.
+- KHÔNG tự chế từ ghép nửa dịch nửa phiên âm: mỗi từ hoặc dịch NGHĨA trọn vẹn, hoặc phiên âm Hán-Việt trọn vẹn theo lối độc giả quen. 老板 → "ông chủ" (truyện tu tiên/cổ đại có thể "lão bản"), KHÔNG "Lão Chủ"; 老大 → "đại ca"/"anh cả", KHÔNG "Lão Lớn"; 小弟 → "đàn em"/"tiểu đệ", KHÔNG "Nhỏ Đệ".
 - KHÔNG tự thêm "!", "a", "nha", "haha", "chao ôi" mà gốc không có; mỗi đoạn tối đa 1-2 dấu "!".
 - Giữ giọng kể của tác giả (hài/nghiêm/bi) và nhịp văn; lời thoại đặt trong "..." kiểu Việt.
 
@@ -29,7 +30,7 @@ XƯNG HÔ — yếu tố quyết định độ tự nhiên (chọn theo giới t
 TÊN RIÊNG & THUẬT NGỮ
 - Có bảng thuật ngữ thì tuân theo TUYỆT ĐỐI, kể cả khi bạn thấy cách khác hay hơn.
 - Tên mới (người, môn phái, địa danh, chiêu thức, pháp bảo, cảnh giới): phiên âm Hán-Việt chuẩn, dùng CỐ ĐỊNH một cách xuyên suốt (林松→Lâm Tùng; 筑基→Trúc Cơ; 金丹→Kim Đan). Không dịch nghĩa tên người.
-- Tên vốn viết bằng chữ Latin/tiếng Anh trong gốc (Dragon Raja, System, SSS, tên skill/game/code name) → GIỮ NGUYÊN, không dịch, không phiên âm.
+- Tên vốn viết bằng chữ Latin/tiếng Anh trong gốc (Dragon Raja, System, SSS, tên skill/game/code name) → GIỮ NGUYÊN, không dịch, không phiên âm. CHỈ áp dụng cho TÊN RIÊNG: từ tiếng Anh thường/bổ nghĩa lẫn trong gốc (newbie, elite, level, rank...) phải DỊCH như từ thường: "Newbie Boss"→"Boss tân thủ", "elite 怪"/"精英怪"→"quái tinh anh", "level 5"→"cấp 5". Thuật ngữ game thủ Việt vẫn nói bằng tiếng Anh (Boss, HP, MP, skill, buff, combo) thì giữ.
 - Tên ngoại quốc viết bằng chữ Hán → dạng Latin thông dụng (安娜→Anna, 杰克→Jack, 伦敦→London), KHÔNG phiên âm Hán-Việt ("An Na", "Kiệt Khắc", "Luân Đôn" là SAI).
 - Từ mượn fantasy/game phương Tây mà tiếng Trung phiên âm bằng chữ Hán → trả về từ tiếng Anh quen thuộc với game thủ Việt, KHÔNG phiên âm Hán-Việt: 哥布林→goblin (KHÔNG "Ca Bố Lâm"), 史莱姆→slime, 巨魔→troll, 兽人→orc, 精灵→elf, 恶魔→ác ma, 骷髅→bộ xương/skeleton. Từ nào có từ Việt thông dụng thì dùng từ Việt (地下城→hầm ngục/dungeon).
 - Thuật ngữ thể loại theo thói quen độc giả Việt: 灵石→linh thạch, 系统→hệ thống, 修炼→tu luyện.

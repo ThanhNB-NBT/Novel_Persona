@@ -209,6 +209,9 @@ ThemeData _build({required bool dark}) {
       insetPadding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
       backgroundColor: dark ? Pal.dSurfaceAlt : Pal.ink,
       contentTextStyle: TextStyle(color: dark ? Pal.dInk : Colors.white),
+      // nền snackbar TỐI ở cả 2 theme → action phải là màu nhấn SÁNG; mặc định
+      // (inversePrimary) ra chữ tối trên nền tối, nút "Áp cả truyện" tàng hình
+      actionTextColor: dark ? Pal.dAccent : Pal.accentSoft,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
     ),
   );

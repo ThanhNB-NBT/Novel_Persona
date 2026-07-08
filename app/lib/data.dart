@@ -34,6 +34,24 @@ Future<void> editChapterText(int novelId, int index, String wrong, String correc
 /// Góp ý sửa bản dịch: lưu như term glossary (dùng cho chương/truyện dịch SAU). Theo plan §5.2.
 Future<void> submitCorrection(int novelId, String wrong, String correct) async {
   final uid = sb.auth.currentUser!.id;
+  // Term đang mang ĐÚNG bản sai này (thường là gợi ý LLM có kèm chữ Trung, vd
+  // 幻妖→"Hoan Yêu") → sửa TẠI CHỖ thay vì thêm term mới: giữ liên kết term_zh nên
+  // chương dịch SAU được prompt ép đúng tên, không chỉ vá chương cũ bằng patch.
+  final hits = List<Map<String, dynamic>>.from(await sb
+      .from('glossary_terms')
+      .select('id')
+      .eq('novel_id', novelId)
+      .eq('correct_vi', wrong));
+  if (hits.isNotEmpty) {
+    for (final h in hits) {
+      await sb.from('glossary_terms').update({
+        'correct_vi': correct,
+        'wrong_vi': wrong,
+        'approved': true,
+      }).eq('id', h['id']);
+    }
+    return;
+  }
   await sb.from('glossary_terms').insert({
     'novel_id': novelId,
     'wrong_vi': wrong,
