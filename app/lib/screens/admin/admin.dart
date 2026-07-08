@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../cultivation.dart';
 import '../../data.dart';
 import '../../widgets.dart';
+import '../cultivation/pixel.dart';
 
 /// Màn Quản trị (chỉ admin vào được — RLS + isAdminProvider chặn ở cả 2 đầu).
 /// 4 tab: Worker (hàng đợi/lỗi), Truyện (ẩn/sửa), Token (chi phí LLM), Báo cáo.
@@ -24,7 +26,7 @@ class AdminScreen extends ConsumerWidget {
           );
         }
         return DefaultTabController(
-          length: 6,
+          length: 7,
           child: Scaffold(
             appBar: AppBar(
               title: const Text('Quản trị'),
@@ -73,6 +75,7 @@ class AdminScreen extends ConsumerWidget {
                   Tab(text: 'Truyện'),
                   Tab(text: 'Token'),
                   Tab(text: 'Báo cáo'),
+                  Tab(text: 'Tu Tiên'),
                 ],
               ),
             ),
@@ -83,6 +86,7 @@ class AdminScreen extends ConsumerWidget {
               _NovelsTab(),
               _TokensTab(),
               _ReportsTab(),
+              _CultTab(),
             ]),
           ),
         );
@@ -1358,6 +1362,101 @@ class _ReportsTab extends ConsumerWidget {
           );
         },
       ),
+    );
+  }
+}
+
+// ---------------- Tu Tiên: catalog vật phẩm ----------------
+
+/// Kho vật phẩm hệ thống tu tiên: toàn bộ catalog nhóm theo loại — soi nhanh
+/// tên/phẩm/trọng số rơi/hiệu ứng khi cân bằng game. Chỉ xem (seed nằm trong
+/// migration 039, đổi số liệu thì sửa migration mới).
+class _CultTab extends ConsumerWidget {
+  const _CultTab();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final cs = Theme.of(context).colorScheme;
+    final t = Theme.of(context).textTheme;
+    return _Refreshable(
+      async: ref.watch(cultCatalogProvider),
+      onRefresh: () async => ref.invalidate(cultCatalogProvider),
+      emptyText: 'Catalog trống — migration 039 đã chạy chưa?',
+      builder: (items) {
+        // nhóm theo loại, giữ thứ tự khai báo trong cultTypeNames
+        final byType = <String, List<Rec>>{};
+        for (final it in items) {
+          byType.putIfAbsent(it['type'] as String, () => []).add(it);
+        }
+        return ListView(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
+          children: [
+            Text('${items.length} vật phẩm trong catalog',
+                style: t.labelMedium?.copyWith(color: cs.onSurfaceVariant)),
+            for (final type in cultTypeNames.keys)
+              if (byType[type] case final list?) ...[
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(2, 16, 2, 6),
+                  child: Text(
+                      '${cultTypeNames[type]!.toUpperCase()} (${list.length})',
+                      style: t.labelMedium?.copyWith(
+                          color: cs.onSurfaceVariant, letterSpacing: 0.8)),
+                ),
+                for (final it in list)
+                  Card(
+                    margin: const EdgeInsets.only(bottom: 6),
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(10, 8, 12, 8),
+                      child: Row(children: [
+                        PixelIcon(it['pixel'] as String,
+                            grade: it['grade'] as int, size: 36),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(children: [
+                                  Flexible(
+                                    child: Text(it['name'] as String,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: t.bodyMedium?.copyWith(
+                                            fontWeight: FontWeight.w700)),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  TagChip(
+                                      gradeNames[(it['grade'] as int) - 1],
+                                      color:
+                                          gradeColor(it['grade'] as int)),
+                                ]),
+                                Text(cultEffectText(it),
+                                    style: t.labelMedium
+                                        ?.copyWith(color: cs.onSurface)),
+                                Text(it['descr'] as String? ?? '',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: t.labelSmall?.copyWith(
+                                        color: cs.onSurfaceVariant)),
+                              ]),
+                        ),
+                        const SizedBox(width: 8),
+                        // trọng số rơi — to = dễ rơi (trong nhóm phẩm được phép)
+                        Column(children: [
+                          Text('${it['weight']}',
+                              style: t.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.w800,
+                                  color: cs.onSurfaceVariant)),
+                          Text('rơi',
+                              style: t.labelSmall
+                                  ?.copyWith(color: cs.onSurfaceVariant)),
+                        ]),
+                      ]),
+                    ),
+                  ),
+              ],
+          ],
+        );
+      },
     );
   }
 }

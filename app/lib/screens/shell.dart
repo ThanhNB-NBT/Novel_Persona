@@ -4,13 +4,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../cultivation.dart';
 import '../data.dart';
+import 'cultivation/cultivation.dart';
+import 'cultivation/pixel.dart';
 import 'explore/home.dart';
 import 'library/library.dart';
 import 'library/queue.dart';
 import 'account/settings.dart';
 
-/// Khung 4 tab: Tủ truyện · Khám phá · Hàng đợi · Cài đặt.
+/// Khung 5 tab: Tủ truyện · Khám phá · TU TIÊN (giữa, nổi) · Hàng đợi · Cài đặt.
 /// Mặc định mở Tủ truyện (chưa đăng nhập → Khám phá). Vuốt ngang đổi tab bằng PageView.
 /// Dock NỔI đè lên nội dung như NEO (Stack, không dùng slot bottomNavigationBar —
 /// slot đó chừa nguyên một dải nền phía sau).
@@ -23,11 +26,14 @@ class RootShell extends ConsumerStatefulWidget {
 class _RootShellState extends ConsumerState<RootShell> {
   late int _i;
   late final _pc = PageController(initialPage: _i);
-  static const _pages = [LibraryScreen(), HomeScreen(), QueueScreen(), SettingsScreen()];
+  static const _pages = [
+    LibraryScreen(), HomeScreen(), CultivationScreen(), QueueScreen(), SettingsScreen(),
+  ];
 
   static const _tabs = [
     (icon: Icons.bookmarks_outlined, active: Icons.bookmarks_rounded, label: 'Tủ truyện'),
     (icon: Icons.explore_outlined, active: Icons.explore_rounded, label: 'Khám phá'),
+    (icon: Icons.self_improvement_rounded, active: Icons.self_improvement_rounded, label: 'Tu Tiên'),
     (icon: Icons.hourglass_empty_rounded, active: Icons.hourglass_bottom_rounded, label: 'Hàng đợi'),
     (icon: Icons.settings_outlined, active: Icons.settings_rounded, label: 'Cài đặt'),
   ];
@@ -50,13 +56,14 @@ class _RootShellState extends ConsumerState<RootShell> {
     void changed(int i) {
       if (i == _i) return;
       if (i == 0) ref.invalidate(readingProvider);
-      if (i == 2) ref.invalidate(translateQueueProvider);
+      if (i == 2) ref.invalidate(cultStateProvider); // tick exp mỗi lần mở Tu Tiên
+      if (i == 3) ref.invalidate(translateQueueProvider);
       HapticFeedback.lightImpact();
       setState(() => _i = i);
     }
 
     void go(int i) {
-      if (i < 0 || i > 3 || i == _i) return;
+      if (i < 0 || i > 4 || i == _i) return;
       _pc.animateToPage(i,
           duration: const Duration(milliseconds: 320), curve: Curves.easeOutCubic);
     }
@@ -74,6 +81,81 @@ class _RootShellState extends ConsumerState<RootShell> {
         // dữ liệu khi mở tab để thấy thay đổi vừa gây ở màn khác.
         Align(alignment: Alignment.bottomCenter, child: _Dock(index: _i, onTap: go)),
       ]),
+    );
+  }
+}
+
+/// Đĩa Tu Tiên "dập nổi" giữa dock: thái cực xoay chậm miên man; được chọn thì
+/// bừng sáng + hiện nhẫn quang mảnh quanh đĩa (thay cho pill — pill ẩn ở tab giữa).
+class _TaijiDisc extends StatefulWidget {
+  final bool selected;
+  final VoidCallback onTap;
+  const _TaijiDisc({required this.selected, required this.onTap});
+  @override
+  State<_TaijiDisc> createState() => _TaijiDiscState();
+}
+
+class _TaijiDiscState extends State<_TaijiDisc>
+    with SingleTickerProviderStateMixin {
+  late final _spin =
+      AnimationController(vsync: this, duration: const Duration(seconds: 14))
+        ..repeat();
+
+  @override
+  void dispose() {
+    _spin.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final sel = widget.selected;
+    return GestureDetector(
+      onTap: widget.onTap,
+      child: AnimatedScale(
+        scale: sel ? 1.12 : 1,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOutCubic,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 300),
+          width: 54,
+          height: 54,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [cs.primary, cs.primary.withValues(alpha: 0.8)]),
+            border: Border.all(
+                color: cs.surface.withValues(alpha: 0.9), width: 3),
+            boxShadow: [
+              BoxShadow(
+                  color: cs.primary.withValues(alpha: sel ? 0.75 : 0.4),
+                  blurRadius: sel ? 22 : 12,
+                  offset: const Offset(0, 4)),
+            ],
+          ),
+          child: Stack(alignment: Alignment.center, children: [
+            // nhẫn quang chỉ hiện khi được chọn
+            AnimatedOpacity(
+              opacity: sel ? 1 : 0,
+              duration: const Duration(milliseconds: 250),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.85), width: 1.5),
+                ),
+                child: const SizedBox(width: 42, height: 42),
+              ),
+            ),
+            RotationTransition(
+                turns: _spin,
+                child: const PixelIcon('taiji', grade: 5, size: 28)),
+          ]),
+        ),
+      ),
     );
   }
 }
@@ -108,10 +190,24 @@ class _Dock extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final t = Theme.of(context).textTheme;
     final dark = Theme.of(context).brightness == Brightness.dark;
-    const n = 4;
+    const n = 5;
     return SafeArea(
       minimum: const EdgeInsets.fromLTRB(24, 0, 24, 14),
-      child: DecoratedBox(
+      // Stack clip none: đĩa Tu Tiên "dập nổi" nhô lên khỏi dock (nằm NGOÀI
+      // ClipRRect của dock, không thì bị cắt cụt đầu).
+      child: Stack(clipBehavior: Clip.none, alignment: Alignment.center, children: [
+        _dockBody(context, cs, t, dark, n),
+        Positioned(
+          top: -16,
+          child: _TaijiDisc(selected: index == 2, onTap: () => onTap(2)),
+        ),
+      ]),
+    );
+  }
+
+  Widget _dockBody(
+      BuildContext context, ColorScheme cs, TextTheme t, bool dark, int n) {
+    return DecoratedBox(
         // bóng ở NGOÀI ClipRRect — trong clip là bị cắt mất, dock "bẹt"
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(32),
@@ -164,10 +260,16 @@ class _Dock extends StatelessWidget {
                                 child: Transform.scale(scaleX: s, scaleY: 1 / s, child: child),
                               );
                             },
-                            child: DecoratedBox(
-                              decoration: BoxDecoration(
-                                color: cs.primary.withValues(alpha: 0.13),
-                                borderRadius: BorderRadius.circular(26),
+                            // tab giữa: pill ẨN (đĩa Tu Tiên tự sáng lên thay) —
+                            // pill trượt dưới đĩa nhìn chồng chéo rất xấu
+                            child: AnimatedOpacity(
+                              opacity: index == 2 ? 0 : 1,
+                              duration: const Duration(milliseconds: 250),
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  color: cs.primary.withValues(alpha: 0.13),
+                                  borderRadius: BorderRadius.circular(26),
+                                ),
                               ),
                             ),
                           ),
@@ -184,6 +286,10 @@ class _Dock extends StatelessWidget {
                           child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
+                                // ô giữa: đĩa Tu Tiên nổi đè lên trên → chỉ chừa chỗ + nhãn
+                                if (i == 2)
+                                  const SizedBox(height: 24)
+                                else
                                 // icon "pop" nhẹ khi được chọn
                                 AnimatedScale(
                                   scale: i == index ? 1.12 : 1,
@@ -218,8 +324,6 @@ class _Dock extends StatelessWidget {
               ),
             ),
           ),
-        )),
-      ),
-    );
+        )));
   }
 }

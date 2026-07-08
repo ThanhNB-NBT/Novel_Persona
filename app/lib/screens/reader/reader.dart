@@ -4,10 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../cultivation.dart';
 import '../../data.dart';
 import '../../hanviet.dart';
 import '../../tts.dart';
 import '../../widgets.dart';
+import '../cultivation/pixel.dart';
 import 'reader_settings.dart';
 
 /// Vùng chữ đang chọn để sửa: khối chứa + vị trí đầu/cuối trong khối.
@@ -296,9 +298,19 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
               icon: Icon(
                   ts.active ? Icons.headset_off_rounded : Icons.headset_rounded,
                   size: 19),
-              onPressed: () => ts.active
-                  ? TtsPlayer.i.stop()
-                  : TtsPlayer.i.start(novelId, chapterIndex),
+              onPressed: () async {
+                if (ts.active) {
+                  await TtsPlayer.i.stop();
+                  return;
+                }
+                final messenger = ScaffoldMessenger.of(context);
+                // máy thiếu giọng tiếng Việt → nói thẳng lý do thay vì câm lặng
+                final warn = await TtsPlayer.i.start(novelId, chapterIndex);
+                if (warn != null) {
+                  messenger.showSnackBar(SnackBar(
+                      content: Text(warn), duration: const Duration(seconds: 6)));
+                }
+              },
             ),
           ),
           IconButton(
@@ -389,10 +401,22 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     );
   }
 
+  /// Chương này còn quà tu tiên chưa nhận không (công thức md5 + bảng claims).
+  bool _hasGift() {
+    final uid = sb.auth.currentUser?.id;
+    if (uid == null || !giftAt(uid, novelId, chapterIndex)) return false;
+    final claimed = ref.watch(cultClaimedProvider(novelId)).value ?? const <int>{};
+    return !claimed.contains(chapterIndex);
+  }
+
   // -------- Chế độ cuộn dọc (SelectableText → chọn chữ để sửa) --------
   Widget _buildScroll(BuildContext context, ReaderSettings s, ReaderColor col,
       String title, List<String> paras, TextStyle textStyle) {
     _restoreScroll();
+    // quà chèn CUỐI đoạn thứ hash%n — tất định, mỗi user mỗi chỗ khác nhau
+    final giftAfter = _hasGift()
+        ? giftHash(sb.auth.currentUser!.id, novelId, chapterIndex) % paras.length
+        : -1;
     final titleStyle = readerFontStyle(s.fontKey,
             fontSize: s.fontSize + 4, height: 1.3, color: col.fg)
         .copyWith(fontWeight: FontWeight.w700);
@@ -426,17 +450,20 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
         children: [
           Text(title, style: titleStyle),
           const SizedBox(height: 18),
-          for (final para in paras)
+          for (var i = 0; i < paras.length; i++) ...[
             Padding(
               padding: const EdgeInsets.only(bottom: 14),
               child: _TapPara(
-                para: para,
+                para: paras[i],
                 style: textStyle,
                 align: s.justify ? TextAlign.justify : TextAlign.left,
                 sel: _sel,
                 onTapWord: _onTapWord,
               ),
             ),
+            if (i == giftAfter)
+              _GiftButton(novelId: novelId, chapterIndex: chapterIndex, fg: col.fg),
+          ],
           const SizedBox(height: 12),
           Divider(color: col.fg.withValues(alpha: 0.15)),
           const SizedBox(height: 8),
@@ -454,6 +481,8 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   // -------- Chế độ lật trang (Text thường → PageView vuốt ngang luôn ăn) --------
   Widget _buildPager(BuildContext context, ReaderSettings s, ReaderColor col,
       String title, List<String> paras, TextStyle textStyle) {
+    // tính Ở ĐÂY (trong build) — itemBuilder chạy lúc layout, ref.watch trong đó sẽ nổ assert
+    final hasGift = _hasGift();
     final normalized = paras.join('\n\n');
     final titleStyle = readerFontStyle(s.fontKey,
             fontSize: s.fontSize + 4, height: 1.3, color: col.fg)
@@ -517,6 +546,9 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                       style: TextStyle(color: col.fg.withValues(alpha: 0.5), fontSize: 13)),
                 ),
                 const SizedBox(height: 16),
+                // chế độ lật trang: quà nằm ở trang panel cuối chương (không chen vào trang chữ)
+                if (hasGift)
+                  _GiftButton(novelId: novelId, chapterIndex: chapterIndex, fg: col.fg),
                 _EndPanel(novelId: novelId, chapterIndex: chapterIndex, fg: col.fg),
                 _CommentsPanel(novelId: novelId, chapterIndex: chapterIndex, fg: col.fg),
                 const SizedBox(height: 16),
@@ -1197,6 +1229,103 @@ class _CommentsPanelState extends ConsumerState<_CommentsPanel> {
             ),
           ]),
       ]),
+    );
+  }
+}
+
+/// Nút cơ duyên tu tiên trong chương: bấm → RPC cult_claim_gift → dialog vật phẩm.
+/// Dùng màu fg của reader (không lấy ColorScheme của app).
+class _GiftButton extends ConsumerStatefulWidget {
+  final int novelId;
+  final int chapterIndex;
+  final Color fg;
+  const _GiftButton({required this.novelId, required this.chapterIndex, required this.fg});
+  @override
+  ConsumerState<_GiftButton> createState() => _GiftButtonState();
+}
+
+class _GiftButtonState extends ConsumerState<_GiftButton> {
+  bool _claiming = false;
+
+  Future<void> _claim() async {
+    if (_claiming) return;
+    setState(() => _claiming = true);
+    try {
+      final it = await cultClaimGift(widget.novelId, widget.chapterIndex);
+      if (!mounted) return;
+      // nút tự ẩn (claims đổi) + kho ở màn Tu Tiên thấy đồ mới
+      ref.invalidate(cultClaimedProvider(widget.novelId));
+      ref.invalidate(cultInventoryProvider);
+      final grade = it['grade'] as int;
+      // lời dẫn tất định theo chương — mỗi cơ duyên một tình huống khác nhau
+      final flavor = giftFlavors[giftHash(sb.auth.currentUser!.id,
+              widget.novelId, widget.chapterIndex) %
+          giftFlavors.length];
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Cơ duyên!'),
+          content: Column(mainAxisSize: MainAxisSize.min, children: [
+            Text(flavor,
+                textAlign: TextAlign.center,
+                style: Theme.of(ctx).textTheme.bodySmall?.copyWith(
+                    fontStyle: FontStyle.italic,
+                    color: Theme.of(ctx).colorScheme.onSurfaceVariant)),
+            const SizedBox(height: 12),
+            PixelIcon(it['pixel'] as String, grade: grade, size: 72),
+            const SizedBox(height: 10),
+            Text(it['name'] as String,
+                style: Theme.of(ctx)
+                    .textTheme
+                    .titleMedium
+                    ?.copyWith(fontWeight: FontWeight.w700)),
+            Text('${cultTypeNames[it['type']]} · phẩm ${gradeNames[grade - 1]}',
+                style: Theme.of(ctx)
+                    .textTheme
+                    .labelMedium
+                    ?.copyWith(color: gradeColor(grade))),
+            const SizedBox(height: 6),
+            Text(it['descr'] as String? ?? '',
+                textAlign: TextAlign.center,
+                style: Theme.of(ctx).textTheme.bodySmall),
+          ]),
+          actions: [
+            FilledButton(
+                onPressed: () => Navigator.pop(ctx), child: const Text('Thu vào kho')),
+          ],
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      }
+    } finally {
+      if (mounted) setState(() => _claiming = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final fg = widget.fg;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Center(
+        child: OutlinedButton.icon(
+          style: OutlinedButton.styleFrom(
+            foregroundColor: fg.withValues(alpha: 0.85),
+            side: BorderSide(color: fg.withValues(alpha: 0.3)),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          ),
+          onPressed: _claim,
+          icon: _claiming
+              ? SizedBox(
+                  width: 20, height: 20,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: fg.withValues(alpha: 0.6)))
+              : const PixelIcon('gift', grade: 5, size: 22),
+          label: const Text('Cơ duyên hé mở — nhận bảo vật'),
+        ),
+      ),
     );
   }
 }
