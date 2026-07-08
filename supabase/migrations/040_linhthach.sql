@@ -7,13 +7,15 @@
 --  Tiên thạch +300%/48h. Dùng viên mới ĐÈ viên cũ (không cộng dồn thời gian).
 -- ===============================================================================
 
-alter table cult_items drop constraint cult_items_type_check;
+-- Idempotent: SQL này từng được áp thẳng vào DB (ngoài sổ migration) nên mọi
+-- lệnh phải chạy lại được mà không đụng.
+alter table cult_items drop constraint if exists cult_items_type_check;
 alter table cult_items add constraint cult_items_type_check
   check (type in ('congphap','danduoc','vukhi','phapbao','phapchu','linhthach'));
 
 alter table user_cultivation
-  add column stone_pct int not null default 0,
-  add column stone_until timestamptz;
+  add column if not exists stone_pct int not null default 0,
+  add column if not exists stone_until timestamptz;
 
 -- Tick: cộng exp theo 3 phần additive — nền + đan buff (tới buff_until) + linh
 -- thạch (tới stone_until), mỗi kênh kẹp trong khoảng elapsed (tối đa 48h).
@@ -125,4 +127,5 @@ insert into cult_items (code, name, type, grade, weight, effect, descr, pixel) v
 ('lt_trung_pham', 'Trung Phẩm Linh Thạch','linhthach', 2, 45, '{"kind":"stone","pct":60,"hours":12}',  'Linh khí tinh khiết, tốc độ +60% trong 12 giờ.', 'stone'),
 ('lt_thuong_pham','Thượng Phẩm Linh Thạch','linhthach',3, 18, '{"kind":"stone","pct":100,"hours":24}', 'Linh thạch thượng hạng, tốc độ +100% trong 24 giờ.', 'stone'),
 ('lt_cuc_pham',   'Cực Phẩm Linh Thạch',  'linhthach', 4,  6, '{"kind":"stone","pct":200,"hours":24}', 'Cực phẩm hiếm thấy, tốc độ +200% trong 24 giờ.', 'stone'),
-('lt_tien_thach', 'Tiên Thạch',           'linhthach', 5,  2, '{"kind":"stone","pct":300,"hours":48}', 'Kết tinh tiên khí, tốc độ +300% trong 48 giờ.', 'stone');
+('lt_tien_thach', 'Tiên Thạch',           'linhthach', 5,  2, '{"kind":"stone","pct":300,"hours":48}', 'Kết tinh tiên khí, tốc độ +300% trong 48 giờ.', 'stone')
+on conflict (code) do nothing;
