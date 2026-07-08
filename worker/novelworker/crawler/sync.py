@@ -427,22 +427,36 @@ def sync_chapter_list(
             db.sb().table("chapters").select("id", count="exact")
             .eq("novel_id", novel_id).limit(1).execute()
         ).count or 0
-        if existing_count < len(refs):
-            # kéo index đã có THEO TRANG — PostgREST trần 1000 dòng/query; kéo 1 lần với
-            # truyện 4000 chương → have thiếu → tưởng nhầm +3000 chương mới, bump nhiễu.
-            have: set[int] = set()
+        # Stub do request_translation tạo (migration 042) có source_chapter_id NULL.
+        # PHẢI backfill id từ mục lục nguồn, không thì ensure_chapters_fetched bỏ qua
+        # → chương kẹt 'queued' vĩnh viễn (và chặn chương sau theo dịch tuần tự 030).
+        # 1 count rẻ để GIỮ fast-path: truyện refresh không có stub thiếu id thì khỏi
+        # kéo cả 4000 index về so.
+        null_stub_count = (
+            db.sb().table("chapters").select("id", count="exact")
+            .eq("novel_id", novel_id).is_("source_chapter_id", "null")
+            .limit(1).execute()
+        ).count or 0
+        if existing_count < len(refs) or null_stub_count > 0:
+            # kéo (index → source_chapter_id) đã có THEO TRANG — PostgREST trần 1000
+            # dòng/query; kéo 1 lần với truyện 4000 chương → thiếu → bump nhiễu.
+            have: dict[int, str | None] = {}
             frm = 0
             while True:
                 b = (
-                    db.sb().table("chapters").select("chapter_index")
+                    db.sb().table("chapters").select("chapter_index, source_chapter_id")
                     .eq("novel_id", novel_id).range(frm, frm + 999).execute()
                 ).data or []
-                have.update(r["chapter_index"] for r in b)
+                for r in b:
+                    have[r["chapter_index"]] = r.get("source_chapter_id")
                 if len(b) < 1000:
                     break
                 frm += 1000
-            new_refs = [ref for ref in refs if ref.index not in have]
-            if new_refs:
+            # ghi: chương CHƯA có index (nguồn dài thêm) + stub CŨ còn thiếu id (backfill).
+            # Chương đã có id thì KHÔNG đụng — giữ nguyên ý "không refresh title/id" cũ.
+            to_write = [ref for ref in refs
+                        if ref.index not in have or have[ref.index] is None]
+            if to_write:
                 db.upsert_chapter_stubs([
                     {
                         "novel_id": novel_id,
@@ -450,9 +464,9 @@ def sync_chapter_list(
                         "source_chapter_id": ref.source_chapter_id,
                         "title_zh": ref.title_zh,
                     }
-                    for ref in new_refs
+                    for ref in to_write
                 ])
-                added = len(new_refs)
+                added = len(to_write)
     # bump khi TỔNG trên nguồn tăng so với số đã lưu → "Mới cập nhật" đúng cả với
     # truyện lười (không có stub để so)
     row = (
