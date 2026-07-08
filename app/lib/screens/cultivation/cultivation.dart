@@ -208,12 +208,22 @@ class _RealmCard extends StatelessWidget {
           const SizedBox(height: 10),
           Text('${realmNames[realm - 1]} · tầng $stage',
               style: t.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
-          // đạo hiệu + phẩm linh căn — lớp lore hiển thị, không đổi cơ chế
+          // đạo hiệu + phẩm linh căn + hệ ngũ hành
           Text(
-              '「${daoTitles[realm - 1]}」 · ${linhCanTier((st['linh_can'] as num).toInt())}',
+              '「${daoTitles[realm - 1]}」 · ${linhCanTier((st['linh_can'] as num).toInt())}'
+              '${st['element'] != null ? ' · hệ ${elementNames[st['element']]}' : ''}',
               style: t.labelMedium?.copyWith(color: cs.onSurfaceVariant)),
-          Text('${rate.toStringAsFixed(1)} tu vi/giây',
-              style: t.labelMedium?.copyWith(color: cs.onSurfaceVariant)),
+          Builder(builder: (_) {
+            // công pháp hợp hệ linh căn (hoặc hệ Vạn Pháp) → server đã ×1.3, báo cho user biết
+            final cpElem =
+                (st['equipped'] as Rec?)?['congphap']?['effect']?['element'];
+            final match =
+                cpElem != null && (cpElem == st['element'] || cpElem == 'all');
+            return Text(
+                '${rate.toStringAsFixed(1)} tu vi/giây${match ? ' · hợp hệ ×1.3' : ''}',
+                style: t.labelMedium?.copyWith(
+                    color: match ? cs.primary : cs.onSurfaceVariant));
+          }),
           // hiệu ứng có thời hạn đang chạy: đan dược + linh thạch, mỗi kênh 1 dòng đếm ngược
           if (buffUntil != null && buffUntil.isAfter(DateTime.now()))
             Padding(

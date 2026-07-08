@@ -22,6 +22,13 @@ const daoTitles = [
   'Độ Kiếp bán tiên',
 ]; // realm 1..9
 
+/// Ngũ hành — thuộc tính linh căn (trời định lúc khởi tạo, Chuyển Linh Đan đổi được).
+/// Công pháp hợp hệ (trùng thuộc tính hoặc hệ 'all') → tốc độ ×1.3 (migration 043).
+const elementNames = {
+  'kim': 'Kim', 'moc': 'Mộc', 'thuy': 'Thủy', 'hoa': 'Hỏa', 'tho': 'Thổ',
+  'all': 'Vạn Pháp',
+};
+
 /// Tên phẩm linh căn theo giá trị — càng "thuần" tu càng nhanh (lore ngũ hành:
 /// tạp căn 5 hệ kém nhất, đơn linh căn/thiên linh căn hiếm nhất). Chỉ hiển thị.
 String linhCanTier(int lc) => switch (lc) {
@@ -101,7 +108,11 @@ String cultEffectText(Rec it) {
     'buff' => '+${e['pct']}% tốc độ trong ${e['hours']} giờ',
     'stone' => '+${e['pct']}% tốc độ trong ${e['hours']} giờ (cộng dồn với đan)',
     'hothan' => '+${e['pct']}% đột phá cho lần kế tiếp',
-    _ => 'hệ số tu luyện theo phẩm (×1.5 → ×24)', // công pháp
+    'element' => 'đổi thuộc tính linh căn sang hệ khác (ngẫu nhiên)',
+    // công pháp: hệ số theo phẩm + hệ ngũ hành nếu có
+    _ => 'hệ số tu luyện theo phẩm (×1.5 → ×24)'
+        '${e['element'] != null ? ' · hệ ${elementNames[e['element']] ?? e['element']}'
+            ' (hợp linh căn ×1.3)' : ''}',
   };
 }
 
