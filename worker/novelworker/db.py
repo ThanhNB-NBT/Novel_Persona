@@ -56,6 +56,10 @@ def save_chapter_translation(
             "title_vi": title_vi,
             "summary_vi": summary_vi,
             "content_vi": content_vi,
+            # Xoá bản gốc khi dịch xong — tiết kiệm ~2/3 dung lượng DB. Dịch lại
+            # vẫn chạy: chương queued thiếu content_zh → translator defer job,
+            # crawler backfill tự tải lại từ nguồn (sync.py).
+            "content_zh": None,
             "translation_status": "done",
             "translated_at": utc_now(),
             "model_used": model,
