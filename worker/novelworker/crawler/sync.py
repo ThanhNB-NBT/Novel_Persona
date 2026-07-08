@@ -251,7 +251,11 @@ def discover_ranking(adapter: SourceAdapter, max_new: int = 30) -> None:
     ranked = list(fetch(limit=1000))
     known = _existing_novels(sid, [r[0] for r in ranked])  # check theo lô
     bl_ids, bl_keys = _blacklist(sid)
-    for source_novel_id, rank in ranked:
+    for i, (source_novel_id, rank) in enumerate(ranked):
+        # Cập nhật rank cho hàng trăm truyện đã có là chuỗi UPDATE lặng (không log,
+        # không tải gì) — điểm danh định kỳ để Worker tab không tưởng crawler chết.
+        if i % 50 == 0:
+            db.heartbeat("crawler", note=f"quét ranking {adapter.name} ({i}/{len(ranked)})")
         if source_novel_id in known:
             db.sb().table("novels").update({"source_rank": rank}).eq("id", known[source_novel_id]).execute()
             continue
@@ -562,6 +566,10 @@ def refresh_canonical_updates(adapter: SourceAdapter, limit: int) -> None:
         db.sb().table("novels")
         .select("id, source_novel_id, hidden, meta_translated, status, toc_synced_at")
         .eq("source_id", sid).eq("is_canonical", True)
+        # Truyện HOÀN THÀNH không bao giờ ra chương mới → soi lại mục lục là phí trắng
+        # (từng chiếm 56% kho canonical). Ngân sách refresh dồn cho truyện đang-ra, mới
+        # đáng theo dõi. status chỉ được set lúc discovery nên đây là "đã biết hoàn thành".
+        .neq("status", "completed")
         .order("last_checked_at", desc=False, nullsfirst=True)  # chưa soi/lâu nhất trước
         .limit(limit).execute()
     ).data or []
