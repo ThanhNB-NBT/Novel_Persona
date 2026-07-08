@@ -48,6 +48,11 @@ class SourceAdapter(ABC):
 
     name: str  # = sources.name, gán lúc __init__ từ source_row
 
+    # Trạng thái truyện parse "ké" từ HTML mục lục ở lần fetch_chapter_list gần nhất
+    # (None = nguồn không lộ trạng thái trên trang đó). sync_chapter_list đọc để flip
+    # ongoing↔completed mà không tốn thêm fetch nào.
+    last_toc_status: str | None = None
+
     def __init__(
         self,
         base_url: str,

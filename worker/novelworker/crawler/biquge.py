@@ -57,6 +57,11 @@ class BiqugeAdapter(SourceAdapter):
         m = re.search(r'<meta property="' + re.escape(prop) + r'"[^>]*content="([^"]*)"', html)
         return unescape(m.group(1)).strip() if m else None
 
+    @classmethod
+    def _status(cls, html: str) -> str:
+        return "completed" if (cls._meta(html, "og:novel:status") or "").startswith(
+            ("完", "已完")) else "ongoing"
+
     # ---------- SourceAdapter ----------
 
     def fetch_latest(self, limit: int = 30) -> list[NovelMeta]:
@@ -122,8 +127,7 @@ class BiqugeAdapter(SourceAdapter):
         title = self._meta(html, "og:title")
         if not title:
             raise ValueError(f"Không parse được truyện {source_novel_id} ({self.name}) — đổi cấu trúc?")
-        status = "completed" if (self._meta(html, "og:novel:status") or "").startswith(
-            ("完", "已完")) else "ongoing"
+        status = self._status(html)
         cat = self._meta(html, "og:novel:category")
         # og:description thường là boilerplate quảng cáo站 → ưu tiên div#intro (tóm tắt thật)
         m = re.search(r'<div id="intro"[^>]*>(.*?)</div>', html, re.S)
@@ -155,7 +159,10 @@ class BiqugeAdapter(SourceAdapter):
         )
 
     def fetch_chapter_list(self, source_novel_id: str) -> list[ChapterRef]:
+        self.last_toc_status = None  # xoá giá trị truyện trước, phòng lấy nhầm khi fetch fail
         html = self._get(self._novel_url(source_novel_id))
+        # trang truyện = trang mục lục → parse ké trạng thái, khỏi tốn fetch_novel_meta riêng
+        self.last_toc_status = self._status(html)
         # Trang có block "最新章节" (mục mới nhất) trùng mục lục đầy đủ phía dưới.
         # Dedupe theo chapter_id GIỮ lần xuất hiện cuối (block đầy đủ, đúng thứ tự 1→N).
         pattern = re.compile(
@@ -293,8 +300,11 @@ class XinBiqugeAdapter(BiqugeAdapter):
             r'<a href="[^"]*?/' + re.escape(source_novel_id) + r'/(\d+)\.html"[^>]*>([^<]+)</a>')
         base_path = self._novel_url(source_novel_id)
         seen: dict[str, str] = {}   # cid -> title, dict giữ thứ tự xuất hiện
+        self.last_toc_status = None
         for p in range(1, 301):  # trần 300 trang ≈ 30k chương, phòng loop
             html = self._get(base_path if p == 1 else f"{base_path}index_{p}.html")
+            if p == 1:  # trang 1 = trang truyện, có og:novel:status → parse ké
+                self.last_toc_status = self._status(html)
             body = html.split("book_list2", 1)[-1]  # thiếu marker → dùng cả trang
             fresh = 0
             for m in pattern.finditer(body):

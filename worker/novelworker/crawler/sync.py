@@ -24,17 +24,18 @@ def _source_id(adapter: SourceAdapter) -> int:
     return rows[0]["id"]
 
 
-def _existing_novels(sid: int, source_ids: list[str]) -> dict[str, int]:
-    """Map source_novel_id → novels.id cho các id ĐÃ có trong DB (check theo lô,
-    thay vì 1 query/ứng viên khi discovery quét hàng trăm slug)."""
-    out: dict[str, int] = {}
+def _existing_novels(sid: int, source_ids: list[str]) -> dict[str, dict]:
+    """Map source_novel_id → {id, source_rank} cho các id ĐÃ có trong DB (check theo lô,
+    thay vì 1 query/ứng viên khi discovery quét hàng trăm slug). Kèm source_rank để
+    discover_ranking bỏ qua UPDATE khi rank không đổi."""
+    out: dict[str, dict] = {}
     for i in range(0, len(source_ids), 200):
         rows = (
-            db.sb().table("novels").select("id, source_novel_id")
+            db.sb().table("novels").select("id, source_novel_id, source_rank")
             .eq("source_id", sid).in_("source_novel_id", source_ids[i:i + 200])
             .execute()
         ).data or []
-        out.update({r["source_novel_id"]: r["id"] for r in rows})
+        out.update({r["source_novel_id"]: r for r in rows})
     return out
 
 
@@ -257,7 +258,11 @@ def discover_ranking(adapter: SourceAdapter, max_new: int = 30) -> None:
         if i % 50 == 0:
             db.heartbeat("crawler", note=f"quét ranking {adapter.name} ({i}/{len(ranked)})")
         if source_novel_id in known:
-            db.sb().table("novels").update({"source_rank": rank}).eq("id", known[source_novel_id]).execute()
+            # ranking /allvisit/ = lượt đọc tổng → thứ hạng gần như bất động giữa các
+            # chu kỳ; chỉ UPDATE khi rank ĐỔI thật, khỏi bắn trăm round-trip no-op.
+            if known[source_novel_id].get("source_rank") != rank:
+                db.sb().table("novels").update({"source_rank": rank}).eq(
+                    "id", known[source_novel_id]["id"]).execute()
             continue
         if source_novel_id in bl_ids:
             continue  # admin đã xoá vĩnh viễn — không crawl lại dù vẫn trong top
@@ -474,10 +479,18 @@ def sync_chapter_list(
     # bump khi TỔNG trên nguồn tăng so với số đã lưu → "Mới cập nhật" đúng cả với
     # truyện lười (không có stub để so)
     row = (
-        db.sb().table("novels").select("chapter_count_source")
+        db.sb().table("novels").select("chapter_count_source, status")
         .eq("id", novel_id).single().execute()
     ).data or {}
     fields: dict = {}
+    # status parse ké từ chính trang mục lục vừa tải (khuôn biquge; nguồn không lộ →
+    # None, bỏ qua) → truyện hoàn thành SAU discovery tự flip completed (rời vòng
+    # refresh), truyện completed viết tiếp tự flip ongoing (quay lại vòng).
+    src_status = getattr(adapter, "last_toc_status", None)
+    if src_status and src_status != row.get("status"):
+        fields["status"] = src_status
+        log.info("Truyện %s đổi trạng thái %s → %s (theo nguồn)",
+                 novel_id, row.get("status"), src_status)
     if total > (row.get("chapter_count_source") or 0):
         now = db.utc_now()
         fields = {"chapter_count_source": total, "last_chapter_at": now, "updated_at": now}
@@ -572,6 +585,16 @@ def refresh_canonical_updates(adapter: SourceAdapter, limit: int) -> None:
         .neq("status", "completed")
         .order("last_checked_at", desc=False, nullsfirst=True)  # chưa soi/lâu nhất trước
         .limit(limit).execute()
+    ).data or []
+    # Vé phụ ~10% ngân sách: truyện completed bị loại khỏi vòng chính, nhưng nguồn có
+    # thể gắn nhầm trạng thái / viết tiếp → soi lác đác vài truyện cũ nhất mỗi chu kỳ;
+    # nguồn nói ongoing thì sync_chapter_list tự flip status → quay lại vòng chính.
+    rows += (
+        db.sb().table("novels")
+        .select("id, source_novel_id, hidden, meta_translated, status, toc_synced_at")
+        .eq("source_id", sid).eq("is_canonical", True).eq("status", "completed")
+        .order("last_checked_at", desc=False, nullsfirst=True)
+        .limit(max(1, limit // 10)).execute()
     ).data or []
     for i, nv in enumerate(rows):
         if reader_fetch_waiting():
