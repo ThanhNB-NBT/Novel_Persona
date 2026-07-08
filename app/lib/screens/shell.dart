@@ -87,15 +87,15 @@ class _RootShellState extends ConsumerState<RootShell> {
 
 /// Đĩa Tu Tiên "dập nổi" giữa dock: thái cực xoay chậm miên man; được chọn thì
 /// bừng sáng + hiện nhẫn quang mảnh quanh đĩa (thay cho pill — pill ẩn ở tab giữa).
-class _TaijiDisc extends StatefulWidget {
+class _TaijiDisc extends ConsumerStatefulWidget {
   final bool selected;
   final VoidCallback onTap;
   const _TaijiDisc({required this.selected, required this.onTap});
   @override
-  State<_TaijiDisc> createState() => _TaijiDiscState();
+  ConsumerState<_TaijiDisc> createState() => _TaijiDiscState();
 }
 
-class _TaijiDiscState extends State<_TaijiDisc>
+class _TaijiDiscState extends ConsumerState<_TaijiDisc>
     with SingleTickerProviderStateMixin {
   late final _spin =
       AnimationController(vsync: this, duration: const Duration(seconds: 14))
@@ -111,6 +111,7 @@ class _TaijiDiscState extends State<_TaijiDisc>
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final sel = widget.selected;
+    final emblem = ref.watch(tabEmblemProvider); // biểu tượng do user chọn
     return GestureDetector(
       onTap: widget.onTap,
       child: AnimatedScale(
@@ -152,7 +153,7 @@ class _TaijiDiscState extends State<_TaijiDisc>
             ),
             RotationTransition(
                 turns: _spin,
-                child: const PixelIcon('taiji', grade: 5, size: 28)),
+                child: PixelIcon(emblem, grade: 5, size: 28)),
           ]),
         ),
       ),

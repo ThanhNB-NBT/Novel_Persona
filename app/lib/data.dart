@@ -58,6 +58,26 @@ final appThemeModeProvider = NotifierProvider<AppThemeMode, int>(
   AppThemeMode.new,
 );
 
+/// Emblem xoay giữa dock (tab Tu Tiên) — key sprite trong pixel.dart. Chọn tại
+/// màn Sửa hồ sơ, lưu cục bộ (thuần trang trí, không cần server). Chỉ nhận các
+/// emblem đối xứng radial cho xoay đẹp.
+const tabEmblems = ['taiji', 'compass', 'array', 'orb', 'mirror', 'jade'];
+
+class TabEmblem extends Notifier<String> {
+  @override
+  String build() {
+    final e = prefs.getString('tab_emblem');
+    return (e != null && tabEmblems.contains(e)) ? e : 'taiji';
+  }
+
+  void set(String e) {
+    state = e;
+    prefs.setString('tab_emblem', e);
+  }
+}
+
+final tabEmblemProvider = NotifierProvider<TabEmblem, String>(TabEmblem.new);
+
 /// Thống kê đọc của user hiện tại (số truyện đang đọc, tổng chương đã tiến).
 final readStatsProvider = FutureProvider.autoDispose<Map<String, int>>((
   ref,
@@ -77,18 +97,10 @@ final readStatsProvider = FutureProvider.autoDispose<Map<String, int>>((
 
 /// Avatar preset (emoji) — không cần upload ảnh; lưu thẳng ký tự vào profiles.avatar_url.
 const avatarPresets = [
-  '📖',
-  '🐉',
-  '⚔️',
-  '🦊',
-  '🌙',
-  '🔥',
-  '🗡️',
-  '🏯',
-  '🐼',
-  '🎭',
-  '🌸',
-  '👑',
+  '📖', '🐉', '⚔️', '🦊', '🌙', '🔥', '🗡️', '🏯', '🐼', '🎭', '🌸', '👑',
+  // bổ sung: linh thú, ngũ hành, tiên gia
+  '☯️', '🐯', '🦅', '🐍', '🐢', '🦋', '🪷', '🏮', '🧧', '🌊', '⛰️', '🍃',
+  '❄️', '⚡', '💎', '🌟', '🗿', '🎋', '🦉', '🌺',
 ];
 
 /// Hồ sơ user (tên hiển thị, avatar preset, streak đọc).

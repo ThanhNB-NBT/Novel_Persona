@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../../ambient.dart';
 import '../../data.dart';
 import '../../offline.dart';
+import '../../theme.dart' show monoStyle;
 import '../../widgets.dart';
 
 class NovelDetailScreen extends ConsumerWidget {
@@ -372,6 +373,15 @@ class _ChapterTile extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 13),
         child: Row(children: [
+          // số thứ tự chương (mono, phải-căn cho thẳng cột khi số dài ngắn khác nhau)
+          SizedBox(
+            width: 34,
+            child: Text('${c['chapter_index']}',
+                textAlign: TextAlign.right,
+                style: monoStyle(context,
+                    color: cs.onSurfaceVariant.withValues(alpha: 0.7))),
+          ),
+          const SizedBox(width: 12),
           Expanded(
             child: Text(
               c['title_vi'] ?? 'Chương ${c['chapter_index']}',
