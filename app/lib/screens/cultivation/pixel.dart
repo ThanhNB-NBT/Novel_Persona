@@ -474,3 +474,147 @@ class _PixelPainter extends CustomPainter {
   @override
   bool shouldRepaint(_PixelPainter old) => old.grid != grid || old.grade != grade;
 }
+
+// ===== Nhân vật pixel theo CHỦNG TỘC (sprite 24×26, kiểu 16-bit JRPG) =====
+// Ngồi thiền chính diện, full body, palette giới hạn theo tộc — chung khung
+// thân để "cùng một game": Nhân áo lam + trâm + đai ngọc · Yêu tai cáo + đuôi
+// chóp trắng, tông thổ · Ma sừng xương + mắt đỏ, tông tím đen · Linh áo trắng
+// viền vàng + linh quang + tóc bạc.
+
+const _cultBase = <String>[
+  '........................', //  0
+  '...........hh...........', //  1 búi tóc
+  '..........hhhh..........', //  2
+  '.......zzzhhhhzzz.......', //  3 trâm cài ngang
+  '........kkkkkkkk........', //  4 đỉnh đầu
+  '.......khhhhhhhhk.......', //  5
+  '......khhhhhhhhhhk......', //  6
+  '......khhffffffhhk......', //  7 mái tóc ôm mặt
+  '......khfeffffefhk......', //  8 mắt
+  '......khffffffffhk......', //  9
+  '.......kffffffffk.......', // 10
+  '........kffffffk........', // 11 cằm
+  '..........kffk..........', // 12 cổ
+  '......kkAAAAAAAAkk......', // 13 vai
+  '.....kAAABwwwwBAAAk.....', // 14 cổ áo chéo lộ lớp trong
+  '.....kAAAABwwBAAAAk.....', // 15
+  '....kAAAAABwwBAAAAAk....', // 16
+  '....kASSSSSSSSSSSSAk....', // 17 đai lưng
+  '....kAAAAAffffAAAAAk....', // 18 tay bắt ấn trong lòng
+  '...kAAAAAAffffAAAAAAk...', // 19
+  '...kAAAAAAAAAAAAAAAAk...', // 20 vạt áo xòe phủ chân
+  '..kAAAAAAAAAAAAAAAAAAk..', // 21
+  '..kABBAAAAAAAAAAAABBAk..', // 22 gối bắt sáng
+  '..kCAAAAAAAAAAAAAAAACk..', // 23
+  '...kkkkkkkkkkkkkkkkkk...', // 24
+  '........................', // 25
+];
+
+/// Grid theo tộc: nền chung + thay các hàng đặc trưng (đầu, tóc, đuôi).
+List<String> cultivatorGrid(String? race) {
+  final g = List<String>.of(_cultBase);
+  switch (race) {
+    case 'yeu': // tai cáo lộ da trong + đuôi cong bên phải chóp trắng, đầu trần
+      g[1] = '.......hh......hh.......';
+      g[2] = '.......hhh....hhh.......';
+      g[3] = '.......hfhh..hhfh.......';
+      g[15] = '.....kAAAABwwBAAAAk..ww.';
+      g[16] = '....kAAAAABwwBAAAAAk.BB.';
+      g[17] = '....kASSSSSSSSSSSSAk.BB.';
+      g[18] = '....kAAAAAffffAAAAAk..BB';
+      g[19] = '...kAAAAAAffffAAAAAAk.BB';
+      g[20] = '...kAAAAAAAAAAAAAAAAk.B.';
+    case 'ma': // hai sừng xương cong ra ngoài, đầu trần
+      g[1] = '.....y............y.....';
+      g[2] = '.....yy..........yy.....';
+      g[3] = '......yy........yy......';
+      g[4] = '......yykkkkkkkkyy......';
+    case 'linh': // vòng linh quang lơ lửng + tóc dài xõa qua vai
+      g[0] = '.........SSSSSS.........';
+      g[1] = '........S......S........';
+      g[2] = '.........SSSSSS.........';
+      g[3] = '..........hhhh..........';
+      g[13] = '.....hkkAAAAAAAAkkh.....';
+      g[14] = '....hkAAABwwwwBAAAkh....';
+      g[15] = '....hkAAAABwwBAAAAkh....';
+      g[16] = '...hkAAAAABwwBAAAAAkh...';
+  }
+  return g;
+}
+
+/// Palette giới hạn theo tộc (theo race design rules đã chốt).
+({Color a, Color b, Color c, Color s, Color hair, Color eye, Color skin})
+    _racePal(String? race) => switch (race) {
+          'yeu' => (
+              a: const Color(0xFFC2703A), // áo nâu cam thổ
+              b: const Color(0xFFE8A05C),
+              c: const Color(0xFF8A4A22),
+              s: const Color(0xFF5C3A1E), // đai da
+              hair: const Color(0xFF7A4A26),
+              eye: const Color(0xFF241F31),
+              skin: const Color(0xFFF1C27D),
+            ),
+          'ma' => (
+              a: const Color(0xFF463058), // áo tím đen
+              b: const Color(0xFF6E4A85),
+              c: const Color(0xFF2A1836),
+              s: const Color(0xFFB02A37), // đai đỏ thẫm
+              hair: const Color(0xFF231A2F),
+              eye: const Color(0xFFE03131), // mắt đỏ
+              skin: const Color(0xFFE0C2B8), // da tái
+            ),
+          'linh' => (
+              a: const Color(0xFFE4DCC8), // áo trắng ngà
+              b: const Color(0xFFE9C46A), // viền vàng
+              c: const Color(0xFFB8A888),
+              s: const Color(0xFFD4A017), // linh quang + đai vàng
+              hair: const Color(0xFFE8E4F0), // tóc bạc
+              eye: const Color(0xFF3BC9DB),
+              skin: const Color(0xFFF6DCB5),
+            ),
+          _ => (
+              a: const Color(0xFF3E63B0), // Nhân: áo thanh lam
+              b: const Color(0xFF6E8FD6),
+              c: const Color(0xFF2A4578),
+              s: const Color(0xFF2F9E77), // đai ngọc bích
+              hair: const Color(0xFF2E2A3B),
+              eye: const Color(0xFF241F31),
+              skin: const Color(0xFFF1C27D),
+            ),
+        };
+
+/// Vẽ nhân vật vào [rect]: căn giữa ngang theo rect, ĐÁY sprite chạm đáy rect
+/// (đặt đáy rect lên mặt chỗ ngồi là nhân vật "ngồi" đúng chỗ).
+void drawCultivator(Canvas canvas, Rect rect, String? race) {
+  final grid = cultivatorGrid(race);
+  final pal = _racePal(race);
+  final cell = rect.width / grid[0].length;
+  final oy = rect.bottom - grid.length * cell;
+  final paint = Paint();
+  for (var y = 0; y < grid.length; y++) {
+    final row = grid[y];
+    for (var x = 0; x < row.length; x++) {
+      final ch = row[x];
+      if (ch == '.') continue;
+      paint.color = switch (ch) {
+        'k' => const Color(0xFF241F31), // viền mực
+        'w' => const Color(0xFFF6F4EF),
+        'y' => const Color(0xFFCBB9A0), // xương sừng
+        'z' => const Color(0xFFC6CCDA), // trâm bạc
+        'A' => pal.a,
+        'B' => pal.b,
+        'C' => pal.c,
+        'S' => pal.s,
+        'h' => pal.hair,
+        'e' => pal.eye,
+        'f' => pal.skin,
+        _ => const Color(0x00000000),
+      };
+      // +0.5 phủ mép: tránh khe hở hairline giữa các ô khi scale lẻ
+      canvas.drawRect(
+          Rect.fromLTWH(
+              rect.left + x * cell, oy + y * cell, cell + 0.5, cell + 0.5),
+          paint);
+    }
+  }
+}

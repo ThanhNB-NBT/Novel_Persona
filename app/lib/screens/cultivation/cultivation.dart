@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../cultivation.dart';
 import '../../data.dart';
+import '../../theme.dart' show monoStyle;
 import 'pixel.dart';
 
 /// Màn Tu Tiên: card cảnh giới + exp bar tick sống, nút Lên Tầng/Đột Phá,
@@ -59,7 +60,8 @@ class _CultivationScreenState extends ConsumerState<CultivationScreen> {
         barrierLabel: 'đột phá',
         barrierColor: Colors.black.withValues(alpha: 0.72),
         transitionDuration: const Duration(milliseconds: 200),
-        pageBuilder: (ctx, _, _) => _AdvanceFxDialog(result: r, major: major),
+        pageBuilder: (ctx, _, _) => _AdvanceFxDialog(
+            result: r, major: major, race: st['race'] as String?),
       );
     } catch (e) {
       if (!mounted) return;
@@ -70,8 +72,6 @@ class _CultivationScreenState extends ConsumerState<CultivationScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final t = Theme.of(context).textTheme;
     final state = ref.watch(cultStateProvider);
 
     return Scaffold(
@@ -100,19 +100,13 @@ class _CultivationScreenState extends ConsumerState<CultivationScreen> {
                   const SizedBox(height: 16),
                 ],
                 _RealmCard(st: st, exp: _exp, onAdvance: () => _advance(st)),
-                const SizedBox(height: 16),
+                const SizedBox(height: 20),
+                const _SectionLabel('Trang bị', Icons.shield_moon_outlined),
+                const SizedBox(height: 12),
                 _EquipRow(st: st),
-                const SizedBox(height: 16),
-                Text('CHỈ SỐ',
-                    style: t.labelMedium?.copyWith(
-                        color: cs.onSurfaceVariant, letterSpacing: 0.8)),
-                const SizedBox(height: 8),
-                _StatsRow(stats: (st['stats'] as Map?) ?? const {}),
-                const SizedBox(height: 16),
-                Text('KHO ĐỒ',
-                    style: t.labelMedium?.copyWith(
-                        color: cs.onSurfaceVariant, letterSpacing: 0.8)),
-                const SizedBox(height: 8),
+                const SizedBox(height: 20),
+                const _SectionLabel('Túi càn khôn', Icons.backpack_rounded),
+                const SizedBox(height: 12),
                 const _InventoryGrid(),
               ],
             ),
@@ -129,39 +123,44 @@ num? _cpMult(Rec st) {
   return const {1: 1.5, 2: 3, 3: 6, 4: 12, 5: 24}[g];
 }
 
-num _ratePct(Rec st) {
-  final eq = (st['equipped'] as Rec?) ?? const {};
-  num p(String s) => eq[s]?['effect']?['rate_pct'] as num? ?? 0;
-  return p('vukhi') + p('phapbao');
-}
+/// Pill "tầng N" nhỏ cạnh tên cảnh giới, tô theo màu phẩm/cảnh giới.
+Widget _tangPill(BuildContext context, int stage, Color rc) => Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+      decoration: BoxDecoration(
+        color: rc.withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: rc.withValues(alpha: 0.5)),
+      ),
+      child: Text('tầng $stage',
+          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: rc, fontWeight: FontWeight.w800, letterSpacing: 0.2)),
+    );
 
-num _btPct(Rec st) =>
-    ((st['equipped'] as Rec?)?['phapchu']?['effect']?['bt_pct'] as num? ?? 0) +
-    (st['bt_bonus_pct'] as num? ?? 0);
-
-/// Chip chỉ số nhỏ treo quanh nhân vật.
-Widget _statBadge(BuildContext context, String label, String value) {
+/// Chip thông tin nhỏ (icon + chữ) trong bảng nhân vật; [on] để nhấn màu nhấn.
+Widget _infoChip(BuildContext context, IconData icon, String text,
+    {bool on = false}) {
   final cs = Theme.of(context).colorScheme;
-  final t = Theme.of(context).textTheme;
+  final c = on ? cs.primary : cs.onSurfaceVariant;
   return Container(
-    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
     decoration: BoxDecoration(
-      color: cs.surface.withValues(alpha: 0.85),
-      borderRadius: BorderRadius.circular(12),
-      border: Border.all(color: cs.outlineVariant),
+      color: c.withValues(alpha: 0.10),
+      borderRadius: BorderRadius.circular(9),
     ),
-    child: Column(children: [
-      Text(label,
-          style: t.labelSmall?.copyWith(fontSize: 9, color: cs.onSurfaceVariant)),
-      Text(value,
-          style: t.labelLarge
-              ?.copyWith(fontWeight: FontWeight.w800, color: cs.primary)),
+    child: Row(mainAxisSize: MainAxisSize.min, children: [
+      Icon(icon, size: 12, color: c),
+      const SizedBox(width: 4),
+      Text(text,
+          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: c, fontWeight: FontWeight.w600, letterSpacing: 0)),
     ]),
   );
 }
 
-/// Card cảnh giới: sprite nhân vật + quầng theo phẩm, tên cảnh giới/tầng,
-/// exp bar sống, tốc độ, buff đang chạy, nút Lên Tầng/Đột Phá.
+/// Bảng nhân vật kiểu game: khung viền tô theo cảnh giới + gradient nhẹ,
+/// nhân vật bên trái, thông tin (tên/tầng/đạo hiệu + chip) bên phải,
+/// thanh tu vi có số nằm trong thanh, buff chip, nút Lên Tầng/Đột Phá,
+/// và dải 5 chỉ số chiến đấu ở đáy.
 class _RealmCard extends StatelessWidget {
   final Rec st;
   final ValueNotifier<double> exp;
@@ -176,6 +175,7 @@ class _RealmCard extends StatelessWidget {
     final stage = st['stage'] as int;
     final req = (st['req'] as num).toDouble();
     final rate = (st['rate'] as num).toDouble();
+    final rc = gradeColor((realm + 1) ~/ 2); // màu phẩm/cảnh giới
     final major = stage >= 9 && realm < 9;
     final peak = stage >= 9 && realm >= 9;
     // tỷ lệ đột phá hiển thị = công thức server (đan hộ thân + pháp chú đã cộng)
@@ -185,121 +185,161 @@ class _RealmCard extends StatelessWidget {
             ((st['equipped'] as Rec?)?['phapchu']?['effect']?['bt_pct'] as num? ?? 0)
                 .toInt())
         .clamp(10, 100);
+    final now = DateTime.now();
     final buffUntil = DateTime.tryParse(st['buff_until'] as String? ?? '');
+    final stoneUntil = DateTime.tryParse(st['stone_until'] as String? ?? '');
+    final cpElem = (st['equipped'] as Rec?)?['congphap']?['effect']?['element'];
+    final match = cpElem != null && (cpElem == st['element'] || cpElem == 'all');
+    final hasBuff = (buffUntil != null && buffUntil.isAfter(now)) ||
+        (stoneUntil != null && stoneUntil.isAfter(now));
 
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(children: [
-          // nhân vật thiền: lơ lửng + quầng linh khí thở + linh quang bay quanh,
-          // tông màu theo nửa cảnh giới (1-2 Hoàng ... 9 Tiên).
-          // 4 chỉ số treo quanh người thay vì liệt kê bên dưới.
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: rc.withValues(alpha: 0.45)),
+        // gradient loang màu cảnh giới từ đỉnh xuống → cảm giác "bảng hero"
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [rc.withValues(alpha: 0.18), cs.surface],
+          stops: const [0, 0.5],
+        ),
+      ),
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 16),
+      child: Column(children: [
+        Row(children: [
+          // nhân vật thu nhỏ vừa khung (moon halo + linh quang theo công pháp)
           SizedBox(
-              height: 150,
-              width: double.infinity,
-              child: Stack(alignment: Alignment.center, children: [
-            _AnimatedCultivator(
-                realm: realm,
-                cpCode: (st['equipped'] as Rec?)?['congphap']?['code'] as String?),
-            Positioned(left: 0, top: 8, child: _statBadge(context, 'Linh căn', '${st['linh_can']}')),
-            Positioned(
-                right: 0,
-                top: 8,
-                child: _statBadge(context, 'Công pháp',
-                    _cpMult(st) == null ? '—' : '×${_cpMult(st)}')),
-            Positioned(
-                left: 0,
-                bottom: 8,
-                child: _statBadge(context, 'Tốc độ', '+${_ratePct(st)}%')),
-            Positioned(
-                right: 0,
-                bottom: 8,
-                child: _statBadge(context, 'Đột phá', '+${_btPct(st)}%')),
-          ])),
-          const SizedBox(height: 10),
-          Text('${realmNames[realm - 1]} · tầng $stage',
-              style: t.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
-          // đạo hiệu + chủng tộc + phẩm linh căn + hệ ngũ hành
-          Text(
-              '「${daoTitles[realm - 1]}」'
-              '${st['race'] != null ? ' · ${raceNames[st['race']]}' : ''}'
-              ' · ${linhCanTier((st['linh_can'] as num).toInt())}'
-              '${st['element'] != null ? ' · hệ ${elementNames[st['element']]}' : ''}',
-              textAlign: TextAlign.center,
-              style: t.labelMedium?.copyWith(color: cs.onSurfaceVariant)),
-          Builder(builder: (_) {
-            // công pháp hợp hệ linh căn (hoặc hệ Vạn Pháp) → server đã ×1.3, báo cho user biết
-            final cpElem =
-                (st['equipped'] as Rec?)?['congphap']?['effect']?['element'];
-            final match =
-                cpElem != null && (cpElem == st['element'] || cpElem == 'all');
-            return Text(
-                '${rate.toStringAsFixed(1)} tu vi/giây${match ? ' · hợp hệ ×1.3' : ''}',
-                style: t.labelMedium?.copyWith(
-                    color: match ? cs.primary : cs.onSurfaceVariant));
-          }),
-          // hiệu ứng có thời hạn đang chạy: đan dược + linh thạch, mỗi kênh 1 dòng đếm ngược
-          if (buffUntil != null && buffUntil.isAfter(DateTime.now()))
-            Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: _BuffCountdown(
-                  label: 'Đan lực',
-                  pct: (st['buff_pct'] as num).toInt(),
-                  until: buffUntil),
+            width: 118,
+            height: 134,
+            child: FittedBox(
+              fit: BoxFit.contain,
+              child: _AnimatedCultivator(
+                  realm: realm,
+                  race: st['race'] as String?,
+                  cpCode:
+                      (st['equipped'] as Rec?)?['congphap']?['code'] as String?),
             ),
-          if (DateTime.tryParse(st['stone_until'] as String? ?? '')
-              case final su? when su.isAfter(DateTime.now()))
-            Padding(
-              padding: const EdgeInsets.only(top: 2),
-              child: _BuffCountdown(
-                  label: 'Linh thạch',
-                  pct: (st['stone_pct'] as num).toInt(),
-                  until: su),
-            ),
-          const SizedBox(height: 14),
-          ValueListenableBuilder<double>(
-            valueListenable: exp,
-            builder: (_, e, _) {
-              final full = e >= req;
-              return Column(children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: LinearProgressIndicator(
-                    value: (e / req).clamp(0.0, 1.0).toDouble(),
-                    minHeight: 10,
-                    backgroundColor: cs.primary.withValues(alpha: 0.12),
-                  ),
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                Flexible(
+                  child: Text(realmNames[realm - 1],
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: t.headlineSmall?.copyWith(color: cs.onSurface)),
                 ),
-                const SizedBox(height: 6),
-                Text(
-                  full
-                      ? (peak
-                          ? 'Viên mãn — chờ phi thăng'
-                          : 'Bình cảnh — ${major ? 'sẵn sàng đột phá' : 'sẵn sàng lên tầng'}')
-                      : '${e.floor()} / ${req.floor()} tu vi',
-                  style: t.labelMedium?.copyWith(
-                      color: full ? cs.primary : cs.onSurfaceVariant,
-                      fontWeight: full ? FontWeight.w700 : null),
-                ),
-                const SizedBox(height: 10),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton.icon(
-                    onPressed: full && !peak ? onAdvance : null,
-                    icon: Icon(major ? Icons.bolt_rounded : Icons.arrow_upward_rounded,
-                        size: 18),
-                    label: Text(major
-                        ? 'Đột phá ${realmNames[realm]} ($chance%)'
-                        : peak
-                            ? 'Đỉnh Độ Kiếp'
-                            : 'Lên tầng ${stage + 1}'),
-                  ),
-                ),
-              ]);
-            },
+                const SizedBox(width: 8),
+                _tangPill(context, stage, rc),
+              ]),
+              const SizedBox(height: 3),
+              Text('「${daoTitles[realm - 1]}」',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: t.labelMedium),
+              const SizedBox(height: 10),
+              // 3 dòng chữ cũ → chip gọn: phẩm linh căn · hệ · tốc độ · công pháp
+              Wrap(spacing: 6, runSpacing: 6, children: [
+                _infoChip(context, Icons.spa_rounded,
+                    linhCanTier((st['linh_can'] as num).toInt())),
+                if (st['element'] != null)
+                  _infoChip(context, Icons.auto_awesome_rounded,
+                      'hệ ${elementNames[st['element']]}${match ? ' ×1.3' : ''}',
+                      on: match),
+                _infoChip(context, Icons.speed_rounded,
+                    '${rate.toStringAsFixed(1)}/giây',
+                    on: true),
+                if (_cpMult(st) != null)
+                  _infoChip(context, Icons.menu_book_rounded,
+                      'công pháp ×${_cpMult(st)}'),
+              ]),
+            ]),
           ),
         ]),
-      ),
+        // buff có thời hạn đang chạy → chip vàng nhỏ
+        if (hasBuff) ...[
+          const SizedBox(height: 12),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Wrap(spacing: 8, runSpacing: 8, children: [
+              if (buffUntil != null && buffUntil.isAfter(now))
+                _BuffCountdown(
+                    label: 'Đan lực',
+                    pct: (st['buff_pct'] as num).toInt(),
+                    until: buffUntil),
+              if (stoneUntil != null && stoneUntil.isAfter(now))
+                _BuffCountdown(
+                    label: 'Linh thạch',
+                    pct: (st['stone_pct'] as num).toInt(),
+                    until: stoneUntil),
+            ]),
+          ),
+        ],
+        const SizedBox(height: 14),
+        ValueListenableBuilder<double>(
+          valueListenable: exp,
+          builder: (_, e, _) {
+            final full = e >= req;
+            return Column(children: [
+              // thanh tu vi kiểu game: số / trạng thái nằm TRONG thanh
+              Container(
+                height: 22,
+                clipBehavior: Clip.antiAlias,
+                decoration: BoxDecoration(
+                  color: rc.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(11),
+                ),
+                child: Stack(children: [
+                  FractionallySizedBox(
+                    widthFactor: (e / req).clamp(0.0, 1.0).toDouble(),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: full ? cs.primary : rc,
+                        borderRadius: BorderRadius.circular(11),
+                      ),
+                    ),
+                  ),
+                  Center(
+                    child: Text(
+                      full
+                          ? (peak
+                              ? 'Viên mãn — chờ phi thăng'
+                              : 'Bình cảnh · ${major ? 'sẵn sàng đột phá' : 'sẵn sàng lên tầng'}')
+                          : '${e.floor()} / ${req.floor()}',
+                      style: monoStyle(context,
+                          size: 11,
+                          w: FontWeight.w700,
+                          color: full ? cs.onPrimary : cs.onSurface),
+                    ),
+                  ),
+                ]),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: full && !peak ? onAdvance : null,
+                  icon: Icon(
+                      major ? Icons.bolt_rounded : Icons.arrow_upward_rounded,
+                      size: 18),
+                  label: Text(major
+                      ? 'Đột phá ${realmNames[realm]} ($chance%)'
+                      : peak
+                          ? 'Đỉnh Độ Kiếp'
+                          : 'Lên tầng ${stage + 1}'),
+                ),
+              ),
+            ]);
+          },
+        ),
+        const SizedBox(height: 16),
+        Divider(height: 1, color: cs.outlineVariant),
+        const SizedBox(height: 14),
+        // dải 5 chỉ số chiến đấu — đáy "bảng nhân vật" (gộp từ mục CHỈ SỐ cũ)
+        _StatsRow(stats: (st['stats'] as Map?) ?? const {}),
+      ]),
     );
   }
 }
@@ -310,7 +350,8 @@ class _RealmCard extends StatelessWidget {
 class _AdvanceFxDialog extends StatefulWidget {
   final Rec result;
   final bool major;
-  const _AdvanceFxDialog({required this.result, required this.major});
+  final String? race;
+  const _AdvanceFxDialog({required this.result, required this.major, this.race});
   @override
   State<_AdvanceFxDialog> createState() => _AdvanceFxDialogState();
 }
@@ -364,7 +405,7 @@ class _AdvanceFxDialogState extends State<_AdvanceFxDialog>
                     parent: _ctrl,
                     curve: const Interval(0.15, 0.6, curve: Curves.easeOut)),
                 child: ok
-                    ? _AnimatedCultivator(realm: realm)
+                    ? _AnimatedCultivator(realm: realm, race: widget.race)
                     : const PixelIcon('talisman', grade: 1, size: 80),
               ),
               const SizedBox(height: 10),
@@ -509,6 +550,9 @@ enum _Aura { qi, ice, wind, earth, sword, gold, star }
       'cp_luyen_the' => (_Aura.gold, const Color(0xFFFFA94D)),
       'cp_cuu_chuyen' => (_Aura.gold, const Color(0xFFFFC94D)),
       'cp_thien_cang' => (_Aura.sword, const Color(0xFFCED4DA)),
+      'cp_liet_hoa' => (_Aura.gold, const Color(0xFFFF7043)),
+      'cp_xich_diem' => (_Aura.gold, const Color(0xFFFF5722)),
+      'cp_thanh_moc' => (_Aura.qi, const Color(0xFF69DB7C)),
       'cp_dai_dien' => (_Aura.star, const Color(0xFFB197FC)),
       'cp_hon_don' => (_Aura.star, const Color(0xFF9775FA)),
       'cp_thai_co' => (_Aura.star, const Color(0xFFFFE066)),
@@ -519,10 +563,11 @@ enum _Aura { qi, ice, wind, earth, sword, gold, star }
 class CultivatorPreview extends StatelessWidget {
   final int realm;
   final String? cpCode;
-  const CultivatorPreview({super.key, required this.realm, this.cpCode});
+  final String? race;
+  const CultivatorPreview({super.key, required this.realm, this.cpCode, this.race});
   @override
   Widget build(BuildContext context) =>
-      _AnimatedCultivator(realm: realm, cpCode: cpCode);
+      _AnimatedCultivator(realm: realm, cpCode: cpCode, race: race);
 }
 
 /// Bóng tiên nhân động: lơ lửng lên xuống, quầng thở, hiệu ứng bay theo công pháp.
@@ -531,7 +576,8 @@ class CultivatorPreview extends StatelessWidget {
 class _AnimatedCultivator extends StatefulWidget {
   final int realm; // 1..9
   final String? cpCode; // code công pháp đang tu → kiểu hiệu ứng
-  const _AnimatedCultivator({required this.realm, this.cpCode});
+  final String? race; // dáng silhouette theo chủng tộc
+  const _AnimatedCultivator({required this.realm, this.cpCode, this.race});
   @override
   State<_AnimatedCultivator> createState() => _AnimatedCultivatorState();
 }
@@ -569,7 +615,8 @@ class _AnimatedCultivatorState extends State<_AnimatedCultivator>
               offset: Offset(0, math.sin(_ctrl.value * 2 * math.pi) * 4),
               child: CustomPaint(
                 size: const Size(96, 112),
-                painter: _SilhouettePainter(rim: color, realm: widget.realm),
+                painter: _SilhouettePainter(
+                    rim: color, realm: widget.realm, race: widget.race),
               ),
             ),
           ),
@@ -672,13 +719,16 @@ class _SkyPainter extends CustomPainter {
       old.t != t || old.moon != moon || old.aura != aura || old.realm != realm;
 }
 
-/// Bóng tiên nhân thủy mặc: silhouette đen ngồi kiết già, búi tóc + trâm,
-/// dải đai bay, viền sáng bắt trăng một bên. Không mặt — không bao giờ "xấu".
+/// Bóng tiên nhân thủy mặc: silhouette đen ngồi kiết già, dải đai bay, viền
+/// sáng bắt trăng một bên. Không mặt — không bao giờ "xấu".
 /// Chỗ ngồi theo cảnh giới: mỏm đá (1-3) → đài sen (4-6) → kiếm bay (7-9).
+/// Dáng theo CHỦNG TỘC (nhìn là biết, khỏi cần chữ): Nhân búi tóc + trâm ·
+/// Yêu tai thú + đuôi · Ma hai sừng cong · Linh tai nhọn + vòng linh quang.
 class _SilhouettePainter extends CustomPainter {
   final Color rim; // màu viền sáng (theo hệ công pháp/cảnh giới)
   final int realm; // 1..9 — quyết định chỗ ngồi
-  _SilhouettePainter({required this.rim, required this.realm});
+  final String? race; // null/nhan → dáng người thường
+  _SilhouettePainter({required this.rim, required this.realm, this.race});
 
   /// Mỏm đá lơ lửng góc cạnh + 2 mảnh vụn trôi (Luyện Khí → Kim Đan).
   void _rock(Canvas canvas, double cx, Paint p, Color ink) {
@@ -776,73 +826,15 @@ class _SilhouettePainter extends CustomPainter {
         _sword(canvas, cx, p, ink);
     }
 
-    // thân người ngồi kiết già: vai HẸP thuôn xuống đáy RỘNG (tam giác thiền),
-    // hai bump đầu gối rõ, hõm nhẹ giữa gối
-    p.color = ink;
-    final body = Path()
-      ..moveTo(cx - 5.5, 47) // cổ trái
-      ..quadraticBezierTo(cx - 13, 51, cx - 16, 60) // vai trái đổ xuống
-      ..quadraticBezierTo(cx - 22, 76, cx - 30, 90) // tay áo trái xòe
-      ..quadraticBezierTo(cx - 27, 95, cx - 17, 95.5) // gối trái tròn
-      ..quadraticBezierTo(cx, 92.5, cx + 17, 95.5) // hõm giữa hai gối
-      ..quadraticBezierTo(cx + 27, 95, cx + 30, 90) // gối phải
-      ..quadraticBezierTo(cx + 22, 76, cx + 16, 60) // tay áo phải
-      ..quadraticBezierTo(cx + 13, 51, cx + 5.5, 47) // vai phải
-      ..quadraticBezierTo(cx, 44.5, cx - 5.5, 47)
-      ..close();
-    canvas.drawPath(body, p);
-
-    // đầu nhỏ cân đối + búi tóc gọn + trâm mảnh
-    canvas.drawCircle(Offset(cx, 37.5), 7.5, p);
-    canvas.drawCircle(Offset(cx, 28.6), 3.2, p);
-    canvas.drawLine(
-        Offset(cx - 5.5, 28.8),
-        Offset(cx + 5.5, 27.6),
-        Paint()
-          ..isAntiAlias = true
-          ..strokeWidth = 1.4
-          ..strokeCap = StrokeCap.round
-          ..color = ink);
-
-    // dải đai bay về một phía — nhuộm màu linh khí cho nổi khỏi nền tối
-    final sash = Paint()
-      ..isAntiAlias = true
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.8
-      ..strokeCap = StrokeCap.round
-      ..color = rim.withValues(alpha: 0.5);
-    canvas.drawPath(
-        Path()
-          ..moveTo(cx + 12, 70)
-          ..quadraticBezierTo(cx + 28, 63, cx + 38, 49)
-          ..quadraticBezierTo(cx + 42, 43, cx + 41, 37),
-        sash);
-    canvas.drawPath(
-        Path()
-          ..moveTo(cx + 12, 74)
-          ..quadraticBezierTo(cx + 30, 73, cx + 40, 64),
-        sash..strokeWidth = 1.2..color = rim.withValues(alpha: 0.35));
-
-    // viền sáng bắt trăng: mép phải đầu + vai + tay áo (phía nguồn sáng)
-    final rimP = Paint()
-      ..isAntiAlias = true
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.5
-      ..strokeCap = StrokeCap.round
-      ..color = rim.withValues(alpha: 0.9);
-    canvas.drawArc(Rect.fromCircle(center: Offset(cx, 37.5), radius: 7.5),
-        -math.pi * 0.45, math.pi * 0.6, false, rimP);
-    canvas.drawPath(
-        Path()
-          ..moveTo(cx + 6.5, 47.5)
-          ..quadraticBezierTo(cx + 13.5, 51.5, cx + 16.5, 60.5)
-          ..quadraticBezierTo(cx + 22.5, 76.5, cx + 30.5, 90),
-        rimP..color = rim.withValues(alpha: 0.55));
+    // Nhân vật PIXEL theo tộc (pixel.dart) — full body ngồi thiền chính diện.
+    // Rộng 66px căn giữa, đáy sprite lún nhẹ vào mặt chỗ ngồi (~y100).
+    drawCultivator(
+        canvas, Rect.fromLTWH(cx - 33, 30, 66, 70), race);
   }
 
   @override
   bool shouldRepaint(_SilhouettePainter old) =>
-      old.rim != rim || old.realm != realm;
+      old.rim != rim || old.realm != realm || old.race != race;
 }
 
 /// Hiệu ứng bay quanh theo HỆ công pháp (vẽ ĐÈ lên bóng người — quầng thở
@@ -1019,13 +1011,48 @@ class _BuffCountdownState extends State<_BuffCountdown> {
     final left = widget.until.difference(DateTime.now());
     if (left.isNegative) return const SizedBox.shrink();
     final h = left.inHours, m = left.inMinutes % 60, s = left.inSeconds % 60;
-    return Text(
-      '${widget.label} +${widget.pct}% · còn ${h > 0 ? '${h}g ' : ''}$m′${s.toString().padLeft(2, '0')}″',
-      style: Theme.of(context)
-          .textTheme
-          .labelMedium
-          ?.copyWith(color: cs.primary, fontWeight: FontWeight.w600),
+    // chip vàng (secondary) — buff nổi khỏi bảng nhân vật
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+      decoration: BoxDecoration(
+        color: cs.secondary.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(9),
+      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(Icons.bolt_rounded, size: 12, color: cs.secondary),
+        const SizedBox(width: 4),
+        Text(
+          '${widget.label} +${widget.pct}% · ${h > 0 ? '${h}g ' : ''}$m′${s.toString().padLeft(2, '0')}″',
+          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: cs.secondary, fontWeight: FontWeight.w700, letterSpacing: 0),
+        ),
+      ]),
     );
+  }
+}
+
+/// Tiêu đề mục kiểu game: thanh nhấn dọc + icon + nhãn viết hoa nhỏ.
+class _SectionLabel extends StatelessWidget {
+  final String title;
+  final IconData icon;
+  const _SectionLabel(this.title, this.icon);
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final t = Theme.of(context).textTheme;
+    return Row(children: [
+      Container(
+        width: 3,
+        height: 15,
+        decoration: BoxDecoration(
+            color: cs.primary, borderRadius: BorderRadius.circular(2)),
+      ),
+      const SizedBox(width: 8),
+      Icon(icon, size: 16, color: cs.onSurfaceVariant),
+      const SizedBox(width: 6),
+      Text(title.toUpperCase(),
+          style: t.labelSmall?.copyWith(color: cs.onSurface, letterSpacing: 1)),
+    ]);
   }
 }
 
