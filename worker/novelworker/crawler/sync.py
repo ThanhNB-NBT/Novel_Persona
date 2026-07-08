@@ -332,10 +332,12 @@ def process_novel_requests(adapters: list[SourceAdapter], limit: int = 3) -> Non
                 {"status": "failed", "note": str(e)[:300]}).eq("id", r["id"]).execute()
             continue
         if novel is None:
-            # nguồn đang chặn → giữ pending thử lại, nhưng tối đa 10 phút thì chốt
+            # Nguồn đang chặn tần suất → giữ pending thử lại. Hạn 1 GIỜ mới chốt:
+            # discovery quét nguồn xong thì search thường bị chặn thêm một lúc,
+            # hạn 10 phút từng chốt oan "không có" (E2E 2026-07-08).
             age_sec = (datetime.now(timezone.utc)
                        - datetime.fromisoformat(r["created_at"])).total_seconds()
-            if blocked and age_sec < 600:
+            if blocked and age_sec < 3600:
                 continue
             db.sb().table("novel_requests").update(
                 {"status": "notfound", "note": "Không nguồn nào có truyện này"}

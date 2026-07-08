@@ -157,9 +157,13 @@ def run_crawler() -> None:
                     sync.discover_ranking(adapter, max_new=max_new)
                     if not getattr(adapter, "fetch_ranking", None):
                         sync.discover_latest(adapter, max_new=max_new)
+                    # chen giữa các bước dài: yêu cầu truyện không phải đợi hết cả
+                    # chu kỳ discovery (10-15 phút) mới được xử
+                    sync.process_novel_requests(list(adapters.values()))
                     sync.sync_followed_novels(adapter)
                     # truyện đã có ra chương mới → nổi "Mới cập nhật" (không chỉ truyện mới)
                     sync.refresh_canonical_updates(adapter, limit=refresh_n)
+                    sync.process_novel_requests(list(adapters.values()))
                     _eval_source_health(adapter)
             except Exception:
                 log.exception("Lỗi vòng crawl (%s)", adapter.name)
