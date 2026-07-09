@@ -593,6 +593,11 @@ Future<void> setInLibrary(int novelId, bool add) async {
 
 /// Xóa truyện khỏi Tủ truyện = xóa lịch sử đọc (reading_progress) của truyện đó.
 Future<void> removeReading(int novelId) async {
+  // Xoá luôn vị trí cuộn trong từng chương lưu local (rp_<novelId>_<idx>),
+  // nếu không thì mở lại chương vẫn nhảy về chỗ đọc dở dù đã xoá khỏi tủ.
+  for (final k in prefs.getKeys().where((k) => k.startsWith('rp_${novelId}_'))) {
+    await prefs.remove(k);
+  }
   final uid = sb.auth.currentUser?.id;
   if (uid == null) return;
   await sb
