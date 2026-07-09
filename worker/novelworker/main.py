@@ -10,6 +10,7 @@ Lệnh vận hành:
     python -m novelworker.main cost                          # thống kê token đã dùng theo model
     python -m novelworker.main audit [--fix]                 # quét chương done hỏng (Trung/cụt/mất đoạn), --fix để dịch lại
     python -m novelworker.main quality [--novel <id>]        # chấm điểm chất lượng dịch (metric: len, glossary, lặp cụm, mất đoạn)
+    python -m novelworker.main meta --novel <id>             # dịch lại metadata (tên/mô tả/thể loại) 1 truyện — sau khi sửa prompt tên
 """
 from __future__ import annotations
 
@@ -321,6 +322,24 @@ def run_quality(novel_id: int | None) -> None:
             print(line)
 
 
+def run_meta(novel_id: int) -> None:
+    """Xếp lại job dịch metadata (tên/mô tả/thể loại) cho 1 truyện — dùng khi đã sửa
+    prompt metadata và muốn dịch lại tên đã lưu. Translator đang chạy sẽ tự xử lý."""
+    nv = (
+        db.sb().table("novels").select("id, title_zh, title_vi")
+        .eq("id", novel_id).maybe_single().execute()
+    ).data
+    if not nv:
+        print(f"Không thấy truyện #{novel_id}.")
+        return
+    # xoá job metadata cũ trước (unique index chặn enqueue trùng khi còn job done), rồi xếp lại
+    db.sb().table("translation_jobs").delete().eq("novel_id", novel_id).eq("type", "metadata").execute()
+    db.enqueue("metadata", novel_id, priority=5)
+    print(f"Đã xếp dịch lại metadata truyện #{novel_id} "
+          f"({nv.get('title_vi') or nv.get('title_zh')}).")
+    print("Translator đang chạy sẽ dịch lại trong vài giây; kiểm tra lại title_vi trong app/Supabase.")
+
+
 def run_request(novel_id: int, up_to: int) -> None:
     """Bản service-role của RPC request_translation — test không cần app/đăng nhập."""
     rows = (
@@ -340,7 +359,7 @@ def run_request(novel_id: int, up_to: int) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(prog="novelworker")
     parser.add_argument("mode",
-                        choices=["crawl", "translate", "request", "add", "cost", "audit", "quality"])
+                        choices=["crawl", "translate", "request", "add", "cost", "audit", "quality", "meta"])
     parser.add_argument("--book-id", help="add: id truyện (số trong URL nguồn)")
     parser.add_argument("--source", default="shuhaige",
                         help="add: sources.name của nguồn crawl (mặc định shuhaige)")
@@ -355,6 +374,10 @@ def main() -> None:
         run_quality(args.novel)  # --novel <id> để chấm 1 truyện; bỏ trống = tất cả
     elif args.mode == "audit":
         run_audit(args.fix)
+    elif args.mode == "meta":
+        if args.novel is None:
+            parser.error("meta cần --novel <id>")
+        run_meta(args.novel)
     elif args.mode == "crawl":
         run_crawler()
     elif args.mode == "translate":
