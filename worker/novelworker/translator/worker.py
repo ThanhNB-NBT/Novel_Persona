@@ -302,6 +302,30 @@ def _extract_json(text: str) -> dict | list:
         raise
 
 
+# Tag kỳ ảo/giả tưởng → LUÔN ta–ngươi (kể cả khi kèm tag Đô thị: "đô thị tu tiên").
+# Nhận cả nhãn Việt (đã dịch metadata) lẫn Hán (chương mẫu dịch trước khi có metadata).
+_FANTASY_TAGS = (
+    "tu tiên", "tiên hiệp", "huyền huyễn", "kiếm hiệp", "cổ đại", "cổ trang",
+    "võng du", "game", "hệ thống", "dị giới", "khoa huyễn", "vô hạn", "mạt thế",
+    "tiên", "huyền", "kỳ ảo", "fantasy", "litrpg",
+    "修真", "仙侠", "玄幻", "武侠", "古代", "网游", "系统", "无限", "末世", "科幻",
+)
+
+
+def _register_directive(genres: list[str]) -> str:
+    """Chỉ thị xưng hô cho chương, chốt DETERMINISTIC từ TAG thể loại. Đô thị THUẦN
+    (có tag đô thị, KHÔNG kèm tag kỳ ảo) → tôi–anh; còn lại (mặc định) → ta–ngươi."""
+    gl = " ".join(genres).lower()
+    fantasy = any(k in gl for k in _FANTASY_TAGS)
+    urban = ("đô thị" in gl or "都市" in gl) and not fantasy
+    if urban:
+        return ("[Xưng hô — truyện ĐÔ THỊ ĐỜI THỰC: thoại tôi–anh/em/cô tùy quan hệ; câu KỂ "
+                "ngôi ba nam 'anh ta/gã', nữ 'cô/cô ấy'. KHÔNG 'hắn/nàng', KHÔNG ta–ngươi.]")
+    return ("[Xưng hô — mặc định TA–NGƯƠI: thoại ta–ngươi (huynh–đệ–tỷ–muội; mày–tao khi chửi/"
+            "thân), kể cả cảnh mua bán/quán trọ; câu KỂ ngôi ba nam CHỦ YẾU 'hắn', nữ 'nàng'. "
+            "KHÔNG 'anh/anh ta/ông/tôi' làm đại từ cho nhân vật.]")
+
+
 # ---------- xử lý từng loại job ----------
 
 def handle_metadata(job: dict, llm) -> None:
@@ -354,6 +378,10 @@ def handle_chapter(job: dict, llm) -> None:
     if title:
         genres = ", ".join(nv.get("genres") or [])
         novel_line = f"{title}" + (f" — thể loại: {genres}" if genres else "")
+    # Xưng hô quyết định DETERMINISTIC từ TAG thể loại (khỏi để model đoán từ nội dung
+    # game/mua bán → nhầm sang hiện đại). Chỉ Đô thị THUẦN (không kèm tag kỳ ảo) → tôi–anh;
+    # còn lại — kể cả game/hệ thống/dị giới/đô thị-tu-tiên — ta–ngươi + dẫn truyện hắn/nàng.
+    register_line = _register_directive(nv.get("genres") or [])
     twopass = nv.get("twopass_active", True)
     existing_zh = {t["term_zh"] for t in terms if t.get("term_zh")}
     # snapshot TRƯỚC khi merge tên mới: chỉ insert gợi ý chưa có trong DB, tránh nhân bản
@@ -382,7 +410,7 @@ def handle_chapter(job: dict, llm) -> None:
             # chunk sau nhận tóm tắt + đuôi bản dịch chunk trước làm ngữ cảnh nối mạch
             prompts.build_chapter_user(
                 ch.get("title_zh") if i == 0 else None, chunk, prev_summary,
-                prev_tail=prev_tail, novel_line=novel_line),
+                prev_tail=prev_tail, novel_line=novel_line, register_line=register_line),
             # fuse chất lượng NẰM TRONG chain: output kém → tự đổi provider kế, không fail oan
             validate=_quality_fuse(chunk),
         )
@@ -424,6 +452,13 @@ def handle_chapter(job: dict, llm) -> None:
     title_vi = None
     if ch.get("title_zh"):
         title_vi, text = _pop_title(text)
+        # model đôi khi bỏ dịch tiêu đề → còn trơ chữ Hán. Phiên âm Hán-Việt cho khỏi
+        # trơ chữ Trung (bỏ "第x章" trước). han_viet trả None nếu có chữ ngoài bảng → giữ nguyên.
+        if title_vi and HAN_CHARS.search(title_vi):
+            zh_clean = re.sub(
+                r"^第?\s*[\d一二三四五六七八九十百千零〇兩两]+\s*[章回節节卷]\s*[:：.．\-–—]?\s*",
+                "", ch["title_zh"]).strip()
+            title_vi = hanviet.han_viet(zh_clean) or title_vi
 
     db.save_chapter_translation(
         ch["id"], title_vi, text, model, prompt_tokens, completion_tokens,

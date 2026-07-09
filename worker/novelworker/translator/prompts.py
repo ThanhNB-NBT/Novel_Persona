@@ -20,28 +20,31 @@ VĂN PHONG — các lỗi convert PHẢI tránh (sai → đúng):
 - KHÔNG tự chế từ ghép nửa dịch nửa phiên âm: mỗi từ hoặc dịch NGHĨA trọn vẹn, hoặc phiên âm Hán-Việt trọn vẹn theo lối độc giả quen. 老板 → "ông chủ" (truyện tu tiên/cổ đại có thể "lão bản"), KHÔNG "Lão Chủ"; 老大 → "đại ca"/"anh cả", KHÔNG "Lão Lớn"; 小弟 → "đàn em"/"tiểu đệ", KHÔNG "Nhỏ Đệ".
 - KHÔNG tự thêm "!", "a", "nha", "haha", "chao ôi" mà gốc không có; mỗi đoạn tối đa 1-2 dấu "!".
 - Giữ giọng kể của tác giả (hài/nghiêm/bi) và nhịp văn; lời thoại đặt trong "..." kiểu Việt.
+- NỘI DUNG 18+ (app phổ thông — LUẬT CỨNG): gặp bộ phận sinh dục hoặc cảnh tình dục lộ liễu → DỊCH GIẢM NHẸ bằng lối nói tránh, TUYỆT ĐỐI KHÔNG dùng từ giải phẫu/tục tĩu chỉ bộ phận sinh dục; cảnh sex chi tiết → rút gọn, mờ hoá, giữ mạch truyện chứ không tả trần trụi. Không tự thêm chi tiết dâm tục gốc không có.
 
 XƯNG HÔ — yếu tố quyết định độ tự nhiên. Trước MỖI câu thoại, xác định: người nói là AI (tra BẢNG NHÂN VẬT nếu có), giới tính gì, nói với ai, quan hệ/vai vế ra sao — rồi mới chọn từ xưng hô. Một CẶP nhân vật giữ NGUYÊN một kiểu xưng hô suốt truyện, chỉ đổi khi quan hệ đổi (bái sư, kết nghĩa, trở mặt, thành thân...).
 - Câu KỂ ngôi ba — đại từ theo THỂ LOẠI (dùng sai là lỗi nghe "ngượng" nhất):
-  · Cổ trang/tiên hiệp/huyền huyễn/kiếm hiệp/cổ đại → nam: hắn/gã/y; nữ: nàng/cô nương.
-  · Đô thị/hiện đại/võng du/hệ thống bối cảnh nay → nam: anh ta/gã/cậu ta; nữ: cô/cô ấy. TUYỆT ĐỐI KHÔNG "hắn"/"nàng" cho truyện hiện đại — nghe giả và cổ lỗ y hệt bản convert.
-  CẤM "cậu/bạn/anh/em" trong câu kể — đó là ngôi hai, CHỈ dùng trong lời thoại. Sai: "bố mẹ kỳ vọng cậu thành tài" → đúng (cổ trang): "...kỳ vọng hắn thành tài" / (hiện đại): "...kỳ vọng anh ta thành tài". Không gọi người là "nó" trừ khi cố ý khinh miệt.
+  · Truyện CÓ yếu tố kỳ ảo — tu tiên/tiên hiệp/huyền huyễn/kiếm hiệp/cổ đại/võng du/GAME/LitRPG/hệ thống/dị giới/khoa huyễn/vô hạn/mạt thế (KỂ CẢ game có "người chơi", quái, mua bán, hầm mỏ hiện đại) → nam dùng CHỦ YẾU "hắn", nữ "nàng". "y"/"gã" chỉ khi cần phân biệt hai nam trong CÙNG đoạn — đừng rải "y/gã" thay cho "hắn". CẤM "anh/anh ta/ông/cậu ta/gã ta" làm đại từ kể cho nhân vật trong truyện kỳ ảo (đây là lỗi hay gặp nhất).
+  · CHỈ truyện THUẦN đô thị đời thực (KHÔNG tu luyện/game/dị giới: học đường, công sở, ngôn tình hiện đại) → nam "anh ta/gã", nữ "cô/cô ấy"; ở đây MỚI cấm "hắn/nàng".
+  CẤM "cậu/bạn/anh/em" trong câu kể — đó là ngôi hai, CHỈ dùng trong lời thoại. Sai: "bố mẹ kỳ vọng cậu thành tài" → đúng (kỳ ảo): "...kỳ vọng hắn thành tài". Không gọi người là "nó" trừ khi cố ý khinh miệt.
 - GIỚI TÍNH LÀ LUẬT CỨNG với từ TỰ XƯNG. CHỈ NỮ mới được: "thiếp" (với chồng/tình lang), "nô tì"/"nô gia" (hầu gái), "bổn cung" (phi tần/công chúa), "ai gia" (thái hậu), "bổn cô nương". CHỈ NAM: "lão phu" (ông già), "bổn thiếu gia", "trẫm" (vua), "bần tăng" (hòa thượng), "mỗ". Nhân vật NAM tự xưng "thiếp" là LỖI NẶNG NHẤT. Không chắc giới tính → dùng "ta".
 - Vai vế: đệ tử với sư phụ xưng "đồ nhi/con", sư phụ tự xưng "vi sư"; với tiền bối xưng "vãn bối"; quan/tướng với vua xưng "thần"; kẻ dưới với chủ nhân xưng "thuộc hạ"; người tu đạo gặp nhau gọi "đạo hữu". Bề trên nói với kẻ dưới dùng "ngươi", không "ngài".
+- Đã gọi danh xưng đối phương (nhị thúc, sư phụ, chưởng môn...) MỘT lần trong lượt thoại thì câu sau dùng đại từ ("ngài"/"người"), ĐỪNG lặp danh xưng mỗi câu. Tự xưng giữ "ta" (mặc định kỳ ảo), chỉ "con/đồ nhi" khi thật sự là cha–con hoặc sư đồ ràng buộc. Vd: "Nhị thúc! Con hiểu ý tốt của nhị thúc, nhưng con đã có mục tiêu." → "Nhị thúc, ta hiểu ý ngài, nhưng ta đã có mục tiêu rồi."
 - Register thoại theo thể loại: tu tiên/cổ đại/huyền huyễn/võng du/hệ thống/vô hạn lưu/mạt thế/khoa huyễn → mặc định ta–ngươi (văn phong truyện mạng), huynh–đệ–tỷ–muội; mày–tao khi chửi nhau hoặc bằng hữu suồng sã. "tôi–cậu/anh–em" CHỈ dành cho truyện THUẦN đô thị đời thường (học đường, công sở, ngôn tình đô thị) — phân vân thì chọn ta–ngươi. Không "cậu/các cậu/các bạn" trong thoại cổ trang: "Các cậu có biết không?" → "Các ngươi có biết không?".
 - Thoại là VĂN NÓI: ngắn gọn như người Việt nói; bỏ trợ từ/chữ đệm thừa. "Chưa chắc đâu." → "Chưa chắc." (giữ "đâu" chỉ khi cố ý nhấn); "Ngươi thật sự cho rằng ta sẽ không dám hay sao?" → "Ngươi tưởng ta không dám?". Đừng nống câu thoại dài ra cho "trang trọng" — nói như người thật nói.
 
 TÊN RIÊNG & THUẬT NGỮ
 - Có bảng thuật ngữ thì tuân theo TUYỆT ĐỐI, kể cả khi bạn thấy cách khác hay hơn.
 - Tên mới (người, môn phái, địa danh, chiêu thức, pháp bảo, cảnh giới): phiên âm Hán-Việt chuẩn, dùng CỐ ĐỊNH một cách xuyên suốt (林松→Lâm Tùng; 筑基→Trúc Cơ; 金丹→Kim Đan). Không dịch nghĩa tên người.
-- Tên vốn viết bằng chữ Latin/tiếng Anh trong gốc (Dragon Raja, System, SSS, tên skill/game/code name) → GIỮ NGUYÊN, không dịch, không phiên âm. CHỈ áp dụng cho TÊN RIÊNG: từ tiếng Anh thường/bổ nghĩa lẫn trong gốc (newbie, elite, level, rank...) phải DỊCH như từ thường: "Newbie Boss"→"Boss tân thủ", "elite 怪"/"精英怪"→"quái tinh anh", "level 5"→"cấp 5", "玩家/player"→"người chơi". Thuật ngữ game thủ Việt vẫn nói bằng tiếng Anh (Boss, HP, MP, skill, buff, combo) thì giữ.
+- Tên vốn viết bằng chữ Latin/tiếng Anh trong gốc (Dragon Raja, System, SSS, tên skill/game/code name) → GIỮ NGUYÊN, không dịch, không phiên âm. CHỈ áp dụng cho TÊN RIÊNG: từ tiếng Anh thường/bổ nghĩa lẫn trong gốc (newbie, elite, level, rank...) phải DỊCH như từ thường: "Newbie Boss"→"Boss tân thủ", "level 5"→"cấp 5", "玩家/player"→"người chơi". Thuật ngữ game thủ Việt vẫn nói bằng tiếng Anh (Boss, HP, MP, skill, buff, combo) thì giữ.
+- 精英/elite (tiền tố phẩm cấp) → "tinh anh": "精英怪"/"elite 怪" → "quái tinh anh" (KHÔNG "giới tinh anh"). Vật liệu/chất liệu ghi bằng tiếng Anh (composite, alloy, carbon, polymer, nylon...) → dùng từ Việt/từ mượn quen thuộc, KHÔNG để trơ tiếng Anh giữa câu Việt: composite → "composite"/"tổng hợp" (vd cung composite), tungsten → "vonfram".
 - Tên ngoại quốc viết bằng chữ Hán → dạng Latin thông dụng (安娜→Anna, 杰克→Jack, 伦敦→London, 汉森→Hansen), KHÔNG phiên âm Hán-Việt ("An Na", "Kiệt Khắc") và TUYỆT ĐỐI KHÔNG phiên âm gạch nối kiểu sách giáo khoa ("An-đê-ri-an", "Héc-nơ", "Han-sen" là SAI).
 - Vũ khí/đồ vật có tên chữ Hán thông dụng → dịch nghĩa hoặc Hán-Việt CHUẨN (狼牙棒→lang nha bổng, 长枪→trường thương); TUYỆT ĐỐI KHÔNG bịa âm lai pinyin ("láng yá bàng" là SAI).
 - Từ mượn fantasy/game phương Tây mà tiếng Trung phiên âm bằng chữ Hán → trả về từ tiếng Anh quen thuộc với game thủ Việt, KHÔNG phiên âm Hán-Việt: 哥布林→goblin (KHÔNG "Ca Bố Lâm"), 史莱姆→slime, 巨魔→troll, 兽人→orc, 精灵→elf, 恶魔→ác ma, 骷髅→bộ xương/skeleton. Từ nào có từ Việt thông dụng thì dùng từ Việt (地下城→hầm ngục/dungeon).
 - Thuật ngữ thể loại theo thói quen độc giả Việt: 灵石→linh thạch, 系统→hệ thống, 修炼→tu luyện.
 {glossary_block}
 ĐỊNH DẠNG XUẤT (bắt buộc đúng để hệ thống bóc tách tự động)
-- Nếu phần nhập có "Tiêu đề chương": dòng ĐẦU TIÊN xuất đúng khuôn «TIÊU ĐỀ: tiêu đề đã dịch» — bỏ "第x章"/số chương, chỉ dịch phần tên; các dòng sau là bản dịch nội dung. Không có tiêu đề thì dịch thẳng nội dung.
+- Nếu phần nhập có "Tiêu đề chương": dòng ĐẦU TIÊN xuất đúng khuôn «TIÊU ĐỀ: tiêu đề đã dịch» — bỏ "第x章"/số chương, chỉ dịch phần tên; PHẢI dịch sang tiếng Việt/Hán-Việt, TUYỆT ĐỐI KHÔNG để nguyên chữ Hán trong tiêu đề. Các dòng sau là bản dịch nội dung. Không có tiêu đề thì dịch thẳng nội dung.
 - Sau nội dung, xuất ĐÚNG 2 dòng cuối cùng, đúng thứ tự:
 SUMMARY: <tóm tắt 100–150 chữ tiếng Việt: sự kiện chính + nhân vật xuất hiện (kèm tên Hán-Việt + giới tính) + quan hệ/cách xưng hô giữa các nhân vật nếu mới lộ ra + tình tiết còn dở — làm ngữ cảnh cho chương sau>
 GLOSSARY_JSON: [{{"zh": "林松", "vi": "Lâm Tùng", "type": "person", "note": "nam, sư huynh"}}]
@@ -121,12 +124,17 @@ def build_chapter_user(
     prev_summary: str | None = None,
     prev_tail: str | None = None,
     novel_line: str | None = None,
+    register_line: str | None = None,
 ) -> str:
     parts = []
     # tên truyện + thể loại → model chọn ĐÚNG register xưng hô (tu tiên: ta-ngươi;
     # đô thị: tôi-cậu) ngay từ câu đầu thay vì tự đoán từ 1 khúc chương
     if novel_line:
         parts.append(f"[Truyện: {novel_line}]")
+    # chỉ thị xưng hô CHỐT từ tag thể loại (worker._register_directive) — quyết định
+    # thay model, khỏi để nội dung game/mua bán làm nó nhầm sang tôi–anh
+    if register_line:
+        parts.append(register_line)
     if prev_summary:
         parts.append(f"[Ngữ cảnh chương trước: {prev_summary}]")
     # đuôi bản dịch liền trước → nối mạch giọng văn + xưng hô qua ranh giới chương/chunk
