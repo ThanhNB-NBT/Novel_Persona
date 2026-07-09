@@ -1225,6 +1225,21 @@ class AdminNovelScreen extends ConsumerWidget {
         title: Text('$title', maxLines: 1, overflow: TextOverflow.ellipsis),
         actions: [
           IconButton(
+            tooltip: 'Dịch lại tên + mô tả (sau khi sửa prompt)',
+            icon: const Icon(Icons.title_rounded),
+            onPressed: () async {
+              final messenger = ScaffoldMessenger.of(context);
+              try {
+                await requestMetaRetranslate(novelId);
+                messenger.showSnackBar(const SnackBar(
+                    content: Text('Đã xếp dịch lại tên — cập nhật sau vài '
+                        'giây, kéo làm mới để xem.')));
+              } catch (e) {
+                messenger.showSnackBar(SnackBar(content: Text('Lỗi: $e')));
+              }
+            },
+          ),
+          IconButton(
             tooltip: 'Yêu cầu dịch',
             icon: const Icon(Icons.playlist_add_rounded),
             onPressed: () => translateRangeDialog(context, ref, novelId,

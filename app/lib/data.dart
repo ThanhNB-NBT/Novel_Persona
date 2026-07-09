@@ -1021,6 +1021,11 @@ Future<int> retryAllFailed() async =>
 /// cụt/mất đoạn) và tự xếp lại dịch. Chống trùng ở RPC (chỉ 1 audit chạy 1 lúc).
 Future<void> requestAudit() => sb.rpc('request_audit');
 
+/// Dịch lại metadata (tên/mô tả/thể loại) 1 truyện — xếp job 'metadata', worker dịch lại
+/// đè lên tên cũ theo prompt hiện tại. Dùng sau khi sửa prompt tên. RPC chống trùng.
+Future<void> requestMetaRetranslate(int novelId) =>
+    sb.rpc('request_meta', params: {'p_novel_id': novelId});
+
 /// Huỷ 1 job: xoá job VÀ trả chương về 'none'. Không reset chương thì hàng đợi
 /// (đọc từ chapters.translation_status) vẫn thấy chương đó → lệch như bug đã gặp.
 Future<void> cancelJob(int jobId, int? chapterId) async {
