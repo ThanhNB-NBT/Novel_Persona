@@ -77,11 +77,18 @@ def reconcile(zh: str | None, vi: str | None, term_type: str | None) -> str | No
     if _HAN.search(vi):  # vi còn nguyên chữ Hán → chưa dịch gì, tra thẳng
         return han_viet(zh) or vi
     if vi.isascii() and len(vi.split()) == 1:
-        return vi  # tên ngoại 1 từ (Anna, Jack, goblin)
+        return vi  # tên ngoại 1 từ (Anna, Jack, Jean-Pierre, goblin)
+    if "-" in vi:  # phiên âm gạch nối có dấu ("An-đê-ri-an") — kiểu bị cấm → tra bảng thay
+        return han_viet(zh) or vi
     syls = vi.split()
-    attempting = len(syls) == len(chars) and all(s[:1].isupper() for s in syls)
+    all_upper = all(s[:1].isupper() for s in syls)
+    # person: tên người Trung không có "dịch nghĩa" toàn viết hoa hợp lệ → lệch số từ
+    # ("Héc Nơ" 2 từ / 赫克诺 3 chữ) vẫn là phiên hỏng, không cần đếm khớp
+    attempting = all_upper and (len(syls) == len(chars) or term_type == "person")
     if not attempting:
-        return vi  # dịch nghĩa / cụm mô tả — tôn trọng lựa chọn của model
+        return vi  # dịch nghĩa / cụm mô tả có từ thường — tôn trọng lựa chọn của model
+    if len(syls) != len(chars):  # person lệch số từ → phiên hỏng chắc chắn, tra thẳng
+        return han_viet(zh) or vi
     t = _load()
     if all(t.get(ch) and s.lower() in t[ch] for ch, s in zip(chars, syls)):
         return vi  # phiên đúng chuẩn (kể cả chọn âm khác của chữ đa âm)

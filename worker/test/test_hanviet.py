@@ -22,6 +22,14 @@ def main() -> None:
     # tên ngoại/từ mượn trả về ASCII → giữ (đúng quy tắc prompt)
     assert reconcile("安娜", "Anna", "person") == "Anna"
     assert reconcile("哥布林", "goblin", "other") == "goblin"
+    # phiên âm gạch nối có dấu (kiểu cấm, bug chương 43) → thay bằng bản tra;
+    # gạch nối thuần ASCII là tên Tây hợp lệ → giữ
+    assert reconcile("安德森", "An-đơ-sơn", "person") == han_viet("安德森")
+    assert reconcile("让皮埃尔", "Jean-Pierre", "person") == "Jean-Pierre"
+    # person toàn viết hoa nhưng LỆCH số từ ("Héc Nơ" 2 từ / 3 chữ) → phiên hỏng, tra thẳng
+    assert reconcile("赫克诺", "Héc Nơ", "person") == han_viet("赫克诺")
+    # place/sect lệch số từ toàn viết hoa vẫn giữ (có thể là dịch nghĩa kiểu tên gọi)
+    assert reconcile("黑龙之城", "Thành Hắc Long", "place") == "Thành Hắc Long"
     # item/skill có thể dịch NGHĨA → không ép Hán-Việt
     assert reconcile("火焰剑", "Kiếm Lửa", "item") == "Kiếm Lửa"
     # chữ ngoài bảng → giữ nguyên, không đoán bừa

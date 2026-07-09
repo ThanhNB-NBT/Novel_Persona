@@ -306,7 +306,8 @@ def _extract_json(text: str) -> dict | list:
 
 def handle_metadata(job: dict, llm) -> None:
     novel = db.sb().table("novels").select("*").eq("id", job["novel_id"]).single().execute().data
-    res = llm.complete(prompts.SYSTEM_METADATA, prompts.build_metadata_user(novel), max_tokens=2048)
+    terms, _ = db.get_glossary(novel["id"])  # dịch lại metadata → tên khớp glossary đã tích lũy
+    res = llm.complete(prompts.SYSTEM_METADATA, prompts.build_metadata_user(novel, terms), max_tokens=2048)
     data = _extract_json(res.text)
     db.sb().table("novels").update({
         "title_vi": data.get("title_vi"),
