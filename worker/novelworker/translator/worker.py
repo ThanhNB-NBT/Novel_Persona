@@ -100,12 +100,24 @@ def check_translation(content_zh: str, content_vi: str) -> str | None:
     return None
 
 
-def _quality_fuse(chunk: str):
+def _register_violation(content_vi: str, register_line: str) -> str | None:
+    """Chặn đại từ trái register trước khi bản dịch được lưu."""
+    if "TA–NGƯƠI" in register_line:
+        bad = re.search(
+            r"\b(?:anh(?!\s+trai\b)(?:\s+(?:ta|ấy))?|cậu ta|ông ta|tôi)\b",
+            content_vi, re.I)
+    else:
+        bad = re.search(r"\b(?:hắn|nàng)\b", content_vi, re.I)
+    return f"lệch xưng hô '{bad.group(0)}'" if bad else None
+
+
+def _quality_fuse(chunk: str, register_line: str):
     """Validator chạy TRONG FallbackChain — raise khi output kém để tự đổi provider.
     Đo trên phần THÂN bản dịch (đã bỏ GLOSSARY_JSON/SUMMARY) — đo text thô sẽ lệch:
     tên Trung trong GLOSSARY_JSON tính nhầm vào tỷ lệ Hán, JSON dài tính nhầm vào độ phình."""
     def check(res) -> None:
-        problem = check_translation(chunk, _strip_meta(res.text))
+        content_vi = _strip_meta(res.text)
+        problem = check_translation(chunk, content_vi) or _register_violation(content_vi, register_line)
         if problem:
             raise RuntimeError(f"Bản dịch {problem} (model {res.model})")
     return check
@@ -370,7 +382,7 @@ def handle_chapter(job: dict, llm) -> None:
     # 2-pass thích ứng + bối cảnh truyện (thể loại → register xưng hô).
     nv = (
         db.sb().table("novels")
-        .select("twopass_active,twopass_low_streak,title_vi,title_zh,genres")
+        .select("twopass_active,twopass_low_streak,title_vi,title_zh,genres,translation_provider,translation_model")
         .eq("id", ch["novel_id"]).single().execute()
     ).data or {}
     novel_line = None
@@ -382,6 +394,11 @@ def handle_chapter(job: dict, llm) -> None:
     # game/mua bán → nhầm sang hiện đại). Chỉ Đô thị THUẦN (không kèm tag kỳ ảo) → tôi–anh;
     # còn lại — kể cả game/hệ thống/dị giới/đô thị-tu-tiên — ta–ngươi + dẫn truyện hắn/nàng.
     register_line = _register_directive(nv.get("genres") or [])
+    # Một truyện chỉ dùng đúng provider + model chốt ở chương đầu. Khi model lỗi,
+    # job sẽ retry cùng cặp thay vì fallback âm thầm sang giọng khác.
+    chapter_llm = llm
+    if nv.get("translation_provider") and nv.get("translation_model"):
+        chapter_llm = llm.pin(nv["translation_provider"], nv["translation_model"])
     twopass = nv.get("twopass_active", True)
     existing_zh = {t["term_zh"] for t in terms if t.get("term_zh")}
     # snapshot TRƯỚC khi merge tên mới: chỉ insert gợi ý chưa có trong DB, tránh nhân bản
@@ -404,7 +421,7 @@ def handle_chapter(job: dict, llm) -> None:
             new_names_this_chapter += len(added)
             detected += added  # tên pass-1 cũng phải vào DB — trước đây chỉ nằm RAM, chương sau mất
 
-        res = llm.complete(
+        res = chapter_llm.complete(
             # chỉ chèn term xuất hiện trong chunk này → prompt gọn, model bám sát hơn
             prompts.build_chapter_system(terms, chunk),
             # chunk sau nhận tóm tắt + đuôi bản dịch chunk trước làm ngữ cảnh nối mạch
@@ -412,8 +429,15 @@ def handle_chapter(job: dict, llm) -> None:
                 ch.get("title_zh") if i == 0 else None, chunk, prev_summary,
                 prev_tail=prev_tail, novel_line=novel_line, register_line=register_line),
             # fuse chất lượng NẰM TRONG chain: output kém → tự đổi provider kế, không fail oan
-            validate=_quality_fuse(chunk),
+            validate=_quality_fuse(chunk, register_line),
         )
+        if not nv.get("translation_model"):
+            db.sb().table("novels").update({
+                "translation_provider": res.provider,
+                "translation_model": res.model,
+            }).eq("id", ch["novel_id"]).execute()
+            nv["translation_provider"], nv["translation_model"] = res.provider, res.model
+            chapter_llm = llm.pin(res.provider, res.model)
         text = res.text
         # bóc bảng tên riêng LLM phát hiện (phục vụ glossary suggest trong app)
         m = GLOSSARY_LINE.search(text)

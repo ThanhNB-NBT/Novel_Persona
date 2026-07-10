@@ -7,7 +7,7 @@ os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "test")
 
 from novelworker.translator.worker import (
     GLOSSARY_LINE, _clean_output, _extract_json, _merge_names, _pop_summary,
-    _split_chunks, _strip_meta, check_translation, han_ratio,
+    _register_violation, _split_chunks, _strip_meta, check_translation, han_ratio,
 )
 
 
@@ -34,6 +34,11 @@ def main() -> None:
     assert "mất hết xuống dòng" in (check_translation(zh5, "một khối chữ liền dài " * 3) or "")
     assert check_translation("原文本", "Bản dịch ổn.\nĐủ dòng.") is None
     assert check_translation("", "Chỉ soi tỷ lệ Hán khi thiếu bản gốc.") is None
+    assert _register_violation("Anh ta quay người.", "[Xưng hô — mặc định TA–NGƯƠI]")
+    assert _register_violation("Anh quay người.", "[Xưng hô — mặc định TA–NGƯƠI]")
+    assert _register_violation("Anh trai quay người.", "[Xưng hô — mặc định TA–NGƯƠI]") is None
+    assert _register_violation("Hắn quay người.", "[Xưng hô — truyện ĐÔ THỊ ĐỜI THỰC]")
+    assert _register_violation("Hắn quay người.", "[Xưng hô — mặc định TA–NGƯƠI]") is None
     # gốc dài mà bản dịch < 1.2x → dịch sót (ngưỡng 0.3 cũ chỉ bắt cụt thảm họa)
     assert "quá ngắn" in (check_translation("字" * 400, "v" * 450) or "")
     assert check_translation("字" * 400, "v" * 500) is None

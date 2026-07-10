@@ -50,6 +50,7 @@ const cultTypeNames = {
 /// Chủng tộc — chọn MỘT lần khi bắt đầu tu (migration 044).
 /// (tên, thiên hướng hiển thị trong sheet chọn tộc)
 const raceNames = {'nhan': 'Nhân tộc', 'yeu': 'Yêu tộc', 'ma': 'Ma tộc', 'linh': 'Linh tộc'};
+const genderNames = {'nam': 'Nam', 'nu': 'Nữ'};
 const raceDescs = {
   'nhan': 'Đạo tâm kiên định — tỷ lệ đột phá +5%.',
   'yeu': 'Thể phách cường hãn — công kích & khí huyết ×1.3.',
@@ -170,7 +171,7 @@ Future<Rec> cultEquip(int itemId) async =>
 Future<Rec> cultAdvance() async =>
     Map<String, dynamic>.from(await sb.rpc('cult_advance') as Map);
 
-/// Chọn chủng tộc — server chặn đổi lại sau khi đã chọn.
-Future<Rec> cultSetRace(String race) async =>
-    Map<String, dynamic>.from(
-        await sb.rpc('cult_set_race', params: {'p_race': race}) as Map);
+/// Chọn dung mạo (tộc + giới tính) — user thường chỉ MỘT lần, admin đổi tự do.
+Future<Rec> cultSetAvatar(String race, String gender) async =>
+    Map<String, dynamic>.from(await sb.rpc('cult_set_avatar',
+        params: {'p_race': race, 'p_gender': gender}) as Map);

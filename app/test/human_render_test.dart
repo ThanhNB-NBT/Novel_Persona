@@ -20,12 +20,20 @@ void main() {
             child: Container(
               color: const Color(0xFF101826),
               padding: const EdgeInsets.all(12),
-              // 4 tộc × mốc cảnh giới: Nhân/đá · Yêu/sen · Ma/sen · Linh/kiếm
-              child: const Row(mainAxisSize: MainAxisSize.min, children: [
-                CultivatorPreview(realm: 2, race: 'nhan', cpCode: null),
-                CultivatorPreview(realm: 5, race: 'yeu', cpCode: 'cp_huyen_bang'),
-                CultivatorPreview(realm: 6, race: 'ma', cpCode: 'cp_liet_hoa'),
-                CultivatorPreview(realm: 9, race: 'linh', cpCode: 'cp_thai_co'),
+              // 4 tộc × 2 giới tính, mốc cảnh giới: đá · sen · sen · kiếm
+              child: const Column(mainAxisSize: MainAxisSize.min, children: [
+                Row(mainAxisSize: MainAxisSize.min, children: [
+                  CultivatorPreview(realm: 2, race: 'nhan', gender: 'nam', cpCode: null),
+                  CultivatorPreview(realm: 5, race: 'yeu', gender: 'nam', cpCode: 'cp_huyen_bang'),
+                  CultivatorPreview(realm: 6, race: 'ma', gender: 'nam', cpCode: 'cp_liet_hoa'),
+                  CultivatorPreview(realm: 9, race: 'linh', gender: 'nam', cpCode: 'cp_thai_co'),
+                ]),
+                Row(mainAxisSize: MainAxisSize.min, children: [
+                  CultivatorPreview(realm: 2, race: 'nhan', gender: 'nu', cpCode: null),
+                  CultivatorPreview(realm: 5, race: 'yeu', gender: 'nu', cpCode: 'cp_huyen_bang'),
+                  CultivatorPreview(realm: 6, race: 'ma', gender: 'nu', cpCode: 'cp_liet_hoa'),
+                  CultivatorPreview(realm: 9, race: 'linh', gender: 'nu', cpCode: 'cp_thai_co'),
+                ]),
               ]),
             ),
           ),
