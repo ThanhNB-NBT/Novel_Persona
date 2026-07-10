@@ -48,7 +48,14 @@ android {
     }
 
     buildTypes {
+        debug {
+            // app id riêng cho dev: `flutter run` cài SONG SONG với bản release
+            // (khác chữ ký nên không cài đè nhau được — tách id là hết đụng độ)
+            applicationIdSuffix = ".dev"
+            manifestPlaceholders["appName"] = "Gác Truyện dev"
+        }
         release {
+            manifestPlaceholders["appName"] = "Gác Truyện"
             signingConfig = if (keystoreProperties.isNotEmpty())
                 signingConfigs.getByName("release")
             else
