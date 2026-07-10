@@ -20,10 +20,13 @@ class Fake:
         self.model = name
         self.text = text
 
-    def complete(self, system, user, temperature=0.3, max_tokens=8192):
+    def complete(self, system, user, temperature=0.3, max_tokens=8192, validate=None):
         if self.text is None:
             raise RuntimeError(f"{self.model} lỗi")
-        return LLMResult(text=self.text, model=self.model, prompt_tokens=1, completion_tokens=1)
+        res = LLMResult(text=self.text, model=self.model, prompt_tokens=1, completion_tokens=1)
+        if validate:
+            validate(res)
+        return res
 
 
 def main() -> None:

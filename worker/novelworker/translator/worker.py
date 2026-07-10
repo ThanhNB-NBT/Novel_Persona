@@ -100,24 +100,21 @@ def check_translation(content_zh: str, content_vi: str) -> str | None:
     return None
 
 
-def _register_violation(content_vi: str, register_line: str) -> str | None:
-    """Chặn đại từ trái register trước khi bản dịch được lưu."""
-    if "TA–NGƯƠI" in register_line:
-        bad = re.search(
-            r"\b(?:anh(?!\s+trai\b)(?:\s+(?:ta|ấy))?|cậu ta|ông ta|tôi)\b",
-            content_vi, re.I)
-    else:
-        bad = re.search(r"\b(?:hắn|nàng)\b", content_vi, re.I)
+def _register_violation(content_vi: str) -> str | None:
+    """Chặn đại từ trái register ta–ngươi trước khi bản dịch được lưu."""
+    bad = re.search(
+        r"\b(?:anh(?!\s+trai\b)(?:\s+(?:ta|ấy))?|cậu ta|ông ta|tôi)\b",
+        content_vi, re.I)
     return f"lệch xưng hô '{bad.group(0)}'" if bad else None
 
 
-def _quality_fuse(chunk: str, register_line: str):
+def _quality_fuse(chunk: str):
     """Validator chạy TRONG FallbackChain — raise khi output kém để tự đổi provider.
     Đo trên phần THÂN bản dịch (đã bỏ GLOSSARY_JSON/SUMMARY) — đo text thô sẽ lệch:
     tên Trung trong GLOSSARY_JSON tính nhầm vào tỷ lệ Hán, JSON dài tính nhầm vào độ phình."""
     def check(res) -> None:
         content_vi = _strip_meta(res.text)
-        problem = check_translation(chunk, content_vi) or _register_violation(content_vi, register_line)
+        problem = check_translation(chunk, content_vi) or _register_violation(content_vi)
         if problem:
             raise RuntimeError(f"Bản dịch {problem} (model {res.model})")
     return check
@@ -314,28 +311,12 @@ def _extract_json(text: str) -> dict | list:
         raise
 
 
-# Tag kỳ ảo/giả tưởng → LUÔN ta–ngươi (kể cả khi kèm tag Đô thị: "đô thị tu tiên").
-# Nhận cả nhãn Việt (đã dịch metadata) lẫn Hán (chương mẫu dịch trước khi có metadata).
-_FANTASY_TAGS = (
-    "tu tiên", "tiên hiệp", "huyền huyễn", "kiếm hiệp", "cổ đại", "cổ trang",
-    "võng du", "game", "hệ thống", "dị giới", "khoa huyễn", "vô hạn", "mạt thế",
-    "tiên", "huyền", "kỳ ảo", "fantasy", "litrpg",
-    "修真", "仙侠", "玄幻", "武侠", "古代", "网游", "系统", "无限", "末世", "科幻",
-)
-
-
-def _register_directive(genres: list[str]) -> str:
-    """Chỉ thị xưng hô cho chương, chốt DETERMINISTIC từ TAG thể loại. Đô thị THUẦN
-    (có tag đô thị, KHÔNG kèm tag kỳ ảo) → tôi–anh; còn lại (mặc định) → ta–ngươi."""
-    gl = " ".join(genres).lower()
-    fantasy = any(k in gl for k in _FANTASY_TAGS)
-    urban = ("đô thị" in gl or "都市" in gl) and not fantasy
-    if urban:
-        return ("[Xưng hô — truyện ĐÔ THỊ ĐỜI THỰC: thoại tôi–anh/em/cô tùy quan hệ; câu KỂ "
-                "ngôi ba nam 'anh ta/gã', nữ 'cô/cô ấy'. KHÔNG 'hắn/nàng', KHÔNG ta–ngươi.]")
-    return ("[Xưng hô — mặc định TA–NGƯƠI: thoại ta–ngươi (huynh–đệ–tỷ–muội; mày–tao khi chửi/"
-            "thân), kể cả cảnh mua bán/quán trọ; câu KỂ ngôi ba nam CHỦ YẾU 'hắn', nữ 'nàng'. "
-            "KHÔNG 'anh/anh ta/ông/tôi' làm đại từ cho nhân vật.]")
+# Xưng hô: MỘT luật cho mọi truyện (bỏ nhánh đô thị tôi–anh 2026-07-10 — LLM hay
+# lộn giữa hai register; crawl giờ cũng chặn đô thị đời thực/ngôn tình/lịch sử từ đầu vào).
+REGISTER_LINE = (
+    "[Xưng hô — TA–NGƯƠI: thoại ta–ngươi (huynh–đệ–tỷ–muội; mày–tao khi chửi/"
+    "thân), kể cả cảnh mua bán/quán trọ; câu KỂ ngôi ba nam CHỦ YẾU 'hắn', nữ 'nàng'. "
+    "KHÔNG 'anh/anh ta/ông/tôi' làm đại từ cho nhân vật.]")
 
 
 # ---------- xử lý từng loại job ----------
@@ -390,10 +371,7 @@ def handle_chapter(job: dict, llm) -> None:
     if title:
         genres = ", ".join(nv.get("genres") or [])
         novel_line = f"{title}" + (f" — thể loại: {genres}" if genres else "")
-    # Xưng hô quyết định DETERMINISTIC từ TAG thể loại (khỏi để model đoán từ nội dung
-    # game/mua bán → nhầm sang hiện đại). Chỉ Đô thị THUẦN (không kèm tag kỳ ảo) → tôi–anh;
-    # còn lại — kể cả game/hệ thống/dị giới/đô thị-tu-tiên — ta–ngươi + dẫn truyện hắn/nàng.
-    register_line = _register_directive(nv.get("genres") or [])
+    register_line = REGISTER_LINE  # một luật ta–ngươi cho mọi truyện
     # Một truyện chỉ dùng đúng provider + model chốt ở chương đầu. Khi model lỗi,
     # job sẽ retry cùng cặp thay vì fallback âm thầm sang giọng khác.
     chapter_llm = llm
@@ -429,7 +407,7 @@ def handle_chapter(job: dict, llm) -> None:
                 ch.get("title_zh") if i == 0 else None, chunk, prev_summary,
                 prev_tail=prev_tail, novel_line=novel_line, register_line=register_line),
             # fuse chất lượng NẰM TRONG chain: output kém → tự đổi provider kế, không fail oan
-            validate=_quality_fuse(chunk, register_line),
+            validate=_quality_fuse(chunk),
         )
         if not nv.get("translation_model"):
             db.sb().table("novels").update({

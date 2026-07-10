@@ -163,6 +163,38 @@ def _cache_cover_and_update(adapter: SourceAdapter, novel_id: int, external_url:
         db.sb().table("novels").update({"cover_url": cached}).eq("id", novel_id).execute()
 
 
+# Lọc thể loại lúc discovery (2026-07-10): chặn đô thị/lịch sử/ngôn tình, TRỪ khi
+# category/mô tả có yếu tố kỳ ảo (dị năng, cao võ, võng du, hệ thống, tu tiên...).
+# Tag nguồn là tiếng Trung (og:novel:category); ddxs không có tag → không lọc được.
+_BLOCKED_CATS = ("都市", "历史", "言情", "现言", "古言")
+_ALLOW_KEYWORDS = ("异能", "高武", "网游", "游戏", "系统", "修仙", "修真", "玄幻",
+                   "武侠", "仙侠", "末世", "科幻", "无限")
+# ponytail: cache RAM để mỗi chu kỳ ranking khỏi fetch lại metadata truyện đã chặn;
+# worker restart thì fetch lại 1 lần — chấp nhận được
+_genre_skipped: set[tuple[int, str]] = set()
+
+
+def genre_blocked(meta) -> str | None:
+    """Trả về category bị chặn nếu truyện thuộc diện hạn chế, None nếu cho qua."""
+    cats = " ".join(meta.genres_zh or [])
+    hit = next((b for b in _BLOCKED_CATS if b in cats), None)
+    if not hit:
+        return None
+    hay = cats + " " + (meta.description_zh or "")
+    if any(k in hay for k in _ALLOW_KEYWORDS):
+        return None
+    return hit
+
+
+def _skip_by_genre(sid: int, meta) -> bool:
+    hit = genre_blocked(meta)
+    if hit:
+        _genre_skipped.add((sid, meta.source_novel_id))
+        log.info("Discovery: bỏ qua %s — thể loại hạn chế '%s'", meta.title_zh, hit)
+        return True
+    return False
+
+
 def _queue_canonical_work(adapter: SourceAdapter, novel: dict, meta, prio_meta: int) -> None:
     """Sau upsert truyện mới: LỌC CHẤT LƯỢNG rồi mới đốt token.
     Sync mục lục trước → truyện đang-ra dưới `discover_min_chapters` chương = truyện mỏng
@@ -204,12 +236,15 @@ def discover_latest(adapter: SourceAdapter, max_new: int = 50) -> None:
         if reader_fetch_waiting():
             log.info("Discovery %s: nhường chỗ tải chương người đọc (đã thêm %d)", adapter.name, added)
             break
-        if cand.source_novel_id in known or cand.source_novel_id in bl_ids:
+        if (cand.source_novel_id in known or cand.source_novel_id in bl_ids
+                or (sid, cand.source_novel_id) in _genre_skipped):
             continue
         try:
             meta = adapter.fetch_novel_meta(cand.source_novel_id)
         except Exception:
             log.exception("Discovery: lỗi lấy metadata %s (%s)", cand.source_novel_id, adapter.name)
+            continue
+        if _skip_by_genre(sid, meta):
             continue
         key = dedup_key(meta.title_zh, meta.author_zh)
         if key in bl_keys:
@@ -264,8 +299,8 @@ def discover_ranking(adapter: SourceAdapter, max_new: int = 30) -> None:
                 db.sb().table("novels").update({"source_rank": rank}).eq(
                     "id", known[source_novel_id]["id"]).execute()
             continue
-        if source_novel_id in bl_ids:
-            continue  # admin đã xoá vĩnh viễn — không crawl lại dù vẫn trong top
+        if source_novel_id in bl_ids or (sid, source_novel_id) in _genre_skipped:
+            continue  # admin đã xoá vĩnh viễn / thể loại hạn chế — không crawl lại dù trong top
         if added >= max_new:
             continue  # hết quota thêm mới nhưng vẫn quét nốt để cập nhật rank truyện đã có
         if reader_fetch_waiting():
@@ -275,6 +310,8 @@ def discover_ranking(adapter: SourceAdapter, max_new: int = 30) -> None:
             meta = adapter.fetch_novel_meta(source_novel_id)
         except Exception:
             log.exception("Ranking: lỗi metadata %s (%s)", source_novel_id, adapter.name)
+            continue
+        if _skip_by_genre(sid, meta):
             continue
         key = dedup_key(meta.title_zh, meta.author_zh)
         if key in bl_keys:
