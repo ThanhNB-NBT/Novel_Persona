@@ -850,8 +850,8 @@ class _AnimatedCultivatorState extends State<_AnimatedCultivator>
               offset: Offset(0, math.sin(_ctrl.value * 2 * math.pi) * 4),
               child: Image.asset(
                 _cultivatorAsset(widget.race, widget.gender),
-                width: 124,
-                height: 152,
+                width: 104,
+                height: 128,
                 fit: BoxFit.contain,
               ),
             ),
@@ -931,6 +931,30 @@ class _SkyPainter extends CustomPainter {
             ..color = moon.withValues(alpha: 0.35));
     }
 
+    // dãy núi thủy mặc 3 lớp (xa mờ → gần đậm, nhoè nhẹ như nét mực loang) —
+    // cảnh có chiều sâu thay vì trống trơn sau lưng nhân vật
+    void range(List<Offset> pts, double alpha) {
+      final p = Path()..moveTo(-4, size.height + 4);
+      for (final o in pts) {
+        p.lineTo(o.dx, o.dy);
+      }
+      p
+        ..lineTo(size.width + 4, size.height + 4)
+        ..close();
+      canvas.drawPath(
+          p,
+          Paint()
+            ..color = moon.withValues(alpha: alpha)
+            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1.5));
+    }
+
+    range(const [Offset(0, 118), Offset(22, 96), Offset(48, 112), Offset(78, 92),
+      Offset(108, 110), Offset(132, 98), Offset(150, 114)], 0.10);
+    range(const [Offset(0, 128), Offset(30, 108), Offset(62, 124), Offset(96, 104),
+      Offset(126, 122), Offset(150, 112)], 0.16);
+    range(const [Offset(0, 140), Offset(26, 122), Offset(58, 136), Offset(92, 118),
+      Offset(124, 134), Offset(150, 124)], 0.24);
+
     // quầng linh khí thở (theo màu công pháp) — chuyển từ _AuraPainter sang đây
     // để nằm SAU bóng người, không rửa trôi silhouette
     final breathe = 0.5 + 0.5 * math.sin(t * 2 * math.pi);
@@ -959,6 +983,16 @@ class _SkyPainter extends CustomPainter {
               width: w,
               height: 10),
           mist);
+    }
+
+    // đom đóm linh khí bay lên — lệch pha nhau, mờ dần khi lên cao (loop khớp t)
+    final mote = Paint();
+    for (var i = 0; i < 7; i++) {
+      final ph = (t + i / 7) % 1;
+      final x = (i * 41 + 13) % 140 + 5 + math.sin((t * 2 + i) * 2 * math.pi) * 3;
+      mote.color = aura.withValues(alpha: 0.35 * (1 - ph));
+      canvas.drawCircle(
+          Offset(x, size.height - 8 - ph * (size.height - 30)), 1.3, mote);
     }
   }
 
@@ -1306,9 +1340,9 @@ class _EquipRow extends ConsumerWidget {
     final cs = Theme.of(context).colorScheme;
     final t = Theme.of(context).textTheme;
     final it = ((st['equipped'] as Rec?) ?? const {})[type] as Rec?;
-    return InkWell(
+    return Builder(builder: (slotCtx) => InkWell(
       borderRadius: BorderRadius.circular(14),
-      onTap: it == null ? null : () => _showItemSheet(context, ref, it, null),
+      onTap: it == null ? null : () => _showItemPopup(slotCtx, ref, it, null),
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 10),
         decoration: BoxDecoration(
@@ -1339,7 +1373,7 @@ class _EquipRow extends ConsumerWidget {
                     color: gradeColor(it['grade'] as int))),
         ]),
       ),
-    );
+    ));
   }
 
   @override
@@ -1358,7 +1392,8 @@ class _EquipRow extends ConsumerWidget {
   }
 }
 
-/// Lưới kho đồ; tap → sheet chi tiết dùng/trang bị.
+/// Lưới kho đồ: ô nhỏ chỉ icon + số lượng (màu viền = phẩm), đồ ĐANG TRANG BỊ
+/// được ẩn (đã hiện ở mục Trang bị); tap → popup nhỏ ngay cạnh ô.
 class _InventoryGrid extends ConsumerWidget {
   const _InventoryGrid();
 
@@ -1367,11 +1402,24 @@ class _InventoryGrid extends ConsumerWidget {
     final cs = Theme.of(context).colorScheme;
     final t = Theme.of(context).textTheme;
     final inv = ref.watch(cultInventoryProvider).value ?? const <Rec>[];
-    if (inv.isEmpty) {
+    // ẩn món đang đeo — nhìn túi là biết còn gì CHƯA dùng
+    final st = ref.watch(cultStateProvider).value;
+    final wearing = {
+      for (final e in ((st?['equipped'] as Rec?) ?? const {}).values)
+        if (e != null) (e as Map)['id'] as int,
+    };
+    final items = [
+      for (final r in inv)
+        if (!wearing.contains((r['cult_items'] as Rec)['id'])) r,
+    ];
+    if (items.isEmpty) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 24),
         child: Center(
-          child: Text('Kho trống — đọc truyện để gặp cơ duyên nhận bảo vật.',
+          child: Text(
+              inv.isEmpty
+                  ? 'Kho trống — đọc truyện để gặp cơ duyên nhận bảo vật.'
+                  : 'Bao nhiêu bảo vật đều đã trang bị cả.',
               style: t.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
         ),
       );
@@ -1380,103 +1428,150 @@ class _InventoryGrid extends ConsumerWidget {
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 4, mainAxisSpacing: 8, crossAxisSpacing: 8,
-          childAspectRatio: 0.82),
-      itemCount: inv.length,
+          crossAxisCount: 6, mainAxisSpacing: 8, crossAxisSpacing: 8),
+      itemCount: items.length,
       itemBuilder: (context, i) {
-        final it = inv[i]['cult_items'] as Rec;
-        final qty = inv[i]['qty'] as int;
+        final it = items[i]['cult_items'] as Rec;
+        final qty = items[i]['qty'] as int;
         final grade = it['grade'] as int;
-        return InkWell(
-          borderRadius: BorderRadius.circular(14),
-          onTap: () => _showItemSheet(context, ref, it, qty),
-          child: Container(
-            decoration: BoxDecoration(
-              color: cs.surface,
-              borderRadius: BorderRadius.circular(14),
-              border:
-                  Border.all(color: gradeColor(grade).withValues(alpha: 0.55)),
+        // Builder: cần context CỦA Ô để popup neo đúng cạnh ô được bấm
+        return Builder(builder: (tileCtx) {
+          return InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: () => _showItemPopup(tileCtx, ref, it, qty),
+            child: Container(
+              decoration: BoxDecoration(
+                color: cs.surface,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                    color: gradeColor(grade).withValues(alpha: 0.55)),
+              ),
+              child: Stack(children: [
+                Center(
+                    child:
+                        PixelIcon(it['pixel'] as String, grade: grade, size: 32)),
+                if (qty > 1)
+                  Positioned(
+                    right: 3,
+                    bottom: 1,
+                    child: Text('×$qty',
+                        style: t.labelSmall?.copyWith(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w800,
+                            color: gradeColor(grade))),
+                  ),
+              ]),
             ),
-            padding: const EdgeInsets.all(6),
-            child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-              PixelIcon(it['pixel'] as String, grade: grade, size: 36),
-              const SizedBox(height: 4),
-              Text(it['name'] as String,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: t.labelSmall?.copyWith(fontSize: 9.5)),
-              Text('${gradeNames[grade - 1]}${qty > 1 ? ' ×$qty' : ''}',
-                  style: t.labelSmall?.copyWith(
-                      fontSize: 9, color: gradeColor(grade),
-                      fontWeight: FontWeight.w700)),
-            ]),
-          ),
-        );
+          );
+        });
       },
     );
   }
 }
 
-/// Sheet chi tiết vật phẩm: hiệu ứng + mô tả + nút Dùng (đan dược) / Trang bị / Học.
-/// qty null = mở từ slot đang đeo → chỉ xem, không có nút hành động.
-void _showItemSheet(BuildContext context, WidgetRef ref, Rec it, int? qty) {
+/// Popup chi tiết vật phẩm neo NGAY CẠNH ô vừa bấm (thay bottom sheet cũ chiếm
+/// cả đáy màn): tên + phẩm + hiệu ứng + mô tả, kèm dòng hành động khi mở từ túi.
+/// qty null = mở từ slot đang đeo → chỉ xem.
+Future<void> _showItemPopup(
+    BuildContext tileCtx, WidgetRef ref, Rec it, int? qty) async {
+  final cs = Theme.of(tileCtx).colorScheme;
+  final t = Theme.of(tileCtx).textTheme;
+  final grade = it['grade'] as int;
   // đồ tiêu hao (uống/kích hoạt): đan dược + linh thạch
   final isDan = it['type'] == 'danduoc' || it['type'] == 'linhthach';
-  showModalBottomSheet(
-    context: context,
-    showDragHandle: true,
-    builder: (ctx) {
-      final cs = Theme.of(ctx).colorScheme;
-      final t = Theme.of(ctx).textTheme;
-      final grade = it['grade'] as int;
-      return Padding(
-        padding: EdgeInsets.fromLTRB(
-            20, 0, 20, 20 + MediaQuery.of(ctx).viewPadding.bottom),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          PixelIcon(it['pixel'] as String, grade: grade, size: 64),
-          const SizedBox(height: 8),
-          Text(it['name'] as String,
-              style: t.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
-          Text(
-              '${cultTypeNames[it['type']]} · phẩm ${gradeNames[grade - 1]}'
-              '${(qty ?? 0) > 1 ? ' · còn $qty' : ''}',
-              style: t.labelMedium?.copyWith(color: gradeColor(grade))),
-          const SizedBox(height: 6),
-          Text(cultEffectText(it),
-              style: t.bodyMedium
-                  ?.copyWith(color: cs.primary, fontWeight: FontWeight.w600)),
-          const SizedBox(height: 6),
-          Text(it['descr'] as String? ?? '',
-              textAlign: TextAlign.center,
-              style: t.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
-          if (qty != null) ...[
-            const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                onPressed: () async {
-                  final messenger = ScaffoldMessenger.of(context);
-                  Navigator.pop(ctx);
-                  try {
-                    isDan
-                        ? await cultUseItem(it['id'] as int)
-                        : await cultEquip(it['id'] as int);
-                    ref.invalidate(cultStateProvider);
-                    ref.invalidate(cultInventoryProvider);
-                  } catch (e) {
-                    messenger.showSnackBar(SnackBar(content: Text('$e')));
-                  }
-                },
-                child: Text(isDan
+
+  // vị trí ô trên màn → popup mọc từ cạnh ô
+  final box = tileCtx.findRenderObject() as RenderBox;
+  final overlay =
+      Overlay.of(tileCtx).context.findRenderObject() as RenderBox;
+  final rect = RelativeRect.fromRect(
+    Rect.fromPoints(
+      box.localToGlobal(Offset.zero, ancestor: overlay),
+      box.localToGlobal(box.size.bottomRight(Offset.zero), ancestor: overlay),
+    ),
+    Offset.zero & overlay.size,
+  );
+
+  final action = await showMenu<String>(
+    context: tileCtx,
+    position: rect,
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+    items: [
+      PopupMenuItem(
+        enabled: false,
+        padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 216),
+          child: Column(mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              PixelIcon(it['pixel'] as String, grade: grade, size: 30),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                  Text(it['name'] as String,
+                      style: t.labelLarge?.copyWith(
+                          color: cs.onSurface, fontWeight: FontWeight.w700)),
+                  Text(
+                      '${cultTypeNames[it['type']]} · ${gradeNames[grade - 1]}'
+                      '${(qty ?? 0) > 1 ? ' · ×$qty' : ''}',
+                      style: t.labelSmall
+                          ?.copyWith(color: gradeColor(grade))),
+                ]),
+              ),
+            ]),
+            const SizedBox(height: 6),
+            Text(cultEffectText(it),
+                style: t.labelMedium?.copyWith(
+                    color: cs.primary, fontWeight: FontWeight.w600)),
+            if ((it['descr'] as String?)?.isNotEmpty ?? false) ...[
+              const SizedBox(height: 4),
+              Text(it['descr'] as String,
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                  style: t.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
+            ],
+          ]),
+        ),
+      ),
+      if (qty != null)
+        PopupMenuItem(
+          value: 'use',
+          height: 40,
+          child: Row(children: [
+            Icon(
+                isDan
+                    ? Icons.local_drink_rounded
+                    : it['type'] == 'congphap'
+                        ? Icons.menu_book_rounded
+                        : Icons.shield_moon_rounded,
+                size: 18,
+                color: cs.primary),
+            const SizedBox(width: 8),
+            Text(
+                isDan
                     ? 'Dùng'
                     : it['type'] == 'congphap'
                         ? 'Tu học'
-                        : 'Trang bị'),
-              ),
-            ),
-          ],
-        ]),
-      );
-    },
+                        : 'Trang bị',
+                style: t.labelLarge?.copyWith(
+                    color: cs.primary, fontWeight: FontWeight.w700)),
+          ]),
+        ),
+    ],
   );
+
+  if (action != 'use') return;
+  try {
+    isDan
+        ? await cultUseItem(it['id'] as int)
+        : await cultEquip(it['id'] as int);
+    ref.invalidate(cultStateProvider);
+    ref.invalidate(cultInventoryProvider);
+  } catch (e) {
+    if (tileCtx.mounted) {
+      ScaffoldMessenger.of(tileCtx).showSnackBar(SnackBar(content: Text('$e')));
+    }
+  }
 }

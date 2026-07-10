@@ -77,16 +77,17 @@ const giftFlavors = [
 ];
 
 /// Hash tất định theo (user, truyện, chương) — nguồn chung cho "có quà không"
-/// (% 100 < 30) và "quà nằm sau đoạn nào" (% số đoạn).
+/// (% 100 < 50) và "quà nằm sau đoạn nào" (% số đoạn).
 int giftHash(String uid, int novelId, int index) => int.parse(
       md5.convert(utf8.encode('$uid:$novelId:$index')).toString().substring(0, 6),
       radix: 16,
     );
 
 /// Chương này có quà cho user này không — mirror y hệt SQL cult_gift_at():
-/// 6 hex đầu của md5('uid:novel:index') % 100 < 30 (~30% chương, tất định).
+/// 6 hex đầu của md5('uid:novel:index') % 100 < 50 (~50% chương, tất định —
+/// migration 049 "Thiên Đạo sủng nhi", đổi ở đây phải đổi cả SQL).
 bool giftAt(String uid, int novelId, int index) =>
-    giftHash(uid, novelId, index) % 100 < 30;
+    giftHash(uid, novelId, index) % 100 < 50;
 
 /// State tu luyện (đã tick exp phía server): realm/stage/exp/req/rate/equipped...
 final cultStateProvider = FutureProvider.autoDispose<Rec?>((ref) async {
