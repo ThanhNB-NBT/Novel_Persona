@@ -126,7 +126,8 @@ class _ProfileCard extends StatelessWidget {
             ),
             alignment: Alignment.center,
             child: hasEmoji
-                ? Text(avatar!, style: const TextStyle(fontSize: 28))
+                // height:1 — bỏ leading font emoji, không thì glyph lệch lên trên
+                ? Text(avatar!, style: const TextStyle(fontSize: 28, height: 1))
                 : Text(initial,
                     style: Theme.of(context).textTheme.headlineSmall
                         ?.copyWith(color: cs.primary)),

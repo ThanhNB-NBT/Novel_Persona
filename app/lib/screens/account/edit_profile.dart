@@ -128,8 +128,9 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
         gradient: LinearGradient(colors: [cs.primary, cs.tertiary]),
       ),
       alignment: Alignment.center,
+      // height:1 — bỏ leading của font emoji (mặc định đẩy glyph lệch lên trên)
       child: _avatar != null
-          ? Text(_avatar!, style: const TextStyle(fontSize: 48))
+          ? Text(_avatar!, style: const TextStyle(fontSize: 48, height: 1))
           : Text(initial,
               style: Theme.of(context)
                   .textTheme
@@ -153,7 +154,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
               color: sel ? cs.primary : cs.outlineVariant, width: sel ? 2 : 1),
         ),
         alignment: Alignment.center,
-        child: Text(emoji, style: const TextStyle(fontSize: 26)),
+        child: Text(emoji, style: const TextStyle(fontSize: 26, height: 1)),
       ),
     );
   }
