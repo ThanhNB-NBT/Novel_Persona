@@ -881,13 +881,22 @@ class _AnimatedCultivatorState extends State<_AnimatedCultivator>
               weaponSprite: widget.weaponSprite, weaponGrade: widget.weaponGrade),
           child: Center(
             child: Transform.translate(
-              // hạ thấp +10 cho ĐẦU lọt tâm halo (docs/tu-tien.md §3); nhấp nhô ±4px
-              offset: Offset(0, 10 + math.sin(_ctrl.value * 2 * math.pi) * 4),
-              child: Image.asset(
-                _cultivatorAsset(widget.race, widget.gender),
-                width: 104,
-                height: 128,
-                fit: BoxFit.contain,
+              // Ảnh chibi không có layer riêng nên giả lập chiều sâu bằng nghiêng,
+              // phóng nhẹ và nhấp nhô; aura/vũ khí vẫn chạy ở lớp trước.
+              offset: Offset(
+                  math.sin(_ctrl.value * 2 * math.pi) * 1.5,
+                  10 + math.sin(_ctrl.value * 2 * math.pi) * 4),
+              child: Transform.rotate(
+                angle: math.sin(_ctrl.value * 2 * math.pi) * 0.012,
+                child: Transform.scale(
+                  scale: 1 + math.sin(_ctrl.value * 2 * math.pi) * 0.012,
+                  child: Image.asset(
+                    _cultivatorAsset(widget.race, widget.gender),
+                    width: 104,
+                    height: 128,
+                    fit: BoxFit.contain,
+                  ),
+                ),
               ),
             ),
           ),
