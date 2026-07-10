@@ -3,8 +3,9 @@
     <uses-permission android:name="android.permission.INTERNET"/>
     <!-- flutter_local_notifications: hiện thông báo trên thanh hệ thống (Android 13+) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <!-- label theo buildType (manifestPlaceholders): release "Gác Truyện", debug "Gác Truyện dev" -->
     <application
-        android:label="Gác Truyện"
+        android:label="${appName}"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

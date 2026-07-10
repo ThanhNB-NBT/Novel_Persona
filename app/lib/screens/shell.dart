@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
@@ -90,8 +91,9 @@ class _RootShellState extends ConsumerState<RootShell> {
   }
 }
 
-/// Đĩa Tu Tiên "dập nổi" giữa dock: thái cực xoay chậm miên man; được chọn thì
-/// bừng sáng + hiện nhẫn quang mảnh quanh đĩa (thay cho pill — pill ẩn ở tab giữa).
+/// Đĩa Tu Tiên "dập nổi" giữa dock: biểu tượng đứng yên trang trọng, quanh mép
+/// là vòng bát quái mảnh xoay chậm + đốm linh khí chạy quỹ đạo kéo vệt đuôi.
+/// Được chọn: bừng sáng + vòng quay NHANH lên (như dồn linh khí).
 class _TaijiDisc extends ConsumerStatefulWidget {
   final bool selected;
   final VoidCallback onTap;
@@ -103,7 +105,7 @@ class _TaijiDisc extends ConsumerStatefulWidget {
 class _TaijiDiscState extends ConsumerState<_TaijiDisc>
     with SingleTickerProviderStateMixin {
   late final _spin =
-      AnimationController(vsync: this, duration: const Duration(seconds: 14))
+      AnimationController(vsync: this, duration: const Duration(seconds: 12))
         ..repeat();
 
   @override
@@ -116,6 +118,13 @@ class _TaijiDiscState extends ConsumerState<_TaijiDisc>
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final sel = widget.selected;
+    // chọn tab → linh khí quay nhanh gấp ~3 (đổi duration giữa chừng vẫn mượt
+    // vì repeat() chạy tiếp từ value hiện tại)
+    final want = sel ? 4 : 12;
+    if (_spin.duration!.inSeconds != want) {
+      _spin.duration = Duration(seconds: want);
+      _spin.repeat();
+    }
     final emblem = ref.watch(tabEmblemProvider); // biểu tượng do user chọn
     return GestureDetector(
       onTap: widget.onTap,
@@ -143,27 +152,69 @@ class _TaijiDiscState extends ConsumerState<_TaijiDisc>
             ],
           ),
           child: Stack(alignment: Alignment.center, children: [
-            // nhẫn quang chỉ hiện khi được chọn
-            AnimatedOpacity(
-              opacity: sel ? 1 : 0,
-              duration: const Duration(milliseconds: 250),
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.85), width: 1.5),
-                ),
-                child: const SizedBox(width: 42, height: 42),
+            // vòng bát quái + đốm linh khí quay quanh mép đĩa
+            AnimatedBuilder(
+              animation: _spin,
+              builder: (_, _) => CustomPaint(
+                size: const Size.square(48),
+                painter: _SpiritRingPainter(_spin.value, sel),
               ),
             ),
-            RotationTransition(
-                turns: _spin,
-                child: PixelIcon(emblem, grade: 5, size: 28)),
+            // biểu tượng ĐỨNG YÊN (xoay cả icon nhìn chóng mặt, kém "ấn tín")
+            PixelIcon(emblem, grade: 5, size: 26),
           ]),
         ),
       ),
     );
   }
+}
+
+/// Vòng linh khí quanh đĩa Tu Tiên: 8 vạch bát quái mảnh xoay đều + 1 đốm sáng
+/// chạy quỹ đạo kéo vệt đuôi mờ dần. Trắng trên nền primary — hợp cả 2 theme.
+class _SpiritRingPainter extends CustomPainter {
+  final double t; // 0..1 vòng quay
+  final bool sel;
+  _SpiritRingPainter(this.t, this.sel);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final c = size.center(Offset.zero);
+    const r = 20.0; // bán kính quỹ đạo (đĩa 54 - viền 3 - chừa mép)
+    final ang = t * 2 * math.pi;
+
+    // 8 vạch bát quái xoay theo t (vạch dài/ngắn xen kẽ — gợi hào âm dương)
+    final tick = Paint()
+      ..isAntiAlias = true
+      ..strokeWidth = 1.4
+      ..strokeCap = StrokeCap.round
+      ..color = Colors.white.withValues(alpha: sel ? 0.75 : 0.45);
+    for (var i = 0; i < 8; i++) {
+      final a = ang + i * math.pi / 4;
+      final len = i.isEven ? 3.5 : 2.0;
+      canvas.drawLine(
+        c + Offset(math.cos(a), math.sin(a)) * (r - len),
+        c + Offset(math.cos(a), math.sin(a)) * r,
+        tick,
+      );
+    }
+
+    // đốm linh khí chạy NGƯỢC chiều vạch (nhìn "sống" hơn cùng chiều) + vệt đuôi
+    final head = -ang * 2;
+    for (var k = 0; k < 6; k++) {
+      final a = head + k * 0.14; // đuôi rải phía sau
+      final alpha = (sel ? 0.95 : 0.7) * (1 - k / 6);
+      canvas.drawCircle(
+        c + Offset(math.cos(a), math.sin(a)) * r,
+        k == 0 ? 2.1 : 1.5 - k * 0.15,
+        Paint()
+          ..isAntiAlias = true
+          ..color = Colors.white.withValues(alpha: alpha),
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_SpiritRingPainter old) => old.t != t || old.sel != sel;
 }
 
 /// Giữ trạng thái từng tab trong PageView (thay vai trò IndexedStack cũ).
