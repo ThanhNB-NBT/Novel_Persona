@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 
 import '../../data.dart';
 import '../../hanviet.dart';
-import '../../widgets.dart';
 
 const _typeLabels = {
   'person': 'Nhân vật',
@@ -26,6 +25,9 @@ class _GlossaryScreenState extends ConsumerState<GlossaryScreen> {
   // chế độ chọn hàng loạt để xoá (LLM có thể gợi ý cả trăm term sai — xoá tay từng cái quá cực)
   bool _selecting = false;
   final Set<int> _sel = {};
+  // hai mục có thể cả trăm dòng — cho thu gọn để khỏi kéo mệt
+  bool _openPending = true;
+  bool _openApproved = true;
 
   int get novelId => widget.novelId;
 
@@ -91,14 +93,23 @@ class _GlossaryScreenState extends ConsumerState<GlossaryScreen> {
             padding: const EdgeInsets.only(bottom: 88),
             children: [
               if (pending.isNotEmpty) ...[
-                SectionHeader('Gợi ý chờ duyệt (${pending.length})'),
-                for (final t in pending)
-                  if (_selecting)
-                    _checkTile(t)
-                  else
-                    _PendingTile(term: t, onChanged: refresh),
+                _toggleHeader('Gợi ý chờ duyệt (${pending.length})', _openPending,
+                    () => setState(() => _openPending = !_openPending)),
+                if (_openPending)
+                  for (final t in pending)
+                    if (_selecting)
+                      _checkTile(t)
+                    else
+                      _PendingTile(
+                        term: t,
+                        onChanged: refresh,
+                        onEdit: () =>
+                            _showTermDialog(context, term: t, onDone: refresh),
+                      ),
               ],
-              SectionHeader('Đã áp dụng (${approved.length})'),
+              _toggleHeader('Đã áp dụng (${approved.length})', _openApproved,
+                  () => setState(() => _openApproved = !_openApproved)),
+              if (_openApproved)
               for (final t in approved)
                 if (_selecting)
                   _checkTile(t)
@@ -130,6 +141,21 @@ class _GlossaryScreenState extends ConsumerState<GlossaryScreen> {
       ),
     );
   }
+
+  /// Tiêu đề mục bấm được để thu gọn/mở (danh sách dài cả trăm dòng).
+  Widget _toggleHeader(String title, bool open, VoidCallback onTap) => InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 18, 12, 10),
+          child: Row(children: [
+            Expanded(
+                child: Text(title,
+                    style: Theme.of(context).textTheme.headlineSmall)),
+            Icon(open ? Icons.expand_less_rounded : Icons.expand_more_rounded,
+                color: Theme.of(context).colorScheme.onSurfaceVariant),
+          ]),
+        ),
+      );
 
   /// AppBar chế độ chọn: đếm số đã chọn + Chọn tất cả + Xoá.
   AppBar _selectAppBar(List<Rec> all) => AppBar(
@@ -246,25 +272,55 @@ class _GlossaryScreenState extends ConsumerState<GlossaryScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(term == null ? 'Thêm thuật ngữ' : 'Sửa thuật ngữ'),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
-          TextField(
-            controller: zh,
-            decoration: const InputDecoration(labelText: 'Từ gốc (tiếng Trung)'),
-          ),
-          TextField(
-            controller: vi,
-            decoration: const InputDecoration(labelText: 'Bản dịch đúng *'),
-            autofocus: term != null,
-          ),
-          TextField(
-            controller: wrong,
-            decoration: const InputDecoration(
-                labelText: 'Bản dịch sai (nếu có)',
-                helperText: 'Dùng để vá chương cũ: sai → đúng'),
-          ),
-          const SizedBox(height: 8),
-          StatefulBuilder(
-            builder: (_, setState) => DropdownButtonFormField<String>(
+        content: StatefulBuilder(builder: (_, setState) {
+          // phiên âm Hán-Việt tra bảng từ ô chữ Trung — như form sửa ở màn đọc,
+          // người không biết tiếng Trung bấm chip là điền được bản chuẩn
+          final z = zh.text.trim();
+          String? hanFill;
+          if (z.isNotEmpty) {
+            final filled = z.replaceAllMapped(
+                RegExp(r'[㐀-䶿一-鿿]+'), (m) => hanVietOf(m.group(0)!) ?? m.group(0)!);
+            if (filled != z) hanFill = filled;
+          }
+          return Column(mainAxisSize: MainAxisSize.min, children: [
+            TextField(
+              controller: zh,
+              onChanged: (_) => setState(() {}),
+              decoration: const InputDecoration(labelText: 'Từ gốc (tiếng Trung)'),
+            ),
+            TextField(
+              controller: vi,
+              decoration: const InputDecoration(labelText: 'Bản dịch đúng *'),
+              autofocus: term != null,
+            ),
+            if (hanFill case final hf?)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: ActionChip(
+                    visualDensity: VisualDensity.compact,
+                    side: BorderSide(
+                        color: Theme.of(ctx).colorScheme.primary.withValues(alpha: 0.6)),
+                    label: Text('tra bảng ⇒ $hf',
+                        style: Theme.of(ctx).textTheme.labelMedium?.copyWith(
+                            color: Theme.of(ctx).colorScheme.primary)),
+                    onPressed: () => setState(() {
+                      vi.text = hf;
+                      vi.selection =
+                          TextSelection.collapsed(offset: vi.text.length);
+                    }),
+                  ),
+                ),
+              ),
+            TextField(
+              controller: wrong,
+              decoration: const InputDecoration(
+                  labelText: 'Bản dịch sai (nếu có)',
+                  helperText: 'Dùng để vá chương cũ: sai → đúng'),
+            ),
+            const SizedBox(height: 8),
+            DropdownButtonFormField<String>(
               initialValue: type,
               decoration: const InputDecoration(labelText: 'Loại'),
               items: [
@@ -273,8 +329,8 @@ class _GlossaryScreenState extends ConsumerState<GlossaryScreen> {
               ],
               onChanged: (v) => setState(() => type = v ?? 'other'),
             ),
-          ),
-        ]),
+          ]);
+        }),
         actions: [
           if (term != null)
             TextButton(
@@ -318,11 +374,13 @@ class _GlossaryScreenState extends ConsumerState<GlossaryScreen> {
   }
 }
 
-/// Term do LLM gợi ý (approved=false): duyệt nhanh hoặc bỏ.
+/// Term do LLM gợi ý (approved=false): duyệt nhanh hoặc bỏ; bấm vào dòng để sửa.
 class _PendingTile extends StatelessWidget {
   final Rec term;
   final VoidCallback onChanged;
-  const _PendingTile({required this.term, required this.onChanged});
+  final VoidCallback onEdit;
+  const _PendingTile(
+      {required this.term, required this.onChanged, required this.onEdit});
 
   @override
   Widget build(BuildContext context) {
@@ -336,6 +394,7 @@ class _PendingTile extends StatelessWidget {
         ),
         child: ListTile(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          onTap: onEdit, // sửa trước rồi mới duyệt — khỏi duyệt bản LLM phiên sai
           title: Text('${term['term_zh'] ?? '(?)'} → ${term['correct_vi']}'),
           // kèm phiên âm tra bảng khi LỆCH với gợi ý — người không biết tiếng Trung
           // vẫn phát hiện được LLM phiên sai trước khi duyệt
