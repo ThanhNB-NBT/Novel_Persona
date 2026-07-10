@@ -69,10 +69,8 @@ class TranslationProvider:
 class FallbackChain:
     """Thử lần lượt từng provider theo thứ tự LLM_PROVIDER cho tới khi thành công.
 
-    Ví dụ LLM_PROVIDER=nvidia,fireworks,openrouter:
-    NVIDIA NIM free là chính; bị rate-limit (429) hoặc lỗi thì tự chuyển
-    Fireworks rồi OpenRouter trong cùng lần gọi — job không fail oan.
-    (Mỗi provider bên trong đã có tenacity retry 3 lần riêng.)
+    Từ 2026-07-10 chỉ còn nvidia (nhiều key) — chain giữ lại vì cho phép
+    nhiều lane key và fuse chất lượng validate nằm trong cùng vòng thử.
     """
 
     def __init__(self, providers: list[tuple[str, TranslationProvider]]):
@@ -105,51 +103,33 @@ class FallbackChain:
         raise last_exc if last_exc else RuntimeError("Không có provider nào khả dụng")
 
     def pin(self, provider: str, model: str) -> "FallbackChain":
-        """Khôi phục đúng provider/model đã ghim cho một truyện."""
+        """Khôi phục đúng provider/model đã ghim cho một truyện.
+
+        Truyện còn ghim provider đã gỡ (openrouter/fireworks cũ) → dùng chain
+        hiện tại (nvidia) thay vì fail job; giọng đổi một lần rồi ổn định.
+        """
         for name, item in self.providers:
             if name == provider:
                 return FallbackChain([(name, item.with_model(model))])
-        raise RuntimeError(f"Provider đã ghim '{provider}' không còn trong LLM_PROVIDER")
+        import logging
+        logging.getLogger(__name__).warning(
+            "Provider đã ghim '%s' không còn — dùng nvidia thay", provider)
+        return self
 
 
-_BASE_URLS = {
-    "openrouter": "https://openrouter.ai/api/v1",
-    "fireworks": "https://api.fireworks.ai/inference/v1",
-    "nvidia": "https://integrate.api.nvidia.com/v1",
-}
-_MODELS = {
-    "openrouter": lambda: settings.openrouter_model,
-    "fireworks": lambda: settings.fireworks_model,
-    "nvidia": lambda: settings.nvidia_model,
-}
+_NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1"
 
 
-def _make(name: str, api_key: str) -> tuple[str, TranslationProvider]:
-    return name, TranslationProvider(_BASE_URLS[name], api_key, _MODELS[name](), name)
+def build_chain(slot: int = 0) -> FallbackChain:
+    """Chain provider cho 1 luồng dịch (slot) — chỉ NVIDIA NIM.
 
-
-def build_chain(slot: int = 0) -> TranslationProvider | FallbackChain:
-    """Chain provider cho 1 luồng dịch (slot).
-
-    nvidia có thể khai NHIỀU key (nvidia_api_keys, phân cách phẩy) → mỗi luồng ghim
-    key[slot % số_key] để 2+ key chạy SONG SONG (mỗi key 1 lane 40 RPM). Cùng model
-    nên văn phong không lệch. openrouter/fireworks là fallback dùng chung.
-    Provider chưa có key thì bỏ qua.
+    Khai NHIỀU key (nvidia_api_keys, phân cách phẩy) → mỗi luồng ghim
+    key[slot % số_key] để 2+ key chạy SONG SONG (mỗi key 1 lane 40 RPM).
     """
-    names = [n.strip().lower() for n in settings.llm_provider.split(",") if n.strip()]
-    chain: list[tuple[str, TranslationProvider]] = []
-    for n in names:
-        if n == "nvidia":
-            keys = settings.nvidia_keys
-            if keys:
-                chain.append(_make("nvidia", keys[slot % len(keys)]))
-        elif n in ("openrouter", "fireworks"):
-            key = settings.openrouter_api_key if n == "openrouter" else settings.fireworks_api_key
-            if key:
-                chain.append(_make(n, key))
-        else:
-            raise ValueError(f"LLM_PROVIDER không hợp lệ: {n}")
-    if not chain:
-        raise ValueError("Không có provider nào có API key — kiểm tra .env")
+    keys = settings.nvidia_keys
+    if not keys:
+        raise ValueError("Thiếu NVIDIA_API_KEYS — kiểm tra .env")
+    provider = TranslationProvider(
+        _NVIDIA_BASE_URL, keys[slot % len(keys)], settings.nvidia_model, "nvidia")
     # Luôn bọc FallbackChain (kể cả 1 provider) để `complete(validate=...)` đồng nhất.
-    return FallbackChain(chain)
+    return FallbackChain([("nvidia", provider)])

@@ -8,13 +8,8 @@ class Settings(BaseSettings):
     supabase_url: str
     supabase_service_role_key: str
 
-    # LLM — thứ tự ưu tiên, phân cách phẩy; lỗi/rate-limit thì tự chuyển provider kế.
-    # free-first: nvidia (chính) → openrouter (dự phòng free) → fireworks (lưới cuối trả phí).
-    llm_provider: str = "nvidia,openrouter,fireworks"
-    openrouter_api_key: str = ""
-    openrouter_model: str = "google/gemma-4-31b-it:free"
-    fireworks_api_key: str = ""
-    fireworks_model: str = "accounts/fireworks/models/deepseek-v4-flash"
+    # LLM — chỉ NVIDIA NIM (bỏ openrouter/fireworks 2026-07-10: fallback deepseek làm lệch giọng dịch).
+    llm_provider: str = "nvidia"
     # nvidia có thể khai NHIỀU key (phân cách phẩy) — mỗi key 1 lane 40 RPM chạy song song.
     # nvidia_api_key (số ít) giữ để tương thích .env cũ.
     nvidia_api_key: str = ""
