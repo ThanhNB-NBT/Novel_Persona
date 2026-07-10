@@ -138,6 +138,21 @@ const _sprites = <String, List<String>>{
     '...kkk......',
     '............',
   ],
+  // vòng sáng (pháp bảo halo — Nguyệt/Tinh/Lôi/Kim Hoàn)
+  'halo': [
+    '............',
+    '...kkkkkk...',
+    '..kBwBBBBk..',
+    '.kBwk..kBBk.',
+    '.kwk....kBk.',
+    '.kBk....kAk.',
+    '.kBk....kAk.',
+    '.kBAk..kAAk.',
+    '..kBAAAAAk..',
+    '...kkkkkk...',
+    '............',
+    '............',
+  ],
   // la bàn tầm linh
   'compass': [
     '............',
