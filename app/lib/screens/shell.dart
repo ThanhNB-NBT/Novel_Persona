@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../cultivation.dart';
 import '../data.dart';
+import '../update.dart';
 import 'cultivation/cultivation.dart';
 import 'cultivation/pixel.dart';
 import 'explore/home.dart';
@@ -42,6 +43,10 @@ class _RootShellState extends ConsumerState<RootShell> {
   void initState() {
     super.initState();
     _i = sb.auth.currentUser != null ? 0 : 1; // Tủ truyện nếu đã đăng nhập, ngược lại Khám phá
+    // có bản mới trên GitHub Releases → hỏi 1 lần mỗi version (sau frame đầu, cần context)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) maybePromptUpdate(context, ref);
+    });
   }
 
   @override

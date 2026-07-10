@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.0+1
+version: 1.0.1+2
 
 environment:
   sdk: ^3.12.2
@@ -49,6 +49,9 @@ dependencies:
   flutter_tts: ^4.2.0
   # Tu luyện: md5 xác định chương có quà (mirror công thức SQL cult_gift_at)
   crypto: ^3.0.6
+  # Cập nhật trong app: so version với GitHub Releases + mở link tải APK
+  package_info_plus: ^9.0.1
+  url_launcher: ^6.3.1
 
 dev_dependencies:
   flutter_test:
@@ -88,6 +91,8 @@ flutter:
     - assets/icon/gt_ink.png     # logo GT mực đậm — chế độ sáng
     - assets/icon/gt_white.png   # logo GT trắng — chế độ tối
     - assets/hanviet.tsv         # bảng tra Hán-Việt (đồng bộ từ worker/novelworker/data/)
+
+    - assets/cultivators/
 
   # To add assets to your application, add an assets section, like this:
   # assets:
