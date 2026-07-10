@@ -105,13 +105,58 @@ def check_translation(content_zh: str, content_vi: str) -> str | None:
 _DIALOGUE_RE = re.compile(r'"[^"\n]{1,500}"|“[^”\n]{1,500}”')
 
 
-def _register_violation(content_vi: str) -> str | None:
-    """Chặn đại từ sai trong LỜI KỂ (user chốt 2026-07-10: chỉ lời kể mới cấm
-    anh/tôi — thoại được linh hoạt anh/em/ca theo bối cảnh, nên bỏ qua khi soi)."""
+# Đại từ kể sai có thể vá MÁY MÓC an toàn (ngôi ba rõ ràng, giới tính rõ ràng).
+# "tôi"/"cô" trần không vá được (không rõ thay bằng gì) → vẫn để fuse chặn + retry.
+_REG_FIX = [
+    (re.compile(r"\b[Cc]ô (?:ta|ấy)\b"), "nàng"),
+    (re.compile(r"\b[Aa]nh (?!trai\b)(?:ta|ấy)\b"), "hắn"),
+    (re.compile(r"\b[Cc]ậu ta\b"), "hắn"),
+    (re.compile(r"\b[Ôô]ng (?:ta|ấy)\b"), "lão"),
+]
+# "Cô/Anh" TRẦN chỉ vá khi mở đầu câu kể + chữ thường theo sau (chắc chắn là đại từ);
+# giữa câu để yên — "cô" còn là danh từ (cô nương/cô gái), "anh" còn là anh hùng/tinh anh.
+_REG_FIX_HEAD = [
+    (re.compile(r"(^|[.!?…]\s+)Cô\s+(?=[a-zà-ỹ])(?!ta\b|ấy\b|nương|gái|em\b|đơn|độc|bé\b)", re.M), r"\1Nàng "),
+    (re.compile(r"(^|[.!?…]\s+)Anh\s+(?=[a-zà-ỹ])(?!ta\b|ấy\b|trai|em\b|hùng|tài|kiệt|linh|hào|dũng)", re.M), r"\1Hắn "),
+]
+
+
+def _fix_register(vi: str) -> str:
+    """Vá đại từ kể sai phổ biến NGOÀI ngoặc kép (model quen 'cô ấy/anh ta' với truyện
+    nữ chính/hiện đại — vá máy móc đỡ đốt lượt retry; thoại giữ nguyên)."""
+    def fix_seg(seg: str) -> str:
+        for pat, rep in _REG_FIX:
+            seg = pat.sub(lambda m, r=rep: r.capitalize() if m.group(0)[0].isupper() else r, seg)
+        for pat, rep in _REG_FIX_HEAD:
+            seg = pat.sub(rep, seg)
+        return seg
+    out, last = [], 0
+    for m in _DIALOGUE_RE.finditer(vi):
+        out.append(fix_seg(vi[last:m.start()]))
+        out.append(m.group(0))
+        last = m.end()
+    out.append(fix_seg(vi[last:]))
+    return "".join(out)
+
+
+_ZH_DIALOGUE_RE = re.compile(r"“[^”]*”|「[^」]*」")
+
+
+def _is_first_person(zh: str) -> bool:
+    """Gốc có 我 trong LỜI KỂ (ngoài thoại) = truyện ngôi thứ nhất → 'tôi' hợp lệ."""
+    return "我" in _ZH_DIALOGUE_RE.sub("", zh)
+
+
+def _register_violation(content_vi: str, allow_toi: bool = False) -> str | None:
+    """Chặn đại từ sai trong LỜI KỂ (user chốt 2026-07-10: chỉ lời kể mới cấm —
+    thoại được linh hoạt anh/em/ca theo bối cảnh, nên bỏ qua khi soi).
+    CHỈ bắt cụm không thể nhầm ("anh ta", "cô ấy", "tôi"...) — "anh"/"cô" trần
+    KHÔNG bắt vì dính oan từ ghép: anh hùng/tinh anh/Nguyên Anh/nước Anh/cô nương.
+    `allow_toi`: truyện kể ngôi thứ nhất → "tôi" là đúng, không bắt."""
     narration = _DIALOGUE_RE.sub(" ", content_vi)
-    bad = re.search(
-        r"\b(?:anh(?!\s+trai\b)(?:\s+(?:ta|ấy))?|cậu ta|ông ta|tôi)\b",
-        narration, re.I)
+    pat = r"\b(?:anh\s+(?:ta|ấy)|cậu ta|ông ta|cô\s+(?:ta|ấy)" + \
+        ("" if allow_toi else r"|tôi(?!\s+luyện)") + r")\b"
+    bad = re.search(pat, narration, re.I)
     return f"lệch xưng hô '{bad.group(0)}' trong lời kể" if bad else None
 
 
@@ -120,8 +165,12 @@ def _quality_fuse(chunk: str):
     Đo trên phần THÂN bản dịch (đã bỏ GLOSSARY_JSON/SUMMARY) — đo text thô sẽ lệch:
     tên Trung trong GLOSSARY_JSON tính nhầm vào tỷ lệ Hán, JSON dài tính nhầm vào độ phình."""
     def check(res) -> None:
+        # vá đại từ kể sai vá được TRƯỚC khi soi — res.text sửa tại chỗ để pipeline
+        # nhận bản đã vá (validator là chỗ duy nhất thấy text trước khi chain trả về)
+        res.text = _fix_register(res.text)
         content_vi = _strip_meta(res.text)
-        problem = check_translation(chunk, content_vi) or _register_violation(content_vi)
+        problem = check_translation(chunk, content_vi) or _register_violation(
+            content_vi, allow_toi=_is_first_person(chunk))
         if problem:
             raise RuntimeError(f"Bản dịch {problem} (model {res.model})")
     return check
@@ -322,7 +371,7 @@ def _extract_json(text: str) -> dict | list:
 # lời KỂ cứng hắn/nàng; THOẠI linh hoạt theo bối cảnh (fuse cũng chỉ soi lời kể).
 REGISTER_LINE = (
     "[Xưng hô — LỜI KỂ ngôi ba: nam 'hắn', nữ 'nàng'; TUYỆT ĐỐI KHÔNG "
-    "'anh/anh ta/ông ta/cậu ta/tôi' làm đại từ trong lời kể. THOẠI linh hoạt theo "
+    "'anh/anh ta/ông ta/cậu ta/tôi/cô/cô ấy' làm đại từ trong lời kể. THOẠI linh hoạt theo "
     "bối cảnh: tu tiên/cổ trang ta–ngươi, ca ca/đệ đệ/sư huynh; nhân vật hiện đại "
     "với nhau được anh/em hoặc 'ca'; nhắc người thứ ba trong thoại: hắn ta/anh ta đều được.]")
 
