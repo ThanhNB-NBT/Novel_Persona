@@ -1,6 +1,6 @@
 # Handoff (2026-07-05, cập nhật 2026-07-06)
 
-> **Tối ưu 2026-07-06:** `handle_patch` phân trang (vá đủ truyện >1000 chương); `reset_orphan_chapters` → SQL RPC (migration 024, hết trần 1000 dòng); audit định kỳ chỉ quét chương dịch sau watermark (giảm egress, audit full vẫn qua lệnh `audit`/nút Quét lỗi); `reprioritize` + `queue_sample_chapters` gom update theo lô; migration 025 index `chapters(translated_at) where done` + `novels(chapter_count_translated desc)`. Còn treo: phân trang mục lục app cho truyện >2000 chương; Realtime→Broadcast khi user tăng.
+> **Tối ưu 2026-07-06:** `handle_patch` phân trang (vá đủ truyện >1000 chương); `reset_orphan_chapters` → SQL RPC (migration 024, hết trần 1000 dòng); audit định kỳ chỉ quét chương dịch sau watermark (giảm egress, audit full vẫn qua lệnh `audit`/nút Quét lỗi); `reprioritize` + `queue_sample_chapters` gom update theo lô; migration 025 index `chapters(translated_at) where done` + `novels(chapter_count_translated desc)`. Còn treo: Realtime→Broadcast khi user tăng. (Phân trang mục lục app ĐÃ XONG — `chapterListProvider` kéo theo trang 1000 + ListView.builder, đừng đề xuất lại.)
 
 > **STATUS: cả 3 task 11/13/14 ĐÃ XONG (2026-07-06).** Chi tiết plan gốc giữ lại bên dưới làm tham chiếu.
 > - **Task 14 (latency):** migration 022 `model_health` + RPC `bump_model_health`; `db.record_model_call` gọi trong `FallbackChain.complete`; tab Token (admin) có khối "SỨC KHỎE MODEL" (latency TB / %OK / chấm sống-chậm-chết).
