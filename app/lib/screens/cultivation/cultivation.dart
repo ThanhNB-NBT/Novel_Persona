@@ -256,17 +256,24 @@ class _HeroStage extends ConsumerWidget {
             ),
           ),
         ),
-        // cảnh nhân vật (trăng + sao + sương + bóng người) phóng to theo khung
+        // cảnh nhân vật (halo + trận pháp + sương + người) phóng to theo khung;
+        // truyền đồ ĐANG ĐEO có hiển thị: vòng sáng (pháp bảo halo) + vũ khí
         Positioned.fill(
           bottom: 62,
           child: FittedBox(
             fit: BoxFit.contain,
-            child: _AnimatedCultivator(
+            child: Builder(builder: (_) {
+              final eq = (st['equipped'] as Rec?) ?? const {};
+              return _AnimatedCultivator(
                 realm: realm,
                 race: st['race'] as String?,
                 gender: st['gender'] as String?,
-                cpCode:
-                    (st['equipped'] as Rec?)?['congphap']?['code'] as String?),
+                cpCode: eq['congphap']?['code'] as String?,
+                halo: eq['phapbao']?['effect']?['halo'] as String?,
+                weaponSprite: eq['vukhi']?['pixel'] as String?,
+                weaponGrade: eq['vukhi']?['grade'] as int? ?? 1,
+              );
+            }),
           ),
         ),
         // tên cảnh giới + tầng + đạo hiệu — neo đáy, căn giữa
@@ -770,7 +777,7 @@ class _BurstPainter extends CustomPainter {
 }
 
 /// Kiểu hiệu ứng quanh người theo CÔNG PHÁP đang tu (mỗi công pháp một "hệ").
-enum _Aura { qi, ice, wind, earth, sword, gold, star }
+enum _Aura { qi, ice, wind, earth, sword, gold, star, fire, leaf }
 
 /// code công pháp → (hệ hiệu ứng, màu hệ). null màu = dùng màu cảnh giới.
 (_Aura, Color?) _auraFor(String? code) => switch (code) {
@@ -781,9 +788,10 @@ enum _Aura { qi, ice, wind, earth, sword, gold, star }
       'cp_luyen_the' => (_Aura.gold, const Color(0xFFFFA94D)),
       'cp_cuu_chuyen' => (_Aura.gold, const Color(0xFFFFC94D)),
       'cp_thien_cang' => (_Aura.sword, const Color(0xFFCED4DA)),
-      'cp_liet_hoa' => (_Aura.gold, const Color(0xFFFF7043)),
-      'cp_xich_diem' => (_Aura.gold, const Color(0xFFFF5722)),
-      'cp_thanh_moc' => (_Aura.qi, const Color(0xFF69DB7C)),
+      // hệ Hỏa/Mộc có hiệu ứng RIÊNG (lửa bốc / lá cuốn) — hết mượn gold/qi
+      'cp_liet_hoa' => (_Aura.fire, const Color(0xFFFF7043)),
+      'cp_xich_diem' => (_Aura.fire, const Color(0xFFFF5722)),
+      'cp_thanh_moc' => (_Aura.leaf, const Color(0xFF69DB7C)),
       'cp_dai_dien' => (_Aura.star, const Color(0xFFB197FC)),
       'cp_hon_don' => (_Aura.star, const Color(0xFF9775FA)),
       'cp_thai_co' => (_Aura.star, const Color(0xFFFFE066)),
@@ -796,11 +804,27 @@ class CultivatorPreview extends StatelessWidget {
   final String? cpCode;
   final String? race;
   final String? gender;
+  final String? halo; // kiểu vòng sáng (pháp bảo vòng đang đeo)
+  final String? weaponSprite; // pixel key vũ khí đang đeo
+  final int weaponGrade;
   const CultivatorPreview(
-      {super.key, required this.realm, this.cpCode, this.race, this.gender});
+      {super.key,
+      required this.realm,
+      this.cpCode,
+      this.race,
+      this.gender,
+      this.halo,
+      this.weaponSprite,
+      this.weaponGrade = 1});
   @override
   Widget build(BuildContext context) => _AnimatedCultivator(
-      realm: realm, cpCode: cpCode, race: race, gender: gender);
+      realm: realm,
+      cpCode: cpCode,
+      race: race,
+      gender: gender,
+      halo: halo,
+      weaponSprite: weaponSprite,
+      weaponGrade: weaponGrade);
 }
 
 /// Bóng tiên nhân động: lơ lửng lên xuống, quầng thở, hiệu ứng bay theo công pháp.
@@ -811,8 +835,17 @@ class _AnimatedCultivator extends StatefulWidget {
   final String? cpCode; // code công pháp đang tu → kiểu hiệu ứng
   final String? race; // dáng nhân vật theo chủng tộc
   final String? gender; // nam/nu — dáng + kiểu tóc
+  final String? halo; // kiểu vòng sáng sau đầu (từ pháp bảo vòng)
+  final String? weaponSprite; // vũ khí đang đeo bay quanh (null = không)
+  final int weaponGrade;
   const _AnimatedCultivator(
-      {required this.realm, this.cpCode, this.race, this.gender});
+      {required this.realm,
+      this.cpCode,
+      this.race,
+      this.gender,
+      this.halo,
+      this.weaponSprite,
+      this.weaponGrade = 1});
   @override
   State<_AnimatedCultivator> createState() => _AnimatedCultivatorState();
 }
@@ -840,14 +873,16 @@ class _AnimatedCultivatorState extends State<_AnimatedCultivator>
       child: AnimatedBuilder(
         animation: _ctrl,
         builder: (_, _) => CustomPaint(
-          // nền: vầng trăng cảnh giới + sương trôi + quầng thở
-          painter: _SkyPainter(_ctrl.value, gradeColor(grade), color, widget.realm),
-          // trước: hiệu ứng công pháp bay quanh (đè lên bóng người)
-          foregroundPainter: _AuraPainter(_ctrl.value, color, style),
+          // nền: halo sau đầu + trận pháp dưới chân + sương + quầng thở
+          painter: _SkyPainter(_ctrl.value, gradeColor(grade), color,
+              widget.realm, halo: widget.halo),
+          // trước: hiệu ứng công pháp + vũ khí hộ chủ bay quanh
+          foregroundPainter: _AuraPainter(_ctrl.value, color, style,
+              weaponSprite: widget.weaponSprite, weaponGrade: widget.weaponGrade),
           child: Center(
             child: Transform.translate(
-              // lơ lửng: nhấp nhô ±4px theo sin
-              offset: Offset(0, math.sin(_ctrl.value * 2 * math.pi) * 4),
+              // hạ thấp +10 cho ĐẦU lọt tâm halo (docs/tu-tien.md §3); nhấp nhô ±4px
+              offset: Offset(0, 10 + math.sin(_ctrl.value * 2 * math.pi) * 4),
               child: Image.asset(
                 _cultivatorAsset(widget.race, widget.gender),
                 width: 104,
@@ -874,14 +909,17 @@ String _cultivatorAsset(String? race, String? gender) {
   return 'assets/cultivators/${raceKey}_$genderKey.webp';
 }
 
-/// Nền "thủy mặc": vầng trăng lớn màu cảnh giới sau lưng + sương mù trôi ngang
-/// + quầng linh khí thở. Vẽ TRƯỚC bóng người (background painter).
+/// Nền cảnh tu luyện — vẽ TRƯỚC bóng người (background painter):
+/// sao (realm 5+) → VÒNG SÁNG SAU ĐẦU (halo, kiểu theo pháp bảo vòng đang đeo)
+/// → TRẬN PHÁP xoay dưới chân → quầng thở → sương trôi → đom đóm linh khí.
+/// Hình học khớp docs/tu-tien.md §3: canvas 150×145, đầu nhân vật ≈ (75, 37).
 class _SkyPainter extends CustomPainter {
   final double t; // 0..1
   final Color moon; // màu cảnh giới
-  final Color aura; // màu hệ công pháp (quầng thở)
-  final int realm; // 1..9 — trăng to dần, sao từ Hóa Thần, nhị nguyệt từ Đại Thừa
-  _SkyPainter(this.t, this.moon, this.aura, this.realm);
+  final Color aura; // màu hệ công pháp (trận pháp + quầng thở)
+  final int realm; // 1..9 — halo nhích to, sao từ Hóa Thần, vành kép từ Đại Thừa
+  final String? halo; // kiểu vòng từ pháp bảo: nguyet/tinh/loi/kim — null = vòng trơn
+  _SkyPainter(this.t, this.moon, this.aura, this.realm, {this.halo});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -897,31 +935,26 @@ class _SkyPainter extends CustomPainter {
         canvas.drawCircle(Offset(x, y), 1.0 + tw * 0.6, star);
       }
     }
-    // vầng trăng: đĩa gradient mờ + vành khuyên mảnh, ôm đầu-vai bóng người;
-    // bán kính lớn dần theo cảnh giới (Luyện Khí 41 → Độ Kiếp 49)
-    final mr = 40.0 + realm;
-    final mc = Offset(c.dx, c.dy - 16);
+
+    // ---- vòng sáng sau đầu (halo): tâm TRÙNG ĐẦU nhân vật, nhỏ gọn ----
+    final hr = 15.0 + realm * 0.9; // ~16..23
+    final hc = Offset(c.dx, c.dy - 29); // đầu ảnh full-body ≈ y 43 sau khi hạ +10
+    // nền phát sáng mờ chung cho mọi kiểu vòng
     canvas.drawCircle(
-        mc,
-        mr + 2,
+        hc,
+        hr + 3,
         Paint()
           ..shader = RadialGradient(colors: [
-            moon.withValues(alpha: 0.34),
-            moon.withValues(alpha: 0.10),
+            moon.withValues(alpha: 0.30),
+            moon.withValues(alpha: 0.08),
             moon.withValues(alpha: 0),
-          ], stops: const [0, 0.72, 1])
-              .createShader(Rect.fromCircle(center: mc, radius: mr + 2)));
-    canvas.drawCircle(
-        mc,
-        mr,
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.2
-          ..color = moon.withValues(alpha: 0.55));
-    // nhị nguyệt luân từ Đại Thừa (realm 8+): vành ngoài thứ hai quay lệch pha
+          ], stops: const [0, 0.7, 1])
+              .createShader(Rect.fromCircle(center: hc, radius: hr + 3)));
+    _drawHalo(canvas, hc, hr);
+    // nhị luân từ Đại Thừa (realm 8+): vành ngoài thứ hai quay lệch pha
     if (realm >= 8) {
       canvas.drawArc(
-          Rect.fromCircle(center: mc, radius: mr + 6),
+          Rect.fromCircle(center: hc, radius: hr + 5),
           t * 2 * math.pi,
           math.pi * 1.2,
           false,
@@ -931,43 +964,42 @@ class _SkyPainter extends CustomPainter {
             ..color = moon.withValues(alpha: 0.35));
     }
 
-    // dãy núi thủy mặc 3 lớp (xa mờ → gần đậm, nhoè nhẹ như nét mực loang) —
-    // cảnh có chiều sâu thay vì trống trơn sau lưng nhân vật
-    void range(List<Offset> pts, double alpha) {
-      final p = Path()..moveTo(-4, size.height + 4);
-      for (final o in pts) {
-        p.lineTo(o.dx, o.dy);
-      }
-      p
-        ..lineTo(size.width + 4, size.height + 4)
-        ..close();
-      canvas.drawPath(
-          p,
-          Paint()
-            ..color = moon.withValues(alpha: alpha)
-            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1.5));
+    // ---- trận pháp dưới chân: 2 ellipse đồng tâm + vạch rune xoay chậm ----
+    final fc = Offset(c.dx, size.height - 13);
+    final ring = Paint()
+      ..isAntiAlias = true
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.0
+      ..color = aura.withValues(alpha: 0.35);
+    canvas.drawOval(Rect.fromCenter(center: fc, width: 96, height: 22), ring);
+    canvas.drawOval(Rect.fromCenter(center: fc, width: 66, height: 15),
+        ring..color = aura.withValues(alpha: 0.22));
+    // vạch rune chạy trên vành ngoài (chiếu phối cảnh: y nén 0.23)
+    final rune = Paint()
+      ..isAntiAlias = true
+      ..strokeCap = StrokeCap.round
+      ..strokeWidth = 1.6;
+    for (var i = 0; i < 8; i++) {
+      final a = t * 2 * math.pi + i * math.pi / 4;
+      final p = Offset(fc.dx + math.cos(a) * 48, fc.dy + math.sin(a) * 48 * 0.23);
+      // nửa vành sau (đi lên trên) mờ hơn — giả chiều sâu
+      rune.color = aura.withValues(alpha: math.sin(a) > 0 ? 0.55 : 0.25);
+      canvas.drawLine(p.translate(0, -1.6), p.translate(0, 1.6), rune);
     }
 
-    range(const [Offset(0, 118), Offset(22, 96), Offset(48, 112), Offset(78, 92),
-      Offset(108, 110), Offset(132, 98), Offset(150, 114)], 0.10);
-    range(const [Offset(0, 128), Offset(30, 108), Offset(62, 124), Offset(96, 104),
-      Offset(126, 122), Offset(150, 112)], 0.16);
-    range(const [Offset(0, 140), Offset(26, 122), Offset(58, 136), Offset(92, 118),
-      Offset(124, 134), Offset(150, 124)], 0.24);
-
-    // quầng linh khí thở (theo màu công pháp) — chuyển từ _AuraPainter sang đây
-    // để nằm SAU bóng người, không rửa trôi silhouette
+    // quầng linh khí thở (theo màu công pháp) — nằm SAU bóng người
     final breathe = 0.5 + 0.5 * math.sin(t * 2 * math.pi);
-    for (final (r0, a) in [(40.0, 0.22), (58.0, 0.10)]) {
+    for (final (r0, a) in [(38.0, 0.20), (54.0, 0.09)]) {
       final r = r0 + breathe * 6;
       canvas.drawCircle(
-        Offset(c.dx, c.dy + 6),
+        Offset(c.dx, c.dy + 14),
         r,
         Paint()
           ..shader = RadialGradient(colors: [
             aura.withValues(alpha: a),
             aura.withValues(alpha: 0),
-          ]).createShader(Rect.fromCircle(center: Offset(c.dx, c.dy + 6), radius: r)),
+          ]).createShader(
+              Rect.fromCircle(center: Offset(c.dx, c.dy + 14), radius: r)),
       );
     }
 
@@ -996,20 +1028,86 @@ class _SkyPainter extends CustomPainter {
     }
   }
 
+  /// Vẽ vòng sáng theo kiểu pháp bảo vòng đang đeo (docs/tu-tien.md §2 halo):
+  /// null vòng trơn · nguyet 2 lưỡi trăng ngược chiều · tinh vành + 5 sao chạy ·
+  /// loi vành răng cưa giật sáng · kim vành kép + 8 tia kim quang xoay.
+  void _drawHalo(Canvas canvas, Offset hc, double hr) {
+    final stroke = Paint()
+      ..isAntiAlias = true
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.2
+      ..strokeCap = StrokeCap.round
+      ..color = moon.withValues(alpha: 0.55);
+    final ang = t * 2 * math.pi;
+    switch (halo) {
+      case 'nguyet': // 2 lưỡi trăng quay ngược chiều nhau
+        canvas.drawArc(Rect.fromCircle(center: hc, radius: hr), ang,
+            math.pi * 1.15, false, stroke);
+        canvas.drawArc(Rect.fromCircle(center: hc, radius: hr - 3), -ang * 1.3,
+            math.pi * 0.9, false,
+            stroke..color = moon.withValues(alpha: 0.35));
+      case 'tinh': // vành mảnh + 5 vì sao chạy quanh, nhấp nháy lệch pha
+        canvas.drawCircle(
+            hc, hr, stroke..color = moon.withValues(alpha: 0.30));
+        final star = Paint()..isAntiAlias = true;
+        for (var i = 0; i < 5; i++) {
+          final a = ang + i * 2 * math.pi / 5;
+          final tw = 0.5 + 0.5 * math.sin((t * 3 + i / 5) * 2 * math.pi);
+          star.color = Colors.white.withValues(alpha: 0.35 + 0.5 * tw);
+          canvas.drawCircle(
+              hc + Offset(math.cos(a), math.sin(a)) * hr, 1.2 + tw * 0.8, star);
+        }
+      case 'loi': // vành răng cưa (zigzag trong/ngoài) + chớp sáng ngẫu-định kỳ
+        final p = Path();
+        for (var i = 0; i <= 14; i++) {
+          final a = ang + i * 2 * math.pi / 14;
+          final r = hr + (i.isEven ? 1.8 : -1.8);
+          final o = hc + Offset(math.cos(a), math.sin(a)) * r;
+          i == 0 ? p.moveTo(o.dx, o.dy) : p.lineTo(o.dx, o.dy);
+        }
+        // chớp: sáng bừng ~1/6 thời gian mỗi vòng lặp
+        final flash = (t * 6) % 1 < 0.35;
+        canvas.drawPath(p..close(),
+            stroke..color = moon.withValues(alpha: flash ? 0.9 : 0.45));
+      case 'kim': // vành kép + 8 tia kim quang xoay
+        canvas.drawCircle(hc, hr, stroke);
+        canvas.drawCircle(hc, hr - 3.5,
+            stroke..color = moon.withValues(alpha: 0.30));
+        for (var i = 0; i < 8; i++) {
+          final a = ang + i * math.pi / 4;
+          canvas.drawLine(
+              hc + Offset(math.cos(a), math.sin(a)) * (hr + 1.5),
+              hc + Offset(math.cos(a), math.sin(a)) * (hr + 5.5),
+              stroke..color = moon.withValues(alpha: 0.65));
+        }
+      default: // vòng trơn — như cũ, chỉ nhỏ lại ôm đầu
+        canvas.drawCircle(hc, hr, stroke);
+    }
+  }
+
   @override
   bool shouldRepaint(_SkyPainter old) =>
-      old.t != t || old.moon != moon || old.aura != aura || old.realm != realm;
+      old.t != t ||
+      old.moon != moon ||
+      old.aura != aura ||
+      old.realm != realm ||
+      old.halo != halo;
 }
 
 /// Hiệu ứng bay quanh theo HỆ công pháp (vẽ ĐÈ lên bóng người — quầng thở
 /// nằm bên _SkyPainter phía sau):
 /// qi đốm sáng · ice mảnh băng · wind cung gió xoáy · earth đá vụn ·
-/// sword kiếm quang · gold vòng kim quang lan · star tinh tú nhấp nháy.
+/// sword kiếm quang · gold vòng kim quang lan · star tinh tú nhấp nháy ·
+/// fire lưỡi lửa bốc lên · leaf lá cuốn theo gió.
+/// Kèm VŨ KHÍ ĐANG ĐEO bay quanh người (quỹ đạo Lissajous — không tròn đều).
 class _AuraPainter extends CustomPainter {
   final double t; // 0..1
   final Color color;
   final _Aura style;
-  _AuraPainter(this.t, this.color, this.style);
+  final String? weaponSprite; // pixel key của vũ khí đang đeo — null = không vẽ
+  final int weaponGrade;
+  _AuraPainter(this.t, this.color, this.style,
+      {this.weaponSprite, this.weaponGrade = 1});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -1030,6 +1128,67 @@ class _AuraPainter extends CustomPainter {
         _dots(canvas, c);
       case _Aura.star:
         _stars(canvas, c);
+      case _Aura.fire:
+        _flames(canvas, c);
+      case _Aura.leaf:
+        _leaves(canvas, c);
+    }
+    if (weaponSprite != null) _weapon(canvas, c);
+  }
+
+  /// Vũ khí hộ chủ: bán kính + độ cao dao động theo sin tần số lệch nhau →
+  /// quỹ tích như "ý niệm điều khiển", không phải vòng tròn máy móc.
+  void _weapon(Canvas canvas, Offset c) {
+    final a = t * 2 * math.pi;
+    final r = 44 + 10 * math.sin(a * 3 + 1.3);
+    final p = Offset(
+      c.dx + math.cos(a) * r,
+      c.dy - 6 + math.sin(a) * r * 0.40 + math.sin(a * 2 + 0.7) * 6,
+    );
+    final front = math.sin(a) > 0; // nửa vòng dưới coi như bay TRƯỚC người
+    // vệt sáng mờ kéo sau đuôi vũ khí
+    final dir = Offset(-math.sin(a), math.cos(a) * 0.4);
+    canvas.drawLine(
+        p - dir * 10,
+        p,
+        Paint()
+          ..strokeWidth = 2.5
+          ..strokeCap = StrokeCap.round
+          ..color = color.withValues(alpha: front ? 0.30 : 0.12)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2));
+    paintOrbitSprite(canvas, p, front ? 1.5 : 1.1, weaponSprite!, weaponGrade,
+        opacity: front ? 1 : 0.45);
+  }
+
+  /// lưỡi lửa bốc từ quanh thân lên, lắc ngang + nhỏ dần khi lên cao
+  void _flames(Canvas canvas, Offset c) {
+    for (var i = 0; i < 6; i++) {
+      final ph = (t * 2 + i / 6) % 1; // 2 đợt/loop
+      final x = c.dx + ((i * 29) % 76 - 38) + math.sin((t + i) * 2 * math.pi) * 4;
+      final y = c.dy + 34 - ph * 66;
+      final s = (1 - ph) * 4.2 + 0.8;
+      final flame = Path()
+        ..moveTo(x, y - s * 1.7)
+        ..quadraticBezierTo(x + s, y - s * 0.3, x, y + s)
+        ..quadraticBezierTo(x - s, y - s * 0.3, x, y - s * 1.7);
+      canvas.drawPath(flame, _glow(0.75 * (1 - ph) + 0.1));
+    }
+  }
+
+  /// lá cuốn: bay quanh theo elip đồng thời tự xoay, rơi nhẹ rồi cuốn lên
+  void _leaves(Canvas canvas, Offset c) {
+    for (var i = 0; i < 5; i++) {
+      final ang = (t + i / 5) * 2 * math.pi;
+      final p = c +
+          Offset(math.cos(ang) * 56,
+              math.sin(ang) * 24 + math.sin(ang * 2 + i) * 5);
+      final front = math.sin(ang) > 0;
+      canvas.save();
+      canvas.translate(p.dx, p.dy);
+      canvas.rotate(ang * 2 + i); // lá tự xoay khi bay
+      canvas.drawOval(Rect.fromCenter(center: Offset.zero, width: 7, height: 3),
+          _glow(front ? 0.85 : 0.35));
+      canvas.restore();
     }
   }
 
@@ -1147,7 +1306,11 @@ class _AuraPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_AuraPainter old) =>
-      old.t != t || old.color != color || old.style != style;
+      old.t != t ||
+      old.color != color ||
+      old.style != style ||
+      old.weaponSprite != weaponSprite ||
+      old.weaponGrade != weaponGrade;
 }
 
 /// Đếm ngược hiệu ứng có thời hạn (đan dược / linh thạch) — tự vẽ lại mỗi giây.
