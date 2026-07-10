@@ -17,10 +17,12 @@ env/
 .env.local
 .env.production
 
-# IDE
+# IDE / AI agents
 .vscode/
 .idea/
 .claude/
+.agents/
+.codex/
 *.swp
 *.swo
 *~
@@ -58,3 +60,7 @@ out/
 # so tay VPS chua IP/ha tang — repo public, khong commit
 worker/VPS.md
 worker/vps.bat
+worker/vps.ps1
+
+# ket qua eval dich (noi dung chuong) — khong commit
+worker/eval_out/

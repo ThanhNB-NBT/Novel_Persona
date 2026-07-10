@@ -26,18 +26,18 @@ void main() {
             children: const [
               // realm thấp, chưa đeo gì — vòng trơn
               CultivatorPreview(realm: 2, race: 'nhan', gender: 'nam'),
-              // yêu nữ + halo tinh + kiếm bay + công pháp hỏa
+              // yêu nữ + halo tinh + kiếm bay + gương pháp bảo bay + hỏa
               CultivatorPreview(
                   realm: 5, race: 'yeu', gender: 'nu', cpCode: 'cp_liet_hoa',
-                  halo: 'tinh', weaponSprite: 'sword', weaponGrade: 4),
+                  halo: 'tinh', weaponSprite: 'sword', phapbaoSprite: 'mirror'),
               // ma nam + halo kim + đao bay + công pháp mộc (lá cuốn)
               CultivatorPreview(
                   realm: 8, race: 'ma', gender: 'nam', cpCode: 'cp_thanh_moc',
-                  halo: 'kim', weaponSprite: 'saber', weaponGrade: 5),
+                  halo: 'kim', weaponSprite: 'saber'),
               // linh nữ + halo nguyệt + thương bay
               CultivatorPreview(
                   realm: 4, race: 'linh', gender: 'nu', cpCode: 'cp_huyen_bang',
-                  halo: 'nguyet', weaponSprite: 'spear', weaponGrade: 3),
+                  halo: 'nguyet', weaponSprite: 'spear'),
             ],
           ),
         ),
