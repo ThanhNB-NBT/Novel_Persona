@@ -92,14 +92,10 @@ flutter:
     - assets/icon/gt_white.png   # logo GT trắng — chế độ tối
     - assets/hanviet.tsv         # bảng tra Hán-Việt (đồng bộ từ worker/novelworker/data/)
 
-    - assets/cultivators/human_male.webp
-    - assets/cultivators/human_female.webp
-    - assets/cultivators/fox_male.webp
-    - assets/cultivators/fox_female.webp
-    - assets/cultivators/demon_male.webp
-    - assets/cultivators/demon_female.webp
-    - assets/cultivators/spirit_male.webp
-    - assets/cultivators/spirit_female.webp
+    # cả thư mục (chỉ chứa webp) — thả frame idle phụ _f2.._f4 vào là tự bundle
+    - assets/cultivators/
+    - assets/bg/cultivation_bg.webp
+    - assets/cult_fx/sword_wheel.webp
     - assets/cult_items/
 
   # To add assets to your application, add an assets section, like this:

@@ -73,11 +73,12 @@ File map:
   (CHỈ webp được bundle; PNG là file gốc không ship — bug 1.0.2 vì trỏ .png).
 - `app/assets/cult_items/*.webp` — 27 minh hoạ vật phẩm theo `pixel` key trong catalog;
   một hình dùng lại cho mọi item cùng key, còn phẩm cấp thể hiện bằng viền/màu UI.
+- `app/assets/cult_fx/sword_wheel.webp` — kiếm luân ngũ sắc sau đầu, xoay trực tiếp như một ảnh
+  có nền trong suốt; không dựng lại bằng nét Canvas đơn giản.
 
 Bố cục cảnh `_AnimatedCultivator` (canvas 150×145, loop 4s), vẽ theo thứ tự:
-1. `_SkyPainter` (nền): sao (realm 5+) → **vòng sáng sau ĐẦU** (halo — kiểu theo pháp bảo
-   vòng đang đeo, mặc định vòng trơn màu cảnh giới, tâm đặt TRÙNG ĐẦU nhân vật) →
-   **trận pháp dưới chân** (ellipse xoay chậm màu công pháp) → quầng thở → sương trôi
+1. `_SkyPainter` (nền): sao (realm 5+) → **kiếm luân ngũ sắc sau ĐẦU** (5 kiếm neo theo
+   đỉnh ngũ giác, quay thành quỹ đạo tròn; pháp bảo Lôi quay nhanh hơn) → bóng chân tự nhiên → quầng thở → sương trôi
    → đom đóm linh khí bay lên.
 2. Ảnh nhân vật chibi tu tiên (Image.asset, ~104×128, hạ thấp để đầu lọt tâm halo):
    nét viền đậm, mảng màu ít, toàn thân nhỏ gọn; mỗi tộc/giới có bộ WebP riêng. Ảnh
@@ -98,6 +99,21 @@ màu hiệu ứng theo `_auraFor(cpCode)`. Nền thẻ/section theo ColorScheme 
 cd app && flutter test test/scene_render_test.dart
 # → build/scene_preview.png — MỞ RA NHÌN trước khi commit
 ```
+
+**Nền tranh màn Tu Tiên**: `app/assets/bg/cultivation_bg.webp` là tranh thủy mặc
+dọc, vùng giữa thoáng để đặt nhân vật; code tự về gradient nếu asset lỗi tải.
+
+**Cơ chế màu vòng/aura** (`_auraFor`): 1. code công pháp có kiểu riêng →
+override; 2. hệ trong effect công pháp; 3. hệ LINH CĂN người chơi; 4. màu cảnh
+giới (đã lerp trắng/đen theo nền tối/sáng để không chìm vào backdrop cùng màu).
+
+**Frame idle phụ (tùy chọn, code tự nhận)**: đặt cạnh ảnh gốc trong
+`app/assets/cultivators/` với hậu tố `_f2`..`_f4` (vd `human_male_f2.webp`)
+là nhân vật tự chạy ping-pong 1..n..1 (~2fps), không cần sửa code; frame phải
+liền số (thiếu `_f2` thì `_f3` bị bỏ qua). Spec khi nhờ AI vẽ frame phụ:
+CÙNG nhân vật/pose/khung hình/kích thước với ảnh gốc, nền trong suốt, chỉ
+xê dịch chi tiết nhẹ (vạt áo + tóc lệch 1 nhịp gió, có thể 1 frame nhắm mắt),
+xuất webp cùng cỡ.
 
 ## 4. Quy trình bắt buộc khi sửa hệ Tu Tiên (người & AI)
 

@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import '../../cultivation.dart';
 import '../../data.dart';
@@ -78,6 +80,10 @@ class _CultivationScreenState extends ConsumerState<CultivationScreen> {
   Widget build(BuildContext context) {
     final state = ref.watch(cultStateProvider);
     final cs = Theme.of(context).colorScheme;
+    // nền nhuốm MÀU CẢNH GIỚI (khớp quầng trời của hero stage) — chưa có
+    // state thì tạm màu nhấn app, có data là cả màn liền một tông
+    final realm0 = state.value?['realm'] as int?;
+    final bgTint = realm0 == null ? cs.primary : gradeColor((realm0 + 1) ~/ 2);
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: const SystemUiOverlayStyle(
@@ -96,13 +102,15 @@ class _CultivationScreenState extends ConsumerState<CultivationScreen> {
           children: [
             Positioned.fill(
               child: _CultivationBackdrop(
-                primary: cs.primary,
+                primary: bgTint,
                 gold: cs.secondary,
                 surface: cs.surface,
               ),
             ),
-            // Nền phủ dưới status bar, còn nội dung vẫn né phần cắt màn hình.
+            // top: false — cảnh hero tự trải dưới status bar (topPad) để màu
+            // liền một dải, không lộ vệt nền khác màu trên đầu nhân vật.
             SafeArea(
+              top: false,
               bottom: false,
               child: state.when(
                 loading: () => const Center(child: CircularProgressIndicator()),
@@ -117,6 +125,7 @@ class _CultivationScreenState extends ConsumerState<CultivationScreen> {
                     );
                   }
                   _sync(st);
+                  final topPad = MediaQuery.paddingOf(context).top;
                   return RefreshIndicator(
                     onRefresh: () async => ref.invalidate(cultStateProvider),
                     child: ListView(
@@ -126,10 +135,14 @@ class _CultivationScreenState extends ConsumerState<CultivationScreen> {
                         // chưa chọn chủng tộc → mời chọn (một lần duy nhất, server chặn đổi)
                         if (st['race'] == null)
                           Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                            padding: EdgeInsets.fromLTRB(16, topPad + 8, 16, 4),
                             child: _RacePickerCard(),
                           ),
-                        _HeroStage(st: st),
+                        // có card chọn tộc phía trên thì hero khỏi ôm status bar
+                        _HeroStage(
+                          st: st,
+                          topPad: st['race'] == null ? 0 : topPad,
+                        ),
                         const SizedBox(height: 14),
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -141,19 +154,19 @@ class _CultivationScreenState extends ConsumerState<CultivationScreen> {
                                 exp: _exp,
                                 onAdvance: () => _advance(st),
                               ),
-                              const SizedBox(height: 20),
+                              const SizedBox(height: 14),
                               const _SectionLabel(
                                 'Trang bị',
                                 Icons.shield_moon_outlined,
                               ),
-                              const SizedBox(height: 12),
+                              const SizedBox(height: 8),
                               _EquipRow(st: st),
-                              const SizedBox(height: 20),
+                              const SizedBox(height: 12),
                               const _SectionLabel(
                                 'Túi càn khôn',
                                 Icons.backpack_rounded,
                               ),
-                              const SizedBox(height: 12),
+                              const SizedBox(height: 6),
                               const _InventoryGrid(),
                             ],
                           ),
@@ -182,55 +195,33 @@ class _CultivationBackdrop extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) => DecoratedBox(
-    decoration: BoxDecoration(
-      gradient: LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [
-          Color.alphaBlend(primary.withValues(alpha: 0.82), surface),
-          Color.alphaBlend(primary.withValues(alpha: 0.38), surface),
-          Color.alphaBlend(gold.withValues(alpha: 0.09), surface),
-        ],
+  Widget build(BuildContext context) {
+    // gradient nhuộm màu cảnh giới — fallback khi asset nền lỗi tải.
+    final fallback = DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Color.alphaBlend(primary.withValues(alpha: 0.82), surface),
+            Color.alphaBlend(primary.withValues(alpha: 0.38), surface),
+            Color.alphaBlend(gold.withValues(alpha: 0.09), surface),
+          ],
+        ),
       ),
-    ),
-    child: RepaintBoundary(
-      child: CustomPaint(painter: _WorldPainter(primary, gold)),
-    ),
-  );
-}
-
-class _WorldPainter extends CustomPainter {
-  final Color primary;
-  final Color gold;
-  _WorldPainter(this.primary, this.gold);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final mist = Paint()
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 30);
-    for (final (x, y, r, color) in [
-      (0.12, 0.28, 90.0, primary),
-      (0.84, 0.44, 120.0, gold),
-      (0.38, 0.78, 140.0, primary),
-    ]) {
-      mist.color = color.withValues(alpha: 0.10);
-      canvas.drawCircle(Offset(size.width * x, size.height * y), r, mist);
-    }
-    final dot = Paint()..isAntiAlias = true;
-    for (var i = 0; i < 26; i++) {
-      final x = ((i * 47) % 97) / 97 * size.width;
-      final y = ((i * 71) % 137) / 137 * size.height;
-      dot.color = (i.isEven ? primary : gold).withValues(
-        alpha: 0.20 + (i % 3) * 0.08,
-      );
-      canvas.drawCircle(Offset(x, y), 0.8 + (i % 3) * 0.45, dot);
-    }
+    );
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        // Nền tranh thủy mặc, lỗi tải thì tự về gradient để không vỡ màn.
+        Image.asset(
+          'assets/bg/cultivation_bg.webp',
+          fit: BoxFit.cover,
+          errorBuilder: (_, _, _) => fallback,
+        ),
+      ],
+    );
   }
-
-  @override
-  bool shouldRepaint(_WorldPainter old) =>
-      old.primary != primary || old.gold != gold;
 }
 
 // ---- đọc chỉ số từ state (mirror công thức server, chỉ để hiển thị) ----
@@ -239,23 +230,29 @@ num? _cpMult(Rec st) {
   return const {1: 1.5, 2: 3, 3: 6, 4: 12, 5: 24}[g];
 }
 
-/// Pill "tầng N" nhỏ cạnh tên cảnh giới, tô theo màu phẩm/cảnh giới.
-Widget _tangPill(BuildContext context, int stage, Color rc) => Container(
-  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-  decoration: BoxDecoration(
-    color: rc.withValues(alpha: 0.16),
-    borderRadius: BorderRadius.circular(20),
-    border: Border.all(color: rc.withValues(alpha: 0.5)),
-  ),
-  child: Text(
-    'tầng $stage',
-    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-      color: rc,
-      fontWeight: FontWeight.w800,
-      letterSpacing: 0.2,
+/// Pill "tầng N" nhỏ cạnh tên cảnh giới. Nền kính surface đậm (không tô rc)
+/// vì trời phía sau giờ CÙNG màu cảnh giới — rc trên rc là chìm nghỉm.
+Widget _tangPill(BuildContext context, int stage, Color rc) {
+  final cs = Theme.of(context).colorScheme;
+  return Container(
+    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+    decoration: BoxDecoration(
+      color: cs.surface.withValues(alpha: 0.72),
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(color: rc.withValues(alpha: 0.65)),
+      boxShadow: [BoxShadow(color: rc.withValues(alpha: 0.30), blurRadius: 10)],
     ),
-  ),
-);
+    child: Text(
+      'Tầng $stage',
+      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+        color: rc,
+        fontSize: 10,
+        fontWeight: FontWeight.w800,
+        letterSpacing: 0.2,
+      ),
+    ),
+  );
+}
 
 /// Chip thông tin nhỏ (icon + chữ) trong bảng nhân vật; [on] để nhấn màu nhấn.
 Widget _infoChip(
@@ -274,15 +271,21 @@ Widget _infoChip(
     ),
     child: Row(
       mainAxisSize: MainAxisSize.min,
+      mainAxisAlignment: MainAxisAlignment.center, // trong ô lưới thì căn giữa
       children: [
         Icon(icon, size: 12, color: c),
         const SizedBox(width: 4),
-        Text(
-          text,
-          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-            color: c,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 0,
+        Flexible(
+          child: Text(
+            text,
+            maxLines: 1,
+            overflow:
+                TextOverflow.ellipsis, // chữ dài (Ngũ Hành Tạp Căn) khỏi tràn ô
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: c,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0,
+            ),
           ),
         ),
       ],
@@ -295,7 +298,8 @@ Widget _infoChip(
 /// đáy — không khung, không viền, hoà thẳng vào nền màn hình.
 class _HeroStage extends ConsumerWidget {
   final Rec st;
-  const _HeroStage({required this.st});
+  final double topPad; // chiều cao status bar — trời loang phủ luôn dải này
+  const _HeroStage({required this.st, this.topPad = 0});
 
   /// Sheet admin: đổi tộc/giới tính tự do (server chỉ cho profiles.is_admin).
   void _avatarSheet(BuildContext context, WidgetRef ref) {
@@ -359,25 +363,14 @@ class _HeroStage extends ConsumerWidget {
     final isAdmin = ref.watch(isAdminProvider).value ?? false;
 
     return SizedBox(
-      height: 372,
+      height: 372 + topPad,
       width: double.infinity,
       child: Stack(
         children: [
-          // trời loang màu cảnh giới sau lưng, nhạt dần ra mép
-          Positioned.fill(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: RadialGradient(
-                  center: const Alignment(0, -0.35),
-                  radius: 1.0,
-                  colors: [rc.withValues(alpha: 0.18), rc.withValues(alpha: 0)],
-                ),
-              ),
-            ),
-          ),
-          // cảnh nhân vật (halo + trận pháp + sương + người) phóng to theo khung;
+          // cảnh nhân vật (halo + bóng chân + sương + người) phóng to theo khung;
           // truyền đồ ĐANG ĐEO có hiển thị: vòng sáng (pháp bảo halo) + vũ khí
           Positioned.fill(
+            top: topPad,
             bottom: 62,
             child: FittedBox(
               fit: BoxFit.contain,
@@ -389,9 +382,11 @@ class _HeroStage extends ConsumerWidget {
                     race: st['race'] as String?,
                     gender: st['gender'] as String?,
                     cpCode: eq['congphap']?['code'] as String?,
+                    cpElem: eq['congphap']?['effect']?['element'] as String?,
+                    element: st['element'] as String?,
                     halo: eq['phapbao']?['effect']?['halo'] as String?,
                     weaponSprite: eq['vukhi']?['pixel'] as String?,
-                    weaponGrade: eq['vukhi']?['grade'] as int? ?? 1,
+                    phapbaoSprite: eq['phapbao']?['pixel'] as String?,
                   );
                 },
               ),
@@ -406,20 +401,27 @@ class _HeroStage extends ConsumerWidget {
               children: [
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
+                  // căn đáy → pill nằm ngang chân chữ thay vì giữa dòng
+                  crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Flexible(
                       child: Text(
                         realmNames[realm - 1],
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: t.headlineMedium?.copyWith(
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 1.2,
+                        // Agbalumo: display bo tròn đậm, có dấu tiếng Việt (Đ)
+                        style: GoogleFonts.agbalumo(
+                          textStyle: t.headlineMedium,
+                          fontSize: 32,
+                          letterSpacing: 0.5,
                           color: cs.onSurface,
-                          // quầng phát quang màu cảnh giới quanh chữ
+                          // viền sáng surface ôm chữ cho TƯƠNG PHẢN, vòng ngoài
+                          // là quầng phát quang màu cảnh giới
                           shadows: [
+                            Shadow(color: cs.surface, blurRadius: 8),
+                            Shadow(color: cs.surface, blurRadius: 8),
                             Shadow(
-                              color: rc.withValues(alpha: 0.55),
+                              color: rc.withValues(alpha: 0.5),
                               blurRadius: 18,
                             ),
                           ],
@@ -427,7 +429,11 @@ class _HeroStage extends ConsumerWidget {
                       ),
                     ),
                     const SizedBox(width: 10),
-                    _tangPill(context, st['stage'] as int, rc),
+                    // nhấc pill lên chút cho khớp chân chữ (line-box cao hơn baseline)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 5),
+                      child: _tangPill(context, st['stage'] as int, rc),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 2),
@@ -435,7 +441,19 @@ class _HeroStage extends ConsumerWidget {
                   '「${daoTitles[realm - 1]}」',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: t.labelMedium,
+                  // serif nghiêng + viền kính surface (2 lớp bóng chồng) để nổi
+                  // trên nền tranh, hết cảnh chữ trùng màu nền.
+                  style: GoogleFonts.lora(
+                    textStyle: t.labelMedium,
+                    fontStyle: FontStyle.italic,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.4,
+                    color: cs.onSurface,
+                    shadows: [
+                      Shadow(color: cs.surface, blurRadius: 6),
+                      Shadow(color: cs.surface, blurRadius: 6),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -443,7 +461,7 @@ class _HeroStage extends ConsumerWidget {
           // admin: đổi tộc/giới tính tự do — nút mờ góc phải trên
           if (isAdmin)
             Positioned(
-              top: 4,
+              top: topPad + 4,
               right: 8,
               child: IconButton(
                 icon: Icon(
@@ -629,13 +647,11 @@ class _RealmCard extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(14, 14, 14, 16),
         child: Column(
           children: [
-            // chip gọn: phẩm linh căn · hệ · tốc độ · công pháp
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: [
+            // chip thông tin: LƯỚI 2 CỘT đều nhau — Wrap cũ xuống dòng theo
+            // độ dài chữ nên hàng lệch hàng, nhìn rất bất ổn
+            Builder(
+              builder: (_) {
+                final chips = [
                   _infoChip(
                     context,
                     Icons.spa_rounded,
@@ -660,9 +676,32 @@ class _RealmCard extends StatelessWidget {
                       Icons.menu_book_rounded,
                       'công pháp ×${_cpMult(st)}',
                     ),
-                ],
-              ),
+                ];
+                return Column(
+                  children: [
+                    for (var i = 0; i < chips.length; i += 2)
+                      Padding(
+                        padding: EdgeInsets.only(top: i == 0 ? 0 : 6),
+                        child: Row(
+                          children: [
+                            Expanded(child: chips[i]),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: i + 1 < chips.length
+                                  ? chips[i + 1]
+                                  : const SizedBox.shrink(),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                );
+              },
             ),
+            // 5 chỉ số nằm CÙNG KHỐI với chip (trước ở đáy thẻ sau divider —
+            // tốn 1 mục riêng), style pill đồng bộ chip cho liền mạch
+            const SizedBox(height: 6),
+            _StatsRow(stats: (st['stats'] as Map?) ?? const {}),
             // buff có thời hạn đang chạy → chip vàng nhỏ
             if (hasBuff) ...[
               const SizedBox(height: 12),
@@ -756,11 +795,6 @@ class _RealmCard extends StatelessWidget {
                 );
               },
             ),
-            const SizedBox(height: 16),
-            Divider(height: 1, color: cs.outlineVariant),
-            const SizedBox(height: 14),
-            // dải 5 chỉ số chiến đấu — đáy "bảng nhân vật" (gộp từ mục CHỈ SỐ cũ)
-            _StatsRow(stats: (st['stats'] as Map?) ?? const {}),
           ],
         ),
       ),
@@ -1004,53 +1038,78 @@ class _BurstPainter extends CustomPainter {
 /// Kiểu hiệu ứng quanh người theo CÔNG PHÁP đang tu (mỗi công pháp một "hệ").
 enum _Aura { qi, ice, wind, earth, sword, gold, star, fire, leaf }
 
-/// code công pháp → (hệ hiệu ứng, màu hệ). null màu = dùng màu cảnh giới.
-(_Aura, Color?) _auraFor(String? code) => switch (code) {
-  'cp_huyen_bang' => (_Aura.ice, const Color(0xFF74C0FC)),
-  'cp_ngu_phong' => (_Aura.wind, const Color(0xFF63E6BE)),
-  'cp_huyen_thien' => (_Aura.qi, const Color(0xFF748FFC)),
-  'cp_dia_sat' => (_Aura.earth, const Color(0xFFB08968)),
-  'cp_luyen_the' => (_Aura.gold, const Color(0xFFFFA94D)),
-  'cp_cuu_chuyen' => (_Aura.gold, const Color(0xFFFFC94D)),
-  'cp_thien_cang' => (_Aura.sword, const Color(0xFFCED4DA)),
-  // hệ Hỏa/Mộc có hiệu ứng RIÊNG (lửa bốc / lá cuốn) — hết mượn gold/qi
-  'cp_liet_hoa' => (_Aura.fire, const Color(0xFFFF7043)),
-  'cp_xich_diem' => (_Aura.fire, const Color(0xFFFF5722)),
-  'cp_thanh_moc' => (_Aura.leaf, const Color(0xFF69DB7C)),
-  'cp_dai_dien' => (_Aura.star, const Color(0xFFB197FC)),
-  'cp_hon_don' => (_Aura.star, const Color(0xFF9775FA)),
-  'cp_thai_co' => (_Aura.star, const Color(0xFFFFE066)),
-  _ => (_Aura.qi, null), // chưa học / công pháp nhập môn
+/// hệ ngũ hành → (kiểu hiệu ứng, màu hệ) — nguồn màu CHÍNH của trận pháp/aura.
+const _elemAura = <String, (_Aura, Color)>{
+  'hoa': (_Aura.fire, Color(0xFFFF7043)),
+  'thuy': (_Aura.ice, Color(0xFF74C0FC)),
+  'moc': (_Aura.leaf, Color(0xFF69DB7C)),
+  'kim': (_Aura.gold, Color(0xFFFFC94D)),
+  'tho': (_Aura.earth, Color(0xFFB08968)),
+  'all': (_Aura.star, Color(0xFFB197FC)),
 };
+
+/// Cơ chế màu trận pháp/aura, ưu tiên từ trên xuống:
+/// 1. code công pháp có kiểu RIÊNG (kiếm quang, tinh tú...) → dùng override;
+/// 2. hệ trong effect của công pháp (server) → tra [_elemAura];
+/// 3. hệ LINH CĂN người chơi ([element]) → tra [_elemAura] — công pháp nhập
+///    môn không gắn hệ (dan_khi/tho_nap) vẫn ăn màu theo người tu;
+/// 4. còn lại (qi, null) → dùng màu cảnh giới.
+(_Aura, Color?) _auraFor(String? code, String? cpElem, String? element) {
+  final override = switch (code) {
+    'cp_huyen_bang' => (_Aura.ice, const Color(0xFF74C0FC)),
+    'cp_ngu_phong' => (_Aura.wind, const Color(0xFF63E6BE)),
+    'cp_huyen_thien' => (_Aura.qi, const Color(0xFF748FFC)),
+    'cp_dia_sat' => (_Aura.earth, const Color(0xFFB08968)),
+    'cp_luyen_the' => (_Aura.gold, const Color(0xFFFFA94D)),
+    'cp_cuu_chuyen' => (_Aura.gold, const Color(0xFFFFC94D)),
+    'cp_thien_cang' => (_Aura.sword, const Color(0xFFCED4DA)),
+    'cp_liet_hoa' => (_Aura.fire, const Color(0xFFFF7043)),
+    'cp_xich_diem' => (_Aura.fire, const Color(0xFFFF5722)),
+    'cp_thanh_moc' => (_Aura.leaf, const Color(0xFF69DB7C)),
+    'cp_dai_dien' => (_Aura.star, const Color(0xFFB197FC)),
+    'cp_hon_don' => (_Aura.star, const Color(0xFF9775FA)),
+    'cp_thai_co' => (_Aura.star, const Color(0xFFFFE066)),
+    _ => null,
+  };
+  if (override != null) return override;
+  final byElem = _elemAura[cpElem] ?? _elemAura[element];
+  return byElem ?? (_Aura.qi, null);
+}
 
 /// Bản public của nhân vật động — cho test render soi hình + có thể tái dùng nơi khác.
 class CultivatorPreview extends StatelessWidget {
   final int realm;
   final String? cpCode;
+  final String? cpElem; // hệ của công pháp (effect.element từ server)
+  final String? element; // hệ LINH CĂN người chơi — fallback màu trận pháp
   final String? race;
   final String? gender;
   final String? halo; // kiểu vòng sáng (pháp bảo vòng đang đeo)
-  final String? weaponSprite; // pixel key vũ khí đang đeo
-  final int weaponGrade;
+  final String? weaponSprite; // key icon vũ khí đang đeo (assets/cult_items)
+  final String? phapbaoSprite; // key icon pháp bảo đang đeo — bay đối xứng
   const CultivatorPreview({
     super.key,
     required this.realm,
     this.cpCode,
+    this.cpElem,
+    this.element,
     this.race,
     this.gender,
     this.halo,
     this.weaponSprite,
-    this.weaponGrade = 1,
+    this.phapbaoSprite,
   });
   @override
   Widget build(BuildContext context) => _AnimatedCultivator(
     realm: realm,
     cpCode: cpCode,
+    cpElem: cpElem,
+    element: element,
     race: race,
     gender: gender,
     halo: halo,
     weaponSprite: weaponSprite,
-    weaponGrade: weaponGrade,
+    phapbaoSprite: phapbaoSprite,
   );
 }
 
@@ -1060,19 +1119,23 @@ class CultivatorPreview extends StatelessWidget {
 class _AnimatedCultivator extends StatefulWidget {
   final int realm; // 1..9
   final String? cpCode; // code công pháp đang tu → kiểu hiệu ứng
+  final String? cpElem; // hệ công pháp — nguồn màu chính
+  final String? element; // hệ linh căn — fallback màu khi công pháp vô hệ
   final String? race; // dáng nhân vật theo chủng tộc
   final String? gender; // nam/nu — dáng + kiểu tóc
   final String? halo; // kiểu vòng sáng sau đầu (từ pháp bảo vòng)
   final String? weaponSprite; // vũ khí đang đeo bay quanh (null = không)
-  final int weaponGrade;
+  final String? phapbaoSprite; // pháp bảo đang đeo bay quanh, lệch pha nửa vòng
   const _AnimatedCultivator({
     required this.realm,
     this.cpCode,
+    this.cpElem,
+    this.element,
     this.race,
     this.gender,
     this.halo,
     this.weaponSprite,
-    this.weaponGrade = 1,
+    this.phapbaoSprite,
   });
   @override
   State<_AnimatedCultivator> createState() => _AnimatedCultivatorState();
@@ -1084,6 +1147,82 @@ class _AnimatedCultivatorState extends State<_AnimatedCultivator>
     vsync: this,
     duration: const Duration(seconds: 4),
   )..repeat();
+  ui.Image? _weaponImg; // icon webp của vũ khí đang đeo, decode 1 lần
+  ui.Image? _phapbaoImg; // icon pháp bảo đang đeo — bay lệch pha nửa vòng
+  ui.Image? _swordWheelImg; // kiếm luân minh họa, xoay sau đầu
+  // Frame idle phụ (tóc/áo lay, chớp mắt) nếu có trong bundle: đặt cạnh ảnh
+  // gốc với hậu tố _f2.._f4 (vd human_male_f2.webp) là TỰ NHẬN, không cần
+  // sửa code. Chưa có frame phụ → danh sách 1 phần tử, hành vi như ảnh tĩnh.
+  List<String> _frames = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadIcons();
+    _loadFrames();
+  }
+
+  @override
+  void didUpdateWidget(covariant _AnimatedCultivator old) {
+    super.didUpdateWidget(old);
+    if (old.weaponSprite != widget.weaponSprite ||
+        old.phapbaoSprite != widget.phapbaoSprite) {
+      _loadIcons();
+    }
+    if (old.race != widget.race || old.gender != widget.gender) _loadFrames();
+  }
+
+  Future<void> _loadFrames() async {
+    final base = _cultivatorAsset(widget.race, widget.gender);
+    final found = [base];
+    for (var i = 2; i <= 4; i++) {
+      final p = base.replaceFirst('.webp', '_f$i.webp');
+      try {
+        await rootBundle.load(p); // chỉ dò tồn tại — decode để Image.asset lo
+        found.add(p);
+      } catch (_) {
+        break; // frame phải liền số: thiếu _f2 thì khỏi dò _f3
+      }
+    }
+    if (mounted) setState(() => _frames = found);
+  }
+
+  /// Painter không tự decode asset được → decode ở đây rồi truyền ui.Image vào.
+  Future<void> _loadIcons() async {
+    // decode SONG SONG — tuần tự sẽ dồn trễ, khung hình đầu thiếu đồ bay
+    final imgs = await Future.wait([
+      _decodeItem(widget.weaponSprite),
+      _decodeItem(widget.phapbaoSprite),
+      _decodeAsset('assets/cult_fx/sword_wheel.webp'),
+    ]);
+    if (!mounted) return;
+    setState(() {
+      _weaponImg = imgs[0];
+      _phapbaoImg = imgs[1];
+      _swordWheelImg = imgs[2];
+    });
+  }
+
+  Future<ui.Image?> _decodeItem(String? key) async {
+    if (key == null) return null;
+    try {
+      final data = await rootBundle.load(
+        'assets/cult_items/${key == 'gourd_big' ? 'gourd' : key}.webp',
+      );
+      return await decodeImageFromList(data.buffer.asUint8List());
+    } catch (_) {
+      return null; // thiếu asset thì thôi, không vẽ món đó
+    }
+  }
+
+  Future<ui.Image?> _decodeAsset(String path) async {
+    try {
+      final data = await rootBundle.load(path);
+      return decodeImageFromList(data.buffer.asUint8List());
+    } catch (_) {
+      return null;
+    }
+  }
 
   @override
   void dispose() {
@@ -1093,9 +1232,22 @@ class _AnimatedCultivatorState extends State<_AnimatedCultivator>
 
   @override
   Widget build(BuildContext context) {
-    final (style, elem) = _auraFor(widget.cpCode);
+    final (style, elem) = _auraFor(
+      widget.cpCode,
+      widget.cpElem,
+      widget.element,
+    );
     final grade = (widget.realm + 1) ~/ 2;
-    final color = elem ?? gradeColor(grade);
+    // Nền màn hình cũng nhuộm gradeColor → vòng/trận cùng màu gốc sẽ chìm.
+    // Tách tông theo chế độ nền: tối → đẩy vòng SÁNG lên (pha trắng), sáng →
+    // dìm vòng ĐẬM xuống (pha đen) — vẫn giữ "họ màu" cảnh giới, chỉ lệch bậc.
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final moon = Color.lerp(
+      gradeColor(grade),
+      dark ? Colors.white : Colors.black,
+      dark ? 0.45 : 0.25,
+    )!;
+    final color = elem ?? moon;
     return SizedBox(
       width: 150,
       height: 145,
@@ -1103,41 +1255,77 @@ class _AnimatedCultivatorState extends State<_AnimatedCultivator>
         animation: _ctrl,
         builder: (_, _) => CustomPaint(
           // nền: halo sau đầu + trận pháp dưới chân + sương + quầng thở
+          // nền nhận cả đồ bay quanh: nửa vòng SAU vẽ ở đây → bị người che thật
           painter: _SkyPainter(
             _ctrl.value,
-            gradeColor(grade),
+            moon,
             color,
             widget.realm,
             halo: widget.halo,
+            weaponImg: _weaponImg,
+            phapbaoImg: _phapbaoImg,
+            swordWheelImg: _swordWheelImg,
           ),
-          // trước: hiệu ứng công pháp + vũ khí hộ chủ bay quanh
+          // trước: hiệu ứng công pháp + nửa vòng TRƯỚC của vũ khí/pháp bảo
           foregroundPainter: _AuraPainter(
             _ctrl.value,
             color,
             style,
-            weaponSprite: widget.weaponSprite,
-            weaponGrade: widget.weaponGrade,
+            weaponImg: _weaponImg,
+            phapbaoImg: _phapbaoImg,
           ),
           child: Center(
-            child: Transform.translate(
-              // Ảnh chibi không có layer riêng nên giả lập chiều sâu bằng nghiêng,
-              // phóng nhẹ và nhấp nhô; aura/vũ khí vẫn chạy ở lớp trước.
-              offset: Offset(
-                math.sin(_ctrl.value * 2 * math.pi) * 1.5,
-                10 + math.sin(_ctrl.value * 2 * math.pi) * 4,
-              ),
-              child: Transform.rotate(
-                angle: math.sin(_ctrl.value * 2 * math.pi) * 0.012,
-                child: Transform.scale(
-                  scale: 1 + math.sin(_ctrl.value * 2 * math.pi) * 0.012,
-                  child: Image.asset(
-                    _cultivatorAsset(widget.race, widget.gender),
-                    width: 104,
-                    height: 128,
-                    fit: BoxFit.contain,
+            // Ảnh chibi 1 tấm không có layer riêng → giả chuyển động bằng
+            // 4 tín hiệu chồng nhau (mọi tần số là bội NGUYÊN của loop 4s):
+            // trôi Lissajous, xoay quanh trục Y có phối cảnh (2.5D), nghiêng
+            // Z nhẹ, và THỞ neo ở chân (giãn dọc, bụng phập phồng) thay vì
+            // phóng đều cả ảnh. Bóng dưới chân bên _SkyPainter co giãn ngược
+            // pha [bob] để bán cảm giác lơ lửng.
+            child: Builder(
+              builder: (_) {
+                final ph = _ctrl.value * 2 * math.pi;
+                final bob = math.sin(ph); // -1..1, cùng pha bóng dưới chân
+                final breath = math.sin(ph * 2); // thở 2 nhịp mỗi vòng
+                // có frame phụ → chạy ping-pong 1..n..1 (8 bước/vòng ≈ 2fps),
+                // gaplessPlayback giữ frame cũ khi decode nên không nháy trắng
+                final n = _frames.length;
+                final asset = n <= 1
+                    ? _cultivatorAsset(widget.race, widget.gender)
+                    : () {
+                        final step = (_ctrl.value * 8).floor() % (2 * n - 2);
+                        return _frames[step < n ? step : 2 * n - 2 - step];
+                      }();
+                return Transform.translate(
+                  offset: Offset(
+                    bob * 1.5 + math.sin(ph * 2 + 0.9) * 0.7, // trôi lệch nhịp
+                    10 + bob * 4,
                   ),
-                ),
-              ),
+                  child: Transform(
+                    alignment: Alignment.bottomCenter,
+                    transform: Matrix4.identity()
+                      ..setEntry(
+                        3,
+                        2,
+                        0.0015,
+                      ) // phối cảnh cho rotateY có chiều sâu
+                      ..rotateY(math.sin(ph + 1.1) * 0.07) // khẽ xoay người
+                      ..rotateZ(bob * 0.012)
+                      ..scaleByDouble(
+                        1.0 - breath * 0.006,
+                        1.0 + breath * 0.011,
+                        1.0,
+                        1.0,
+                      ),
+                    child: Image.asset(
+                      asset,
+                      width: 104,
+                      height: 128,
+                      fit: BoxFit.contain,
+                      gaplessPlayback: true,
+                    ),
+                  ),
+                );
+              },
             ),
           ),
         ),
@@ -1159,18 +1347,29 @@ String _cultivatorAsset(String? race, String? gender) {
 }
 
 /// Nền cảnh tu luyện — vẽ TRƯỚC bóng người (background painter):
-/// sao (realm 5+) → VÒNG SÁNG SAU ĐẦU (halo, kiểu theo pháp bảo vòng đang đeo)
-/// → TRẬN PHÁP xoay dưới chân → quầng thở → sương trôi → đom đóm linh khí.
+/// sao (realm 5+) → KIẾM LUÂN NGŨ SẮC sau đầu → bóng chân → quầng thở →
+/// sương trôi → đom đóm linh khí.
 /// Hình học khớp docs/tu-tien.md §3: canvas 150×145, đầu nhân vật ≈ (75, 37).
 class _SkyPainter extends CustomPainter {
   final double t; // 0..1
   final Color moon; // màu cảnh giới
-  final Color aura; // màu hệ công pháp (trận pháp + quầng thở)
-  final int
-  realm; // 1..9 — halo nhích to, sao từ Hóa Thần, vành kép từ Đại Thừa
+  final Color aura; // màu hệ công pháp (quầng thở)
+  final int realm; // 1..9 — kiếm luân nhích to, sao từ Hóa Thần
   final String?
   halo; // kiểu vòng từ pháp bảo: nguyet/tinh/loi/kim — null = vòng trơn
-  _SkyPainter(this.t, this.moon, this.aura, this.realm, {this.halo});
+  final ui.Image? weaponImg; // vũ khí đang đeo — nửa vòng SAU vẽ ở lớp nền này
+  final ui.Image? phapbaoImg; // pháp bảo đang đeo — như trên, lệch pha nửa vòng
+  final ui.Image? swordWheelImg; // kiếm luân minh họa sau đầu
+  _SkyPainter(
+    this.t,
+    this.moon,
+    this.aura,
+    this.realm, {
+    this.halo,
+    this.weaponImg,
+    this.phapbaoImg,
+    this.swordWheelImg,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -1187,69 +1386,28 @@ class _SkyPainter extends CustomPainter {
       }
     }
 
-    // ---- vòng sáng sau đầu (halo): tâm TRÙNG ĐẦU nhân vật, nhỏ gọn ----
-    final hr = 15.0 + realm * 0.9; // ~16..23
+    // ---- kiếm luân ngũ sắc: quay + BÁM nhịp lơ lửng của nhân vật cho dính lưng ----
+    // dùng CÙNG công thức trôi của thân người (child) để vòng dập dềnh đồng bộ,
+    // bỏ hằng số +10 để giữ nguyên vị trí neo gốc, chỉ theo phần chuyển động.
+    final ph = t * 2 * math.pi;
+    final chBob = math.sin(ph);
     final hc = Offset(
-      c.dx,
-      c.dy - 29,
-    ); // đầu ảnh full-body ≈ y 43 sau khi hạ +10
-    // nền phát sáng mờ chung cho mọi kiểu vòng
-    canvas.drawCircle(
-      hc,
-      hr + 3,
-      Paint()
-        ..shader = RadialGradient(
-          colors: [
-            moon.withValues(alpha: 0.30),
-            moon.withValues(alpha: 0.08),
-            moon.withValues(alpha: 0),
-          ],
-          stops: const [0, 0.7, 1],
-        ).createShader(Rect.fromCircle(center: hc, radius: hr + 3)),
+      c.dx + chBob * 1.5 + math.sin(ph * 2 + 0.9) * 0.7,
+      c.dy - 29 + chBob * 4,
     );
-    _drawHalo(canvas, hc, hr);
-    // nhị luân từ Đại Thừa (realm 8+): vành ngoài thứ hai quay lệch pha
-    if (realm >= 8) {
-      canvas.drawArc(
-        Rect.fromCircle(center: hc, radius: hr + 5),
-        t * 2 * math.pi,
-        math.pi * 1.2,
-        false,
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.0
-          ..color = moon.withValues(alpha: 0.35),
-      );
-    }
+    _drawSwordWheel(canvas, hc, 30.0 + realm * 0.65);
 
-    // ---- trận pháp dưới chân: 2 ellipse đồng tâm + vạch rune xoay chậm ----
+    // Bỏ trận pháp: chỉ còn bóng chân để nhân vật neo vào nền tranh.
     final fc = Offset(c.dx, size.height - 13);
-    final ring = Paint()
-      ..isAntiAlias = true
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.0
-      ..color = aura.withValues(alpha: 0.35);
-    canvas.drawOval(Rect.fromCenter(center: fc, width: 96, height: 22), ring);
+    final bob = math.sin(t * 2 * math.pi);
+    // bóng hứng dưới chân, NGƯỢC pha với độ nhấp nhô của người (bob>0 = người
+    // hạ thấp → bóng to + đậm; bay lên → nhỏ + nhạt) — bán cảm giác lơ lửng
     canvas.drawOval(
-      Rect.fromCenter(center: fc, width: 66, height: 15),
-      ring..color = aura.withValues(alpha: 0.22),
+      Rect.fromCenter(center: fc, width: 30 + bob * 5, height: 7 + bob * 1.4),
+      Paint()
+        ..color = Colors.black.withValues(alpha: 0.22 + bob * 0.07)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3),
     );
-    // vạch rune chạy trên vành ngoài (chiếu phối cảnh: y nén 0.23)
-    final rune = Paint()
-      ..isAntiAlias = true
-      ..strokeCap = StrokeCap.round
-      ..strokeWidth = 1.6;
-    for (var i = 0; i < 8; i++) {
-      final a = t * 2 * math.pi + i * math.pi / 4;
-      final p = Offset(
-        fc.dx + math.cos(a) * 48,
-        fc.dy + math.sin(a) * 48 * 0.23,
-      );
-      // nửa vành sau (đi lên trên) mờ hơn — giả chiều sâu
-      rune.color = aura.withValues(alpha: math.sin(a) > 0 ? 0.55 : 0.25);
-      canvas.drawLine(p.translate(0, -1.6), p.translate(0, 1.6), rune);
-    }
-
     // quầng linh khí thở (theo màu công pháp) — nằm SAU bóng người
     final breathe = 0.5 + 0.5 * math.sin(t * 2 * math.pi);
     for (final (r0, a) in [(38.0, 0.20), (54.0, 0.09)]) {
@@ -1296,91 +1454,53 @@ class _SkyPainter extends CustomPainter {
 
     // đom đóm linh khí bay lên — lệch pha nhau, mờ dần khi lên cao (loop khớp t)
     final mote = Paint();
-    for (var i = 0; i < 7; i++) {
-      final ph = (t + i / 7) % 1;
+    for (var i = 0; i < 10; i++) {
+      final ph = (t + i / 10) % 1;
       final x =
           (i * 41 + 13) % 140 + 5 + math.sin((t * 2 + i) * 2 * math.pi) * 3;
-      mote.color = aura.withValues(alpha: 0.35 * (1 - ph));
+      final tw =
+          0.5 + 0.5 * math.sin((t * 3 + i / 3) * 2 * math.pi); // nhấp nháy
+      mote.color = aura.withValues(alpha: (0.20 + 0.25 * tw) * (1 - ph));
       canvas.drawCircle(
         Offset(x, size.height - 8 - ph * (size.height - 30)),
-        1.3,
+        1.0 + (i % 3) * 0.35,
         mote,
+      );
+    }
+
+    // đồ bay quanh đang ở nửa vòng SAU — vẽ ở lớp nền để thân người che thật
+    if (weaponImg != null) {
+      _drawOrbiter(canvas, t, c, aura, weaponImg!, frontLayer: false);
+    }
+    if (phapbaoImg != null) {
+      _drawOrbiter(
+        canvas,
+        t,
+        c,
+        moon,
+        phapbaoImg!,
+        frontLayer: false,
+        scale: 0.82,
+        orbit: _orbitPhapbao,
       );
     }
   }
 
-  /// Vẽ vòng sáng theo kiểu pháp bảo vòng đang đeo (docs/tu-tien.md §2 halo):
-  /// null vòng trơn · nguyet 2 lưỡi trăng ngược chiều · tinh vành + 5 sao chạy ·
-  /// loi vành răng cưa giật sáng · kim vành kép + 8 tia kim quang xoay.
-  void _drawHalo(Canvas canvas, Offset hc, double hr) {
-    final stroke = Paint()
-      ..isAntiAlias = true
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.2
-      ..strokeCap = StrokeCap.round
-      ..color = moon.withValues(alpha: 0.55);
-    final ang = t * 2 * math.pi;
-    switch (halo) {
-      case 'nguyet': // 2 lưỡi trăng quay ngược chiều nhau
-        canvas.drawArc(
-          Rect.fromCircle(center: hc, radius: hr),
-          ang,
-          math.pi * 1.15,
-          false,
-          stroke,
-        );
-        canvas.drawArc(
-          Rect.fromCircle(center: hc, radius: hr - 3),
-          -ang * 1.3,
-          math.pi * 0.9,
-          false,
-          stroke..color = moon.withValues(alpha: 0.35),
-        );
-      case 'tinh': // vành mảnh + 5 vì sao chạy quanh, nhấp nháy lệch pha
-        canvas.drawCircle(hc, hr, stroke..color = moon.withValues(alpha: 0.30));
-        final star = Paint()..isAntiAlias = true;
-        for (var i = 0; i < 5; i++) {
-          final a = ang + i * 2 * math.pi / 5;
-          final tw = 0.5 + 0.5 * math.sin((t * 3 + i / 5) * 2 * math.pi);
-          star.color = Colors.white.withValues(alpha: 0.35 + 0.5 * tw);
-          canvas.drawCircle(
-            hc + Offset(math.cos(a), math.sin(a)) * hr,
-            1.2 + tw * 0.8,
-            star,
-          );
-        }
-      case 'loi': // vành răng cưa (zigzag trong/ngoài) + chớp sáng ngẫu-định kỳ
-        final p = Path();
-        for (var i = 0; i <= 14; i++) {
-          final a = ang + i * 2 * math.pi / 14;
-          final r = hr + (i.isEven ? 1.8 : -1.8);
-          final o = hc + Offset(math.cos(a), math.sin(a)) * r;
-          i == 0 ? p.moveTo(o.dx, o.dy) : p.lineTo(o.dx, o.dy);
-        }
-        // chớp: sáng bừng ~1/6 thời gian mỗi vòng lặp
-        final flash = (t * 6) % 1 < 0.35;
-        canvas.drawPath(
-          p..close(),
-          stroke..color = moon.withValues(alpha: flash ? 0.9 : 0.45),
-        );
-      case 'kim': // vành kép + 8 tia kim quang xoay
-        canvas.drawCircle(hc, hr, stroke);
-        canvas.drawCircle(
-          hc,
-          hr - 3.5,
-          stroke..color = moon.withValues(alpha: 0.30),
-        );
-        for (var i = 0; i < 8; i++) {
-          final a = ang + i * math.pi / 4;
-          canvas.drawLine(
-            hc + Offset(math.cos(a), math.sin(a)) * (hr + 1.5),
-            hc + Offset(math.cos(a), math.sin(a)) * (hr + 5.5),
-            stroke..color = moon.withValues(alpha: 0.65),
-          );
-        }
-      default: // vòng trơn — như cũ, chỉ nhỏ lại ôm đầu
-        canvas.drawCircle(hc, hr, stroke);
-    }
+  void _drawSwordWheel(Canvas canvas, Offset c, double radius) {
+    final img = swordWheelImg;
+    if (img == null) return;
+    final side = radius * 2.35;
+    final speed = halo == 'loi' ? 1.5 : 1.0;
+    canvas.save();
+    canvas.translate(c.dx, c.dy);
+    canvas.rotate(t * 2 * math.pi * speed);
+    canvas.drawImageRect(
+      img,
+      Rect.fromLTWH(0, 0, img.width.toDouble(), img.height.toDouble()),
+      Rect.fromCenter(center: Offset.zero, width: side, height: side),
+      Paint()..filterQuality = FilterQuality.high,
+    );
+    canvas.restore();
   }
 
   @override
@@ -1389,7 +1509,74 @@ class _SkyPainter extends CustomPainter {
       old.moon != moon ||
       old.aura != aura ||
       old.realm != realm ||
-      old.halo != halo;
+      old.halo != halo ||
+      old.weaponImg != weaponImg ||
+      old.phapbaoImg != phapbaoImg ||
+      old.swordWheelImg != swordWheelImg;
+}
+
+/// Quỹ đạo VŨ KHÍ: vòng ngang quanh eo, góc quét đều nhưng bán kính + cao độ
+/// dao động theo sin TẦN SỐ LỆCH NHAU (đường Lissajous) → quỹ tích bất quy
+/// tắc như "ý niệm điều khiển", không phải vòng tròn máy móc.
+/// Trả về (vị trí, đang ở nửa TRƯỚC người hay không).
+(Offset, bool) _orbit(double t, Offset c) {
+  final a = t * 2 * math.pi;
+  final r = 44 + 10 * math.sin(a * 3 + 1.3);
+  return (
+    Offset(
+      c.dx + math.cos(a) * r,
+      c.dy - 6 + math.sin(a) * r * 0.40 + math.sin(a * 2 + 0.7) * 6,
+    ),
+    math.sin(a) > 0, // nửa vòng dưới coi như bay TRƯỚC người
+  );
+}
+
+/// Quỹ đạo PHÁP BẢO: TRỤC KHÁC HẲN vũ khí — ellipse dựng đứng hơn, NGHIÊNG
+/// chéo ~29°, tâm nâng lên ngang ngực, quay NGƯỢC chiều, bán kính thở theo
+/// tần số khác → hai món không bao giờ trùng nhịp hay trùng đường.
+(Offset, bool) _orbitPhapbao(double t, Offset c) {
+  final a = -t * 2 * math.pi + 2.6; // ngược chiều, mọc lệch góc so với vũ khí
+  final r = 34 + 8 * math.sin(a * 2 + 0.5);
+  final raw = Offset(math.cos(a) * r * 0.55, math.sin(a) * r * 0.72);
+  const ct = 0.8776, st = 0.4794; // cos/sin 0.5 rad — góc nghiêng trục
+  return (
+    c + Offset(raw.dx * ct - raw.dy * st, -10 + raw.dx * st + raw.dy * ct),
+    raw.dy > 0, // nửa thấp của vòng chéo coi như TRƯỚC người
+  );
+}
+
+/// Vẽ 1 món bay quanh + vệt đuôi theo quỹ đạo [orbit], TÁCH LỚP: nửa vòng sau
+/// gọi từ _SkyPainter (dưới ảnh nhân vật → thân che thật), nửa trước từ
+/// _AuraPainter.
+void _drawOrbiter(
+  Canvas canvas,
+  double t,
+  Offset c,
+  Color color,
+  ui.Image img, {
+  required bool frontLayer,
+  double scale = 1,
+  (Offset, bool) Function(double, Offset) orbit = _orbit,
+}) {
+  final (p, front) = orbit(t, c);
+  if (front != frontLayer) return;
+  // đuôi kiếm quang: lấy lại vị trí các pha ngay trước → chuỗi đốm nhỏ mờ dần
+  final tail = Paint();
+  for (var k = 6; k >= 1; k--) {
+    final (q, _) = orbit(t - k * 0.013, c);
+    tail.color = color.withValues(alpha: 0.30 * (1 - k / 7));
+    canvas.drawCircle(q, (2.4 - k * 0.28) * scale, tail);
+  }
+  // ra sau nhỏ lại một chút cho có chiều sâu
+  final side = (front ? 26.0 : 21.0) * scale;
+  canvas.drawImageRect(
+    img,
+    Rect.fromLTWH(0, 0, img.width.toDouble(), img.height.toDouble()),
+    Rect.fromCenter(center: p, width: side, height: side),
+    Paint()
+      ..filterQuality = FilterQuality.medium
+      ..color = Colors.white.withValues(alpha: front ? 1 : 0.88),
+  );
 }
 
 /// Hiệu ứng bay quanh theo HỆ công pháp (vẽ ĐÈ lên bóng người — quầng thở
@@ -1402,14 +1589,14 @@ class _AuraPainter extends CustomPainter {
   final double t; // 0..1
   final Color color;
   final _Aura style;
-  final String? weaponSprite; // pixel key của vũ khí đang đeo — null = không vẽ
-  final int weaponGrade;
+  final ui.Image? weaponImg; // icon vũ khí đang đeo — null = không vẽ
+  final ui.Image? phapbaoImg; // icon pháp bảo đang đeo — bay lệch pha nửa vòng
   _AuraPainter(
     this.t,
     this.color,
     this.style, {
-    this.weaponSprite,
-    this.weaponGrade = 1,
+    this.weaponImg,
+    this.phapbaoImg,
   });
 
   @override
@@ -1436,38 +1623,21 @@ class _AuraPainter extends CustomPainter {
       case _Aura.leaf:
         _leaves(canvas, c);
     }
-    if (weaponSprite != null) _weapon(canvas, c);
-  }
-
-  /// Vũ khí hộ chủ: bán kính + độ cao dao động theo sin tần số lệch nhau →
-  /// quỹ tích như "ý niệm điều khiển", không phải vòng tròn máy móc.
-  void _weapon(Canvas canvas, Offset c) {
-    final a = t * 2 * math.pi;
-    final r = 44 + 10 * math.sin(a * 3 + 1.3);
-    final p = Offset(
-      c.dx + math.cos(a) * r,
-      c.dy - 6 + math.sin(a) * r * 0.40 + math.sin(a * 2 + 0.7) * 6,
-    );
-    final front = math.sin(a) > 0; // nửa vòng dưới coi như bay TRƯỚC người
-    // vệt sáng mờ kéo sau đuôi vũ khí
-    final dir = Offset(-math.sin(a), math.cos(a) * 0.4);
-    canvas.drawLine(
-      p - dir * 10,
-      p,
-      Paint()
-        ..strokeWidth = 2.5
-        ..strokeCap = StrokeCap.round
-        ..color = color.withValues(alpha: front ? 0.30 : 0.12)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2),
-    );
-    paintOrbitSprite(
-      canvas,
-      p,
-      front ? 1.5 : 1.1,
-      weaponSprite!,
-      weaponGrade,
-      opacity: front ? 1 : 0.45,
-    );
+    if (weaponImg != null) {
+      _drawOrbiter(canvas, t, c, color, weaponImg!, frontLayer: true);
+    }
+    if (phapbaoImg != null) {
+      _drawOrbiter(
+        canvas,
+        t,
+        c,
+        color,
+        phapbaoImg!,
+        frontLayer: true,
+        scale: 0.82,
+        orbit: _orbitPhapbao,
+      );
+    }
   }
 
   /// lưỡi lửa bốc từ quanh thân lên, lắc ngang + nhỏ dần khi lên cao
@@ -1636,8 +1806,8 @@ class _AuraPainter extends CustomPainter {
       old.t != t ||
       old.color != color ||
       old.style != style ||
-      old.weaponSprite != weaponSprite ||
-      old.weaponGrade != weaponGrade;
+      old.weaponImg != weaponImg ||
+      old.phapbaoImg != phapbaoImg;
 }
 
 /// Đếm ngược hiệu ứng có thời hạn (đan dược / linh thạch) — tự vẽ lại mỗi giây.
@@ -1806,7 +1976,8 @@ class _RacePickerCardState extends ConsumerState<_RacePickerCard> {
   }
 }
 
-/// 5 chỉ số cơ bản: nền theo cảnh giới + tộc + trang bị (server tính, cult_stats).
+/// 5 chỉ số cơ bản (server tính, cult_stats) — pill gọn đồng bộ _infoChip,
+/// nằm chung khối chip trong thẻ tu vi.
 class _StatsRow extends StatelessWidget {
   final Map stats;
   const _StatsRow({required this.stats});
@@ -1820,17 +1991,16 @@ class _StatsRow extends StatelessWidget {
         for (final key in statNames.keys) ...[
           Expanded(
             child: Container(
-              padding: const EdgeInsets.symmetric(vertical: 8),
+              padding: const EdgeInsets.symmetric(vertical: 4),
               decoration: BoxDecoration(
-                color: cs.surface,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: cs.outlineVariant),
+                color: cs.onSurfaceVariant.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(9),
               ),
               child: Column(
                 children: [
                   Text(
                     '${stats[key] ?? '—'}',
-                    style: t.labelLarge?.copyWith(
+                    style: t.labelSmall?.copyWith(
                       fontWeight: FontWeight.w800,
                       color: cs.primary,
                     ),
@@ -1840,7 +2010,7 @@ class _StatsRow extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: t.labelSmall?.copyWith(
-                      fontSize: 8.5,
+                      fontSize: 8,
                       color: cs.onSurfaceVariant,
                     ),
                   ),
@@ -1855,8 +2025,9 @@ class _StatsRow extends StatelessWidget {
   }
 }
 
-/// 6 slot trang bị (2 hàng): công pháp/vũ khí/pháp bảo · pháp chú/y phục/hài.
-/// Dưới tên hiện bonus của món đó; tap món đang đeo → popup chi tiết.
+/// 6 slot trang bị GỌN trên 1 hàng: chỉ icon + bonus (đang đeo) hoặc tên loại
+/// (trống) — tên món, mô tả đầy đủ nằm ở popup khi tap. Trước là 2 hàng ô to
+/// (icon + tên + bonus) chiếm gấp đôi chỗ.
 class _EquipRow extends ConsumerWidget {
   final Rec st;
   const _EquipRow({required this.st});
@@ -1878,13 +2049,13 @@ class _EquipRow extends ConsumerWidget {
     final it = ((st['equipped'] as Rec?) ?? const {})[type] as Rec?;
     return Builder(
       builder: (slotCtx) => InkWell(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(12),
         onTap: it == null ? null : () => _showItemPopup(slotCtx, ref, it, null),
         child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 10),
+          height: 58,
           decoration: BoxDecoration(
             color: cs.surface,
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(12),
             border: Border.all(
               color: it != null
                   ? gradeColor(it['grade'] as int).withValues(alpha: 0.7)
@@ -1892,34 +2063,32 @@ class _EquipRow extends ConsumerWidget {
             ),
           ),
           child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
               it != null
                   ? PixelIcon(
                       it['pixel'] as String,
                       grade: it['grade'] as int,
-                      size: 34,
+                      size: 28,
                     )
-                  : Icon(Icons.add_rounded, size: 34, color: cs.outlineVariant),
-              const SizedBox(height: 4),
-              Text(
-                it?['name'] as String? ?? cultTypeNames[type]!,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
-                style: t.labelSmall?.copyWith(
-                  fontSize: 9.5,
-                  color: it != null ? cs.onSurface : cs.onSurfaceVariant,
-                ),
-              ),
-              if (it != null)
-                Text(
-                  _bonus(it),
+                  : Icon(Icons.add_rounded, size: 22, color: cs.outlineVariant),
+              const SizedBox(height: 2),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 2),
+                child: Text(
+                  it != null ? _bonus(it) : cultTypeNames[type]!,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
                   style: t.labelSmall?.copyWith(
-                    fontSize: 9.5,
-                    fontWeight: FontWeight.w800,
-                    color: gradeColor(it['grade'] as int),
+                    fontSize: 8,
+                    fontWeight: it != null ? FontWeight.w800 : FontWeight.w500,
+                    color: it != null
+                        ? gradeColor(it['grade'] as int)
+                        : cs.onSurfaceVariant,
                   ),
                 ),
+              ),
             ],
           ),
         ),
@@ -1929,19 +2098,13 @@ class _EquipRow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    Widget row(List<String> types) => Row(
+    const types = ['congphap', 'vukhi', 'phapbao', 'phapchu', 'yphuc', 'giay'];
+    return Row(
       children: [
         for (final type in types) ...[
           Expanded(child: _slot(context, ref, type)),
-          if (type != types.last) const SizedBox(width: 8),
+          if (type != types.last) const SizedBox(width: 6),
         ],
-      ],
-    );
-    return Column(
-      children: [
-        row(const ['congphap', 'vukhi', 'phapbao']),
-        const SizedBox(height: 8),
-        row(const ['phapchu', 'yphuc', 'giay']),
       ],
     );
   }
@@ -1969,7 +2132,7 @@ class _InventoryGrid extends ConsumerWidget {
     ];
     if (items.isEmpty) {
       return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 24),
+        padding: const EdgeInsets.symmetric(vertical: 12),
         child: Center(
           child: Text(
             inv.isEmpty
@@ -1982,11 +2145,15 @@ class _InventoryGrid extends ConsumerWidget {
     }
     return GridView.builder(
       shrinkWrap: true,
+      primary: false,
+      padding: EdgeInsets.zero,
       physics: const NeverScrollableScrollPhysics(),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 6,
-        mainAxisSpacing: 8,
-        crossAxisSpacing: 8,
+        crossAxisCount: 6, // khớp 6 cột hàng Trang bị → ô cùng bề rộng
+        mainAxisExtent:
+            58, // ponytail: khớp chiều cao ô Trang bị (_slot height 58)
+        mainAxisSpacing: 6,
+        crossAxisSpacing: 6,
       ),
       itemCount: items.length,
       itemBuilder: (context, i) {
