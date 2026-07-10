@@ -100,12 +100,19 @@ def check_translation(content_zh: str, content_vi: str) -> str | None:
     return None
 
 
+# Thoại nằm trong "..." hoặc “...” (prompt bắt thoại dùng ngoặc kép kiểu Việt).
+# Giới hạn độ dài + không ăn qua xuống dòng để câu kể thiếu ngoặc đóng không bị nuốt oan.
+_DIALOGUE_RE = re.compile(r'"[^"\n]{1,500}"|“[^”\n]{1,500}”')
+
+
 def _register_violation(content_vi: str) -> str | None:
-    """Chặn đại từ trái register ta–ngươi trước khi bản dịch được lưu."""
+    """Chặn đại từ sai trong LỜI KỂ (user chốt 2026-07-10: chỉ lời kể mới cấm
+    anh/tôi — thoại được linh hoạt anh/em/ca theo bối cảnh, nên bỏ qua khi soi)."""
+    narration = _DIALOGUE_RE.sub(" ", content_vi)
     bad = re.search(
         r"\b(?:anh(?!\s+trai\b)(?:\s+(?:ta|ấy))?|cậu ta|ông ta|tôi)\b",
-        content_vi, re.I)
-    return f"lệch xưng hô '{bad.group(0)}'" if bad else None
+        narration, re.I)
+    return f"lệch xưng hô '{bad.group(0)}' trong lời kể" if bad else None
 
 
 def _quality_fuse(chunk: str):
@@ -311,12 +318,13 @@ def _extract_json(text: str) -> dict | list:
         raise
 
 
-# Xưng hô: MỘT luật cho mọi truyện (bỏ nhánh đô thị tôi–anh 2026-07-10 — LLM hay
-# lộn giữa hai register; crawl giờ cũng chặn đô thị đời thực/ngôn tình/lịch sử từ đầu vào).
+# Xưng hô: MỘT luật cho mọi truyện (2026-07-10, đã bỏ nhánh đô thị tôi–anh):
+# lời KỂ cứng hắn/nàng; THOẠI linh hoạt theo bối cảnh (fuse cũng chỉ soi lời kể).
 REGISTER_LINE = (
-    "[Xưng hô — TA–NGƯƠI: thoại ta–ngươi (huynh–đệ–tỷ–muội; mày–tao khi chửi/"
-    "thân), kể cả cảnh mua bán/quán trọ; câu KỂ ngôi ba nam CHỦ YẾU 'hắn', nữ 'nàng'. "
-    "KHÔNG 'anh/anh ta/ông/tôi' làm đại từ cho nhân vật.]")
+    "[Xưng hô — LỜI KỂ ngôi ba: nam 'hắn', nữ 'nàng'; TUYỆT ĐỐI KHÔNG "
+    "'anh/anh ta/ông ta/cậu ta/tôi' làm đại từ trong lời kể. THOẠI linh hoạt theo "
+    "bối cảnh: tu tiên/cổ trang ta–ngươi, ca ca/đệ đệ/sư huynh; nhân vật hiện đại "
+    "với nhau được anh/em hoặc 'ca'; nhắc người thứ ba trong thoại: hắn ta/anh ta đều được.]")
 
 
 # ---------- xử lý từng loại job ----------

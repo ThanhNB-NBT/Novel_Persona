@@ -34,10 +34,16 @@ def main() -> None:
     assert "mất hết xuống dòng" in (check_translation(zh5, "một khối chữ liền dài " * 3) or "")
     assert check_translation("原文本", "Bản dịch ổn.\nĐủ dòng.") is None
     assert check_translation("", "Chỉ soi tỷ lệ Hán khi thiếu bản gốc.") is None
+    # lời kể: cấm anh/anh ta/tôi
     assert _register_violation("Anh ta quay người.")
     assert _register_violation("Anh quay người.")
+    assert _register_violation("Tôi bước tới.")
     assert _register_violation("Anh trai quay người.") is None
     assert _register_violation("Hắn quay người.") is None
+    # thoại trong ngoặc kép: anh/em/tôi được phép, cả ngoặc thẳng lẫn ngoặc cong
+    assert _register_violation('"Anh chờ em với!" Nàng gọi.') is None
+    assert _register_violation("“Tôi không tin anh.” Hắn lắc đầu.") is None
+    assert _register_violation('"Lâm ca, anh xem này." Hắn đưa kiếm cho anh ta.')  # ngoài ngoặc vẫn bắt
     # gốc dài mà bản dịch < 1.2x → dịch sót (ngưỡng 0.3 cũ chỉ bắt cụt thảm họa)
     assert "quá ngắn" in (check_translation("字" * 400, "v" * 450) or "")
     assert check_translation("字" * 400, "v" * 500) is None
