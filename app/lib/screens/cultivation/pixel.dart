@@ -426,7 +426,7 @@ const _sprites = <String, List<String>>{
 };
 // (nhân vật giờ vẽ vector trong cultivation.dart — _HumanPainter, không dùng sprite nữa)
 
-/// Icon pixel: sprite 12×12 tô màu theo phẩm cấp, vẽ nét vuông sắc cạnh.
+/// Icon vật phẩm minh hoạ riêng; fallback pixel giữ được catalog cũ nếu server trả key lạ.
 class PixelIcon extends StatelessWidget {
   final String sprite;
   final int grade; // 1..5, đổi tông A/B/C
@@ -435,9 +435,17 @@ class PixelIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return CustomPaint(
-      size: Size.square(size),
-      painter: _PixelPainter(_sprites[sprite] ?? _sprites['pill']!, grade),
+    final key = sprite == 'gourd_big' ? 'gourd' : sprite;
+    return Image.asset(
+      'assets/cult_items/$key.webp',
+      width: size,
+      height: size,
+      fit: BoxFit.contain,
+      filterQuality: FilterQuality.high,
+      errorBuilder: (_, _, _) => CustomPaint(
+        size: Size.square(size),
+        painter: _PixelPainter(_sprites[sprite] ?? _sprites['pill']!, grade),
+      ),
     );
   }
 }
@@ -480,14 +488,16 @@ class _PixelPainter extends CustomPainter {
         };
         // +0.5 phủ mép: tránh khe hở hairline giữa các ô khi scale lẻ
         canvas.drawRect(
-            Rect.fromLTWH(ox + x * cell, oy + y * cell, cell + 0.5, cell + 0.5),
-            paint);
+          Rect.fromLTWH(ox + x * cell, oy + y * cell, cell + 0.5, cell + 0.5),
+          paint,
+        );
       }
     }
   }
 
   @override
-  bool shouldRepaint(_PixelPainter old) => old.grid != grid || old.grade != grade;
+  bool shouldRepaint(_PixelPainter old) =>
+      old.grid != grid || old.grade != grade;
 }
 
 // ===== Nhân vật vector "linh thể" theo TỘC + GIỚI TÍNH =====
@@ -498,44 +508,44 @@ class _PixelPainter extends CustomPainter {
 
 /// Palette theo tộc; [glow] là màu năng lượng (mắt + đan điền + đai).
 ({Color a, Color b, Color c, Color s, Color glow, Color hair, Color skin})
-    _racePal(String? race) => switch (race) {
-          'yeu' => (
-              a: const Color(0xFFC2703A), // áo nâu cam thổ
-              b: const Color(0xFFE8A05C),
-              c: const Color(0xFF5E3014),
-              s: const Color(0xFF8A5A2E), // đai da
-              glow: const Color(0xFFFFB566), // hổ phách
-              hair: const Color(0xFF8A5430), // lông cáo
-              skin: const Color(0xFFF1C27D),
-            ),
-          'ma' => (
-              a: const Color(0xFF4A3260), // áo tím đen
-              b: const Color(0xFF7B5496),
-              c: const Color(0xFF1E1028),
-              s: const Color(0xFFB02A37), // đai đỏ thẫm
-              glow: const Color(0xFFFF4D5E), // mắt đỏ ma khí
-              hair: const Color(0xFF1E1528),
-              skin: const Color(0xFFE3C6BC), // da tái
-            ),
-          'linh' => (
-              a: const Color(0xFFE7DFC9), // áo trắng ngà
-              b: const Color(0xFFF4EEDD),
-              c: const Color(0xFFA8946A),
-              s: const Color(0xFFD4A017), // đai vàng
-              glow: const Color(0xFFFFD166), // linh quang kim
-              hair: const Color(0xFFE9E6F2), // tóc bạc
-              skin: const Color(0xFFF6DCB5),
-            ),
-          _ => (
-              a: const Color(0xFF3E63B0), // Nhân: áo thanh lam
-              b: const Color(0xFF6E8FD6),
-              c: const Color(0xFF1C2E52),
-              s: const Color(0xFF2F9E77), // đai ngọc bích
-              glow: const Color(0xFF5EEAD4), // ngọc lam
-              hair: const Color(0xFF2A2438),
-              skin: const Color(0xFFF1C27D),
-            ),
-        };
+_racePal(String? race) => switch (race) {
+  'yeu' => (
+    a: const Color(0xFFC2703A), // áo nâu cam thổ
+    b: const Color(0xFFE8A05C),
+    c: const Color(0xFF5E3014),
+    s: const Color(0xFF8A5A2E), // đai da
+    glow: const Color(0xFFFFB566), // hổ phách
+    hair: const Color(0xFF8A5430), // lông cáo
+    skin: const Color(0xFFF1C27D),
+  ),
+  'ma' => (
+    a: const Color(0xFF4A3260), // áo tím đen
+    b: const Color(0xFF7B5496),
+    c: const Color(0xFF1E1028),
+    s: const Color(0xFFB02A37), // đai đỏ thẫm
+    glow: const Color(0xFFFF4D5E), // mắt đỏ ma khí
+    hair: const Color(0xFF1E1528),
+    skin: const Color(0xFFE3C6BC), // da tái
+  ),
+  'linh' => (
+    a: const Color(0xFFE7DFC9), // áo trắng ngà
+    b: const Color(0xFFF4EEDD),
+    c: const Color(0xFFA8946A),
+    s: const Color(0xFFD4A017), // đai vàng
+    glow: const Color(0xFFFFD166), // linh quang kim
+    hair: const Color(0xFFE9E6F2), // tóc bạc
+    skin: const Color(0xFFF6DCB5),
+  ),
+  _ => (
+    a: const Color(0xFF3E63B0), // Nhân: áo thanh lam
+    b: const Color(0xFF6E8FD6),
+    c: const Color(0xFF1C2E52),
+    s: const Color(0xFF2F9E77), // đai ngọc bích
+    glow: const Color(0xFF5EEAD4), // ngọc lam
+    hair: const Color(0xFF2A2438),
+    skin: const Color(0xFFF1C27D),
+  ),
+};
 
 Color _mix(Color x, Color y, double t) => Color.lerp(x, y, t)!;
 
@@ -555,14 +565,21 @@ const _chibiEye = [
   '..kkkk..',
 ];
 
-void drawChibiCultivator(Canvas canvas, Rect rect, String? race, String? gender) {
+void drawChibiCultivator(
+  Canvas canvas,
+  Rect rect,
+  String? race,
+  String? gender,
+) {
   // ponytail: race/gender chưa dùng — bản duyệt chỉ có Nhân nam
   const n = 64;
   final g = List.generate(n, (_) => List<Color?>.filled(n, null)); // [y][x]
 
   const outline = Color(0xFF231C31);
   const skin = Color(0xFFF6D7A9), skinSh = Color(0xFFE0B183);
-  const hair = Color(0xFF352A4E), hairLt = Color(0xFF52427A), hairDk = Color(0xFF241C36);
+  const hair = Color(0xFF352A4E),
+      hairLt = Color(0xFF52427A),
+      hairDk = Color(0xFF241C36);
   const robe = Color(0xFF3E63B0);
   const robeDk = Color(0xFF2A4578), robeDk2 = Color(0xFF1D2C4E);
   const jade = Color(0xFF2F9E77), jadeLt = Color(0xFF55C79B);
@@ -606,12 +623,12 @@ void drawChibiCultivator(Canvas canvas, Rect rect, String? race, String? gender)
   disk(40, 26, 1.6, 1.2, skinSh);
   // mái xẻ lọn: giữa dài, xen kẽ lọn ngắn
   int bangY(int dx) => switch (dx.abs()) {
-        <= 1 => 18,
-        <= 4 => 15,
-        <= 7 => 17,
-        <= 10 => 14,
-        _ => 18,
-      };
+    <= 1 => 18,
+    <= 4 => 15,
+    <= 7 => 17,
+    <= 10 => 14,
+    _ => 18,
+  };
   for (var x = cx - 12; x <= cx + 12; x++) {
     for (var y = 6; y <= bangY(x - cx); y++) {
       final ddx = (x - 32) / 13.5, ddy = (y - 18) / 12.5;
@@ -662,17 +679,17 @@ void drawChibiCultivator(Canvas canvas, Rect rect, String? race, String? gender)
   px(34, 30, skinSh);
   // thân: vai tròn → loe dần → đáy bo (ngồi xếp bằng)
   int half(int y) => switch (y) {
-        31 => 7,
-        32 => 10,
-        33 => 12,
-        <= 42 => 13,
-        <= 52 => 13 + (y - 42), // loe tới 23
-        <= 56 => 23,
-        57 => 22,
-        58 => 20,
-        59 => 17,
-        _ => 12,
-      };
+    31 => 7,
+    32 => 10,
+    33 => 12,
+    <= 42 => 13,
+    <= 52 => 13 + (y - 42), // loe tới 23
+    <= 56 => 23,
+    57 => 22,
+    58 => 20,
+    59 => 17,
+    _ => 12,
+  };
   for (var y = 31; y <= 60; y++) {
     rectF(cx - half(y), y, cx + half(y), y, robe);
   }
@@ -710,7 +727,8 @@ void drawChibiCultivator(Canvas canvas, Rect rect, String? race, String? gender)
   for (var y = 0; y < n; y++) {
     for (var x = 0; x < n; x++) {
       if (g[y][x] == null) continue;
-      final bare = (y == 0 || g[y - 1][x] == null) ||
+      final bare =
+          (y == 0 || g[y - 1][x] == null) ||
           (y == n - 1 || g[y + 1][x] == null) ||
           (x == 0 || g[y][x - 1] == null) ||
           (x == n - 1 || g[y][x + 1] == null);
@@ -736,8 +754,14 @@ void drawChibiCultivator(Canvas canvas, Rect rect, String? race, String? gender)
       if (c == null) continue;
       paint.color = c;
       canvas.drawRect(
-          Rect.fromLTWH(rect.left + x * cell, oy + y * cell, cell + 0.5, cell + 0.5),
-          paint);
+        Rect.fromLTWH(
+          rect.left + x * cell,
+          oy + y * cell,
+          cell + 0.5,
+          cell + 0.5,
+        ),
+        paint,
+      );
     }
   }
 }
@@ -780,29 +804,35 @@ void drawCultivator(Canvas canvas, Rect rect, String? race, String? gender) {
     fill.shader = null;
     // chóp đuôi trắng
     canvas.drawPath(
-        Path()
-          ..moveTo(81, 48)
-          ..cubicTo(74, 41, 63, 43, 62, 51)
-          ..cubicTo(68, 50, 76, 52, 79, 57)
-          ..close(),
-        fill..color = const Color(0xFFF6F1E7));
+      Path()
+        ..moveTo(81, 48)
+        ..cubicTo(74, 41, 63, 43, 62, 51)
+        ..cubicTo(68, 50, 76, 52, 79, 57)
+        ..close(),
+      fill..color = const Color(0xFFF6F1E7),
+    );
   }
   if (race == 'linh') {
     // vòng linh quang lơ lửng trên đầu, có quầng
     final halo = Rect.fromCenter(
-        center: const Offset(cx, 3.5), width: 23, height: 6.5);
+      center: const Offset(cx, 3.5),
+      width: 23,
+      height: 6.5,
+    );
     canvas.drawOval(
-        halo,
-        line
-          ..strokeWidth = 3.2
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.5)
-          ..color = pal.glow.withValues(alpha: 0.55));
+      halo,
+      line
+        ..strokeWidth = 3.2
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.5)
+        ..color = pal.glow.withValues(alpha: 0.55),
+    );
     canvas.drawOval(
-        halo,
-        line
-          ..strokeWidth = 1.4
-          ..maskFilter = null
-          ..color = pal.glow);
+      halo,
+      line
+        ..strokeWidth = 1.4
+        ..maskFilter = null
+        ..color = pal.glow,
+    );
   }
 
   // ---------- THÂN: một khối silhouette, gradient dọc màu tộc ----------
@@ -827,21 +857,23 @@ void drawCultivator(Canvas canvas, Rect rect, String? race, String? gender) {
 
   // viền tà áo sáng chạy dọc đáy (nẹp thêu)
   canvas.drawPath(
-      Path()
-        ..moveTo(cx - base + 3, 95.5)
-        ..quadraticBezierTo(cx, 102.5, cx + base - 3, 95.5),
-      line
-        ..strokeWidth = 2.2
-        ..color = pal.b.withValues(alpha: 0.5));
+    Path()
+      ..moveTo(cx - base + 3, 95.5)
+      ..quadraticBezierTo(cx, 102.5, cx + base - 3, 95.5),
+    line
+      ..strokeWidth = 2.2
+      ..color = pal.b.withValues(alpha: 0.5),
+  );
 
   // cổ áo chữ V lộ lớp trong sáng, viền màu đai
   canvas.drawPath(
-      Path()
-        ..moveTo(cx - 5.5, 32.5)
-        ..lineTo(cx, 47)
-        ..lineTo(cx + 5.5, 32.5)
-        ..close(),
-      fill..color = _mix(pal.b, Colors.white, 0.5));
+    Path()
+      ..moveTo(cx - 5.5, 32.5)
+      ..lineTo(cx, 47)
+      ..lineTo(cx + 5.5, 32.5)
+      ..close(),
+    fill..color = _mix(pal.b, Colors.white, 0.5),
+  );
   line
     ..strokeWidth = 1.2
     ..color = pal.s.withValues(alpha: 0.85);
@@ -866,56 +898,77 @@ void drawCultivator(Canvas canvas, Rect rect, String? race, String? gender) {
   fill.shader = null;
   // mép tay áo bắt sáng
   canvas.drawPath(
-      Path()
-        ..moveTo(cx - 16, 68)
-        ..quadraticBezierTo(cx, 74.5, cx + 16, 68),
-      line
-        ..strokeWidth = 1.1
-        ..color = pal.b.withValues(alpha: 0.6));
+    Path()
+      ..moveTo(cx - 16, 68)
+      ..quadraticBezierTo(cx, 74.5, cx + 16, 68),
+    line
+      ..strokeWidth = 1.1
+      ..color = pal.b.withValues(alpha: 0.6),
+  );
 
   // đai lưng phát sáng + nút thắt (trên mép tay áo)
   final sash = RRect.fromRectAndRadius(
-      Rect.fromCenter(
-          center: const Offset(cx, 60.5),
-          width: (shoulder + 2.5) * 2,
-          height: 3.4),
-      const Radius.circular(2));
+    Rect.fromCenter(
+      center: const Offset(cx, 60.5),
+      width: (shoulder + 2.5) * 2,
+      height: 3.4,
+    ),
+    const Radius.circular(2),
+  );
   canvas.drawRRect(
-      sash,
-      Paint()
-        ..isAntiAlias = true
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3)
-        ..color = pal.glow.withValues(alpha: 0.4));
+    sash,
+    Paint()
+      ..isAntiAlias = true
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3)
+      ..color = pal.glow.withValues(alpha: 0.4),
+  );
   canvas.drawRRect(sash, fill..color = pal.s);
   canvas.drawCircle(
-      const Offset(cx, 60.5), 1.8, fill..color = _mix(pal.s, Colors.white, 0.35));
+    const Offset(cx, 60.5),
+    1.8,
+    fill..color = _mix(pal.s, Colors.white, 0.35),
+  );
 
   // lõi đan điền lơ lửng giữa hai tay — "pin năng lượng" của nhân vật
   canvas.drawCircle(
-      const Offset(cx, 70.5),
-      6.5,
-      Paint()
-        ..isAntiAlias = true
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5)
-        ..color = pal.glow.withValues(alpha: 0.6));
-  canvas.drawCircle(const Offset(cx, 70.5), 2.4,
-      fill..color = _mix(pal.glow, Colors.white, 0.65));
+    const Offset(cx, 70.5),
+    6.5,
+    Paint()
+      ..isAntiAlias = true
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5)
+      ..color = pal.glow.withValues(alpha: 0.6),
+  );
+  canvas.drawCircle(
+    const Offset(cx, 70.5),
+    2.4,
+    fill..color = _mix(pal.glow, Colors.white, 0.65),
+  );
 
   // viền sáng vành phải (bắt trăng)
   line
     ..strokeWidth = 1.2
     ..color = Colors.white.withValues(alpha: 0.5);
   canvas.drawPath(
-      Path()
-        ..moveTo(cx + shoulder - 0.5, 43)
-        ..cubicTo(cx + shoulder + 1.5, 58, cx + base - 2.5, 76, cx + base - 0.8, 95),
-      line);
+    Path()
+      ..moveTo(cx + shoulder - 0.5, 43)
+      ..cubicTo(
+        cx + shoulder + 1.5,
+        58,
+        cx + base - 2.5,
+        76,
+        cx + base - 0.8,
+        95,
+      ),
+    line,
+  );
 
   // ---------- ĐẦU (r 9.2 — thanh thoát hơn, bớt chibi) ----------
   const headC = Offset(cx, 20.5);
   // cổ
-  canvas.drawRect(Rect.fromLTRB(cx - 3, 26, cx + 3, 33.5),
-      fill..color = _mix(pal.skin, pal.c, 0.25));
+  canvas.drawRect(
+    Rect.fromLTRB(cx - 3, 26, cx + 3, 33.5),
+    fill..color = _mix(pal.skin, pal.c, 0.25),
+  );
   // mặt
   fill.shader = RadialGradient(
     center: const Alignment(-0.3, -0.4),
@@ -927,12 +980,13 @@ void drawCultivator(Canvas canvas, Rect rect, String? race, String? gender) {
   if (race == 'linh') {
     for (final d in [-1.0, 1.0]) {
       canvas.drawPath(
-          Path()
-            ..moveTo(cx + d * 8.3, 19.5)
-            ..lineTo(cx + d * 14, 16.5)
-            ..lineTo(cx + d * 7.7, 23.5)
-            ..close(),
-          fill..color = pal.skin);
+        Path()
+          ..moveTo(cx + d * 8.3, 19.5)
+          ..lineTo(cx + d * 14, 16.5)
+          ..lineTo(cx + d * 7.7, 23.5)
+          ..close(),
+        fill..color = pal.skin,
+      );
     }
   }
   // sừng Ma tộc: bản dày mọc từ thái dương, cong ra ngoài như sừng bò
@@ -963,85 +1017,108 @@ void drawCultivator(Canvas canvas, Rect rect, String? race, String? gender) {
   ).createShader(const Rect.fromLTWH(35, 7, 30, 16));
   // vòm tóc ôm đỉnh đầu, mái chữ M
   canvas.drawPath(
-      Path()
-        ..moveTo(cx - 9.5, 21)
-        ..cubicTo(cx - 9.2, 8.8, cx + 9.2, 8.8, cx + 9.5, 21)
-        ..quadraticBezierTo(cx + 6, 14.6, cx + 2.6, 15.3)
-        ..quadraticBezierTo(cx, 17.6, cx - 2.6, 15.3)
-        ..quadraticBezierTo(cx - 6, 14.6, cx - 9.5, 21)
-        ..close(),
-      fill);
+    Path()
+      ..moveTo(cx - 9.5, 21)
+      ..cubicTo(cx - 9.2, 8.8, cx + 9.2, 8.8, cx + 9.5, 21)
+      ..quadraticBezierTo(cx + 6, 14.6, cx + 2.6, 15.3)
+      ..quadraticBezierTo(cx, 17.6, cx - 2.6, 15.3)
+      ..quadraticBezierTo(cx - 6, 14.6, cx - 9.5, 21)
+      ..close(),
+    fill,
+  );
   fill.shader = null;
   // tóc dài xõa hai bên: nữ dài chấm gối, Linh nam cũng để dài vừa
   final strandLen = nu ? 90.0 : (race == 'linh' ? 58.0 : 0.0);
   if (strandLen > 0) {
     for (final d in [-1.0, 1.0]) {
       canvas.drawPath(
-          Path()
-            ..moveTo(cx + d * 8.3, 16.5)
-            ..cubicTo(cx + d * 14, 33, cx + d * 16, 58, cx + d * 22, strandLen)
-            ..quadraticBezierTo(
-                cx + d * 18, strandLen + 2, cx + d * 16.5, strandLen - 2)
-            ..cubicTo(cx + d * 12, 60, cx + d * 10.5, 38, cx + d * 6.5, 22)
-            ..close(),
-          fill..color = pal.hair);
+        Path()
+          ..moveTo(cx + d * 8.3, 16.5)
+          ..cubicTo(cx + d * 14, 33, cx + d * 16, 58, cx + d * 22, strandLen)
+          ..quadraticBezierTo(
+            cx + d * 18,
+            strandLen + 2,
+            cx + d * 16.5,
+            strandLen - 2,
+          )
+          ..cubicTo(cx + d * 12, 60, cx + d * 10.5, 38, cx + d * 6.5, 22)
+          ..close(),
+        fill..color = pal.hair,
+      );
     }
   }
   // vệt bóng tóc
   canvas.drawPath(
-      Path()
-        ..moveTo(cx - 6.5, 11.5)
-        ..quadraticBezierTo(cx - 1.5, 9.2, cx + 3.5, 10),
-      line
-        ..strokeWidth = 1.1
-        ..color = Colors.white.withValues(alpha: 0.3));
+    Path()
+      ..moveTo(cx - 6.5, 11.5)
+      ..quadraticBezierTo(cx - 1.5, 9.2, cx + 3.5, 10),
+    line
+      ..strokeWidth = 1.1
+      ..color = Colors.white.withValues(alpha: 0.3),
+  );
 
   // kiểu tóc + phụ kiện theo tộc
   switch (race) {
     case 'yeu': // tai cáo trên đỉnh, lòng tai sáng
       for (final d in [-1.0, 1.0]) {
         canvas.drawPath(
-            Path()
-              ..moveTo(cx + d * 2.8, 11.5)
-              ..lineTo(cx + d * 10.5, 0)
-              ..lineTo(cx + d * 9, 13)
-              ..close(),
-            fill..color = pal.hair);
+          Path()
+            ..moveTo(cx + d * 2.8, 11.5)
+            ..lineTo(cx + d * 10.5, 0)
+            ..lineTo(cx + d * 9, 13)
+            ..close(),
+          fill..color = pal.hair,
+        );
         canvas.drawPath(
-            Path()
-              ..moveTo(cx + d * 4.8, 10)
-              ..lineTo(cx + d * 9.4, 3)
-              ..lineTo(cx + d * 8.4, 11.2)
-              ..close(),
-            fill..color = _mix(pal.skin, Colors.white, 0.35));
+          Path()
+            ..moveTo(cx + d * 4.8, 10)
+            ..lineTo(cx + d * 9.4, 3)
+            ..lineTo(cx + d * 8.4, 11.2)
+            ..close(),
+          fill..color = _mix(pal.skin, Colors.white, 0.35),
+        );
       }
     case 'ma': // đầu trần khoe sừng — thêm vệt tóc vuốt ngược
       canvas.drawPath(
-          Path()
-            ..moveTo(cx - 3.5, 10.5)
-            ..quadraticBezierTo(cx, 7.8, cx + 3.5, 10.5)
-            ..quadraticBezierTo(cx, 9.5, cx - 3.5, 10.5)
-            ..close(),
-          fill..color = hairLight);
+        Path()
+          ..moveTo(cx - 3.5, 10.5)
+          ..quadraticBezierTo(cx, 7.8, cx + 3.5, 10.5)
+          ..quadraticBezierTo(cx, 9.5, cx - 3.5, 10.5)
+          ..close(),
+        fill..color = hairLight,
+      );
     case 'linh': // không búi — tóc bạc + vòng quang đã đủ nhận diện
       break;
     default: // Nhân: búi tóc + trâm cài (nam ngang bạc · nữ chếch + ngọc)
       canvas.drawOval(
-          Rect.fromCenter(
-              center: Offset(cx, nu ? 8.2 : 7.6),
-              width: nu ? 7.0 : 7.8,
-              height: nu ? 6.4 : 8.2),
-          fill..color = pal.hair);
+        Rect.fromCenter(
+          center: Offset(cx, nu ? 8.2 : 7.6),
+          width: nu ? 7.0 : 7.8,
+          height: nu ? 6.4 : 8.2,
+        ),
+        fill..color = pal.hair,
+      );
       line
         ..strokeWidth = 1.3
         ..color = const Color(0xFFC6CCDA);
       if (nu) {
-        canvas.drawLine(const Offset(cx - 4, 6.2), const Offset(cx + 6.5, 10), line);
-        canvas.drawCircle(const Offset(cx + 7.2, 10.5), 1.4,
-            fill..color = pal.s); // ngọc bội đầu trâm
+        canvas.drawLine(
+          const Offset(cx - 4, 6.2),
+          const Offset(cx + 6.5, 10),
+          line,
+        );
+        canvas.drawCircle(
+          const Offset(cx + 7.2, 10.5),
+          1.4,
+          fill..color = pal.s,
+        ); // ngọc bội đầu trâm
       } else {
         // trâm chếch nhẹ xuyên qua búi
-        canvas.drawLine(const Offset(cx - 5, 8.6), const Offset(cx + 5, 6.6), line);
+        canvas.drawLine(
+          const Offset(cx - 5, 8.6),
+          const Offset(cx + 5, 6.6),
+          line,
+        );
       }
   }
 
@@ -1051,27 +1128,30 @@ void drawCultivator(Canvas canvas, Rect rect, String? race, String? gender) {
       ..moveTo(cx + d * 5.8, 22.3)
       ..quadraticBezierTo(cx + d * 4.2, 23.5, cx + d * 2.6, 22.5);
     canvas.drawPath(
-        eye,
-        line
-          ..strokeWidth = 1.6
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 0.7)
-          ..color = pal.glow.withValues(alpha: 0.3));
+      eye,
+      line
+        ..strokeWidth = 1.6
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 0.7)
+        ..color = pal.glow.withValues(alpha: 0.3),
+    );
     canvas.drawPath(
-        eye,
-        line
-          ..strokeWidth = 0.9
-          ..maskFilter = null
-          ..color = _mix(pal.glow, Colors.white, 0.25));
+      eye,
+      line
+        ..strokeWidth = 0.9
+        ..maskFilter = null
+        ..color = _mix(pal.glow, Colors.white, 0.25),
+    );
   }
   // viền sáng má phải
   canvas.drawArc(
-      Rect.fromCircle(center: headC, radius: 8.8),
-      -0.9,
-      1.5,
-      false,
-      line
-        ..strokeWidth = 1.1
-        ..color = Colors.white.withValues(alpha: 0.4));
+    Rect.fromCircle(center: headC, radius: 8.8),
+    -0.9,
+    1.5,
+    false,
+    line
+      ..strokeWidth = 1.1
+      ..color = Colors.white.withValues(alpha: 0.4),
+  );
 
   canvas.restore();
 }
@@ -1089,7 +1169,8 @@ String _rep(String ch, int n) => List.filled(n, ch).join();
 String _sym(String mid) {
   final total = 22 - mid.length;
   final left = total ~/ 2, right = total - left;
-  return '${_rep('.', left)}k$mid' 'k${_rep('.', right)}';
+  return '${_rep('.', left)}k$mid'
+      'k${_rep('.', right)}';
 }
 
 final _cultBase = <String>[
@@ -1170,47 +1251,52 @@ List<String> cultivatorGridPixel(String? race, String? gender) {
 
 /// Palette giới hạn theo tộc, riêng cho sprite pixel (khác record của vector).
 ({Color a, Color b, Color c, Color s, Color hair, Color eye, Color skin})
-    pixelRacePal(String? race) => switch (race) {
-          'yeu' => (
-              a: const Color(0xFFC2703A),
-              b: const Color(0xFFE8A05C),
-              c: const Color(0xFF8A4A22),
-              s: const Color(0xFF5C3A1E),
-              hair: const Color(0xFF7A4A26),
-              eye: const Color(0xFF241F31),
-              skin: const Color(0xFFF1C27D),
-            ),
-          'ma' => (
-              a: const Color(0xFF463058),
-              b: const Color(0xFF6E4A85),
-              c: const Color(0xFF2A1836),
-              s: const Color(0xFFB02A37),
-              hair: const Color(0xFF231A2F),
-              eye: const Color(0xFFE03131),
-              skin: const Color(0xFFE0C2B8),
-            ),
-          'linh' => (
-              a: const Color(0xFFE4DCC8),
-              b: const Color(0xFFE9C46A),
-              c: const Color(0xFFB8A888),
-              s: const Color(0xFFD4A017),
-              hair: const Color(0xFFE8E4F0),
-              eye: const Color(0xFF3BC9DB),
-              skin: const Color(0xFFF6DCB5),
-            ),
-          _ => (
-              a: const Color(0xFF3E63B0),
-              b: const Color(0xFF6E8FD6),
-              c: const Color(0xFF2A4578),
-              s: const Color(0xFF2F9E77),
-              hair: const Color(0xFF2E2A3B),
-              eye: const Color(0xFF241F31),
-              skin: const Color(0xFFF1C27D),
-            ),
-        };
+pixelRacePal(String? race) => switch (race) {
+  'yeu' => (
+    a: const Color(0xFFC2703A),
+    b: const Color(0xFFE8A05C),
+    c: const Color(0xFF8A4A22),
+    s: const Color(0xFF5C3A1E),
+    hair: const Color(0xFF7A4A26),
+    eye: const Color(0xFF241F31),
+    skin: const Color(0xFFF1C27D),
+  ),
+  'ma' => (
+    a: const Color(0xFF463058),
+    b: const Color(0xFF6E4A85),
+    c: const Color(0xFF2A1836),
+    s: const Color(0xFFB02A37),
+    hair: const Color(0xFF231A2F),
+    eye: const Color(0xFFE03131),
+    skin: const Color(0xFFE0C2B8),
+  ),
+  'linh' => (
+    a: const Color(0xFFE4DCC8),
+    b: const Color(0xFFE9C46A),
+    c: const Color(0xFFB8A888),
+    s: const Color(0xFFD4A017),
+    hair: const Color(0xFFE8E4F0),
+    eye: const Color(0xFF3BC9DB),
+    skin: const Color(0xFFF6DCB5),
+  ),
+  _ => (
+    a: const Color(0xFF3E63B0),
+    b: const Color(0xFF6E8FD6),
+    c: const Color(0xFF2A4578),
+    s: const Color(0xFF2F9E77),
+    hair: const Color(0xFF2E2A3B),
+    eye: const Color(0xFF241F31),
+    skin: const Color(0xFFF1C27D),
+  ),
+};
 
 /// Vẽ nhân vật pixel vào [rect]: căn giữa ngang, ĐÁY sprite chạm đáy rect.
-void drawCultivatorPixel(Canvas canvas, Rect rect, String? race, String? gender) {
+void drawCultivatorPixel(
+  Canvas canvas,
+  Rect rect,
+  String? race,
+  String? gender,
+) {
   final grid = cultivatorGridPixel(race, gender);
   final pal = pixelRacePal(race);
   final cell = rect.width / grid[0].length;
@@ -1236,16 +1322,28 @@ void drawCultivatorPixel(Canvas canvas, Rect rect, String? race, String? gender)
         _ => const Color(0x00000000),
       };
       canvas.drawRect(
-          Rect.fromLTWH(rect.left + x * cell, oy + y * cell, cell + 0.5, cell + 0.5),
-          paint);
+        Rect.fromLTWH(
+          rect.left + x * cell,
+          oy + y * cell,
+          cell + 0.5,
+          cell + 0.5,
+        ),
+        paint,
+      );
     }
   }
 }
 
 /// Vẽ 1 sprite vật phẩm (đã có trong [_sprites]) tại toạ độ bất kỳ trên canvas
 /// — dùng cho vũ khí ĐANG ĐEO bay quanh người, không phải icon trong danh sách.
-void paintOrbitSprite(Canvas canvas, Offset center, double cellSize, String spriteKey, int grade,
-    {double opacity = 1}) {
+void paintOrbitSprite(
+  Canvas canvas,
+  Offset center,
+  double cellSize,
+  String spriteKey,
+  int grade, {
+  double opacity = 1,
+}) {
   final grid = _sprites[spriteKey] ?? _sprites['sword']!;
   final g = _grades[(grade - 1).clamp(0, 4)];
   final cols = grid[0].length, rows = grid.length;
@@ -1268,11 +1366,16 @@ void paintOrbitSprite(Canvas canvas, Offset center, double cellSize, String spri
         'B' => g.b,
         'C' => g.c,
         _ => const Color(0x00000000),
-      }
-          .withValues(alpha: opacity);
+      }.withValues(alpha: opacity);
       canvas.drawRect(
-          Rect.fromLTWH(ox + x * cellSize, oy + y * cellSize, cellSize + 0.5, cellSize + 0.5),
-          paint);
+        Rect.fromLTWH(
+          ox + x * cellSize,
+          oy + y * cellSize,
+          cellSize + 0.5,
+          cellSize + 0.5,
+        ),
+        paint,
+      );
     }
   }
 }
@@ -1284,43 +1387,73 @@ void paintOrbitSprite(Canvas canvas, Offset center, double cellSize, String spri
 // drawChibiHero(canvas, rect, race, gender): rect nên cao ≈ 1.3× rộng.
 
 typedef _ChibiPal = ({
-  Color robe, Color robeLt, Color robeDk, // áo
-  Color sash, Color sashLt, // đai
-  Color hair, Color hairLt, // tóc
-  Color skin, Color skinSh, // da
-  Color iris, Color accent, Color trim, // mắt · linh khí · viền sáng
+  Color robe,
+  Color robeLt,
+  Color robeDk, // áo
+  Color sash,
+  Color sashLt, // đai
+  Color hair,
+  Color hairLt, // tóc
+  Color skin,
+  Color skinSh, // da
+  Color iris,
+  Color accent,
+  Color trim, // mắt · linh khí · viền sáng
 });
 
 _ChibiPal _chibiPal(String? race) => switch (race) {
-      'yeu' => (
-          robe: const Color(0xFFCE8A4A), robeLt: const Color(0xFFEDB472), robeDk: const Color(0xFF8A5424),
-          sash: const Color(0xFF6E4A28), sashLt: const Color(0xFFAD814C),
-          hair: const Color(0xFFEDE3CC), hairLt: const Color(0xFFFAF4E4), // tóc bạch hồ
-          skin: const Color(0xFFF6D7A9), skinSh: const Color(0xFFE0B183),
-          iris: const Color(0xFFC97E2E), accent: const Color(0xFFFFB566), trim: const Color(0xFFFFF3DE),
-        ),
-      'ma' => (
-          robe: const Color(0xFF4A3462), robeLt: const Color(0xFF6E4E90), robeDk: const Color(0xFF261636),
-          sash: const Color(0xFFB02A37), sashLt: const Color(0xFFE0555F),
-          hair: const Color(0xFF2A2036), hairLt: const Color(0xFF4A3A5E),
-          skin: const Color(0xFFE7CCC4), skinSh: const Color(0xFFD0AAA0),
-          iris: const Color(0xFFE83A46), accent: const Color(0xFFFF4D5E), trim: const Color(0xFFFFC0C6),
-        ),
-      'linh' => (
-          robe: const Color(0xFFEDE6D2), robeLt: const Color(0xFFFAF6EA), robeDk: const Color(0xFFBFB08C),
-          sash: const Color(0xFFD4A017), sashLt: const Color(0xFFF2CE5C),
-          hair: const Color(0xFFE9E5F0), hairLt: const Color(0xFFFFFFFF), // tóc bạc
-          skin: const Color(0xFFF6DCB5), skinSh: const Color(0xFFE6C295),
-          iris: const Color(0xFF39B9CC), accent: const Color(0xFFFFD166), trim: const Color(0xFFFFF0C4),
-        ),
-      _ => (
-          robe: const Color(0xFF3E63B0), robeLt: const Color(0xFF6E8FD6), robeDk: const Color(0xFF27406F),
-          sash: const Color(0xFF2F9E77), sashLt: const Color(0xFF62CCA0),
-          hair: const Color(0xFF322C42), hairLt: const Color(0xFF544C6E),
-          skin: const Color(0xFFF6D7A9), skinSh: const Color(0xFFE0B183),
-          iris: const Color(0xFF4C74C8), accent: const Color(0xFF5EEAD4), trim: const Color(0xFFFFFFFF),
-        ),
-    };
+  'yeu' => (
+    robe: const Color(0xFFCE8A4A),
+    robeLt: const Color(0xFFEDB472),
+    robeDk: const Color(0xFF8A5424),
+    sash: const Color(0xFF6E4A28), sashLt: const Color(0xFFAD814C),
+    hair: const Color(0xFFEDE3CC),
+    hairLt: const Color(0xFFFAF4E4), // tóc bạch hồ
+    skin: const Color(0xFFF6D7A9), skinSh: const Color(0xFFE0B183),
+    iris: const Color(0xFFC97E2E),
+    accent: const Color(0xFFFFB566),
+    trim: const Color(0xFFFFF3DE),
+  ),
+  'ma' => (
+    robe: const Color(0xFF4A3462),
+    robeLt: const Color(0xFF6E4E90),
+    robeDk: const Color(0xFF261636),
+    sash: const Color(0xFFB02A37),
+    sashLt: const Color(0xFFE0555F),
+    hair: const Color(0xFF2A2036),
+    hairLt: const Color(0xFF4A3A5E),
+    skin: const Color(0xFFE7CCC4),
+    skinSh: const Color(0xFFD0AAA0),
+    iris: const Color(0xFFE83A46),
+    accent: const Color(0xFFFF4D5E),
+    trim: const Color(0xFFFFC0C6),
+  ),
+  'linh' => (
+    robe: const Color(0xFFEDE6D2),
+    robeLt: const Color(0xFFFAF6EA),
+    robeDk: const Color(0xFFBFB08C),
+    sash: const Color(0xFFD4A017), sashLt: const Color(0xFFF2CE5C),
+    hair: const Color(0xFFE9E5F0), hairLt: const Color(0xFFFFFFFF), // tóc bạc
+    skin: const Color(0xFFF6DCB5), skinSh: const Color(0xFFE6C295),
+    iris: const Color(0xFF39B9CC),
+    accent: const Color(0xFFFFD166),
+    trim: const Color(0xFFFFF0C4),
+  ),
+  _ => (
+    robe: const Color(0xFF3E63B0),
+    robeLt: const Color(0xFF6E8FD6),
+    robeDk: const Color(0xFF27406F),
+    sash: const Color(0xFF2F9E77),
+    sashLt: const Color(0xFF62CCA0),
+    hair: const Color(0xFF322C42),
+    hairLt: const Color(0xFF544C6E),
+    skin: const Color(0xFFF6D7A9),
+    skinSh: const Color(0xFFE0B183),
+    iris: const Color(0xFF4C74C8),
+    accent: const Color(0xFF5EEAD4),
+    trim: const Color(0xFFFFFFFF),
+  ),
+};
 
 void drawChibiHero(Canvas canvas, Rect rect, String? race, String? gender) {
   const cols = 40, rows = 52;
@@ -1385,9 +1518,21 @@ void drawChibiHero(Canvas canvas, Rect rect, String? race, String? gender) {
       // tai cáo lớn dựng chếch
       for (var i = 0; i < 8; i++) {
         final w = 4 - i * 0.45;
-        disk(cx + d * (7.5 + i * 0.8), 6.0 - i * 1.1, w.clamp(0.6, 4), w.clamp(0.6, 4), pal.hair);
+        disk(
+          cx + d * (7.5 + i * 0.8),
+          6.0 - i * 1.1,
+          w.clamp(0.6, 4),
+          w.clamp(0.6, 4),
+          pal.hair,
+        );
       }
-      disk(cx + d * 8.5, 3.5, 1.6, 2.4, const Color(0xFFE9B7C4)); // lòng tai hồng
+      disk(
+        cx + d * 8.5,
+        3.5,
+        1.6,
+        2.4,
+        const Color(0xFFE9B7C4),
+      ); // lòng tai hồng
     }
   }
   if (race == 'linh') {
@@ -1400,12 +1545,12 @@ void drawChibiHero(Canvas canvas, Rect rect, String? race, String? gender) {
 
   // ---------- TÓC TRƯỚC: mái chữ M + tóc mai ôm mặt ----------
   int bangBottom(int dx) => switch (dx.abs()) {
-        <= 2 => 15, // rẽ ngôi giữa dài xuống
-        <= 5 => 11,
-        <= 8 => 14,
-        <= 11 => 12,
-        _ => 16,
-      };
+    <= 2 => 15, // rẽ ngôi giữa dài xuống
+    <= 5 => 11,
+    <= 8 => 14,
+    <= 11 => 12,
+    _ => 16,
+  };
   for (var x = (cx - 12).round(); x <= (cx + 12).round(); x++) {
     for (var y = 2; y <= bangBottom(x - cx.round()); y++) {
       final dx = (x - cx) / 13.5, dy = (y - 15) / 13;
@@ -1459,7 +1604,8 @@ void drawChibiHero(Canvas canvas, Rect rect, String? race, String? gender) {
   for (var y = 0; y < rows; y++) {
     for (var x = 0; x < cols; x++) {
       if (g[y][x] == null) continue;
-      final bare = (y == 0 || g[y - 1][x] == null) ||
+      final bare =
+          (y == 0 || g[y - 1][x] == null) ||
           (y == rows - 1 || g[y + 1][x] == null) ||
           (x == 0 || g[y][x - 1] == null) ||
           (x == cols - 1 || g[y][x + 1] == null);
@@ -1481,7 +1627,13 @@ void drawChibiHero(Canvas canvas, Rect rect, String? race, String? gender) {
   }
   // đai lưng + nút
   rectF((cx - hw(35)).round() + 1, 35, (cx + hw(35)).round() - 1, 36, pal.sash);
-  rectF((cx - hw(34)).round() + 1, 34, (cx + hw(34)).round() - 1, 34, pal.sashLt);
+  rectF(
+    (cx - hw(34)).round() + 1,
+    34,
+    (cx + hw(34)).round() - 1,
+    34,
+    pal.sashLt,
+  );
   rectF((cx - 1).round(), 35, (cx + 1).round(), 38, pal.sash); // dải đai rủ
 
   // MẮT TO long lanh (MapleStory/GT): tròng lớn + 2 vệt sáng
@@ -1528,7 +1680,9 @@ void drawChibiHero(Canvas canvas, Rect rect, String? race, String? gender) {
   }
 
   // ---------- XUẤT: fit rect giữ tỉ lệ, đáy chạm đáy rect ----------
-  final cell = (rect.width / cols < rect.height / rows) ? rect.width / cols : rect.height / rows;
+  final cell = (rect.width / cols < rect.height / rows)
+      ? rect.width / cols
+      : rect.height / rows;
   final ox = rect.left + (rect.width - cols * cell) / 2;
   final oy = rect.bottom - rows * cell;
   final paint = Paint();
@@ -1538,7 +1692,9 @@ void drawChibiHero(Canvas canvas, Rect rect, String? race, String? gender) {
       if (c == null) continue;
       paint.color = c;
       canvas.drawRect(
-          Rect.fromLTWH(ox + x * cell, oy + y * cell, cell + 0.5, cell + 0.5), paint);
+        Rect.fromLTWH(ox + x * cell, oy + y * cell, cell + 0.5, cell + 0.5),
+        paint,
+      );
     }
   }
 }
