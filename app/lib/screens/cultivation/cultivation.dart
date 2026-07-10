@@ -870,7 +870,8 @@ String _cultivatorAsset(String? race, String? gender) {
     _ => 'human',
   };
   final genderKey = gender == 'nu' ? 'female' : 'male';
-  return 'assets/cultivators/${raceKey}_$genderKey.png';
+  // CHỈ webp được bundle trong pubspec (png là file gốc, không ship)
+  return 'assets/cultivators/${raceKey}_$genderKey.webp';
 }
 
 /// Nền "thủy mặc": vầng trăng lớn màu cảnh giới sau lưng + sương mù trôi ngang
