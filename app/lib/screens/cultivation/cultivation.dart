@@ -848,13 +848,11 @@ class _AnimatedCultivatorState extends State<_AnimatedCultivator>
             child: Transform.translate(
               // lơ lửng: nhấp nhô ±4px theo sin
               offset: Offset(0, math.sin(_ctrl.value * 2 * math.pi) * 4),
-              child: CustomPaint(
-                size: const Size(96, 112),
-                painter: _SilhouettePainter(
-                    rim: color,
-                    realm: widget.realm,
-                    race: widget.race,
-                    gender: widget.gender),
+              child: Image.asset(
+                _cultivatorAsset(widget.race, widget.gender),
+                width: 124,
+                height: 152,
+                fit: BoxFit.contain,
               ),
             ),
           ),
@@ -862,6 +860,17 @@ class _AnimatedCultivatorState extends State<_AnimatedCultivator>
       ),
     );
   }
+}
+
+String _cultivatorAsset(String? race, String? gender) {
+  final raceKey = switch (race) {
+    'yeu' => 'fox',
+    'ma' => 'demon',
+    'linh' => 'spirit',
+    _ => 'human',
+  };
+  final genderKey = gender == 'nu' ? 'female' : 'male';
+  return 'assets/cultivators/${raceKey}_$genderKey.png';
 }
 
 /// Nền "thủy mặc": vầng trăng lớn màu cảnh giới sau lưng + sương mù trôi ngang
@@ -955,128 +964,6 @@ class _SkyPainter extends CustomPainter {
   @override
   bool shouldRepaint(_SkyPainter old) =>
       old.t != t || old.moon != moon || old.aura != aura || old.realm != realm;
-}
-
-/// Bóng tiên nhân thủy mặc: silhouette đen ngồi kiết già, dải đai bay, viền
-/// sáng bắt trăng một bên. Không mặt — không bao giờ "xấu".
-/// Chỗ ngồi theo cảnh giới: mỏm đá (1-3) → đài sen (4-6) → kiếm bay (7-9).
-/// Dáng theo CHỦNG TỘC (nhìn là biết, khỏi cần chữ): Nhân búi tóc + trâm ·
-/// Yêu tai thú + đuôi · Ma hai sừng cong · Linh tai nhọn + vòng linh quang.
-class _SilhouettePainter extends CustomPainter {
-  final Color rim; // màu viền sáng (theo hệ công pháp/cảnh giới)
-  final int realm; // 1..9 — quyết định chỗ ngồi
-  final String? race; // null/nhan → dáng người thường
-  final String? gender; // nam/nu
-  _SilhouettePainter(
-      {required this.rim, required this.realm, this.race, this.gender});
-
-  /// Mỏm đá lơ lửng góc cạnh + 2 mảnh vụn trôi (Luyện Khí → Kim Đan).
-  void _rock(Canvas canvas, double cx, Paint p, Color ink) {
-    final rock = Path()
-      ..moveTo(cx - 28, 102)
-      ..lineTo(cx + 30, 102)
-      ..lineTo(cx + 21, 109)
-      ..lineTo(cx + 4, 111.5)
-      ..lineTo(cx - 18, 109)
-      ..lineTo(cx - 25, 105)
-      ..close();
-    canvas.drawPath(rock, p..color = ink.withValues(alpha: 0.95));
-    canvas.drawCircle(Offset(cx - 38, 106), 2.0, p..color = ink.withValues(alpha: 0.5));
-    canvas.drawCircle(Offset(cx + 39, 103), 1.5, p..color = ink.withValues(alpha: 0.4));
-    // ánh trăng hắt mép trên
-    canvas.drawLine(
-        Offset(cx + 6, 102.5),
-        Offset(cx + 29, 102.5),
-        Paint()
-          ..isAntiAlias = true
-          ..strokeWidth = 1.1
-          ..strokeCap = StrokeCap.round
-          ..color = rim.withValues(alpha: 0.45));
-  }
-
-  /// Đài sen: bệ + 5 cánh nhọn chĩa lên, mép cánh viền sáng (Nguyên Anh → Luyện Hư).
-  void _lotus(Canvas canvas, double cx, Paint p, Color ink) {
-    canvas.drawOval(Rect.fromCenter(center: Offset(cx, 106), width: 62, height: 10),
-        p..color = ink.withValues(alpha: 0.95));
-    final edge = Paint()
-      ..isAntiAlias = true
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.1
-      ..strokeCap = StrokeCap.round
-      ..color = rim.withValues(alpha: 0.55);
-    for (var k = -2; k <= 2; k++) {
-      final bx = cx + k * 13.0;
-      final tipY = 96.0 + k.abs() * 1.5; // cánh giữa cao nhất
-      final petal = Path()
-        ..moveTo(bx - 6, 105)
-        ..quadraticBezierTo(bx - 4, 99, bx, tipY)
-        ..quadraticBezierTo(bx + 4, 99, bx + 6, 105)
-        ..close();
-      canvas.drawPath(petal, p..color = ink);
-      // viền sáng mép trái mỗi cánh (phía trăng)
-      canvas.drawPath(
-          Path()
-            ..moveTo(bx + 4.5, 100)
-            ..quadraticBezierTo(bx + 2, 97.5, bx, tipY + 0.5),
-          edge);
-    }
-  }
-
-  /// Kiếm bay: lưỡi dài mũi chếch phải, chuôi trái, vệt kiếm quang (Hợp Thể → Độ Kiếp).
-  void _sword(Canvas canvas, double cx, Paint p, Color ink) {
-    final blade = Path()
-      ..moveTo(cx - 40, 101.5)
-      ..lineTo(cx + 38, 100)
-      ..lineTo(cx + 48, 103)
-      ..lineTo(cx + 38, 106)
-      ..lineTo(cx - 40, 104.5)
-      ..close();
-    canvas.drawPath(blade, p..color = ink.withValues(alpha: 0.95));
-    // hộ thủ + chuôi
-    canvas.drawRect(Rect.fromCenter(center: Offset(cx - 41, 103), width: 3, height: 9),
-        p..color = ink);
-    canvas.drawRect(Rect.fromCenter(center: Offset(cx - 46, 103), width: 8, height: 3.4),
-        p..color = ink);
-    // sống kiếm bắt sáng + kiếm quang kéo sau đuôi
-    final gleam = Paint()
-      ..isAntiAlias = true
-      ..strokeCap = StrokeCap.round
-      ..strokeWidth = 1.1
-      ..color = rim.withValues(alpha: 0.6);
-    canvas.drawLine(Offset(cx - 36, 102.2), Offset(cx + 45, 102.6), gleam);
-    canvas.drawLine(Offset(cx - 52, 104.5), Offset(cx - 60, 105.5),
-        gleam..color = rim.withValues(alpha: 0.3)..strokeWidth = 2);
-  }
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    const ink = Color(0xFF1E1B2E); // mực — tím than gần đen, nổi trên cả 2 theme
-    final cx = size.width / 2;
-    final p = Paint()
-      ..isAntiAlias = true
-      ..color = ink;
-
-    // chỗ ngồi lơ lửng — TÁCH KHỎI thân (hở vài px, quầng sáng lọt qua khe)
-    switch ((realm + 2) ~/ 3) {
-      case 1:
-        _rock(canvas, cx, p, ink);
-      case 2:
-        _lotus(canvas, cx, p, ink);
-      default:
-        _sword(canvas, cx, p, ink);
-    }
-
-    // Nhân vật PIXEL theo tộc (pixel.dart) — full body ngồi thiền chính diện.
-    // Rộng 66px căn giữa, đáy sprite lún nhẹ vào mặt chỗ ngồi (~y100).
-    drawCultivator(canvas, Rect.fromLTWH(cx - 33, 30, 66, 70), race, gender);
-  }
-
-  @override
-  bool shouldRepaint(_SilhouettePainter old) =>
-      old.rim != rim ||
-      old.realm != realm ||
-      old.race != race ||
-      old.gender != gender;
 }
 
 /// Hiệu ứng bay quanh theo HỆ công pháp (vẽ ĐÈ lên bóng người — quầng thở
