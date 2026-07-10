@@ -208,8 +208,9 @@ class _ReadingRow extends ConsumerWidget {
   }
 }
 
-/// Sheet "Yêu cầu truyện mới": nhập TÊN TIẾNG TRUNG → worker tìm trên các nguồn có
-/// search rồi crawl về + tự vào tủ sách. Poll 5s khi còn yêu cầu đang tìm.
+/// Sheet "Yêu cầu truyện mới": nhập tên tiếng Việt (worker nhờ LLM đoán tên gốc)
+/// hoặc tên tiếng Trung → tìm trên các nguồn có search rồi crawl về + tự vào
+/// tủ sách. Poll 5s khi còn yêu cầu đang tìm.
 class _RequestSheet extends ConsumerStatefulWidget {
   const _RequestSheet();
   @override
@@ -267,9 +268,9 @@ class _RequestSheetState extends ConsumerState<_RequestSheet> {
             Text('Yêu cầu truyện mới', style: t.titleLarge),
             const SizedBox(height: 6),
             Text(
-              'Nhập TÊN GỐC TIẾNG TRUNG của truyện (dán từ nơi khác). Hệ thống tìm '
-              'trên các nguồn, crawl về và tự thêm vào tủ sách của bạn — thường xong '
-              'trong dưới 1 phút.',
+              'Nhập tên truyện tiếng Việt (Hán-Việt) hoặc tên gốc tiếng Trung. '
+              'Hệ thống tự tìm tên gốc, crawl về và thêm vào tủ sách của bạn — '
+              'thường xong trong dưới 1 phút.',
               style: t.bodySmall?.copyWith(color: cs.onSurfaceVariant),
             ),
             const SizedBox(height: 14),
@@ -280,7 +281,7 @@ class _RequestSheetState extends ConsumerState<_RequestSheet> {
                   autofocus: true,
                   maxLength: 100,
                   decoration: const InputDecoration(
-                      counterText: '', hintText: '例如：剑来', isDense: true),
+                      counterText: '', hintText: 'vd: Kiếm Lai / 剑来', isDense: true),
                   onSubmitted: (_) => _submit(),
                 ),
               ),

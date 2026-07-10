@@ -305,9 +305,39 @@ def discover_ranking(adapter: SourceAdapter, max_new: int = 30) -> None:
         log.info("Ranking %s: thêm %d truyện hot", adapter.name, added)
 
 
+_CJK = re.compile(r"[㐀-䶿一-鿿]")
+
+
+def _zh_candidates(q: str) -> list[str]:
+    """Tên không có chữ Hán (user gõ tên Hán-Việt/tiếng Việt) → nhờ LLM đoán tối đa
+    3 tên gốc tiếng Trung khả dĩ để search nguồn. Có chữ Hán thì dùng nguyên văn.
+    # ponytail: nguồn chặn search → tick sau gọi LLM lại cho cùng request (vài chục
+    # token/lần, tối đa 1h) — cache vào note khi nào thấy tốn mới làm."""
+    if _CJK.search(q):
+        return [q]
+    from ..translator.providers import build_chain
+    res = build_chain().complete(
+        "Bạn là chuyên gia tiểu thuyết mạng Trung Quốc, thuộc tên Hán-Việt của các bộ nổi tiếng.",
+        f'Tên tiếng Việt (Hán-Việt) của một tiểu thuyết mạng Trung Quốc: "{q}".\n'
+        "Liệt kê tối đa 3 tên gốc tiếng Trung khả dĩ nhất (khả dĩ nhất đứng đầu), "
+        "mỗi dòng một tên, CHỮ HÁN GIẢN THỂ (简体字), không đánh số, không giải thích.",
+        temperature=0.0, max_tokens=2048)
+    from opencc import OpenCC  # LLM hay trả phồn thể dù dặn giản thể → ép bằng code
+    t2s = OpenCC("t2s")
+    out: list[str] = []
+    for ln in res.text.strip().splitlines():
+        ln = t2s.convert(ln.strip(" \t-•*.、0123456789"))
+        # chỉ nhận dòng thuần tên (có chữ Hán, không quá dài) — lọc rác/giải thích
+        if ln and _CJK.search(ln) and len(ln) <= 30 and ln not in out:
+            out.append(ln)
+    log.info("Yêu cầu '%s' → ứng viên tên gốc: %s", q, out[:3])
+    return out[:3]
+
+
 def process_novel_requests(adapters: list[SourceAdapter], limit: int = 3) -> None:
-    """User nhập TÊN TIẾNG TRUNG trong app (bảng novel_requests) → tìm lần lượt trên
-    các nguồn có search, thấy thì crawl như thêm tay + bỏ vào tủ sách người xin.
+    """User nhập tên truyện trong app (bảng novel_requests) — tiếng Trung dùng thẳng,
+    tiếng Việt thì tra DB sẵn có rồi nhờ LLM đoán tên gốc → tìm lần lượt trên các
+    nguồn có search, thấy thì crawl như thêm tay + bỏ vào tủ sách người xin.
     Truyện crawl về hiển thị chung ở Khám phá như mọi truyện khác."""
     reqs = (
         db.sb().table("novel_requests").select("id, user_id, query, created_at")
@@ -318,23 +348,34 @@ def process_novel_requests(adapters: list[SourceAdapter], limit: int = 3) -> Non
         novel = None
         blocked = False  # có nguồn đang chặn search → chưa thể kết luận "không có"
         try:
-            for a in adapters:
-                try:
-                    hits = a.search(q)
-                except Exception:
-                    blocked = True  # (shuhaige chặn tần suất search) — thử lại tick sau
-                    continue
-                # Trang kết quả (shuhaige) lẫn cả khối đề cử → CHỈ nhận tựa khớp đúng
-                # hoặc chứa chuỗi tìm; không thì coi như nguồn này không có (bug thật
-                # 2026-07-07: từng lấy nhầm truyện đề cử đầu trang).
-                exact = [h for h in hits if h[1] == q]
-                cand = exact or [h for h in hits if q in h[1]]
-                if not cand:
-                    continue
-                novel = add_novel(a, cand[0][0])
-                log.info("Yêu cầu truyện #%s '%s' → novel %s (%s)",
-                         r["id"], q, novel["id"], a.name)
-                break
+            # tên tiếng Việt mà truyện đã crawl sẵn → khớp title_vi trong DB, khỏi LLM
+            if not _CJK.search(q):
+                hit = (db.sb().table("novels").select("id")
+                       .ilike("title_vi", q).limit(1).execute()).data
+                if hit:
+                    novel = hit[0]
+                    log.info("Yêu cầu truyện #%s '%s' → đã có sẵn novel %s",
+                             r["id"], q, novel["id"])
+            for q_zh in [] if novel else _zh_candidates(q):
+                for a in adapters:
+                    try:
+                        hits = a.search(q_zh)
+                    except Exception:
+                        blocked = True  # (shuhaige chặn tần suất search) — thử lại tick sau
+                        continue
+                    # Trang kết quả (shuhaige) lẫn cả khối đề cử → CHỈ nhận tựa khớp đúng
+                    # hoặc chứa chuỗi tìm; không thì coi như nguồn này không có (bug thật
+                    # 2026-07-07: từng lấy nhầm truyện đề cử đầu trang).
+                    exact = [h for h in hits if h[1] == q_zh]
+                    cand = exact or [h for h in hits if q_zh in h[1]]
+                    if not cand:
+                        continue
+                    novel = add_novel(a, cand[0][0])
+                    log.info("Yêu cầu truyện #%s '%s' (%s) → novel %s (%s)",
+                             r["id"], q, q_zh, novel["id"], a.name)
+                    break
+                if novel is not None:
+                    break
         except Exception as e:
             log.exception("Yêu cầu truyện #%s lỗi", r["id"])
             db.sb().table("novel_requests").update(

@@ -673,7 +673,7 @@ Future<int> retranslateAll(int novelId) async =>
 Future<void> requestToc(int novelId) =>
     sb.rpc('request_toc', params: {'p_novel_id': novelId});
 
-// ---------- Yêu cầu truyện (nhập tên tiếng Trung → worker tìm nguồn crawl về) ----------
+// ---------- Yêu cầu truyện (tên tiếng Việt hoặc tiếng Trung → worker tìm nguồn crawl về) ----------
 
 /// Yêu cầu của TÔI, mới nhất trước. Worker xử lý trong ~10-30s (nguồn chặn search
 /// thì lâu hơn, tối đa 10 phút sẽ chốt kết quả).

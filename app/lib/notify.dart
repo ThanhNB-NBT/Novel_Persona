@@ -16,6 +16,13 @@ const _androidChannel = AndroidNotificationDetails(
   priority: Priority.high,
 );
 
+const _details = NotificationDetails(
+  android: _androidChannel,
+  // iOS: hiện banner + kêu cả khi app đang mở (foreground)
+  iOS: DarwinNotificationDetails(
+      presentAlert: true, presentBanner: true, presentSound: true),
+);
+
 /// Gọi 1 lần khi khởi động app (trước chapterNotifier.start).
 Future<void> initNotifications() async {
   try {
@@ -98,12 +105,7 @@ class ChapterNotifier {
         id: chapterId, // id notification = chapter id (thay thế nếu trùng)
         title: '$title',
         body: 'Chương $idx đã dịch xong',
-        notificationDetails: const NotificationDetails(
-          android: _androidChannel,
-          // iOS: hiện banner + kêu cả khi app đang mở (foreground)
-          iOS: DarwinNotificationDetails(
-              presentAlert: true, presentBanner: true, presentSound: true),
-        ),
+        notificationDetails: _details,
       );
     } catch (_) {
       // nền tảng không hỗ trợ → bỏ qua
@@ -112,3 +114,48 @@ class ChapterNotifier {
 }
 
 final chapterNotifier = ChapterNotifier();
+
+/// Catch-up khi mở app / quay lại từ nền: realtime chỉ sống lúc app mở nên
+/// chương dịch xong trong lúc app tắt KHÔNG BAO GIỜ được báo (lý do "chưa từng
+/// thấy thông báo"). Quét chương dịch xong sau mốc lần kiểm trước, bắn dồn
+/// theo truyện. Push thật (FCM) khi nào cần thì thêm sau.
+Future<void> checkMissedChapters() async {
+  if (sb.auth.currentUser == null) return;
+  final last = prefs.getString('notify_last_check');
+  await prefs.setString(
+      'notify_last_check', DateTime.now().toUtc().toIso8601String());
+  if (last == null) return; // lần đầu: chỉ đặt mốc, khỏi dội thông báo cũ
+
+  final lib = await sb.from('library').select('novel_id');
+  final ids = [for (final r in lib) r['novel_id'] as int];
+  if (ids.isEmpty) return;
+  final rows = List<Rec>.from(await sb
+      .from('chapters')
+      .select('chapter_index, novel_id, novels(title_vi, title_zh)')
+      .inFilter('novel_id', ids)
+      .eq('translation_status', 'done')
+      .gt('translated_at', last));
+  final byNovel = <int, List<Rec>>{};
+  for (final r in rows) {
+    (byNovel[r['novel_id'] as int] ??= []).add(r);
+  }
+  for (final e in byNovel.entries) {
+    final nv = (e.value.first['novels'] as Map?) ?? const {};
+    final title = nv['title_vi'] ?? nv['title_zh'] ?? 'Truyện';
+    final latest = e.value
+        .map((c) => c['chapter_index'] as int)
+        .reduce((a, b) => a > b ? a : b);
+    try {
+      await _plugin.show(
+        id: e.key, // id = novel id → mở app nhiều lần chỉ thay thế, không dồn rác
+        title: '$title',
+        body: e.value.length == 1
+            ? 'Chương $latest đã dịch xong'
+            : '${e.value.length} chương mới dịch xong (mới nhất: chương $latest)',
+        notificationDetails: _details,
+      );
+    } catch (_) {
+      // nền tảng không hỗ trợ → bỏ qua
+    }
+  }
+}

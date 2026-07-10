@@ -6,3 +6,4 @@ pydantic>=2.7
 pydantic-settings>=2.2
 tenacity>=8.3
 python-dotenv>=1.0
+opencc-python-reimplemented>=0.1.7   # phồn → giản thể cho yêu cầu truyện nhập tên tiếng Việt

@@ -36,7 +36,18 @@ Future<void> main() async {
   loadHanViet(); // bảng tra Hán-Việt cho form sửa dịch — nạp nền, không chặn khởi động
   chapterNotifier.start(); // thông báo khi chương trong tủ sách dịch xong
   // đăng nhập/xuất → nối lại kênh realtime (kênh mở trước khi login không mang auth)
-  sb.auth.onAuthStateChange.listen((_) => chapterNotifier.start());
+  sb.auth.onAuthStateChange.listen((s) {
+    chapterNotifier.start();
+    // có phiên (khôi phục lúc mở app / vừa đăng nhập) → quét chương dịch xong
+    // trong lúc app tắt (realtime không sống lúc đó nên phải quét bù)
+    if (s.event == AuthChangeEvent.initialSession ||
+        s.event == AuthChangeEvent.signedIn) {
+      checkMissedChapters();
+    }
+  });
+  // quay lại app từ nền: socket realtime thường đã bị OS ngắt → quét bù luôn
+  // (binding giữ observer nên không cần giữ tham chiếu)
+  AppLifecycleListener(onResume: checkMissedChapters);
   runApp(const ProviderScope(child: NovelApp()));
 }
 
