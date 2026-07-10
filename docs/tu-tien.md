@@ -71,6 +71,8 @@ File map:
 - `app/lib/screens/cultivation/pixel.dart` — sprite 12×12 + palette phẩm + `paintOrbitSprite`.
 - `app/assets/cultivators/{human|fox|demon|spirit}_{male|female}.webp` — ảnh nhân vật
   (CHỈ webp được bundle; PNG là file gốc không ship — bug 1.0.2 vì trỏ .png).
+- `app/assets/cult_items/*.webp` — 27 minh hoạ vật phẩm theo `pixel` key trong catalog;
+  một hình dùng lại cho mọi item cùng key, còn phẩm cấp thể hiện bằng viền/màu UI.
 
 Bố cục cảnh `_AnimatedCultivator` (canvas 150×145, loop 4s), vẽ theo thứ tự:
 1. `_SkyPainter` (nền): sao (realm 5+) → **vòng sáng sau ĐẦU** (halo — kiểu theo pháp bảo
@@ -84,6 +86,9 @@ Bố cục cảnh `_AnimatedCultivator` (canvas 150×145, loop 4s), vẽ theo th
    bộ asset tách layer riêng.
 3. `_AuraPainter` (trước): hiệu ứng công pháp (qi/ice/wind/earth/sword/gold/star/fire/leaf)
    + **vũ khí đang đeo bay quanh** (`paintOrbitSprite`, quỹ đạo bán kính dao động).
+4. `_CultivationBackdrop`: sương linh khí, điểm sáng và mây màu cảnh giới phủ cả màn,
+   kể cả vùng sau status bar. Nội dung vẫn nằm trong `SafeArea`; status bar trong suốt,
+   icon thời gian/pin/sóng sáng để không mất khả năng đọc.
 
 Quy ước màu: KHÔNG hardcode màu cảnh giới — dùng `gradeColor((realm+1)~/2)`;
 màu hiệu ứng theo `_auraFor(cpCode)`. Nền thẻ/section theo ColorScheme app.

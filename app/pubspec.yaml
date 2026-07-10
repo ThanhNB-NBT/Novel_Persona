@@ -100,6 +100,7 @@ flutter:
     - assets/cultivators/demon_female.webp
     - assets/cultivators/spirit_male.webp
     - assets/cultivators/spirit_female.webp
+    - assets/cult_items/
 
   # To add assets to your application, add an assets section, like this:
   # assets:
