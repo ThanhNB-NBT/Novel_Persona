@@ -7,11 +7,21 @@ import '../../widgets.dart';
 
 /// Thông báo: chương truyện trong tủ sách vừa dịch xong — gộp theo truyện,
 /// bấm mở đọc chương mới nhất. Màn riêng (đủ cao) thay cho hiển thị đè menubar.
-class NotificationsScreen extends ConsumerWidget {
+class NotificationsScreen extends ConsumerStatefulWidget {
   const NotificationsScreen({super.key});
+  @override
+  ConsumerState<NotificationsScreen> createState() => _NotificationsScreenState();
+}
+
+class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
+  @override
+  void initState() {
+    super.initState();
+    markNotificationsSeen(); // mở màn = đã xem → dập chấm đỏ trên chuông
+  }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final items = ref.watch(notificationsProvider);
     return Scaffold(
       appBar: AppBar(title: const Text('Thông báo')),

@@ -19,18 +19,7 @@ class LibraryScreen extends ConsumerWidget {
         IconButton(
           tooltip: 'Yêu cầu truyện mới',
           icon: const Icon(Icons.travel_explore_rounded),
-          onPressed: () {
-            if (sb.auth.currentUser == null) {
-              context.push('/login');
-              return;
-            }
-            showModalBottomSheet(
-              context: context,
-              isScrollControlled: true,
-              showDragHandle: true,
-              builder: (_) => const _RequestSheet(),
-            );
-          },
+          onPressed: () => showRequestSheet(context),
         ),
         IconButton(
           tooltip: 'Bản offline',
@@ -39,8 +28,25 @@ class LibraryScreen extends ConsumerWidget {
         ),
         IconButton(
           tooltip: 'Thông báo',
-          icon: const Icon(Icons.notifications_none_rounded),
-          onPressed: () => context.push('/notifications'),
+          // chấm đỏ khi có chương dịch xong chưa xem (từ lần mở màn Thông báo trước)
+          icon: Stack(clipBehavior: Clip.none, children: [
+            const Icon(Icons.notifications_none_rounded),
+            if (ref.watch(unseenNotifProvider).value ?? false)
+              Positioned(
+                right: -1, top: -1,
+                child: Container(
+                  width: 9, height: 9,
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.error,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ),
+          ]),
+          onPressed: () async {
+            await context.push('/notifications');
+            ref.invalidate(unseenNotifProvider); // vừa xem xong → tắt chấm
+          },
         ),
         const SizedBox(width: 4),
       ]),
@@ -208,17 +214,33 @@ class _ReadingRow extends ConsumerWidget {
   }
 }
 
+/// Mở sheet "Yêu cầu truyện mới" từ bất kỳ đâu (Tủ truyện, màn tìm kiếm…),
+/// `initialQuery` điền sẵn tên đang tìm. Chưa đăng nhập → đưa qua login.
+void showRequestSheet(BuildContext context, {String? initialQuery}) {
+  if (sb.auth.currentUser == null) {
+    context.push('/login');
+    return;
+  }
+  showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    showDragHandle: true,
+    builder: (_) => _RequestSheet(initialQuery: initialQuery),
+  );
+}
+
 /// Sheet "Yêu cầu truyện mới": nhập tên tiếng Việt (worker nhờ LLM đoán tên gốc)
 /// hoặc tên tiếng Trung → tìm trên các nguồn có search rồi crawl về + tự vào
 /// tủ sách. Poll 5s khi còn yêu cầu đang tìm.
 class _RequestSheet extends ConsumerStatefulWidget {
-  const _RequestSheet();
+  final String? initialQuery;
+  const _RequestSheet({this.initialQuery});
   @override
   ConsumerState<_RequestSheet> createState() => _RequestSheetState();
 }
 
 class _RequestSheetState extends ConsumerState<_RequestSheet> {
-  final _input = TextEditingController();
+  late final _input = TextEditingController(text: widget.initialQuery ?? '');
   Timer? _poll;
   bool _sending = false;
 

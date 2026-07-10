@@ -691,6 +691,34 @@ final myNovelRequestsProvider = FutureProvider.autoDispose<List<Rec>>((ref) asyn
   );
 });
 
+/// Có chương mới dịch xong SAU lần mở màn Thông báo gần nhất? — chấm đỏ trên
+/// chuông. Mốc "đã xem" lưu local (prefs), set khi mở màn Thông báo.
+final unseenNotifProvider = FutureProvider.autoDispose<bool>((ref) async {
+  ref.watch(authStateProvider);
+  if (sb.auth.currentUser == null) return false;
+  final seen = prefs.getString('notify_seen_at');
+  if (seen == null) {
+    // lần đầu: đặt mốc, khỏi chấm đỏ dội chuyện cũ
+    await prefs.setString('notify_seen_at', DateTime.now().toUtc().toIso8601String());
+    return false;
+  }
+  final lib = await sb.from('library').select('novel_id');
+  final ids = [for (final r in lib) r['novel_id'] as int];
+  if (ids.isEmpty) return false;
+  final rows = await sb
+      .from('chapters')
+      .select('id')
+      .inFilter('novel_id', ids)
+      .eq('translation_status', 'done')
+      .gt('translated_at', seen)
+      .limit(1);
+  return rows.isNotEmpty;
+});
+
+/// Gọi khi mở màn Thông báo — dập chấm đỏ.
+Future<void> markNotificationsSeen() =>
+    prefs.setString('notify_seen_at', DateTime.now().toUtc().toIso8601String());
+
 Future<void> addNovelRequest(String query) async {
   final uid = sb.auth.currentUser?.id;
   if (uid == null) return;

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../data.dart';
 import '../../widgets.dart';
+import '../library/library.dart' show showRequestSheet;
 
 /// Tìm truyện theo tên (lọc theo tiêu chí là màn riêng — xem filter.dart).
 class SearchScreen extends ConsumerStatefulWidget {
@@ -76,8 +77,19 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                     loading: () => const AppLoading(),
                     error: (e, _) => Center(child: Text('Lỗi: $e')),
                     data: (list) => list.isEmpty
+                        // không có trong kho → mời yêu cầu crawl luôn với tên đang gõ
                         ? Center(
-                            child: Text('Không tìm thấy “$_query”.', style: t.bodyMedium))
+                            child: Column(mainAxisSize: MainAxisSize.min, children: [
+                              Text('Không tìm thấy “$_query”.', style: t.bodyMedium),
+                              const SizedBox(height: 14),
+                              FilledButton.tonalIcon(
+                                icon: const Icon(Icons.travel_explore_rounded, size: 18),
+                                label: const Text('Yêu cầu tìm truyện này'),
+                                onPressed: () =>
+                                    showRequestSheet(context, initialQuery: _query),
+                              ),
+                            ]),
+                          )
                         : ListView.separated(
                             padding: const EdgeInsets.only(top: 4, bottom: 24),
                             itemCount: list.length,
