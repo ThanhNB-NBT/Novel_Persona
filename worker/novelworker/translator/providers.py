@@ -91,9 +91,10 @@ class FallbackChain:
         for name, p in self.providers:
             t0 = time.time()
             try:
-                res = p.complete(system, user, temperature=temperature, max_tokens=max_tokens)
-                if validate:
-                    validate(res)
+                # validate truyền VÀO provider: fuse chất lượng fail → tenacity retry
+                # cùng model trước (quan trọng khi chỉ còn 1 provider), rồi mới coi là lỗi
+                res = p.complete(system, user, temperature=temperature,
+                                 max_tokens=max_tokens, validate=validate)
                 db.record_model_call(res.model, (time.time() - t0) * 1000, ok=True)
                 return replace(res, provider=name)
             except Exception as e:
