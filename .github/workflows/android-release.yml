@@ -1,0 +1,65 @@
+# Build APK ký bằng keystore cố định (secret) → đăng lên GitHub Releases.
+# App có nút "Kiểm tra cập nhật" (Cài đặt) đọc release mới nhất qua GitHub API.
+#
+# Phát hành bản mới:
+#  1. Tăng version trong app/pubspec.yaml (vd 1.0.2+3)
+#  2. git tag v1.0.2 && git push origin v1.0.2
+#  → workflow tự build + tạo release kèm APK, app cũ sẽ thấy và mời tải.
+
+name: Android release APK
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write # tạo release
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: subosito/flutter-action@v2
+        with:
+          # ghim theo bản đang dev local — channel:stable trôi version, build lệch khó lần
+          flutter-version: 3.44.4
+          cache: true
+
+      - name: Giải keystore từ secret
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > android/app/upload-keystore.jks
+          cat > android/key.properties <<EOF
+          storePassword=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          keyPassword=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          keyAlias=upload
+          storeFile=upload-keystore.jks
+          EOF
+
+      - name: Flutter pub get
+        run: flutter pub get
+
+      - name: Build APK (release, ký keystore)
+        run: |
+          flutter build apk --release \
+            --dart-define=SUPABASE_URL="${{ secrets.SUPABASE_URL }}" \
+            --dart-define=SUPABASE_ANON_KEY="${{ secrets.SUPABASE_ANON_KEY }}"
+          mv build/app/outputs/flutter-apk/app-release.apk \
+             build/app/outputs/flutter-apk/GacTruyen-${{ github.ref_name }}.apk
+
+      - name: Tạo GitHub Release kèm APK
+        if: startsWith(github.ref, 'refs/tags/') # dispatch tay = chỉ test build
+        uses: softprops/action-gh-release@v2
+        with:
+          files: app/build/app/outputs/flutter-apk/GacTruyen-${{ github.ref_name }}.apk
+          generate_release_notes: true

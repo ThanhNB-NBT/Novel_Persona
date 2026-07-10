@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:package_info_plus/package_info_plus.dart';
+
 import '../../data.dart';
 import '../../theme.dart';
+import '../../update.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -74,10 +77,28 @@ class SettingsScreen extends ConsumerWidget {
             _Tile(Icons.person_outline, 'Sửa thông tin',
                 onTap: () => context.push('/profile/edit')),
           ]),
+          const _SectionLabel('Ứng dụng'),
+          _TileGroup(children: [
+            _Tile(Icons.system_update_alt_rounded, 'Kiểm tra cập nhật',
+                onTap: () => _checkUpdate(context, ref)),
+          ]),
         ],
       ),
     );
   }
+}
+
+/// Kiểm tra chủ động: có bản mới → dialog tải; đã mới nhất → snackbar kèm version.
+Future<void> _checkUpdate(BuildContext context, WidgetRef ref) async {
+  final messenger = ScaffoldMessenger.of(context);
+  final info = await ref.refresh(updateProvider.future);
+  if (info != null) {
+    if (context.mounted) showUpdateDialog(context, info);
+    return;
+  }
+  final v = (await PackageInfo.fromPlatform()).version;
+  messenger.showSnackBar(
+      SnackBar(content: Text('Đang dùng bản mới nhất ($v)')));
 }
 
 class _ProfileCard extends StatelessWidget {
