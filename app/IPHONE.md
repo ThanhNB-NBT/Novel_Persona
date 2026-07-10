@@ -92,8 +92,13 @@ Sau đó **rút–cắm lại cáp**, mở khoá iPhone → hộp **"Tin cậy m
 ## PHẦN 5 — Cài file .ipa bằng SideStore (mỗi lần có bản mới)
 
 ### 5a. Đưa file .ipa vào iPhone
-KHÔNG copy được qua cáp (Explorer chỉ thấy ảnh/video — giới hạn cứng của iOS).
-Dùng đám mây:
+**Cách chính (từ v1.0.4, không cần PC):** mỗi release đã đính sẵn `GacTruyen-vX.Y.Z.ipa`
+— trên iPhone mở Safari vào `github.com/ThanhNB-NBT/Novel_Persona/releases` → tải
+file .ipa → tự vào **Tệp** (Files) mục Tải về.
+
+Cách cũ (build tay qua workflow `ios-unsigned.yml`, artifact bắt đăng nhập GitHub +
+tải về PC giải nén): KHÔNG copy được qua cáp (Explorer chỉ thấy ảnh/video — giới hạn
+cứng của iOS). Dùng đám mây:
 - PC: upload `novel_reader.ipa` lên **Google Drive**.
 - iPhone: mở Google Drive → file đó → ⋯ → **Mở trong…** → **Lưu vào Tệp** (Files).
 - (Thay thế: gửi qua **Telegram** cho chính mình cũng được; Zalo đôi khi chặn .ipa.)
