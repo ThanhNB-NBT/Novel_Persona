@@ -77,7 +77,11 @@ Bố cục cảnh `_AnimatedCultivator` (canvas 150×145, loop 4s), vẽ theo th
    vòng đang đeo, mặc định vòng trơn màu cảnh giới, tâm đặt TRÙNG ĐẦU nhân vật) →
    **trận pháp dưới chân** (ellipse xoay chậm màu công pháp) → quầng thở → sương trôi
    → đom đóm linh khí bay lên.
-2. Ảnh nhân vật (Image.asset, ~104×128, hạ thấp để đầu lọt tâm halo, nhấp nhô ±4px).
+2. Ảnh nhân vật chibi tu tiên (Image.asset, ~104×128, hạ thấp để đầu lọt tâm halo):
+   nét viền đậm, mảng màu ít, toàn thân nhỏ gọn; mỗi tộc/giới có bộ WebP riêng. Ảnh
+   nhấp nhô ±4px, trôi ngang/nhún tỉ lệ/nghiêng rất nhẹ để có idle 2.5D; aura và vũ khí
+   tiếp tục ở lớp trước. Đây không phải rig 3D — muốn tóc/tay áo chuyển động độc lập cần
+   bộ asset tách layer riêng.
 3. `_AuraPainter` (trước): hiệu ứng công pháp (qi/ice/wind/earth/sword/gold/star/fire/leaf)
    + **vũ khí đang đeo bay quanh** (`paintOrbitSprite`, quỹ đạo bán kính dao động).
 
@@ -112,4 +116,4 @@ Roadmap (chưa làm, làm theo thứ tự user chọn):
 - Shop / tiền tệ linh thạch (nguồn: quà trùng → tự bán?).
 - Tông môn, xếp hạng (cần chống gian lận — lúc đó mới siết claim theo reading_progress).
 - Thành tựu.
-- Bộ ảnh nhân vật style thủy mặc thống nhất (tranh AI hiện tại lệch tông — đang treo).
+- Rig tách layer tóc/tay áo cho idle 2.5D sâu hơn (bộ chibi hiện tại dùng 1 layer/nhân vật).
