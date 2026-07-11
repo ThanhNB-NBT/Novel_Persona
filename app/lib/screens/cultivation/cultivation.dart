@@ -976,10 +976,22 @@ class _AdvanceFxDialogState extends State<_AdvanceFxDialog>
   )..forward();
   bool _tammaPhase = false; // pha Tâm Ma trước khi lộ kết quả đột phá
   Timer? _tammaTimer;
+  ui.FragmentShader? _shader; // nấc 2 (major); null = fallback về nấc 1
+
+  Future<void> _loadShader() async {
+    try {
+      final prog =
+          await ui.FragmentProgram.fromAsset('shaders/breakthrough.frag');
+      if (mounted) setState(() => _shader = prog.fragmentShader());
+    } catch (_) {
+      // shader lỗi/thiết bị không hỗ trợ → giữ nguyên hiệu ứng nấc 1
+    }
+  }
 
   @override
   void initState() {
     super.initState();
+    if (widget.major) _loadShader(); // chỉ cảnh lớn mới cần shader
     // đại cảnh giới có Tâm Ma → diễn ~1.9s rồi mới sang kết quả đột phá
     if (widget.result['tamma'] != null) {
       _tammaPhase = true;
@@ -1012,6 +1024,7 @@ class _AdvanceFxDialogState extends State<_AdvanceFxDialog>
   @override
   void dispose() {
     _tammaTimer?.cancel();
+    _shader?.dispose();
     _ctrl.dispose();
     super.dispose();
   }
@@ -1049,7 +1062,8 @@ class _AdvanceFxDialogState extends State<_AdvanceFxDialog>
             return Transform.translate(
               offset: Offset(dx, dy),
               child: CustomPaint(
-                painter: _BurstPainter(v, color, ok, loi, major: widget.major),
+                painter: _BurstPainter(v, color, ok, loi,
+                    major: widget.major, shader: _shader),
                 child: child,
               ),
             );
@@ -1233,7 +1247,9 @@ class _BurstPainter extends CustomPainter {
   final bool ok;
   final bool loi;
   final bool major; // true = đại cảnh giới → bản điện ảnh; false = lên tầng snappy
-  _BurstPainter(this.t, this.color, this.ok, this.loi, {this.major = false});
+  final ui.FragmentShader? shader; // nấc 2: godray+bloom additive (chỉ major)
+  _BurstPainter(this.t, this.color, this.ok, this.loi,
+      {this.major = false, this.shader});
 
   /// Tia sét gãy khúc tất định theo seed (không random — khỏi nhảy mỗi frame);
   /// branch = thêm nhánh con ngắn cho major.
@@ -1399,6 +1415,25 @@ class _BurstPainter extends CustomPainter {
       final a = (1 - t) * 0.9 * (t > 0.2 ? 1.0 : t / 0.2);
       ember.color = color.withValues(alpha: a);
       canvas.drawCircle(Offset(x, y), (1 - t) * 2.2 + 0.6, ember);
+    }
+
+    // 8) NẤC 2: shader godray + bloom phủ additive lên trên (chỉ major, sau hội tụ)
+    if (shader != null && major && t > 0.22) {
+      shader!
+        ..setFloat(0, size.width)
+        ..setFloat(1, size.height)
+        ..setFloat(2, (t - 0.22) / 0.78) // tái chuẩn hoá 0..1 từ lúc va chạm
+        ..setFloat(3, color.r)
+        ..setFloat(4, color.g)
+        ..setFloat(5, color.b)
+        ..setFloat(6, c.dx)
+        ..setFloat(7, c.dy);
+      canvas.drawRect(
+        Offset.zero & size,
+        Paint()
+          ..shader = shader
+          ..blendMode = BlendMode.plus,
+      );
     }
   }
 
