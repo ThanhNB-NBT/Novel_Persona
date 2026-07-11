@@ -870,9 +870,29 @@ class _AdvanceFxDialogState extends State<_AdvanceFxDialog>
     vsync: this,
     duration: const Duration(milliseconds: 1100),
   )..forward();
+  bool _tammaPhase = false; // pha Tâm Ma trước khi lộ kết quả đột phá
+  Timer? _tammaTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    // đại cảnh giới có Tâm Ma → diễn ~1.9s rồi mới sang kết quả đột phá
+    if (widget.result['tamma'] != null) {
+      _tammaPhase = true;
+      _tammaTimer = Timer(const Duration(milliseconds: 1900), () {
+        if (mounted) {
+          setState(() => _tammaPhase = false);
+          _ctrl
+            ..reset()
+            ..forward();
+        }
+      });
+    }
+  }
 
   @override
   void dispose() {
+    _tammaTimer?.cancel();
     _ctrl.dispose();
     super.dispose();
   }
@@ -881,6 +901,7 @@ class _AdvanceFxDialogState extends State<_AdvanceFxDialog>
   Widget build(BuildContext context) {
     final t = Theme.of(context).textTheme;
     final r = widget.result;
+    if (_tammaPhase) return _tammaView(t, r['tamma'] as Rec);
     final ok = r['success'] == true;
     final realm = r['realm'] as int;
     final grade = (realm + 1) ~/ 2;
@@ -957,6 +978,17 @@ class _AdvanceFxDialogState extends State<_AdvanceFxDialog>
                       style: t.labelMedium?.copyWith(color: Colors.white38),
                     ),
                   ),
+                if ((r['tamma'] as Rec?)?['win'] == true)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      '⚔ Áp chế Tâm Ma · +15% đột phá',
+                      style: t.labelMedium?.copyWith(
+                        color: const Color(0xFF9775FA),
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
                 const SizedBox(height: 18),
                 FilledButton(
                   style: FilledButton.styleFrom(
@@ -967,6 +999,65 @@ class _AdvanceFxDialogState extends State<_AdvanceFxDialog>
                   ),
                   onPressed: () => Navigator.pop(context),
                   child: Text(ok ? 'Tiếp tục tu luyện' : 'Tĩnh tâm'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Pha Tâm Ma (~1.9s, tự chuyển sang kết quả): tím đạo nếu áp chế được,
+  /// đỏ ma + rung nếu bị quấy nhiễu. Tái dùng _BurstPainter như pha đột phá.
+  Widget _tammaView(TextTheme t, Rec tm) {
+    final win = tm['win'] == true;
+    final color = win ? const Color(0xFF7048E8) : const Color(0xFFC92A2A);
+    return Center(
+      child: Material(
+        color: Colors.transparent,
+        child: AnimatedBuilder(
+          animation: _ctrl,
+          builder: (_, child) {
+            final v = _ctrl.value;
+            final dx = win ? 0.0 : math.sin(v * math.pi * 12) * 6 * (1 - v);
+            return Transform.translate(
+              offset: Offset(dx, 0),
+              child: CustomPaint(
+                painter: _BurstPainter(v, color, win, false),
+                child: child,
+              ),
+            );
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(48),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const PixelIcon('talisman', grade: 3, size: 80),
+                const SizedBox(height: 10),
+                Text(
+                  'TÂM MA KHẢO NGHIỆM',
+                  style: t.titleLarge?.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  win
+                      ? 'Đạo tâm bất động — áp chế tâm ma!'
+                      : 'Tâm thần chấn động, tâm ma trỗi dậy...',
+                  textAlign: TextAlign.center,
+                  style: t.bodyMedium?.copyWith(color: Colors.white70),
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    'Đạo tâm ${tm['chance']}%',
+                    style: t.labelMedium?.copyWith(color: Colors.white38),
+                  ),
                 ),
               ],
             ),
