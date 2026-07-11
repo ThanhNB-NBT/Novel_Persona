@@ -400,6 +400,62 @@ def _extract_json(text: str) -> dict | list:
         raise
 
 
+# --- Sửa có mục tiêu (Q3-lite, 2026-07-12) -----------------------------------
+# Prompt cấm nhưng model vẫn lì các lỗi văn phong mềm (Q0: "chẳng" tràn lan, chữ đệm
+# "chăng/chứ" cuối câu, convertese, lặp từ). Retry cả chunk vừa đắt vừa không chắc
+# hơn → soi câu lỗi rồi gọi MỘT lượt LLM sửa đúng các câu đó, thay lại bằng máy.
+_REVISE_RULES: list[tuple[str, re.Pattern]] = [
+    ("dùng 'không' thay 'chẳng'", re.compile(r"\bchẳng\b(?!\s+lẽ|\s+qua)", re.I)),
+    ("chữ đệm thừa cuối câu", re.compile(r"\b(?:chăng|chứ|nha)\s*[?!.…”\"]", re.I)),
+    ("lỗi convert", re.compile(
+        r"\b(?:không khỏi|căn bản là|rốt cuộc là|trên thực tế|tổng cảm thấy)\b", re.I)),
+    ("'X một cái' convert", re.compile(
+        r"(?:cười|nhìn|liếc|gật đầu|thở dài|vỗ|lắc đầu)\s+một cái", re.I)),
+    ("lặp 'hắn' dày trong câu", re.compile(r"\bhắn\b.{1,60}\bhắn\b.{1,60}\bhắn\b", re.I)),
+]
+_SENT_SPLIT = re.compile(r'(?<=[.!?…”"])\s+')
+MAX_REVISE_SENTENCES = 12  # ponytail: quá ngần này = bản dịch hỏng diện rộng, retry rẻ hơn revise
+
+
+def _style_flags(vi: str) -> list[tuple[str, str]]:
+    """(câu, lỗi) cho từng câu vi phạm luật văn phong mềm."""
+    flags = []
+    for para in vi.split("\n"):
+        for sent in _SENT_SPLIT.split(para):
+            issues = [name for name, pat in _REVISE_RULES if pat.search(sent)]
+            if issues:
+                flags.append((sent.strip(), "; ".join(issues)))
+    return flags
+
+
+def _apply_fixes(vi: str, fixes) -> tuple[str, int]:
+    """Thay câu sửa vào bản dịch — chỉ nhận bản sửa khớp nguyên văn và lành mạnh."""
+    applied = 0
+    for fx in fixes if isinstance(fixes, list) else []:
+        old, new = (fx or {}).get("old"), (fx or {}).get("new")
+        if (old and new and old != new and old in vi
+                and 0.4 * len(old) <= len(new) <= 2.0 * len(old)
+                and not HAN_CHARS.search(new)):
+            vi = vi.replace(old, new, 1)
+            applied += 1
+    return vi, applied
+
+
+def _style_revise(chapter_llm, vi: str) -> str:
+    """Lượt biên tập có mục tiêu; mọi lỗi ở đây đều không được phá bản dịch gốc."""
+    flags = _style_flags(vi)
+    if not flags or len(flags) > MAX_REVISE_SENTENCES:
+        return vi
+    listing = "\n\n".join(f"CÂU: {s}\nLỖI: {i}" for s, i in flags)
+    try:
+        res = chapter_llm.complete(prompts.SYSTEM_REVISE, listing, max_tokens=2048)
+        vi, applied = _apply_fixes(vi, _extract_json(res.text))
+        log.info("Revise văn phong: %d câu đánh dấu, %d câu thay", len(flags), applied)
+    except Exception as e:
+        log.warning("Revise văn phong lỗi (giữ bản gốc): %s", e)
+    return vi
+
+
 # Xưng hô: MỘT luật cho mọi truyện (2026-07-10, đã bỏ nhánh đô thị tôi–anh):
 # lời KỂ cứng hắn/nàng; THOẠI linh hoạt theo bối cảnh (fuse cũng chỉ soi lời kể).
 REGISTER_LINE = (
@@ -533,6 +589,8 @@ def handle_chapter(job: dict, llm) -> None:
             log.info("Chương %s: chunk %d/%d xong", ch["id"], i + 1, len(chunks))
 
     text = "\n\n".join(parts)
+    # sửa văn phong có mục tiêu: 1 lượt LLM/chương, chỉ khi có câu bị đánh dấu
+    text = _style_revise(chapter_llm, text)
 
     # Lưới an toàn: tên/thuật ngữ trong glossary còn SÓT dạng chữ Hán trong bản dịch
     # (lọt fuse vì dưới ngưỡng 5%) → thay thẳng bằng bản dịch chuẩn. Dài trước để

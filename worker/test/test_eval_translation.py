@@ -67,3 +67,38 @@ def test_english_onomatopoeia():
 
 def test_han_residue_single_char():
     assert any("Hán sót lẻ" in p for p in lint("门外传来。", "Bên ngoài cửa truyền来 tiếng ồn."))
+
+
+def test_style_flags_and_apply():
+    from novelworker.translator.worker import _apply_fixes, _style_flags
+    vi = ('Hắn chẳng thể tin nổi. "Ngài cần phu nhân chăng?" Chẳng lẽ vậy sao?\n'
+          "Nàng gật đầu một cái rồi rời đi.")
+    flags = _style_flags(vi)
+    flagged = " | ".join(s for s, _ in flags)
+    assert "chẳng thể tin" in flagged and "chăng?" in flagged and "gật đầu một cái" in flagged
+    assert all("Chẳng lẽ vậy sao" not in s for s, _ in flags)  # 'chẳng lẽ' hợp lệ
+    fixed, n = _apply_fixes(vi, [
+        {"old": "Hắn chẳng thể tin nổi.", "new": "Hắn không thể tin nổi."},
+        {"old": "không có trong bản dịch", "new": "bị bỏ qua"},
+        {"old": "Nàng gật đầu một cái rồi rời đi.", "new": "Nàng gật đầu rồi rời đi."},
+    ])
+    assert n == 2 and "không thể tin" in fixed and "gật đầu rồi rời đi" in fixed
+
+
+def test_style_revise_with_fake_llm():
+    from novelworker.translator.worker import _style_revise
+
+    class FakeRes:
+        text = '[{"old": "Hắn chẳng nói gì.", "new": "Hắn không nói gì."}]'
+
+    class FakeLLM:
+        def complete(self, system, user, **kw):
+            assert "CÂU:" in user
+            return FakeRes()
+
+    assert _style_revise(FakeLLM(), "Hắn chẳng nói gì.") == "Hắn không nói gì."
+    # không có câu lỗi → không gọi LLM, trả nguyên văn
+    class Boom:
+        def complete(self, *a, **k):
+            raise AssertionError("không được gọi")
+    assert _style_revise(Boom(), "Hắn im lặng rời đi.") == "Hắn im lặng rời đi."

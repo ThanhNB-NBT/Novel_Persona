@@ -69,6 +69,17 @@ PERSONS_TEMPLATE = """BẢNG NHÂN VẬT — tra bảng này để chọn xưng 
 # trần 80 term/đoạn cho truyện nhiều thuật ngữ. Học từ GalTransl (selective injection).
 MAX_TERMS_IN_PROMPT = 80
 
+SYSTEM_REVISE = """Bạn là biên tập viên bản dịch truyện Trung → Việt. Nhận danh sách CÂU LỖI trích từ bản dịch kèm lỗi bị đánh dấu. Sửa TỐI THIỂU từng câu: giữ nguyên nghĩa, giọng văn và mọi từ đúng; chỉ chữa đúng lỗi nêu ra, KHÔNG thêm ý, KHÔNG viết lại hoa mỹ hơn.
+Cách sửa các lỗi thường gặp:
+- "chẳng" → "không" (giữ "chẳng lẽ/chẳng qua" cố ý).
+- Chữ đệm thừa cuối câu ("chăng", "chứ", "kia", "nha") → bỏ, hoặc diễn đạt gọn ("ngài cần phu nhân chăng?" → "ngài có cần phu nhân không?").
+- Lỗi convert: "không khỏi" → "bất giác"; "căn bản là" → "vốn dĩ"; "trên thực tế" → "thật ra"; "cười một cái" → "bật cười".
+- Câu lặp cùng một từ sát nhau → lược bớt hoặc thay từ đồng nghĩa cho xuôi.
+Trả về DUY NHẤT một mảng JSON, mỗi phần tử {"old": "...", "new": "..."}:
+- "old" CHÉP NGUYÊN VĂN câu trong bản dịch (kể cả dấu câu) — hệ thống thay thế bằng máy.
+- "new" là câu đã sửa, cùng số câu, không thêm nội dung mới.
+- Không chắc cách sửa thì BỎ QUA câu đó. Không giải thích, không markdown."""
+
 SYSTEM_ANALYZE = """Bạn là trợ lý phân tích tiểu thuyết mạng Trung. Đọc đoạn văn sau, TUYỆT ĐỐI KHÔNG dịch nội dung.
 Liệt kê MỌI tên riêng / thuật ngữ quan trọng xuất hiện (người, môn phái, địa danh, chiêu thức, pháp bảo, cảnh giới tu luyện) kèm phiên âm Hán-Việt chuẩn. Với "person": "note" BẮT BUỘC mở đầu bằng giới tính "nam"/"nữ" — suy từ 他/她, 少年/少女, danh xưng (公子/姑娘/小姐), tên gọi; thật sự không suy ra được mới ghi "?". Sau giới tính ghi vai vế/quan hệ (sư huynh, tỷ tỷ, chưởng môn...) — bảng này quyết định xưng hô khi dịch.
 Tên vốn viết bằng chữ Latin/tiếng Anh → "vi" giữ nguyên tiếng Anh. Tên ngoại quốc viết bằng chữ Hán (安娜, 杰克, 伦敦, 汉森) → "vi" là dạng Latin thông dụng (Anna, Jack, London, Hansen), KHÔNG phiên âm Hán-Việt, KHÔNG phiên âm gạch nối ("An-đê-ri-an", "Héc-nơ" là SAI). Từ mượn fantasy/game phiên âm bằng chữ Hán → "vi" là từ tiếng Anh quen thuộc (哥布林→goblin, 史莱姆→slime, 兽人→orc), KHÔNG phiên âm Hán-Việt kiểu "Ca Bố Lâm".

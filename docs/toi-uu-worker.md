@@ -671,6 +671,18 @@ Kết luận tạm thời:
 
 Artifact local: các file JSON trong `worker/benchmark_out/` (batch1, batch1a, deepseek_pro, synthetic_one, qwen397, qwen122, gemma4, diffusiongemma...).
 
+## 11.4. Q3-lite đã triển khai (2026-07-12): sửa văn phong có mục tiêu
+
+Model lì với luật văn phong mềm trong prompt ("chẳng" tràn lan, chữ đệm "chăng/chứ" cuối câu, convertese, lặp từ). Thay vì retry cả chunk, worker giờ chạy sau khi ghép chương:
+
+1. `_style_flags` soi từng câu theo 5 luật (chẳng ngoài "chẳng lẽ/chẳng qua", chữ đệm cuối câu, convertese, "X một cái", lặp "hắn" ≥3/câu).
+2. Có câu bị đánh dấu (≤12 — nhiều hơn coi như hỏng diện rộng, không revise) → MỘT lượt LLM với `SYSTEM_REVISE`, trả JSON `[{old, new}]`.
+3. `_apply_fixes` chỉ nhận bản sửa khớp nguyên văn, độ dài 0.4–2x, không chứa chữ Hán. LLM lỗi/JSON hỏng → giữ nguyên bản gốc, không bao giờ phá bản dịch.
+
+Đo thật trên n967 c1: 9 câu đánh dấu → 0, "chẳng" ×9 → 0, câu đọc tự nhiên. Chi phí: +1 call/chương chỉ khi có lỗi.
+
+Còn lại sau revise (đúng phạm vi các pha sau): "chị gái/em" trong thoại cổ trang lọt lẻ tẻ (chờ Q2 scene contract), 在下 sót "tại hạ" (chờ Q1 constraint theo truyện), chữ Hán lẻ dưới ngưỡng fuse (lưới glossary thay được một phần).
+
 ## 12. Bộ Q0 đầu tiên — feedback người đọc 2026-07-11
 
 User đã đọc 7/12 file baseline (`worker/eval_out_baseline/feedback_user_2026-07-11.txt`, giữ local). Nhóm lỗi theo tần suất:
