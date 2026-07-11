@@ -20,8 +20,8 @@ bool _cultItemBusy = false;
 
 String cultivationBackgroundAsset(Brightness brightness) =>
     brightness == Brightness.dark
-        ? 'assets/bg/cultivation_bg_night.webp'
-        : 'assets/bg/cultivation_bg.webp';
+    ? 'assets/bg/cultivation_bg_night.webp'
+    : 'assets/bg/cultivation_bg.webp';
 
 /// Màn Tu Tiên: card cảnh giới + exp bar tick sống, nút Lên Tầng/Đột Phá,
 /// 4 slot trang bị, kho đồ. Server là chuẩn (cult_state đã tick); client chỉ
@@ -85,7 +85,9 @@ class _CultivationScreenState extends ConsumerState<CultivationScreen> {
       );
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$e')));
       }
     } finally {
       if (mounted) setState(() => _advancing = false);
@@ -122,7 +124,9 @@ class _CultivationScreenState extends ConsumerState<CultivationScreen> {
       );
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$e')));
       }
     } finally {
       if (mounted) setState(() => _advancing = false);
@@ -241,11 +245,16 @@ class _CultivationScreenState extends ConsumerState<CultivationScreen> {
                                     showDragHandle: true,
                                     builder: (_) => const _CollectionSheet(),
                                   ),
-                                  icon: const Icon(Icons.grid_view_rounded, size: 16),
+                                  icon: const Icon(
+                                    Icons.grid_view_rounded,
+                                    size: 16,
+                                  ),
                                   label: const Text('Sưu tập'),
                                   style: TextButton.styleFrom(
                                     visualDensity: VisualDensity.compact,
-                                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                    ),
                                   ),
                                 ),
                               ),
@@ -448,10 +457,20 @@ class _HeroStage extends ConsumerWidget {
                 runSpacing: 8,
                 children: [
                   _devChip(ctx, ref, 'Về Luyện Khí 1', 1, 1),
-                  _devChip(ctx, ref, 'Đầy tu vi bậc này',
-                      st['realm'] as int, st['stage'] as int),
-                  _devChip(ctx, ref, 'Sẵn sàng đại cảnh giới',
-                      st['realm'] as int, 9),
+                  _devChip(
+                    ctx,
+                    ref,
+                    'Đầy tu vi bậc này',
+                    st['realm'] as int,
+                    st['stage'] as int,
+                  ),
+                  _devChip(
+                    ctx,
+                    ref,
+                    'Sẵn sàng đại cảnh giới',
+                    st['realm'] as int,
+                    9,
+                  ),
                   _devChip(ctx, ref, 'Độ Kiếp 9 (Phi Thăng)', 9, 9),
                 ],
               ),
@@ -465,7 +484,12 @@ class _HeroStage extends ConsumerWidget {
   /// 1 nút DEV: set realm/stage + đầy tu vi rồi refetch state (không đóng sheet
   /// để bấm liên tiếp). Chỉ dựng khi kDebugMode.
   Widget _devChip(
-      BuildContext ctx, WidgetRef ref, String label, int realm, int stage) {
+    BuildContext ctx,
+    WidgetRef ref,
+    String label,
+    int realm,
+    int stage,
+  ) {
     return ActionChip(
       label: Text(label),
       onPressed: () async {
@@ -913,7 +937,9 @@ class _RealmCard extends StatelessWidget {
                             ? const SizedBox(
                                 width: 18,
                                 height: 18,
-                                child: CircularProgressIndicator(strokeWidth: 2),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
                               )
                             : Icon(
                                 peak
@@ -980,8 +1006,9 @@ class _AdvanceFxDialogState extends State<_AdvanceFxDialog>
 
   Future<void> _loadShader() async {
     try {
-      final prog =
-          await ui.FragmentProgram.fromAsset('shaders/breakthrough.frag');
+      final prog = await ui.FragmentProgram.fromAsset(
+        'shaders/breakthrough.frag',
+      );
       if (mounted) setState(() => _shader = prog.fragmentShader());
     } catch (_) {
       // shader lỗi/thiết bị không hỗ trợ → giữ nguyên hiệu ứng nấc 1
@@ -1038,144 +1065,173 @@ class _AdvanceFxDialogState extends State<_AdvanceFxDialog>
     final realm = r['realm'] as int;
     final grade = (realm + 1) ~/ 2;
     final color = ok
-        ? (widget.ascend ? gradeColor(5) : gradeColor(grade)) // vàng tiên khi phi thăng
+        ? (widget.ascend
+              ? gradeColor(5)
+              : gradeColor(grade)) // vàng tiên khi phi thăng
         : const Color(0xFFE03131);
     // đột phá VÀO Kim Đan trở lên → thiên lôi giáng xuống (lore: kết đan dẫn kiếp)
     final loi = widget.major && (ok ? realm : realm + 1) >= 3;
 
-    return Center(
-      child: Material(
-        color: Colors.transparent,
-        child: AnimatedBuilder(
-          animation: _ctrl,
-          builder: (_, child) {
-            final v = _ctrl.value;
-            // thất bại: rung ngang tắt dần trong nửa đầu
-            var dx = ok ? 0.0 : math.sin(v * math.pi * 10) * 8 * (1 - v);
-            var dy = 0.0;
-            // major thành công: giật máy quanh lúc va chạm (0.30→0.60) rồi tắt
-            if (ok && widget.major && v > 0.30 && v < 0.60) {
-              final s = 1 - ((v - 0.30) / 0.30).clamp(0.0, 1.0);
-              dx += math.sin(v * math.pi * 26) * 7 * s;
-              dy += math.cos(v * math.pi * 22) * 7 * s;
-            }
-            return Transform.translate(
-              offset: Offset(dx, dy),
-              child: CustomPaint(
-                painter: _BurstPainter(v, color, ok, loi,
-                    major: widget.major, shader: _shader),
-                child: child,
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        // FX phủ TOÀN MÀN HÌNH → vụ nổ tan vào bóng tối, không chạm mép hộp thoại
+        Positioned.fill(
+          child: AnimatedBuilder(
+            animation: _ctrl,
+            builder: (_, _) => CustomPaint(
+              painter: _BurstPainter(
+                _ctrl.value,
+                color,
+                ok,
+                loi,
+                major: widget.major,
+                shader: _shader,
               ),
-            );
-          },
-          child: Padding(
-            padding: const EdgeInsets.all(48), // chừa chỗ cho vòng xung kích
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // nhân vật/phù hiện dần sau chớp sáng
-                FadeTransition(
-                  opacity: CurvedAnimation(
-                    parent: _ctrl,
-                    curve: const Interval(0.15, 0.6, curve: Curves.easeOut),
-                  ),
-                  child: ok
-                      ? _AnimatedCultivator(
-                          realm: realm,
-                          race: widget.race,
-                          gender: widget.gender,
-                        )
-                      : const PixelIcon('talisman', grade: 1, size: 80),
-                ),
-                const SizedBox(height: 10),
-                // major thành công: tên "slam" vào (phóng to → co về, nảy) sau va chạm
-                FadeTransition(
-                  opacity: widget.major && ok
-                      ? CurvedAnimation(
-                          parent: _ctrl,
-                          curve: const Interval(0.30, 0.5),
-                        )
-                      : const AlwaysStoppedAnimation(1.0),
-                  child: ScaleTransition(
-                    scale: widget.major && ok
-                        ? Tween(begin: 1.5, end: 1.0).animate(
-                            CurvedAnimation(
-                              parent: _ctrl,
-                              curve: const Interval(0.32, 0.85, curve: Curves.elasticOut),
-                            ),
-                          )
-                        : const AlwaysStoppedAnimation(1.0),
-                    child: Text(
-                      widget.ascend
-                          ? (ok ? 'PHI THĂNG THÀNH CÔNG' : 'PHI THĂNG THẤT BẠI')
-                          : widget.major
-                          ? (ok
-                                ? (loi
-                                      ? 'VƯỢT LÔI KIẾP THÀNH CÔNG'
-                                      : 'ĐỘT PHÁ THÀNH CÔNG')
-                                : 'ĐỘT PHÁ THẤT BẠI')
-                          : 'LÊN TẦNG',
-                      style: t.titleLarge?.copyWith(
-                        color: ok ? Colors.white : color,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1.5,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  widget.ascend
-                      ? (ok
-                            ? 'Vượt Tâm Ma cuối, độ kiếp phi thăng —\nđắc đạo thành Tiên Nhân!'
-                            : 'Tâm ma còn vương, phi thăng bất thành.\nTĩnh tâm rồi thử lại.')
-                      : ok
-                      ? '${realmNames[realm - 1]} · tầng ${r['stage']}'
-                      : loi
-                      ? 'Lôi kiếp đánh rớt, tâm ma quấy nhiễu — mất 30% tu vi tầng này.\nTĩnh tâm dưỡng thương rồi thử lại!'
-                      : 'Tẩu hỏa nhập ma nhẹ, mất 30% tu vi tầng này.\nTĩnh tâm tu luyện tiếp!',
-                  textAlign: TextAlign.center,
-                  style: t.bodyMedium?.copyWith(color: Colors.white70),
-                ),
-                if (widget.major && !widget.ascend)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Text(
-                      'Tỷ lệ lúc roll: ${r['chance']}%',
-                      style: t.labelMedium?.copyWith(color: Colors.white38),
-                    ),
-                  ),
-                if (!widget.ascend && (r['tamma'] as Rec?)?['win'] == true)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Text(
-                      '⚔ Áp chế Tâm Ma · +15% đột phá',
-                      style: t.labelMedium?.copyWith(
-                        color: const Color(0xFF9775FA),
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                const SizedBox(height: 18),
-                FilledButton(
-                  style: FilledButton.styleFrom(
-                    backgroundColor: color,
-                    foregroundColor: ok && grade >= 4
-                        ? Colors.black87
-                        : Colors.white,
-                  ),
-                  onPressed: () => Navigator.pop(context),
-                  child: Text(
-                    ok
-                        ? (widget.ascend ? 'Đắc đạo thành tiên' : 'Tiếp tục tu luyện')
-                        : 'Tĩnh tâm',
-                  ),
-                ),
-              ],
             ),
           ),
         ),
-      ),
+        // Nội dung (nhân vật + chữ + nút) căn giữa; chỉ phần này rung máy
+        Center(
+          child: Material(
+            color: Colors.transparent,
+            child: AnimatedBuilder(
+              animation: _ctrl,
+              builder: (_, child) {
+                final v = _ctrl.value;
+                var dx = ok ? 0.0 : math.sin(v * math.pi * 10) * 8 * (1 - v);
+                var dy = 0.0;
+                // major thành công: giật máy quanh lúc va chạm (0.30→0.60) rồi tắt
+                if (ok && widget.major && v > 0.30 && v < 0.60) {
+                  final sh = 1 - ((v - 0.30) / 0.30).clamp(0.0, 1.0);
+                  dx += math.sin(v * math.pi * 26) * 7 * sh;
+                  dy += math.cos(v * math.pi * 22) * 7 * sh;
+                }
+                return Transform.translate(
+                  offset: Offset(dx, dy),
+                  child: child,
+                );
+              },
+              child: Padding(
+                padding: const EdgeInsets.all(
+                  48,
+                ), // chừa chỗ cho vòng xung kích
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // nhân vật/phù hiện dần sau chớp sáng
+                    FadeTransition(
+                      opacity: CurvedAnimation(
+                        parent: _ctrl,
+                        curve: const Interval(0.15, 0.6, curve: Curves.easeOut),
+                      ),
+                      child: ok
+                          ? _AnimatedCultivator(
+                              realm: realm,
+                              race: widget.race,
+                              gender: widget.gender,
+                            )
+                          : const PixelIcon('talisman', grade: 1, size: 80),
+                    ),
+                    const SizedBox(height: 10),
+                    // major thành công: tên "slam" vào (phóng to → co về, nảy) sau va chạm
+                    FadeTransition(
+                      opacity: widget.major && ok
+                          ? CurvedAnimation(
+                              parent: _ctrl,
+                              curve: const Interval(0.30, 0.5),
+                            )
+                          : const AlwaysStoppedAnimation(1.0),
+                      child: ScaleTransition(
+                        scale: widget.major && ok
+                            ? Tween(begin: 1.5, end: 1.0).animate(
+                                CurvedAnimation(
+                                  parent: _ctrl,
+                                  curve: const Interval(
+                                    0.32,
+                                    0.85,
+                                    curve: Curves.elasticOut,
+                                  ),
+                                ),
+                              )
+                            : const AlwaysStoppedAnimation(1.0),
+                        child: Text(
+                          widget.ascend
+                              ? (ok
+                                    ? 'PHI THĂNG THÀNH CÔNG'
+                                    : 'PHI THĂNG THẤT BẠI')
+                              : widget.major
+                              ? (ok
+                                    ? (loi
+                                          ? 'VƯỢT LÔI KIẾP THÀNH CÔNG'
+                                          : 'ĐỘT PHÁ THÀNH CÔNG')
+                                    : 'ĐỘT PHÁ THẤT BẠI')
+                              : 'LÊN TẦNG',
+                          style: t.titleLarge?.copyWith(
+                            color: ok ? Colors.white : color,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 1.5,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      widget.ascend
+                          ? (ok
+                                ? 'Vượt Tâm Ma cuối, độ kiếp phi thăng —\nđắc đạo thành Tiên Nhân!'
+                                : 'Tâm ma còn vương, phi thăng bất thành.\nTĩnh tâm rồi thử lại.')
+                          : ok
+                          ? '${realmNames[realm - 1]} · tầng ${r['stage']}'
+                          : loi
+                          ? 'Lôi kiếp đánh rớt, tâm ma quấy nhiễu — mất 30% tu vi tầng này.\nTĩnh tâm dưỡng thương rồi thử lại!'
+                          : 'Tẩu hỏa nhập ma nhẹ, mất 30% tu vi tầng này.\nTĩnh tâm tu luyện tiếp!',
+                      textAlign: TextAlign.center,
+                      style: t.bodyMedium?.copyWith(color: Colors.white70),
+                    ),
+                    if (widget.major && !widget.ascend)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text(
+                          'Tỷ lệ lúc roll: ${r['chance']}%',
+                          style: t.labelMedium?.copyWith(color: Colors.white38),
+                        ),
+                      ),
+                    if (!widget.ascend && (r['tamma'] as Rec?)?['win'] == true)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text(
+                          '⚔ Áp chế Tâm Ma · +15% đột phá',
+                          style: t.labelMedium?.copyWith(
+                            color: const Color(0xFF9775FA),
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    const SizedBox(height: 18),
+                    FilledButton(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: color,
+                        foregroundColor: ok && grade >= 4
+                            ? Colors.black87
+                            : Colors.white,
+                      ),
+                      onPressed: () => Navigator.pop(context),
+                      child: Text(
+                        ok
+                            ? (widget.ascend
+                                  ? 'Đắc đạo thành tiên'
+                                  : 'Tiếp tục tu luyện')
+                            : 'Tĩnh tâm',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -1246,15 +1302,28 @@ class _BurstPainter extends CustomPainter {
   final Color color;
   final bool ok;
   final bool loi;
-  final bool major; // true = đại cảnh giới → bản điện ảnh; false = lên tầng snappy
+  final bool
+  major; // true = đại cảnh giới → bản điện ảnh; false = lên tầng snappy
   final ui.FragmentShader? shader; // nấc 2: godray+bloom additive (chỉ major)
-  _BurstPainter(this.t, this.color, this.ok, this.loi,
-      {this.major = false, this.shader});
+  _BurstPainter(
+    this.t,
+    this.color,
+    this.ok,
+    this.loi, {
+    this.major = false,
+    this.shader,
+  });
 
   /// Tia sét gãy khúc tất định theo seed (không random — khỏi nhảy mỗi frame);
   /// branch = thêm nhánh con ngắn cho major.
-  void _bolt(Canvas canvas, Offset from, Offset to, int seed, Paint paint,
-      {bool branch = false}) {
+  void _bolt(
+    Canvas canvas,
+    Offset from,
+    Offset to,
+    int seed,
+    Paint paint, {
+    bool branch = false,
+  }) {
     final path = Path()..moveTo(from.dx, from.dy);
     const n = 6;
     for (var i = 1; i <= n; i++) {
@@ -1280,41 +1349,61 @@ class _BurstPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final c = Offset(size.width / 2, size.height * 0.32);
+    // Tâm nổ đặt quanh nhân vật (nội dung căn giữa màn). s = co giãn theo cỡ màn
+    // để hiệu ứng KHÔNG bé tí / KHÔNG chạm cứng mép khi vẽ toàn màn hình.
+    final c = Offset(size.width / 2, size.height * 0.40);
+    final s = size.shortestSide;
 
     // ---- THẤT BẠI: quầng đỏ + tàn tro rơi ----
     if (!ok) {
       final a = (1 - t) * 0.35;
       canvas.drawCircle(
         c,
-        70 + t * 30,
+        s * 0.2 + t * s * 0.1,
         Paint()
-          ..shader = RadialGradient(colors: [
-            color.withValues(alpha: a),
-            color.withValues(alpha: 0),
-          ]).createShader(Rect.fromCircle(center: c, radius: 100 + t * 30)),
+          ..shader =
+              RadialGradient(
+                colors: [
+                  color.withValues(alpha: a),
+                  color.withValues(alpha: 0),
+                ],
+              ).createShader(
+                Rect.fromCircle(center: c, radius: s * 0.3 + t * s * 0.1),
+              ),
       );
       final ash = Paint()..color = color.withValues(alpha: (1 - t) * 0.6);
-      for (var i = 0; i < 8; i++) {
-        final p = _spoke(c, i, 8, 30 + t * 40, i.toDouble());
-        canvas.drawCircle(Offset(p.dx, p.dy + t * 60), (1 - t) * 2.2, ash);
+      for (var i = 0; i < 10; i++) {
+        final p = _spoke(c, i, 10, s * 0.08 + t * s * 0.12, i.toDouble());
+        canvas.drawCircle(
+          Offset(p.dx, p.dy + t * s * 0.18),
+          (1 - t) * 2.4,
+          ash,
+        );
       }
       return;
     }
 
     // ================= THÀNH CÔNG =================
-    // 1) HỘI TỤ linh khí (major): hạt xoáy vào tâm, sáng dần trước va chạm
-    if (major && t < 0.34) {
-      final g = t / 0.34;
+    // 1) HỘI TỤ linh khí: hạt xoáy vào tâm, sáng dần trước va chạm (cả lên tầng)
+    final gatherEnd = major ? 0.34 : 0.24;
+    if (t < gatherEnd) {
+      final g = t / gatherEnd;
+      final n = major ? 16 : 12;
       final gp = Paint();
-      for (var i = 0; i < 16; i++) {
-        final p = _spoke(c, i, 16, (1 - g) * 120 + 8, g * 3 + i.toDouble());
+      for (var i = 0; i < n; i++) {
+        final p = _spoke(
+          c,
+          i,
+          n,
+          (1 - g) * s * (major ? 0.42 : 0.30) + 8,
+          g * 3 + i.toDouble(),
+        );
         gp.color = color.withValues(alpha: g * 0.9);
-        canvas.drawCircle(p, 1.5 + g * 1.5, gp);
+        canvas.drawCircle(p, 1.5 + g * 1.6, gp);
       }
       canvas.drawCircle(
         c,
-        130 * (1 - g),
+        s * (major ? 0.45 : 0.32) * (1 - g),
         Paint()
           ..style = PaintingStyle.stroke
           ..strokeWidth = 2
@@ -1322,7 +1411,7 @@ class _BurstPainter extends CustomPainter {
       );
     }
 
-    // 2) THIÊN LÔI phân nhánh có quầng glow
+    // 2) THIÊN LÔI phân nhánh có quầng glow (chỉ major + lôi kiếp)
     if (loi && t > 0.18 && t < 0.62) {
       final lt = (t - 0.18) / 0.44;
       final a = (1 - lt) * (math.sin(t * 70) > -0.4 ? 1.0 : 0.3);
@@ -1335,35 +1424,57 @@ class _BurstPainter extends CustomPainter {
         ..strokeCap = StrokeCap.round
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6)
         ..color = const Color(0xFFFFE066).withValues(alpha: a * 0.7);
-      for (final (i, dx) in [-46.0, 2.0, 40.0].indexed) {
+      for (final (i, dx) in [-0.11, 0.006, 0.10].indexed) {
         final w = i == 1 ? 3.0 : 1.8;
         glow.strokeWidth = w + 4;
         core.strokeWidth = w;
-        final from = Offset(c.dx + dx * 1.7, 0);
-        final to = c + Offset(dx * 0.2, -6);
-        _bolt(canvas, from, to, i + 3, glow, branch: major);
-        _bolt(canvas, from, to, i + 3, core, branch: major);
+        final from = Offset(c.dx + dx * s, 0);
+        final to = c + Offset(dx * s * 0.12, -6);
+        _bolt(canvas, from, to, i + 3, glow, branch: true);
+        _bolt(canvas, from, to, i + 3, core, branch: true);
       }
     }
 
-    // 3) CHỚP TRẮNG va chạm (major nổ muộn hơn, sau khi hội tụ)
+    // 3) CHỚP va chạm — major nổ trắng, lên tầng lóe MÀU dịu (không chói)
     final flashStart = major ? 0.30 : 0.0;
-    const flashLen = 0.15;
+    const flashLen = 0.16;
     if (t >= flashStart && t < flashStart + flashLen) {
       final ft = (t - flashStart) / flashLen;
-      canvas.drawCircle(
-        c,
-        major ? 210 : 140,
-        Paint()
-          ..color = Colors.white.withValues(alpha: (1 - ft) * (major ? 0.9 : 0.72)),
-      );
+      if (major) {
+        canvas.drawCircle(
+          c,
+          s * 0.6,
+          Paint()..color = Colors.white.withValues(alpha: (1 - ft) * 0.9),
+        );
+      } else {
+        canvas.drawCircle(
+          c,
+          s * 0.34,
+          Paint()
+            ..shader = RadialGradient(
+              colors: [
+                Color.lerp(
+                  color,
+                  Colors.white,
+                  0.55,
+                )!.withValues(alpha: (1 - ft) * 0.7),
+                color.withValues(alpha: 0),
+              ],
+            ).createShader(Rect.fromCircle(center: c, radius: s * 0.34)),
+        );
+      }
     }
 
-    // 4) TRỤ SÁNG dựng lên (major)
-    if (major && t > 0.34) {
-      final pt = ((t - 0.34) / 0.4).clamp(0.0, 1.0);
-      final h = size.height * 0.85 * Curves.easeOut.transform(pt);
-      final w = (32 + 18 * math.sin(t * 30)) * (1 - pt * 0.3);
+    // 4) TRỤ SÁNG dựng lên — major cao vút, lên tầng cột ngắn nhẹ
+    final pillarStart = major ? 0.34 : 0.0;
+    if (t > pillarStart) {
+      final pt = ((t - pillarStart) / (major ? 0.4 : 0.6)).clamp(0.0, 1.0);
+      final h =
+          (major ? size.height * 0.85 : s * 0.55) *
+          Curves.easeOut.transform(pt);
+      final w =
+          ((major ? 32.0 : 16.0) + (major ? 18 : 9) * math.sin(t * 30).abs()) *
+          (1 - pt * 0.3);
       final rect = Rect.fromLTWH(c.dx - w / 2, c.dy - h, w, h + 20);
       canvas.drawRect(
         rect,
@@ -1371,50 +1482,57 @@ class _BurstPainter extends CustomPainter {
           ..shader = LinearGradient(
             begin: Alignment.bottomCenter,
             end: Alignment.topCenter,
-            colors: [color.withValues(alpha: (1 - t) * 0.85), color.withValues(alpha: 0)],
+            colors: [
+              color.withValues(alpha: (1 - t) * (major ? 0.85 : 0.6)),
+              color.withValues(alpha: 0),
+            ],
           ).createShader(rect)
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8),
+          ..maskFilter = MaskFilter.blur(BlurStyle.normal, major ? 8 : 5),
       );
     }
 
-    // 5) VÒNG XUNG KÍCH (major dày hơn + glow)
-    final rings = major ? const [0.30, 0.42, 0.54] : const [0.0, 0.18];
+    // 5) VÒNG XUNG KÍCH (glow, scale theo màn)
+    final rings = major ? const [0.30, 0.42, 0.54] : const [0.0, 0.22];
     for (final delay in rings) {
       final v = ((t - delay) / (1 - delay)).clamp(0.0, 1.0);
       if (v <= 0) continue;
       canvas.drawCircle(
         c,
-        20 + v * (major ? 190 : 130),
+        s * 0.05 + v * s * (major ? 0.5 : 0.36),
         Paint()
           ..style = PaintingStyle.stroke
-          ..strokeWidth = (1 - v) * 5 + 0.5
-          ..maskFilter = major ? const MaskFilter.blur(BlurStyle.normal, 2) : null
+          ..strokeWidth = (1 - v) * 5 + 0.6
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2)
           ..color = color.withValues(alpha: (1 - v) * 0.8),
       );
     }
 
     // 6) TIA SÁNG phóng ra
     final ray = Paint()
-      ..strokeWidth = 2
+      ..strokeWidth = major ? 2.4 : 1.8
       ..strokeCap = StrokeCap.round
       ..color = color.withValues(alpha: (1 - t) * 0.85);
-    final rayN = major ? 16 : 12;
+    final rayN = major ? 18 : 14;
     for (var i = 0; i < rayN; i++) {
       final ang = i * math.pi * 2 / rayN + 0.26;
       final dir = Offset(math.cos(ang), math.sin(ang));
-      canvas.drawLine(c + dir * (30 + t * 95), c + dir * (46 + t * 120), ray);
+      canvas.drawLine(
+        c + dir * (s * 0.08 + t * s * 0.28),
+        c + dir * (s * 0.12 + t * s * (major ? 0.42 : 0.34)),
+        ray,
+      );
     }
 
     // 7) ĐỐM LINH KHÍ bay lên
-    final emberN = major ? 18 : 8;
+    final emberN = major ? 20 : 12;
     final ember = Paint();
     for (var i = 0; i < emberN; i++) {
       final seed = (i * 53) % 100 / 100.0;
-      final x = c.dx + ((i * 37 % 200) - 100) * (0.4 + seed);
-      final y = c.dy + 40 - t * (major ? 260 : 150) * (0.6 + seed);
-      final a = (1 - t) * 0.9 * (t > 0.2 ? 1.0 : t / 0.2);
+      final x = c.dx + ((i * 37 % 200) - 100) / 100.0 * s * 0.4 * (0.4 + seed);
+      final y = c.dy + s * 0.1 - t * s * (major ? 0.7 : 0.5) * (0.6 + seed);
+      final a = (1 - t) * 0.9 * (t > 0.15 ? 1.0 : t / 0.15);
       ember.color = color.withValues(alpha: a);
-      canvas.drawCircle(Offset(x, y), (1 - t) * 2.2 + 0.6, ember);
+      canvas.drawCircle(Offset(x, y), (1 - t) * 2.4 + 0.6, ember);
     }
 
     // 8) NẤC 2: shader godray + bloom phủ additive lên trên (chỉ major, sau hội tụ)
@@ -2355,8 +2473,7 @@ class _CollectionSheet extends ConsumerWidget {
           for (final it in items) {
             (byType[it['type'] as String] ??= []).add(it);
           }
-          final types =
-              cultTypeNames.keys.where(byType.containsKey).toList();
+          final types = cultTypeNames.keys.where(byType.containsKey).toList();
 
           return ListView(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
@@ -2375,8 +2492,8 @@ class _CollectionSheet extends ConsumerWidget {
                   padding: const EdgeInsets.only(top: 14, bottom: 8),
                   child: _SectionLabel(
                     '${cultTypeNames[ty]}  '
-                        '${byType[ty]!.where((it) => owned.contains(it['id'])).length}'
-                        '/${byType[ty]!.length}',
+                    '${byType[ty]!.where((it) => owned.contains(it['id'])).length}'
+                    '/${byType[ty]!.length}',
                     Icons.category_rounded,
                   ),
                 ),
@@ -2415,7 +2532,9 @@ class _CollectionTile extends StatelessWidget {
         alignment: Alignment.center,
         decoration: BoxDecoration(
           color: Color.alphaBlend(
-            cs.onSurface.withValues(alpha: 0.05), cs.surface),
+            cs.onSurface.withValues(alpha: 0.05),
+            cs.surface,
+          ),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: owned
@@ -2893,9 +3012,13 @@ Future<void> _showItemPopup(
     if (action == 'recycle') {
       final r = await cultRecycle(it['id'] as int);
       if (tileCtx.mounted) {
-        ScaffoldMessenger.of(tileCtx).showSnackBar(SnackBar(
-          content: Text('Luyện hóa ${r['recycled']} bản → +${r['linh_khi']} tu vi'),
-        ));
+        ScaffoldMessenger.of(tileCtx).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Luyện hóa ${r['recycled']} bản → +${r['linh_khi']} tu vi',
+            ),
+          ),
+        );
       }
     } else {
       isDan
