@@ -99,6 +99,10 @@ flutter:
     - assets/cult_fx/sword_wheel.webp
     - assets/cult_items/
 
+  # Fragment shader hiệu ứng Độ Kiếp/đại cảnh giới (nấc 2 — bloom + godray)
+  shaders:
+    - shaders/breakthrough.frag
+
   # To add assets to your application, add an assets section, like this:
   # assets:
   #   - images/a_dot_burr.jpeg

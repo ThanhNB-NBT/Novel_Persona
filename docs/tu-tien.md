@@ -112,6 +112,15 @@ Hiệu ứng đột phá (`_BurstPainter`, dialog `_AdvanceFxDialog`): major = b
 (hội tụ hạt → chớp va chạm → trụ sáng + sét phân nhánh glow + xung kích + camera shake
 + slam tên + haptic nặng, ~1.7s); lên tầng = bản snappy (~0.85s, vòng+tia+haptic nhẹ).
 Preview tĩnh qua widget public `BurstPreview(t, color, ok, loi, major)`.
+**Nấc 2 (chỉ major)**: fragment shader `shaders/breakthrough.frag` (godray+bloom
+thủ tục) phủ ADDITIVE lên trên, nạp async qua `FragmentProgram.fromAsset`; null =
+fallback về nấc 1 (thiết bị không hỗ trợ vẫn chạy). Shader chỉ soi được trên máy
+thật — render test KHÔNG chạy GPU shader. Compile check: `flutter build bundle`.
+
+**Test bậc trên máy thật** (soi hiệu ứng khỏi cày): sheet admin (nút mờ góc hero) có
+mục **DEV chỉ hiện ở kDebugMode** → set nhanh cảnh giới/tầng + đầy tu vi qua RPC
+`cult_debug_set` (056, admin-only). Reset tay: `select cult_debug_set(1,1,true)` khi
+đăng nhập bằng acc admin, hoặc `update user_cultivation set realm=1,stage=1,exp=0`.
 
 **Nền tranh màn Tu Tiên**: `app/assets/bg/cultivation_bg.webp` là bản ban ngày,
 `app/assets/bg/cultivation_bg_night.webp` là bản Dạ Lam; app tự chọn theo theme.
