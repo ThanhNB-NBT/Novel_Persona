@@ -684,11 +684,14 @@ class _CrawlTab extends ConsumerWidget {
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(s['note'] ?? s['key']),
-        content: TextField(
-          controller: ctrl,
-          autofocus: true,
-          keyboardType: TextInputType.number,
-          decoration: InputDecoration(labelText: s['key']),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: TextField(
+            controller: ctrl,
+            autofocus: true,
+            keyboardType: TextInputType.number,
+            decoration: InputDecoration(labelText: s['key']),
+          ),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Huỷ')),
@@ -953,52 +956,45 @@ class _NovelRow extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final title = n['title_vi'] ?? n['title_zh'] ?? 'Truyện #${n['id']}';
     final hidden = n['hidden'] == true;
+    final genres = ((n['genres'] as List?) ?? const []).join(', ');
     return ListTile(
-      contentPadding: const EdgeInsets.fromLTRB(12, 4, 8, 4),
+      contentPadding: const EdgeInsets.fromLTRB(12, 4, 4, 4),
+      horizontalTitleGap: 10, // chữ sát bìa hơn (mặc định 16 hở quá)
       leading: Opacity(
         opacity: hidden ? 0.5 : 1, // truyện đã ẩn → bìa mờ đi
-        child: Cover(url: n['cover_url'], width: 38, aspect: 1.36, label: title),
+        child: Cover(url: n['cover_url'], width: 42, aspect: 1.5, label: title),
       ),
       title: Text(title,
-          maxLines: 1, overflow: TextOverflow.ellipsis,
+          maxLines: 2, overflow: TextOverflow.ellipsis,
           style: t.titleMedium?.copyWith(
               color: hidden ? cs.onSurfaceVariant : cs.onSurface)),
       subtitle: Text(
         [
           '${n['chapter_count_translated'] ?? 0}/${n['chapter_count_source'] ?? 0} chương',
-          if ((n['sources'] as Map?)?['name'] != null) '${(n['sources'] as Map)['name']}',
-          n['status'] == 'completed' ? 'hoàn thành' : 'đang ra',
-          if (n['source_rank'] != null) 'hạng ${n['source_rank']}',
-          if (n['meta_translated'] != true) 'chờ dịch tên',
-          if (n['is_canonical'] != true) 'bản trùng',
-          if (n['last_chapter_at'] != null) 'chương mới ${_elapsed(n['last_chapter_at'])} trước',
+          if (genres.isNotEmpty) genres,
           if (hidden) 'đã ẩn',
         ].join(' · '),
-        maxLines: 2, overflow: TextOverflow.ellipsis,
+        maxLines: 1, overflow: TextOverflow.ellipsis,
       ),
-      trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-        IconButton(
-          tooltip: hidden ? 'Hiện lại' : 'Ẩn khỏi Khám phá',
-          icon: Icon(hidden ? Icons.visibility_off_outlined : Icons.visibility_outlined),
-          onPressed: () async {
-            await setNovelHidden(n['id'], !hidden);
-            ref.invalidate(adminNovelsProvider);
-            // Khám phá/trang chủ/tìm kiếm đang cache → invalidate để back ra là mất ngay.
-            ref.invalidate(novelsProvider);
-            ref.invalidate(homeSectionsProvider);
-          },
-        ),
-        PopupMenuButton<String>(
-          onSelected: (v) {
-            if (v == 'edit') _editNovel(context, n, ref);
-            if (v == 'delete') _deleteNovel(context, n, ref);
-          },
-          itemBuilder: (_) => [
-            const PopupMenuItem(value: 'edit', child: Text('Sửa')),
-            const PopupMenuItem(value: 'delete', child: Text('Xoá vĩnh viễn')),
-          ],
-        ),
-      ]),
+      trailing: PopupMenuButton<String>(
+        onSelected: (v) async {
+          // dùng context TRƯỚC await (edit/delete mở dialog ngay, không qua async gap)
+          if (v == 'edit') return _editNovel(context, n, ref);
+          if (v == 'delete') return _deleteNovel(context, n, ref);
+          await setNovelHidden(n['id'], !hidden);
+          ref.invalidate(adminNovelsProvider);
+          // Khám phá/trang chủ/tìm kiếm đang cache → invalidate để back ra là mất ngay.
+          ref.invalidate(novelsProvider);
+          ref.invalidate(homeSectionsProvider);
+        },
+        itemBuilder: (_) => [
+          PopupMenuItem(
+              value: 'hide',
+              child: Text(hidden ? 'Hiện lại' : 'Ẩn khỏi Khám phá')),
+          const PopupMenuItem(value: 'edit', child: Text('Sửa')),
+          const PopupMenuItem(value: 'delete', child: Text('Xoá vĩnh viễn')),
+        ],
+      ),
       // Trong quản trị → xem thông tin DỊCH của chương, không phải trang đọc.
       onTap: () => context.push('/admin/novel/${n['id']}'),
     );
@@ -1045,27 +1041,35 @@ class _NovelRow extends StatelessWidget {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Sửa truyện'),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
-          TextField(
-              controller: titleVi,
-              decoration: const InputDecoration(labelText: 'Tên tiếng Việt')),
-          TextField(
-              controller: authorVi,
-              decoration: const InputDecoration(labelText: 'Tác giả (Việt)')),
-          const SizedBox(height: 8),
-          StatefulBuilder(
-            builder: (_, set) => DropdownButtonFormField<String>(
-              initialValue: status,
-              decoration: const InputDecoration(labelText: 'Trạng thái'),
-              items: const [
-                DropdownMenuItem(value: 'ongoing', child: Text('Đang ra')),
-                DropdownMenuItem(value: 'completed', child: Text('Hoàn thành')),
-                DropdownMenuItem(value: 'hiatus', child: Text('Tạm ngưng')),
-              ],
-              onChanged: (v) => set(() => status = v ?? 'ongoing'),
-            ),
+        // maxFinite: dialog bung hết bề ngang cho phép (khỏi co giật theo nội dung);
+        // scroll: bàn phím che thì cuộn được thay vì tràn
+        content: SizedBox(
+          width: double.maxFinite,
+          child: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              TextField(
+                  controller: titleVi,
+                  decoration: const InputDecoration(labelText: 'Tên tiếng Việt')),
+              const SizedBox(height: 12),
+              TextField(
+                  controller: authorVi,
+                  decoration: const InputDecoration(labelText: 'Tác giả (Việt)')),
+              const SizedBox(height: 12),
+              StatefulBuilder(
+                builder: (_, set) => DropdownButtonFormField<String>(
+                  initialValue: status,
+                  decoration: const InputDecoration(labelText: 'Trạng thái'),
+                  items: const [
+                    DropdownMenuItem(value: 'ongoing', child: Text('Đang ra')),
+                    DropdownMenuItem(value: 'completed', child: Text('Hoàn thành')),
+                    DropdownMenuItem(value: 'hiatus', child: Text('Tạm ngưng')),
+                  ],
+                  onChanged: (v) => set(() => status = v ?? 'ongoing'),
+                ),
+              ),
+            ]),
           ),
-        ]),
+        ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Huỷ')),
           FilledButton(
@@ -1266,12 +1270,17 @@ class AdminNovelScreen extends ConsumerWidget {
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Lỗi: $e')),
         data: (list) => RefreshIndicator(
-          onRefresh: () async => ref.invalidate(adminChaptersProvider(novelId)),
+          onRefresh: () async {
+            ref.invalidate(adminChaptersProvider(novelId));
+            ref.invalidate(novelProvider(novelId));
+          },
           child: ListView.separated(
-            itemCount: list.length,
-            separatorBuilder: (_, _) => const Divider(height: 1),
+            itemCount: list.length + 1,
+            separatorBuilder: (_, i) =>
+                i == 0 ? const SizedBox.shrink() : const Divider(height: 1),
             itemBuilder: (_, i) {
-              final c = list[i];
+              if (i == 0) return _NovelInfoCard(novel);
+              final c = list[i - 1];
               final st = c['translation_status'] as String;
               final tok = (c['prompt_tokens'] ?? 0) + (c['completion_tokens'] ?? 0);
               final info = [
@@ -1318,6 +1327,63 @@ class AdminNovelScreen extends ConsumerWidget {
   String _date(String iso) {
     final d = DateTime.parse(iso).toLocal();
     return '${d.day}/${d.month} ${d.hour}:${d.minute.toString().padLeft(2, '0')}';
+  }
+}
+
+/// Thẻ thông tin đầu màn quản trị 1 truyện: nguồn, trạng thái, thể loại,
+/// chương mới nhất, tiến độ dịch — thứ trước đây nhét hết vào dòng danh sách.
+class _NovelInfoCard extends StatelessWidget {
+  final Rec? novel;
+  const _NovelInfoCard(this.novel);
+
+  @override
+  Widget build(BuildContext context) {
+    final n = novel;
+    if (n == null) return const SizedBox(height: 8);
+    final cs = Theme.of(context).colorScheme;
+    final t = Theme.of(context).textTheme;
+    final genres = ((n['genres'] as List?) ?? const []).join(', ');
+
+    // baseline: nhãn (labelSmall) và giá trị (bodyMedium) cỡ chữ/line-height khác
+    // nhau — căn top là lệch dòng ngay
+    Widget row(String label, String value) => Padding(
+          padding: const EdgeInsets.symmetric(vertical: 3),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              SizedBox(
+                  width: 92,
+                  child: Text(label,
+                      style: t.labelSmall?.copyWith(color: cs.onSurfaceVariant))),
+              Expanded(child: Text(value, style: t.bodyMedium?.copyWith(color: cs.onSurface))),
+            ],
+          ),
+        );
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: cs.surface,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.7)),
+        ),
+        child: Column(children: [
+          row('Nguồn', '${(n['sources'] as Map?)?['name'] ?? '—'}'),
+          row('Trạng thái', statusLabel('${n['status'] ?? ''}')),
+          if (genres.isNotEmpty) row('Thể loại', genres),
+          row(
+              'Chương mới',
+              n['last_chapter_at'] != null
+                  ? '${_elapsed(n['last_chapter_at'])} trước'
+                  : '—'),
+          row('Đã dịch',
+              '${n['chapter_count_translated'] ?? 0}/${n['chapter_count_source'] ?? 0} chương'),
+        ]),
+      ),
+    );
   }
 }
 

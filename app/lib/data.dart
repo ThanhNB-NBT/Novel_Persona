@@ -192,7 +192,7 @@ final novelProvider = FutureProvider.autoDispose.family<Rec, int>((
   ref,
   id,
 ) async {
-  return await sb.from('novels').select().eq('id', id).single();
+  return await sb.from('novels').select('*, sources(name)').eq('id', id).single();
 });
 
 /// Nhãn tiếng Việt cho trạng thái truyện; trạng thái lạ (crawl mới) hiện nguyên văn.
@@ -833,7 +833,7 @@ final adminNovelsProvider = FutureProvider.autoDispose<List<Rec>>((ref) async {
           .from('novels')
           .select(
             'id, title_vi, title_zh, author_vi, status, hidden, source_id, is_canonical, '
-            'meta_translated, source_rank, last_chapter_at, updated_at, '
+            'genres, meta_translated, source_rank, last_chapter_at, updated_at, '
             'chapter_count_source, chapter_count_translated, cover_url, sources(name)',
           )
           .order('updated_at', ascending: false)

@@ -86,6 +86,17 @@ void showUpdateDialog(BuildContext context, UpdateInfo info) {
               launchUrl(Uri.parse(info.apkUrl!), mode: LaunchMode.externalApplication);
             },
             child: const Text('Tải bản mới'),
+          )
+        else
+          // iOS (hoặc Android thiếu APK): không tự cài được → mở trang release
+          // để xem ghi chú + tải asset, cài qua SideStore.
+          FilledButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              launchUrl(Uri.parse('https://github.com/$_repo/releases/latest'),
+                  mode: LaunchMode.externalApplication);
+            },
+            child: const Text('Mở trang tải'),
           ),
       ],
     ),
