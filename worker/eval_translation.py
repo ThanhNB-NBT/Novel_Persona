@@ -15,6 +15,7 @@ prompt cấm gì thì lint bắt cái đó). Điểm 0 = sạch. Lỗi văn phon
 from __future__ import annotations
 
 import argparse
+from collections import defaultdict
 import json
 import random
 import re
@@ -40,7 +41,36 @@ _RULES: list[tuple[str, re.Pattern]] = [
     # 'Anh/Cô' trần mở đầu câu kể — fuse không chặn (sợ oan anh hùng/Nguyên Anh),
     # nhưng đầu câu + động từ thường là đại từ kể sai → người đọc thẩm định
     ("'Anh/Cô' trần đầu câu kể (nghi vấn)", re.compile(r"(?:^|[.!?…]\s+)(?:Anh|Cô)\s+(?!ta\b|ấy\b|trai\b|hùng\b|nương\b|gái\b|em\b)[a-zà-ỹ]+")),
+    ("convert 'không khỏi'", re.compile(r"\bkhông khỏi\b", re.I)),
+    ("convert 'căn bản là'", re.compile(r"\bcăn bản là\b", re.I)),
+    ("convert 'rốt cuộc là'", re.compile(r"\brốt cuộc là\b", re.I)),
+    ("convert 'trực tiếp + động từ'", re.compile(r"\btrực tiếp\s+(?:đi|đến|nói|hỏi|ra tay|đánh|giết|ném|đẩy|mở|đóng)\b", re.I)),
 ]
+
+# Tự xưng có sắc thái trong gốc không được rút hết thành "ta/tôi" hoặc biến mất.
+# Đây là warning theo constraint từ vựng; reviewer vẫn quyết định cách Việt hóa đúng ngữ cảnh.
+_SELF_REFERENCE_CONSTRAINTS: list[tuple[str, tuple[str, ...]]] = [
+    ("老夫", ("lão phu", "lão già này", "lão đây")),
+    ("老子", ("lão tử", "ông đây", "bố đây", "ta đây")),
+    ("本座", ("bổn tọa",)),
+    ("本尊", ("bản tôn", "bổn tôn")),
+    ("在下", ("tại hạ",)),
+    ("晚辈", ("vãn bối",)),
+    ("贫道", ("bần đạo",)),
+    ("贫僧", ("bần tăng",)),
+    ("哀家", ("ai gia",)),
+    ("朕", ("trẫm",)),
+    # ponytail: 臣 trần nằm trong 大臣/臣子... và "thần" trần nằm trong tinh thần/thần thông...
+    # nên hai chiều đều nhiễu — chỉ match cụm tự xưng rõ
+    ("微臣", ("vi thần",)),
+    ("臣妾", ("thần thiếp",)),
+]
+
+_DIALOGUE = re.compile(r'"[^"\n]*"|“[^”]*”|「[^」]*」')
+_NARRATOR_TERMS = re.compile(
+    r"\b(?:hắn|nàng|y|gã|lão|anh(?:\s+ta)?|cậu(?:\s+ta)?|cô(?:\s+ấy|\s+ta)?|ông\s+ta)\b",
+    re.I,
+)
 
 
 def _han_repeat_density(vi: str) -> list[str]:
@@ -57,6 +87,26 @@ def _exclaim_density(vi: str) -> int:
     return sum(1 for p in vi.split("\n") if p.count("!") > 2)
 
 
+def narrator_terms(vi: str) -> dict[str, int]:
+    """Đếm cách người kể gọi nhân vật, bỏ phần thoại để không trộn hai hệ xưng hô."""
+    narration = _DIALOGUE.sub(" ", vi)
+    out: dict[str, int] = defaultdict(int)
+    for term in _NARRATOR_TERMS.findall(narration):
+        out[term.lower()] += 1
+    return dict(out)
+
+
+def _self_reference_omissions(zh: str, vi: str) -> list[str]:
+    """Bắt tự xưng giàu sắc thái xuất hiện trong gốc nhưng mất khỏi bản dịch."""
+    low = vi.lower()
+    missing = []
+    for source, accepted in _SELF_REFERENCE_CONSTRAINTS:
+        count = zh.count(source)
+        if count and not any(term in low for term in accepted):
+            missing.append(f"{source}×{count} thiếu dấu vết ({'/'.join(accepted)})")
+    return missing
+
+
 def lint(zh: str, vi: str) -> list[str]:
     problems: list[str] = []
     mech = check_translation(zh, vi)          # fuse cơ học: sót Hán/cụt/mất đoạn
@@ -65,6 +115,8 @@ def lint(zh: str, vi: str) -> list[str]:
     reg = _register_violation(vi, allow_toi=_is_first_person(zh))  # xưng hô lời kể
     if reg:
         problems.append(f"[fuse] {reg}")
+    for missing in _self_reference_omissions(zh, vi):
+        problems.append(f"[xưng hô] {missing}")
     for name, pat in _RULES:
         hits = pat.findall(vi)
         if hits:
@@ -75,6 +127,14 @@ def lint(zh: str, vi: str) -> list[str]:
     if n:
         problems.append(f"[lint] {n} đoạn quá 2 dấu '!'")
     return problems
+
+
+def _self_check() -> None:
+    assert _self_reference_omissions("老夫不答应。", "Ta không đồng ý.")
+    assert not _self_reference_omissions("老夫不答应。", "Lão phu không đồng ý.")
+    terms = narrator_terms('Hắn quay đi. “Lão tử không sợ!” Nàng im lặng.')
+    assert terms == {"hắn": 1, "nàng": 1}, terms
+    assert any("không khỏi" in p for p in lint("他笑了。", "Hắn không khỏi bật cười."))
 
 
 # ---------- lấy mẫu ----------
@@ -126,7 +186,12 @@ def main() -> None:
     ap.add_argument("--existing", type=int, default=0)
     ap.add_argument("--fresh", type=int, default=0)
     ap.add_argument("--out", default="eval_out", help="thư mục xuất cặp zh/vi")
+    ap.add_argument("--self-check", action="store_true", help="chạy kiểm tra evaluator, không gọi DB/API")
     args = ap.parse_args()
+    if args.self_check:
+        _self_check()
+        print("Self-check evaluator: OK")
+        return
     if not (args.existing or args.fresh):
         ap.error("cần --existing N hoặc --fresh N")
 
@@ -138,12 +203,16 @@ def main() -> None:
 
     total_problems = 0
     report = []
+    narrator_by_novel: dict[int, dict[str, int]] = defaultdict(lambda: defaultdict(int))
     for r in rows:
         problems = lint(r["content_zh"], r["content_vi"])
         total_problems += len(problems)
         nv = r.get("novels") or {}
+        narrator = narrator_terms(r["content_vi"])
+        for term, count in narrator.items():
+            narrator_by_novel[r["novel_id"]][term] += count
         tag = f"novel {r['novel_id']} ch.{r['chapter_index']} ({nv.get('title_vi', '?')}) [{r.get('model_used')}]"
-        report.append({"chapter": tag, "problems": problems})
+        report.append({"chapter": tag, "problems": problems, "narrator_terms": narrator})
         fname = outdir / f"n{r['novel_id']}_c{r['chapter_index']}.txt"
         fname.write_text(
             f"=== {tag}\n=== thể loại: {', '.join(nv.get('genres') or [])}\n\n"
@@ -154,6 +223,10 @@ def main() -> None:
         for p in problems:
             print(f"           - {p}")
     print(f"\nTổng: {len(rows)} chương, {total_problems} vấn đề máy bắt được.")
+    print("\nĐại từ người kể theo truyện (chỉ là tín hiệu; nhiều nhân vật có thể cần nhiều cách gọi):")
+    for novel_id, terms in narrator_by_novel.items():
+        print(f"  novel {novel_id}: " + ", ".join(
+            f"{term}={count}" for term, count in sorted(terms.items(), key=lambda x: -x[1])))
     print(f"Cặp zh/vi đã xuất ra {outdir}/ — đọc để thẩm định lỗi văn phong máy không thấy.")
     (outdir / "report.json").write_text(
         json.dumps(report, ensure_ascii=False, indent=1), encoding="utf-8")
