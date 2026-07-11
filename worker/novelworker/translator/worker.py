@@ -333,14 +333,20 @@ def _merge_names(terms: list[dict], existing_zh: set[str], names: list[dict]) ->
     return added
 
 
-def _analyze_names(llm, chunk: str) -> list[dict]:
-    """Pass 1: chỉ trích tên riêng + phiên âm (không dịch → rẻ). Lỗi thì bỏ qua."""
+def _analyze_names(llm, chunk: str) -> tuple[list[dict], dict | None]:
+    """Pass 1: tên riêng + scene contract (speakers/POV) trong CÙNG một lượt gọi.
+    Trả (terms, scene); lỗi thì ([], None) — dịch vẫn chạy, chỉ thiếu gợi ý."""
     try:
-        res = llm.complete(prompts.SYSTEM_ANALYZE, chunk, max_tokens=1024)
+        res = llm.complete(prompts.SYSTEM_ANALYZE, chunk, max_tokens=1536)
         data = _extract_json(res.text)
-        return data if isinstance(data, list) else []
     except Exception:
-        return []
+        return [], None
+    if isinstance(data, list):        # model trả shape mảng cũ → vẫn nhận tên
+        return data, None
+    if isinstance(data, dict):
+        terms = data.get("terms")
+        return (terms if isinstance(terms, list) else []), data
+    return [], None
 
 
 def _split_chunks(text: str, limit: int = CHUNK_LIMIT) -> list[str]:
@@ -577,11 +583,15 @@ def handle_chapter(job: dict, llm) -> None:
     for i, chunk in enumerate(chunks):
         # Pass 1 (chỉ khi 2-pass còn bật): chốt phiên âm tên riêng vào glossary TRƯỚC khi dịch,
         # để mọi lần tên xuất hiện trong chunk này đều dùng đúng một cách phiên âm.
+        scene_line = None
         if twopass:
-            names = _analyze_names(llm, chunk)
+            names, scene = _analyze_names(llm, chunk)
             added = _merge_names(terms, existing_zh, names)
             new_names_this_chapter += len(added)
             detected += added  # tên pass-1 cũng phải vào DB — trước đây chỉ nằm RAM, chương sau mất
+            # ponytail: scene contract sống nhờ 2-pass; truyện đã tắt 2-pass thì thôi —
+            # bật lại khi Q0 cho thấy thoại chương sau vẫn lệch
+            scene_line = prompts.build_scene_line(scene)
 
         res = chapter_llm.complete(
             # chỉ chèn term xuất hiện trong chunk này → prompt gọn, model bám sát hơn
@@ -590,7 +600,7 @@ def handle_chapter(job: dict, llm) -> None:
             prompts.build_chapter_user(
                 ch.get("title_zh") if i == 0 else None, chunk, prev_summary,
                 prev_tail=prev_tail, novel_line=novel_line, register_line=register_line,
-                style_line=style_line),
+                style_line=style_line, scene_line=scene_line),
             # fuse chất lượng NẰM TRONG chain: output kém → tự đổi provider kế, không fail oan
             validate=_quality_fuse(chunk),
         )

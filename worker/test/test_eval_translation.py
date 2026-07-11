@@ -107,6 +107,38 @@ def test_style_line_and_narrator_term():
     assert "[Văn phong truyện: X]" in user
 
 
+def test_scene_line_and_analyze_shapes():
+    from novelworker.translator import prompts
+    from novelworker.translator.worker import _analyze_names
+    line = prompts.build_scene_line({
+        "speakers": [
+            {"speaker": "Lâm Tùng", "addressee": "lão giả", "self_term": "vãn bối",
+             "address_term": "tiền bối", "tone": "cung kính"},
+            {"speaker": "?", "addressee": "Lâm Tùng"},  # uncertain → bỏ
+        ],
+        "pov": "ngôi ba bám theo Lâm Tùng"})
+    assert "Lâm Tùng nói với lão giả" in line and "vãn bối" in line
+    assert line.count("nói với") == 1
+    assert prompts.build_scene_line(None) is None
+    assert prompts.build_scene_line({"speakers": []}) is None
+
+    class FakeLLM:
+        def __init__(self, text):
+            self._t = text
+        def complete(self, *a, **k):
+            return type("R", (), {"text": self._t})()
+
+    # shape object mới
+    terms, scene = _analyze_names(FakeLLM(
+        '{"terms": [{"zh": "林松", "vi": "Lâm Tùng"}], "speakers": [], "pov": "ngôi ba"}'), "x")
+    assert terms[0]["vi"] == "Lâm Tùng" and scene["pov"] == "ngôi ba"
+    # shape mảng cũ vẫn nhận
+    terms, scene = _analyze_names(FakeLLM('[{"zh": "林松", "vi": "Lâm Tùng"}]'), "x")
+    assert terms and scene is None
+    # rác → không vỡ
+    assert _analyze_names(FakeLLM("not json"), "x") == ([], None)
+
+
 def test_style_revise_with_fake_llm():
     from novelworker.translator.worker import _style_revise
 
