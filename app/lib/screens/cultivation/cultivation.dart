@@ -1238,53 +1238,23 @@ class _AdvanceFxDialogState extends State<_AdvanceFxDialog>
     );
   }
 
-  /// Overlay Lottie (tải sẵn từ marketplace) chồng lên FX vẽ tay — chỉ khi THÀNH CÔNG.
-  /// Vị trí/scale để hằng số ở đây, dễ chỉnh sau khi soi trên máy thật.
+  /// Overlay Lottie chồng lên FX vẽ tay — CHỈ lôi kiếp (Kim Đan+) khi thành công.
+  /// (Aura + level-up đã bỏ theo yêu cầu.) Vị trí/scale = hằng số, chỉnh sau khi soi máy.
   List<Widget> _lottieOverlays(bool ok) {
-    if (!ok) return const [];
-    final loi = widget.major && (widget.result['realm'] as int) >= 3;
+    final loi = ok && widget.major && (widget.result['realm'] as int) >= 3;
+    if (!loi) return const [];
     return [
-      // Aura linh khí xoáy quanh nhân vật (mọi lần thành công)
       Align(
-        alignment: const Alignment(0, -0.18),
+        alignment: const Alignment(0, -0.5),
         child: FractionallySizedBox(
-          widthFactor: widget.major ? 0.9 : 0.6,
-          child: AspectRatio(
-            aspectRatio: 1,
-            child: Lottie.asset(
-              'assets/cult_fx/fx_aura.json',
-              repeat: false,
-              fit: BoxFit.contain,
-            ),
+          widthFactor: 0.95,
+          child: Lottie.asset(
+            'assets/cult_fx/fx_lightning.json',
+            repeat: false,
+            fit: BoxFit.contain,
           ),
         ),
       ),
-      // Lôi kiếp (Kim Đan+): sét giáng từ trên
-      if (loi)
-        Align(
-          alignment: const Alignment(0, -0.5),
-          child: FractionallySizedBox(
-            widthFactor: 0.95,
-            child: Lottie.asset(
-              'assets/cult_fx/fx_lightning.json',
-              repeat: false,
-              fit: BoxFit.contain,
-            ),
-          ),
-        ),
-      // Lên tầng: hiệu ứng level-up phủ giữa màn
-      if (!widget.major)
-        Align(
-          alignment: const Alignment(0, -0.1),
-          child: FractionallySizedBox(
-            heightFactor: 0.7,
-            child: Lottie.asset(
-              'assets/cult_fx/fx_levelup.json',
-              repeat: false,
-              fit: BoxFit.contain,
-            ),
-          ),
-        ),
     ];
   }
 

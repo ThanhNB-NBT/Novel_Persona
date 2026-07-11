@@ -112,11 +112,9 @@ Hiệu ứng đột phá (`_BurstPainter`, dialog `_AdvanceFxDialog`): major = b
 (hội tụ hạt → chớp va chạm → trụ sáng + sét phân nhánh glow + xung kích + camera shake
 + slam tên + haptic nặng, ~1.7s); lên tầng = bản snappy (~0.85s, vòng+tia+haptic nhẹ).
 Preview tĩnh qua widget public `BurstPreview(t, color, ok, loi, major)`.
-**Overlay Lottie** (gói `lottie`, `_AdvanceFxDialog._lottieOverlays`): chồng lên FX vẽ
-tay khi THÀNH CÔNG — `fx_aura.json` (xoáy linh khí, mọi lần), `fx_lightning.json`
-(lôi kiếp Kim Đan+), `fx_levelup.json` (lên tầng). Vị trí/scale = hằng số trong hàm,
-chỉnh sau khi soi máy. Màu Lottie đóng cứng (chưa tint theo cảnh giới). File `.riv`
-(spiral phi thăng) CHƯA ráp (cần gói `rive`). Pikachu bỏ (lạc tông).
+**Overlay Lottie** (gói `lottie`, `_AdvanceFxDialog._lottieOverlays`): chỉ còn
+`fx_lightning.json` (lôi kiếp Kim Đan+). Aura + level-up đã bỏ. Vị trí/scale = hằng
+số trong hàm, chỉnh sau khi soi máy. File `.riv` (spiral phi thăng) CHƯA ráp (cần `rive`).
 **Nấc 2 (chỉ major)**: fragment shader `shaders/breakthrough.frag` (godray+bloom
 thủ tục) phủ ADDITIVE lên trên, nạp async qua `FragmentProgram.fromAsset`; null =
 fallback về nấc 1 (thiết bị không hỗ trợ vẫn chạy). Shader chỉ soi được trên máy
