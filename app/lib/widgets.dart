@@ -90,32 +90,38 @@ void translateRangeDialog(BuildContext context, WidgetRef ref, int novelId,
     context: context,
     builder: (ctx) => AlertDialog(
       title: const Text('Yêu cầu dịch'),
-      content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('Đã dịch $translated/$source chương. Chọn dịch tới đâu:',
-            style: Theme.of(ctx).textTheme.bodyMedium),
-        const SizedBox(height: 12),
-        Wrap(spacing: 8, runSpacing: 8, children: [
-          for (final step in [50, 100, 200])
-            if (translated + step <= source || translated < source)
-              ActionChip(
-                label: Text('+$step chương'),
-                onPressed: () => submit((translated + step).clamp(0, source)),
-              ),
-          if (translated < source)
-            ActionChip(label: const Text('Đến hết'), onPressed: () => submit(source)),
-        ]),
-        const SizedBox(height: 12),
-        TextField(
-          controller: custom,
-          keyboardType: TextInputType.number,
-          decoration: const InputDecoration(
-              labelText: 'Hoặc dịch tới chương…', isDense: true),
-          onSubmitted: (v) {
-            final to = int.tryParse(v.trim());
-            if (to != null) submit(to.clamp(0, source));
-          },
+      // maxFinite + scroll: bề ngang ổn định, bàn phím che thì cuộn thay vì tràn
+      content: SizedBox(
+        width: double.maxFinite,
+        child: SingleChildScrollView(
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('Đã dịch $translated/$source chương. Chọn dịch tới đâu:',
+                style: Theme.of(ctx).textTheme.bodyMedium),
+            const SizedBox(height: 12),
+            Wrap(spacing: 8, runSpacing: 8, children: [
+              for (final step in [50, 100, 200])
+                if (translated + step <= source || translated < source)
+                  ActionChip(
+                    label: Text('+$step chương'),
+                    onPressed: () => submit((translated + step).clamp(0, source)),
+                  ),
+              if (translated < source)
+                ActionChip(label: const Text('Đến hết'), onPressed: () => submit(source)),
+            ]),
+            const SizedBox(height: 12),
+            TextField(
+              controller: custom,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                  labelText: 'Hoặc dịch tới chương…', isDense: true),
+              onSubmitted: (v) {
+                final to = int.tryParse(v.trim());
+                if (to != null) submit(to.clamp(0, source));
+              },
+            ),
+          ]),
         ),
-      ]),
+      ),
       actions: [
         TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Đóng')),
         FilledButton(
