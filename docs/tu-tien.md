@@ -137,12 +137,15 @@ xuất webp cùng cỡ.
 
 ## 5. Trạng thái & roadmap
 
-Đã có (migration 039→049): exp/realm/stage + đột phá · 8 loại vật phẩm ~100 món ·
+Đã có (migration 039→055): exp/realm/stage + đột phá · 8 loại vật phẩm ~100 món ·
 ngũ hành linh căn · 5 chỉ số · tộc/giới tính + ảnh nhân vật · cơ duyên 50% uniform ·
-hero stage + thẻ tilt + đĩa dock bát quái.
+hero stage + thẻ tilt + đĩa dock bát quái · **Tâm Ma khi đại cảnh giới (054)** ·
+**Luyện hóa đồ trùng → tu vi (053)** · **Bộ sưu tập vật phẩm (UI)** ·
+**Phi Thăng ở đỉnh Độ Kiếp → danh hiệu Tiên Nhân (055)**.
 
 Roadmap (chưa làm, làm theo thứ tự user chọn):
-- Combat tâm ma khi độ kiếp (dùng atk/def/hp/agi/thần thức — hiện stats chỉ để ngắm).
+- Halo/hiệu ứng nhân vật đặc biệt hậu Phi Thăng (hiện chỉ có danh hiệu chữ).
+- "Đã từng thu thập" cho Bộ sưu tập (hiện chỉ tính đồ đang có qty>0 — cần bảng mới).
 - Shop / tiền tệ linh thạch (nguồn: quà trùng → tự bán?).
 - Tông môn, xếp hạng (cần chống gian lận — lúc đó mới siết claim theo reading_progress).
 - Thành tựu.
