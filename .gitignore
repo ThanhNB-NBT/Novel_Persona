@@ -23,6 +23,7 @@ env/
 .claude/
 .agents/
 .codex/
+.codex-remote-attachments/
 *.swp
 *.swo
 *~

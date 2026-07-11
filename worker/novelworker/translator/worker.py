@@ -57,6 +57,18 @@ class MissingContentError(RuntimeError):
     pass
 
 
+def _is_unique_violation(exc: Exception) -> bool:
+    return getattr(exc, "code", None) == "23505" or "duplicate key" in str(exc).lower()
+
+
+def _keep_job_lock(job_id: int, worker_id: str, stop: threading.Event, interval: float) -> None:
+    while not stop.wait(interval):
+        try:
+            db.refresh_job_lock(job_id, worker_id)
+        except Exception:
+            log.exception("Job #%s: không gia hạn được lease", job_id)
+
+
 HAN_CHARS = re.compile(r"[一-鿿㐀-䶿]")
 
 
@@ -540,8 +552,12 @@ def handle_chapter(job: dict, llm) -> None:
                     "note": t.get("note") or None,  # giới tính/vai vế → xưng hô đúng ở chương sau
                     "scope": "novel", "approved": False,
                 }).execute()
-            except Exception:
-                pass  # trùng thì thôi
+            except Exception as exc:
+                if _is_unique_violation(exc):
+                    log.debug("Glossary term trùng, bỏ qua: %s", zh)
+                else:
+                    # Bản dịch đã lưu ở trên: ghi rõ lỗi nhưng không dịch lại cả chương.
+                    log.exception("Không lưu được glossary term %s (chương %s)", zh, ch["id"])
 
     # Cập nhật 2-pass thích ứng: đủ số chương "ít tên mới" liên tiếp thì tắt cho truyện này.
     # ponytail: nhiều luồng có thể đua state — chỉ là heuristic, đua lệch chút không sao.
@@ -640,6 +656,14 @@ def _consume_loop(worker_id: str, slot: int, paused: threading.Event, poll_secon
                 continue
             idle_sleep = poll_seconds
             log.info("[%s] Nhận job #%s type=%s novel=%s", worker_id, job["id"], job["type"], job["novel_id"])
+            lease_stop = threading.Event()
+            lease_thread = threading.Thread(
+                target=_keep_job_lock,
+                args=(job["id"], worker_id, lease_stop,
+                      max(30.0, settings.stale_job_minutes * 20.0)),
+                daemon=True,
+            )
+            lease_thread.start()
             try:
                 HANDLERS[job["type"]](job, llm)
                 db.finish_job(job["id"], ok=True)
@@ -650,6 +674,9 @@ def _consume_loop(worker_id: str, slot: int, paused: threading.Event, poll_secon
             except Exception as e:
                 log.exception("Job #%s lỗi", job["id"])
                 db.finish_job(job["id"], ok=False, error=str(e))
+            finally:
+                lease_stop.set()
+                lease_thread.join(timeout=1)
         except Exception:
             log.exception("[%s] Lỗi tạm thời (mạng/DB) — nghỉ rồi thử lại", worker_id)
             time.sleep(max(poll_seconds, 5.0))

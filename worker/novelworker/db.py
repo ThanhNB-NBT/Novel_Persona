@@ -85,6 +85,13 @@ def claim_next_job(worker_id: str) -> dict | None:
     return res.data[0] if res.data else None
 
 
+def refresh_job_lock(job_id: int, worker_id: str) -> None:
+    """Gia hạn lease để reaper không lấy lại job LLM vẫn đang chạy."""
+    sb().table("translation_jobs").update({"locked_at": utc_now()}).eq(
+        "id", job_id
+    ).eq("status", "running").eq("locked_by", worker_id).execute()
+
+
 def finish_job(job_id: int, ok: bool, error: str | None = None) -> None:
     if ok:
         sb().table("translation_jobs").update(

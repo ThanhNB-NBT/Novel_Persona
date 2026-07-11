@@ -7,11 +7,39 @@ os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "test")
 
 from novelworker.translator.worker import (
     GLOSSARY_LINE, _clean_output, _extract_json, _merge_names, _pop_summary,
-    _fix_register, _register_violation, _split_chunks, _strip_meta, check_translation, han_ratio,
+    _fix_register, _is_unique_violation, _register_violation, _split_chunks, _strip_meta,
+    check_translation, han_ratio,
 )
 
 
 def main() -> None:
+    class UniqueError(Exception):
+        code = "23505"
+
+    assert _is_unique_violation(UniqueError())
+    assert _is_unique_violation(RuntimeError("duplicate key value violates unique constraint"))
+    assert not _is_unique_violation(RuntimeError("network timeout"))
+
+    from novelworker.translator import worker as worker_mod
+    refreshed = []
+    original_refresh = worker_mod.db.refresh_job_lock
+
+    class StopAfterOne:
+        calls = 0
+
+        def wait(self, interval):
+            self.calls += 1
+            return self.calls > 1
+
+    try:
+        worker_mod.db.refresh_job_lock = lambda job_id, worker_id: refreshed.append(
+            (job_id, worker_id)
+        )
+        worker_mod._keep_job_lock(7, "worker:test", StopAfterOne(), 30)
+    finally:
+        worker_mod.db.refresh_job_lock = original_refresh
+    assert refreshed == [(7, "worker:test")]
+
     data = _extract_json('metadata:\n```json\n{"title_vi":"Tên truyện"}\n```')
     assert data["title_vi"] == "Tên truyện"
 
