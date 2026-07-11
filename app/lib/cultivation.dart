@@ -195,6 +195,10 @@ Future<Rec> cultEquip(int itemId) async =>
 Future<Rec> cultAdvance() async =>
     Map<String, dynamic>.from(await sb.rpc('cult_advance') as Map);
 
+/// Phi Thăng (Độ Kiếp tầng 9 đầy tu vi + thắng Tâm Ma cuối). Trả {ascended, tamma}.
+Future<Rec> cultAscend() async =>
+    Map<String, dynamic>.from(await sb.rpc('cult_ascend') as Map);
+
 /// Chọn dung mạo (tộc + giới tính) — user thường chỉ MỘT lần, admin đổi tự do.
 Future<Rec> cultSetAvatar(String race, String gender) async =>
     Map<String, dynamic>.from(await sb.rpc('cult_set_avatar',

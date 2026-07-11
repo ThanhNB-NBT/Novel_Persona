@@ -91,6 +91,43 @@ class _CultivationScreenState extends ConsumerState<CultivationScreen> {
     }
   }
 
+  /// Phi Thăng ở đỉnh Độ Kiếp: một trận Tâm Ma cuối, thắng thì đắc đạo thành tiên.
+  Future<void> _ascend(Rec st) async {
+    if (_advancing) return;
+    setState(() => _advancing = true);
+    try {
+      final r = await cultAscend();
+      if (!mounted) return;
+      ref.invalidate(cultStateProvider);
+      showGeneralDialog(
+        context: context,
+        barrierDismissible: true,
+        barrierLabel: 'phi thăng',
+        barrierColor: Colors.black.withValues(alpha: 0.72),
+        transitionDuration: const Duration(milliseconds: 200),
+        pageBuilder: (ctx, _, _) => _AdvanceFxDialog(
+          result: {
+            'success': r['ascended'] == true,
+            'realm': 9,
+            'stage': 9,
+            'chance': (r['tamma'] as Rec?)?['chance'],
+            'tamma': r['tamma'],
+          },
+          major: true,
+          ascend: true,
+          race: st['race'] as String?,
+          gender: st['gender'] as String?,
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      }
+    } finally {
+      if (mounted) setState(() => _advancing = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(cultStateProvider);
@@ -181,7 +218,9 @@ class _CultivationScreenState extends ConsumerState<CultivationScreen> {
                                 st: st,
                                 exp: _exp,
                                 busy: _advancing,
+                                ascended: st['ascended_at'] != null,
                                 onAdvance: () => _advance(st),
+                                onAscend: () => _ascend(st),
                               ),
                               const SizedBox(height: 14),
                               const _SectionLabel(
@@ -637,12 +676,16 @@ class _RealmCard extends StatelessWidget {
   final Rec st;
   final ValueNotifier<double> exp;
   final VoidCallback onAdvance;
+  final VoidCallback onAscend;
   final bool busy;
+  final bool ascended;
   const _RealmCard({
     required this.st,
     required this.exp,
     required this.onAdvance,
+    required this.onAscend,
     required this.busy,
+    required this.ascended,
   });
 
   @override
@@ -795,7 +838,9 @@ class _RealmCard extends StatelessWidget {
                             child: Text(
                               full
                                   ? (peak
-                                        ? 'Viên mãn — chờ phi thăng'
+                                        ? (ascended
+                                              ? 'Đã phi thăng · Tiên Nhân'
+                                              : 'Viên mãn — có thể phi thăng')
                                         : 'Bình cảnh · ${major ? 'sẵn sàng đột phá' : 'sẵn sàng lên tầng'}')
                                   : '${e.floor()} / ${req.floor()}',
                               style: monoStyle(
@@ -813,7 +858,11 @@ class _RealmCard extends StatelessWidget {
                     SizedBox(
                       width: double.infinity,
                       child: FilledButton.icon(
-                        onPressed: full && !peak && !busy ? onAdvance : null,
+                        onPressed: busy || !full
+                            ? null
+                            : peak
+                            ? (ascended ? null : onAscend)
+                            : onAdvance,
                         icon: busy
                             ? const SizedBox(
                                 width: 18,
@@ -821,16 +870,22 @@ class _RealmCard extends StatelessWidget {
                                 child: CircularProgressIndicator(strokeWidth: 2),
                               )
                             : Icon(
-                                major
+                                peak
+                                    ? (ascended
+                                          ? Icons.auto_awesome
+                                          : Icons.flight_takeoff_rounded)
+                                    : major
                                     ? Icons.bolt_rounded
                                     : Icons.arrow_upward_rounded,
                                 size: 18,
                               ),
                         label: Text(
-                          major
+                          peak
+                              ? (ascended
+                                    ? 'Tiên Nhân · Đã Phi Thăng'
+                                    : 'Phi Thăng')
+                              : major
                               ? 'Đột phá ${realmNames[realm]} ($chance%)'
-                              : peak
-                              ? 'Đỉnh Độ Kiếp'
                               : 'Lên tầng ${stage + 1}',
                         ),
                       ),
@@ -852,11 +907,13 @@ class _RealmCard extends StatelessWidget {
 class _AdvanceFxDialog extends StatefulWidget {
   final Rec result;
   final bool major;
+  final bool ascend; // phi thăng: đổi chữ + tông vàng tiên
   final String? race;
   final String? gender;
   const _AdvanceFxDialog({
     required this.result,
     required this.major,
+    this.ascend = false,
     this.race,
     this.gender,
   });
@@ -905,7 +962,9 @@ class _AdvanceFxDialogState extends State<_AdvanceFxDialog>
     final ok = r['success'] == true;
     final realm = r['realm'] as int;
     final grade = (realm + 1) ~/ 2;
-    final color = ok ? gradeColor(grade) : const Color(0xFFE03131);
+    final color = ok
+        ? (widget.ascend ? gradeColor(5) : gradeColor(grade)) // vàng tiên khi phi thăng
+        : const Color(0xFFE03131);
     // đột phá VÀO Kim Đan trở lên → thiên lôi giáng xuống (lore: kết đan dẫn kiếp)
     final loi = widget.major && (ok ? realm : realm + 1) >= 3;
 
@@ -947,7 +1006,9 @@ class _AdvanceFxDialogState extends State<_AdvanceFxDialog>
                 ),
                 const SizedBox(height: 10),
                 Text(
-                  widget.major
+                  widget.ascend
+                      ? (ok ? 'PHI THĂNG THÀNH CÔNG' : 'PHI THĂNG THẤT BẠI')
+                      : widget.major
                       ? (ok
                             ? (loi
                                   ? 'VƯỢT LÔI KIẾP THÀNH CÔNG'
@@ -962,7 +1023,11 @@ class _AdvanceFxDialogState extends State<_AdvanceFxDialog>
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  ok
+                  widget.ascend
+                      ? (ok
+                            ? 'Vượt Tâm Ma cuối, độ kiếp phi thăng —\nđắc đạo thành Tiên Nhân!'
+                            : 'Tâm ma còn vương, phi thăng bất thành.\nTĩnh tâm rồi thử lại.')
+                      : ok
                       ? '${realmNames[realm - 1]} · tầng ${r['stage']}'
                       : loi
                       ? 'Lôi kiếp đánh rớt, tâm ma quấy nhiễu — mất 30% tu vi tầng này.\nTĩnh tâm dưỡng thương rồi thử lại!'
@@ -970,7 +1035,7 @@ class _AdvanceFxDialogState extends State<_AdvanceFxDialog>
                   textAlign: TextAlign.center,
                   style: t.bodyMedium?.copyWith(color: Colors.white70),
                 ),
-                if (widget.major)
+                if (widget.major && !widget.ascend)
                   Padding(
                     padding: const EdgeInsets.only(top: 4),
                     child: Text(
@@ -978,7 +1043,7 @@ class _AdvanceFxDialogState extends State<_AdvanceFxDialog>
                       style: t.labelMedium?.copyWith(color: Colors.white38),
                     ),
                   ),
-                if ((r['tamma'] as Rec?)?['win'] == true)
+                if (!widget.ascend && (r['tamma'] as Rec?)?['win'] == true)
                   Padding(
                     padding: const EdgeInsets.only(top: 4),
                     child: Text(
@@ -998,7 +1063,11 @@ class _AdvanceFxDialogState extends State<_AdvanceFxDialog>
                         : Colors.white,
                   ),
                   onPressed: () => Navigator.pop(context),
-                  child: Text(ok ? 'Tiếp tục tu luyện' : 'Tĩnh tâm'),
+                  child: Text(
+                    ok
+                        ? (widget.ascend ? 'Đắc đạo thành tiên' : 'Tiếp tục tu luyện')
+                        : 'Tĩnh tâm',
+                  ),
                 ),
               ],
             ),
