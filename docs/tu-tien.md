@@ -105,7 +105,13 @@ màu hiệu ứng theo `_auraFor(cpCode)`. Nền thẻ/section theo ColorScheme 
 ```
 cd app && flutter test test/scene_render_test.dart
 # → build/scene_preview.png — MỞ RA NHÌN trước khi commit
+cd app && flutter test test/burst_render_test.dart
+# → build/burst_preview.png — filmstrip hiệu ứng đột phá/lên tầng (_BurstPainter)
 ```
+Hiệu ứng đột phá (`_BurstPainter`, dialog `_AdvanceFxDialog`): major = bản điện ảnh
+(hội tụ hạt → chớp va chạm → trụ sáng + sét phân nhánh glow + xung kích + camera shake
++ slam tên + haptic nặng, ~1.7s); lên tầng = bản snappy (~0.85s, vòng+tia+haptic nhẹ).
+Preview tĩnh qua widget public `BurstPreview(t, color, ok, loi, major)`.
 
 **Nền tranh màn Tu Tiên**: `app/assets/bg/cultivation_bg.webp` là bản ban ngày,
 `app/assets/bg/cultivation_bg_night.webp` là bản Dạ Lam; app tự chọn theo theme.
