@@ -135,6 +135,18 @@ final cultInventoryProvider = FutureProvider.autoDispose<List<Rec>>((ref) async 
       .gt('qty', 0));
 });
 
+/// Vật phẩm từng sở hữu; không mất dấu khi đã dùng hoặc luyện hóa hết.
+final cultCollectionProvider = FutureProvider.autoDispose<Set<int>>((ref) async {
+  ref.watch(authStateProvider);
+  final uid = sb.auth.currentUser?.id;
+  if (uid == null) return {};
+  final rows = List<Rec>.from(await sb
+      .from('user_cult_collection')
+      .select('item_id')
+      .eq('user_id', uid));
+  return {for (final row in rows) row['item_id'] as int};
+});
+
 /// Diễn giải effect jsonb của vật phẩm thành chữ (sheet chi tiết + tab admin).
 String cultEffectText(Rec it) {
   final e = (it['effect'] as Map?) ?? const {};

@@ -63,12 +63,12 @@ void main() {
         key: key,
         child: Column(
           children: [
-            row('Độ Kiếp', const [0.12, 0.30, 0.40, 0.55, 0.78],
+            row('Độ Kiếp', const [0.06, 0.22, 0.49, 0.76, 0.94],
                 major: true, loi: true),
             row('Đại c.giới', const [0.12, 0.30, 0.42, 0.60, 0.85], major: true),
             row('Lên tầng', const [0.05, 0.18, 0.45, 0.80], major: false, color: jade),
-            row('Thất bại', const [0.15, 0.45, 0.80],
-                major: true, ok: false, color: red),
+            row('Kiếp bại', const [0.22, 0.49, 0.76],
+                major: true, ok: false, loi: true, color: red),
           ],
         ),
       ),
