@@ -52,6 +52,10 @@ trong `_sprites` (pixel.dart), không có thì fallback 'pill' xấu.
 - Chỉ số: `cult_stats()` — nền ×1.12/tầng + trang bị; tộc Yêu ×1.3 atk/hp, Linh ×1.3 thần thức.
 - Đột phá: `85 − 8×(realm−1) + đan hộ thân + pháp chú`, kẹp [10,100]; fail −30% exp
   (Linh tộc mất nửa), Nhân +5%, Ma −5%.
+- **Tâm Ma** (migration 054, CHỈ đại cảnh giới stage 9→realm+1): server tính 1 lần từ
+  5 chỉ số — mức vũ trang `(atk+def+hp+agi có đồ)/(87×base tay không)` + thần thức
+  (Linh tộc ×1.3), nền 35% kẹp [15,90]. Thắng → `+15%` đột phá & giảm NỬA tổn thất;
+  thua → đột phá thường, KHÔNG khóa tiến trình. Hằng số là heuristic, chỉnh trong 054.
 - **Cơ duyên**: chương có quà ⇔ `md5(uid:novel:index)[0..6] % 100 < 50` (~50% chương).
   Rơi đồ: `select * from cult_items order by random() limit 1` — đều tăm tắp.
 - **Đan/linh thạch tăng tốc (`buff`/`stone`)**: `cult_use_item` (migration 052) TỪ CHỐI
