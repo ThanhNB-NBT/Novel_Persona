@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -431,9 +432,54 @@ class _HeroStage extends ConsumerWidget {
                   }
                 },
               ),
+            // Công cụ test bậc — CHỈ trong debug build (flutter run), để soi hiệu ứng
+            if (kDebugMode) ...[
+              const Divider(height: 24),
+              Text(
+                'DEV · test hiệu ứng bậc',
+                style: Theme.of(ctx).textTheme.labelLarge?.copyWith(
+                  color: Theme.of(ctx).colorScheme.tertiary,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _devChip(ctx, ref, 'Về Luyện Khí 1', 1, 1),
+                  _devChip(ctx, ref, 'Đầy tu vi bậc này',
+                      st['realm'] as int, st['stage'] as int),
+                  _devChip(ctx, ref, 'Sẵn sàng đại cảnh giới',
+                      st['realm'] as int, 9),
+                  _devChip(ctx, ref, 'Độ Kiếp 9 (Phi Thăng)', 9, 9),
+                ],
+              ),
+            ],
           ],
         ),
       ),
+    );
+  }
+
+  /// 1 nút DEV: set realm/stage + đầy tu vi rồi refetch state (không đóng sheet
+  /// để bấm liên tiếp). Chỉ dựng khi kDebugMode.
+  Widget _devChip(
+      BuildContext ctx, WidgetRef ref, String label, int realm, int stage) {
+    return ActionChip(
+      label: Text(label),
+      onPressed: () async {
+        final messenger = ScaffoldMessenger.of(ctx);
+        try {
+          await cultDebugSet(realm, stage);
+          ref.invalidate(cultStateProvider);
+          messenger.showSnackBar(
+            SnackBar(content: Text('Đã đặt: cảnh giới $realm · tầng $stage')),
+          );
+        } catch (e) {
+          messenger.showSnackBar(SnackBar(content: Text('$e')));
+        }
+      },
     );
   }
 
