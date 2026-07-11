@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:lottie/lottie.dart';
 
 import '../../cultivation.dart';
 import '../../data.dart';
@@ -1091,6 +1092,8 @@ class _AdvanceFxDialogState extends State<_AdvanceFxDialog>
             ),
           ),
         ),
+        // Overlay Lottie (chồng lên hiệu ứng vẽ tay) — tải sẵn từ marketplace
+        ..._lottieOverlays(ok),
         // Nội dung (nhân vật + chữ + nút) căn giữa; chỉ phần này rung máy
         Center(
           child: Material(
@@ -1233,6 +1236,56 @@ class _AdvanceFxDialogState extends State<_AdvanceFxDialog>
         ),
       ],
     );
+  }
+
+  /// Overlay Lottie (tải sẵn từ marketplace) chồng lên FX vẽ tay — chỉ khi THÀNH CÔNG.
+  /// Vị trí/scale để hằng số ở đây, dễ chỉnh sau khi soi trên máy thật.
+  List<Widget> _lottieOverlays(bool ok) {
+    if (!ok) return const [];
+    final loi = widget.major && (widget.result['realm'] as int) >= 3;
+    return [
+      // Aura linh khí xoáy quanh nhân vật (mọi lần thành công)
+      Align(
+        alignment: const Alignment(0, -0.18),
+        child: FractionallySizedBox(
+          widthFactor: widget.major ? 0.9 : 0.6,
+          child: AspectRatio(
+            aspectRatio: 1,
+            child: Lottie.asset(
+              'assets/cult_fx/fx_aura.json',
+              repeat: false,
+              fit: BoxFit.contain,
+            ),
+          ),
+        ),
+      ),
+      // Lôi kiếp (Kim Đan+): sét giáng từ trên
+      if (loi)
+        Align(
+          alignment: const Alignment(0, -0.5),
+          child: FractionallySizedBox(
+            widthFactor: 0.95,
+            child: Lottie.asset(
+              'assets/cult_fx/fx_lightning.json',
+              repeat: false,
+              fit: BoxFit.contain,
+            ),
+          ),
+        ),
+      // Lên tầng: hiệu ứng level-up phủ giữa màn
+      if (!widget.major)
+        Align(
+          alignment: const Alignment(0, -0.1),
+          child: FractionallySizedBox(
+            heightFactor: 0.7,
+            child: Lottie.asset(
+              'assets/cult_fx/fx_levelup.json',
+              repeat: false,
+              fit: BoxFit.contain,
+            ),
+          ),
+        ),
+    ];
   }
 
   /// Pha Tâm Ma (~1.9s, tự chuyển sang kết quả): tím đạo nếu áp chế được,
