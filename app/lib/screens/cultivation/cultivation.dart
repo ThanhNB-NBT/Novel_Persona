@@ -191,9 +191,23 @@ class _CultivationScreenState extends ConsumerState<CultivationScreen> {
                               const SizedBox(height: 8),
                               _EquipRow(st: st),
                               const SizedBox(height: 12),
-                              const _SectionLabel(
+                              _SectionLabel(
                                 'Túi càn khôn',
                                 Icons.backpack_rounded,
+                                trailing: TextButton.icon(
+                                  onPressed: () => showModalBottomSheet(
+                                    context: context,
+                                    isScrollControlled: true,
+                                    showDragHandle: true,
+                                    builder: (_) => const _CollectionSheet(),
+                                  ),
+                                  icon: const Icon(Icons.grid_view_rounded, size: 16),
+                                  label: const Text('Sưu tập'),
+                                  style: TextButton.styleFrom(
+                                    visualDensity: VisualDensity.compact,
+                                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                                  ),
+                                ),
                               ),
                               const SizedBox(height: 6),
                               const _InventoryGrid(),
@@ -1901,7 +1915,8 @@ class _BuffCountdownState extends State<_BuffCountdown> {
 class _SectionLabel extends StatelessWidget {
   final String title;
   final IconData icon;
-  const _SectionLabel(this.title, this.icon);
+  final Widget? trailing;
+  const _SectionLabel(this.title, this.icon, {this.trailing});
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -1923,7 +1938,116 @@ class _SectionLabel extends StatelessWidget {
           title.toUpperCase(),
           style: t.labelSmall?.copyWith(color: cs.onSurface, letterSpacing: 1),
         ),
+        if (trailing != null) ...[const Spacer(), trailing!],
       ],
+    );
+  }
+}
+
+/// Bộ sưu tập: đối chiếu catalog (tất cả món) với kho hiện có (qty>0). Món chưa
+/// gặp hiện silhouette. Không bảng DB mới — "đã sở hữu" = đang có trong túi.
+class _CollectionSheet extends ConsumerWidget {
+  const _CollectionSheet();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final cs = Theme.of(context).colorScheme;
+    final t = Theme.of(context).textTheme;
+    final catalog = ref.watch(cultCatalogProvider);
+    final inv = ref.watch(cultInventoryProvider);
+
+    return SizedBox(
+      height: MediaQuery.sizeOf(context).height * 0.72,
+      child: catalog.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (e, _) => Center(child: Text('Lỗi: $e')),
+        data: (items) {
+          final owned = <int>{
+            for (final r in inv.value ?? const <Rec>[])
+              (r['cult_items'] as Rec)['id'] as int,
+          };
+          final byType = <String, List<Rec>>{};
+          for (final it in items) {
+            (byType[it['type'] as String] ??= []).add(it);
+          }
+          final types =
+              cultTypeNames.keys.where(byType.containsKey).toList();
+
+          return ListView(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+            children: [
+              Text(
+                'Sưu tập  ${owned.length}/${items.length}',
+                style: t.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Món chưa gặp hiện dạng bóng mờ — đọc truyện để nhặt cơ duyên.',
+                style: t.labelSmall?.copyWith(color: cs.onSurfaceVariant),
+              ),
+              for (final ty in types) ...[
+                Padding(
+                  padding: const EdgeInsets.only(top: 14, bottom: 8),
+                  child: _SectionLabel(
+                    '${cultTypeNames[ty]}  '
+                        '${byType[ty]!.where((it) => owned.contains(it['id'])).length}'
+                        '/${byType[ty]!.length}',
+                    Icons.category_rounded,
+                  ),
+                ),
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: [
+                    for (final it in byType[ty]!)
+                      _CollectionTile(it: it, owned: owned.contains(it['id'])),
+                  ],
+                ),
+              ],
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _CollectionTile extends StatelessWidget {
+  final Rec it;
+  final bool owned;
+  const _CollectionTile({required this.it, required this.owned});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final grade = it['grade'] as int;
+    final icon = PixelIcon(it['pixel'] as String, grade: grade, size: 40);
+    return Tooltip(
+      message: owned ? it['name'] as String : '??? (chưa thu thập)',
+      child: Container(
+        width: 60,
+        height: 60,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: Color.alphaBlend(
+            cs.onSurface.withValues(alpha: 0.05), cs.surface),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: owned
+                ? gradeColor(grade).withValues(alpha: 0.6)
+                : cs.outlineVariant.withValues(alpha: 0.3),
+          ),
+        ),
+        child: owned
+            ? icon
+            : ColorFiltered(
+                colorFilter: ColorFilter.mode(
+                  cs.onSurface.withValues(alpha: 0.28),
+                  BlendMode.srcATop,
+                ),
+                child: icon,
+              ),
+      ),
     );
   }
 }
