@@ -1283,6 +1283,7 @@ class _GiftButtonState extends ConsumerState<_GiftButton> {
       // nút tự ẩn (claims đổi) + kho ở màn Tu Tiên thấy đồ mới
       ref.invalidate(cultClaimedProvider(widget.novelId));
       ref.invalidate(cultInventoryProvider);
+      ref.invalidate(cultCollectionProvider);
       final grade = it['grade'] as int;
       // lời dẫn tất định theo chương — mỗi cơ duyên một tình huống khác nhau
       final flavor = giftFlavors[giftHash(sb.auth.currentUser!.id,

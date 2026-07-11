@@ -23,6 +23,7 @@
 | `cult_items` | Catalog vật phẩm (seed trong migration). Cột `weight` KHÔNG còn dùng từ 049. |
 | `user_cultivation` | 1 dòng/user: realm, stage, exp, linh_can, element, race, gender, buff, equip_* |
 | `user_cult_items` | Kho đồ (user_id, item_id, qty) |
+| `user_cult_collection` | Lịch sử vật phẩm từng sở hữu; trigger từ kho, không mất khi qty về 0 |
 | `cult_claims` | Chương đã nhận quà (PK chặn nhận trùng) |
 
 RPC (đều `to authenticated`): `cult_state()` · `cult_claim_gift(novel, index)` ·
@@ -82,6 +83,7 @@ File map:
   một hình dùng lại cho mọi item cùng key, còn phẩm cấp thể hiện bằng viền/màu UI.
 - `app/assets/cult_fx/sword_wheel.webp` — kiếm luân ngũ sắc sau đầu, xoay trực tiếp như một ảnh
   có nền trong suốt; không dựng lại bằng nét Canvas đơn giản.
+- `app/assets/cult_fx/heart_demon.webp` — linh thể Tâm Ma riêng, thay biểu tượng lá bùa dùng lại.
 
 Bố cục cảnh `_AnimatedCultivator` (canvas 150×145, loop 4s), vẽ theo thứ tự:
 1. `_SkyPainter` (nền): sao (realm 5+) → **kiếm luân ngũ sắc sau ĐẦU** (5 kiếm neo theo
@@ -108,13 +110,16 @@ cd app && flutter test test/scene_render_test.dart
 cd app && flutter test test/burst_render_test.dart
 # → build/burst_preview.png — filmstrip hiệu ứng đột phá/lên tầng (_BurstPainter)
 ```
-Hiệu ứng đột phá (`_BurstPainter`, dialog `_AdvanceFxDialog`): major = bản điện ảnh
-(hội tụ hạt → chớp va chạm → trụ sáng + sét phân nhánh glow + xung kích + camera shake
-+ slam tên + haptic nặng, ~1.7s); lên tầng = bản snappy (~0.85s, vòng+tia+haptic nhẹ).
+Hiệu ứng đột phá (`_BurstPainter`, dialog `_AdvanceFxDialog`): đại cảnh giới là state machine
+4 pha tách biệt: **Tâm Ma (~2,2s) → tụ mây đen (~1,4s) → `tribulation_sequence.webp`
+giáng 3 đạo thẳng vào nhân vật (~5,4s) → mới hiện kết quả**. Trong pha mây/lôi chỉ hiện
+nhân vật chịu kiếp; chữ và nút thành/bại bị ẩn hoàn toàn. Lên tầng = bản ~1,25s
+(linh văn xoay + sóng tu vi + tia + haptic nhẹ).
 Preview tĩnh qua widget public `BurstPreview(t, color, ok, loi, major)`.
-**Overlay Lottie** (gói `lottie`, `_AdvanceFxDialog._lottieOverlays`): chỉ còn
-`fx_lightning.json` (lôi kiếp Kim Đan+). Aura + level-up đã bỏ. Vị trí/scale = hằng
-số trong hàm, chỉnh sau khi soi máy. File `.riv` (spiral phi thăng) CHƯA ráp (cần `rive`).
+**Kiếp lôi động**: `tribulation_sequence.webp` chứa cả timeline ba đạo lôi, sinh từ nguồn
+blue-white plasma riêng rồi đóng gói WebP động; mỗi dialog nạp một bản byte mới để tránh Flutter
+cache trạng thái đã phát xong. `fx_lightning.json` chỉ chạy nhanh sau khi thành công như sét tàn dư,
+không dùng làm thân kiếp lôi. Painter không vẽ tia sét, vòng trắng hay vòng cung tím.
 **Nấc 2 (chỉ major)**: fragment shader `shaders/breakthrough.frag` (godray+bloom
 thủ tục) phủ ADDITIVE lên trên, nạp async qua `FragmentProgram.fromAsset`; null =
 fallback về nấc 1 (thiết bị không hỗ trợ vẫn chạy). Shader chỉ soi được trên máy
@@ -155,15 +160,15 @@ xuất webp cùng cỡ.
 
 ## 5. Trạng thái & roadmap
 
-Đã có (migration 039→055): exp/realm/stage + đột phá · 8 loại vật phẩm ~100 món ·
+Đã có (migration 039→058): exp/realm/stage + đột phá · 8 loại vật phẩm ~100 món ·
 ngũ hành linh căn · 5 chỉ số · tộc/giới tính + ảnh nhân vật · cơ duyên 50% uniform ·
 hero stage + thẻ tilt + đĩa dock bát quái · **Tâm Ma khi đại cảnh giới (054)** ·
-**Luyện hóa đồ trùng → tu vi (053)** · **Bộ sưu tập vật phẩm (UI)** ·
+**Luyện hóa đồ trùng → tu vi (053)** · **Bộ sưu tập ghi nhận đồ từng sở hữu (057)** ·
+**ảnh riêng cho nhóm vật phẩm cấp cao (058)** ·
 **Phi Thăng ở đỉnh Độ Kiếp → danh hiệu Tiên Nhân (055)**.
 
 Roadmap (chưa làm, làm theo thứ tự user chọn):
 - Halo/hiệu ứng nhân vật đặc biệt hậu Phi Thăng (hiện chỉ có danh hiệu chữ).
-- "Đã từng thu thập" cho Bộ sưu tập (hiện chỉ tính đồ đang có qty>0 — cần bảng mới).
 - Shop / tiền tệ linh thạch (nguồn: quà trùng → tự bán?).
 - Tông môn, xếp hạng (cần chống gian lận — lúc đó mới siết claim theo reading_progress).
 - Thành tựu.
