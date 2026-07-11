@@ -41,3 +41,29 @@ def test_dialogue_self_minh():
 
 def test_gia_toc_style():
     assert any("gia tộc" in p for p in lint("洛家。", "Gia tộc Lạc không đồng ý."))
+
+
+# lỗi tự tìm thấy khi đọc 5 file baseline chưa được user chấm (2026-07-12)
+
+def test_transliteration_fuse():
+    """n1052: cả chương phiên âm Hán-Việt từng chữ, 0% chữ Hán nên fuse cũ lọt."""
+    from novelworker.translator.worker import check_translation
+    translit = ("Vân Ẩn quần sơn chiếm địa thiên lý, chủ phong cao sủng nhập vân, "
+                "thường niên vân vụ liễu nhiễu, do như tiên cảnh! Lạc Ly thán hơi "
+                "nhất thanh, song mục mãn thị ngưng trọng, chúng nhân giai thị hữu "
+                "đại sự phát sinh, thử tam nhân kỳ trung nhất nhân tức thị tự kỷ. ") * 8
+    problem = check_translation("原文" * 200, translit)
+    assert problem and "phiên âm" in problem, problem
+    real = ("Hắn nhìn quanh bốn phía, mục đích của chuyến đi này là tìm linh dược. "
+            "Giai đoạn đầu tu luyện tốn không ít chi phí, nhưng theo nguyên tắc của "
+            "tông môn, đệ tử nội môn được cấp linh thạch hàng tháng. Nàng khẽ gật đầu, "
+            "đưa cho hắn một chiếc túi gấm, bên trong là hài nhi thảo vừa hái sáng nay. ") * 8
+    assert check_translation("原文" * 100, real) is None
+
+
+def test_english_onomatopoeia():
+    assert any("tượng thanh" in p for p in lint("咳咳。", '"Cough cough, thôi đi."'))
+
+
+def test_han_residue_single_char():
+    assert any("Hán sót lẻ" in p for p in lint("门外传来。", "Bên ngoài cửa truyền来 tiếng ồn."))

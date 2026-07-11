@@ -77,6 +77,21 @@ def han_ratio(text: str) -> float:
     return len(HAN_CHARS.findall(text)) / max(len(text), 1)
 
 
+# Hư từ Hán-Việt dày đặc = model PHIÊN ÂM từng chữ thay vì dịch nghĩa (novel 1052:
+# "chủ phong cao sủng nhập vân, thường niên vân vụ liễu nhiễu" — 0% chữ Hán nên các
+# fuse khác đều lọt). Văn Việt thật các từ này hiếm ("mục đích/giai đoạn/chi phí"
+# chỉ vài lần/chương) → mật độ cao là phiên âm chắc chắn.
+_TRANSLIT_MARKERS = re.compile(
+    r"\b(?:(?<!mục )đích(?! thân| thị| đáng)|chi(?! phí| tiêu| tiết| nhánh)"
+    r"|hữu(?! ích| hạn| nghị| dụng)|(?<!quy )(?<!nguyên )tắc|giai(?! đoạn| nhân| điệu)"
+    r"|(?<!hài )(?<!nữ )nhi(?! đồng)|nãi|liễu|chúng nhân|khai khẩu|nhất cá)\b", re.I)
+
+
+def _translit_ratio(vi: str) -> float:
+    words = len(vi.split())
+    return len(_TRANSLIT_MARKERS.findall(vi)) / max(words, 1)
+
+
 def check_translation(content_zh: str, content_vi: str) -> str | None:
     """Trả LÝ DO nếu bản dịch hỏng, None nếu đạt. Dùng chung cho: fuse lúc dịch (chunk vs
     output) VÀ lệnh `audit` quét chương đã lưu (content_zh vs content_vi).
@@ -92,6 +107,12 @@ def check_translation(content_zh: str, content_vi: str) -> str | None:
     r = han_ratio(content_vi)
     if r > 0.05:
         return f"còn {r:.0%} ký tự Hán (trả nguyên văn tiếng Trung)"
+    # ponytail: ngưỡng 2% ~ gấp 6 lần văn Việt thật (mục đích/giai đoạn/chi phí...);
+    # bản phiên âm thật sự đo được ~6%
+    if len(content_vi.split()) > 100:
+        t = _translit_ratio(content_vi)
+        if t > 0.02:
+            return f"phiên âm Hán-Việt thay vì dịch nghĩa (mật độ hư từ {t:.1%})"
     # zh→vi bình thường phình 2.5-3.5x (tính KÝ TỰ) → dưới 1.2x là dịch sót đoạn.
     # Ngưỡng 0.3 cũ chỉ bắt được cụt thảm họa; chương ngắn (lời tác giả) giữ ngưỡng lỏng.
     if content_zh:

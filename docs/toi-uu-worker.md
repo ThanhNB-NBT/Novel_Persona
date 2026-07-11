@@ -690,3 +690,25 @@ User đã đọc 7/12 file baseline (`worker/eval_out_baseline/feedback_user_202
 | Tên nhân vật dịch dính liền (n967 "Lạc A Phiêu Phàm Trần"), câu vô nghĩa (n987 d.258) | | CHƯA — lỗi cấp glossary/chương, sửa bằng patch/dịch lại chương đó |
 
 Lưu ý vận hành: prompt mới chỉ ăn vào chương dịch MỚI; chương cũ muốn sạch phải dịch lại. pytest đã cài local (không đưa vào requirements worker — VPS không cần).
+
+### 12.1. Lỗi tự tìm ở 5 file user chưa chấm (2026-07-12)
+
+**Nặng nhất — n1052 (Lạc thị Tiên tộc): toàn bộ chương là PHIÊN ÂM Hán-Việt từng chữ**, không phải tiếng Việt ("chủ phong cao sủng nhập vân, thường niên vân vụ liễu nhiễu"). Fuse cũ lọt hoàn toàn vì 0% chữ Hán, độ dài/xuống dòng chuẩn. Đã thêm detector mật độ hư từ Hán-Việt (đích/chi/hữu/tắc/giai/nhi/liễu... đã loại từ ghép Việt) vào `check_translation`: đo trên 12 chương thật n1052 = 6,8%, các chương sạch ≤0,2%, ngưỡng 2%. Truyện 1052 cần **dịch lại toàn bộ** sau khi deploy.
+
+Các lỗi khác đã vá vào prompt/lint:
+
+| Lỗi | File | Xử lý |
+|:--|:--|:--|
+| 咳咳 → "Cough cough" (tượng thanh tiếng Anh) | n1007 | Prompt + lint |
+| 呼 → "Hổ", 唉 → "Hừ" (sai loại âm) | n1033, n1030 | Prompt thêm ví dụ 呼→phù, 唉→haiz |
+| "hắn" nhét vào lời tự nhủ ("Xem ra hắn thật sự đã tái sinh") | n1033 | Prompt |
+| Chữ Hán sót lẻ dưới ngưỡng fuse 5% ("truyền来", "本该被永远囚禁在天牢") | n1007, n1033, n1030 | Lint bắt mọi chữ Hán còn sót |
+| "Tổng cảm thấy" (总感觉) | n1007 | Lint + đã có luật convert |
+
+Lỗi cấp glossary/truyện — không sửa được bằng prompt, cần sửa term + patch/dịch lại từng truyện:
+
+- n1030: 叶凌 dịch "Hiệp Lăng" (phải **Diệp Lăng**); 魔物 → "mã vật" (phải **ma vật**); lời kể dùng "anh" xuyên suốt.
+- n1043: 二娃子 (cậu bé chăn bò ~13 tuổi) dịch thành "**Lão Nhị**" + người kể gọi "lão" cả chương — sai tuổi nhân vật chính; 兰青 → "Lãm Thanh" (phải **Lan Thanh**); 狗蛋 → "Đồ Đản" (phải Cẩu Đản).
+- n1007: 棒梗 và 傻柱 (hai nhân vật khác nhau) cùng bị dịch "**Thằng Trụ**"; 一大爷 → "Dượng" (phải "ông cả/Nhất đại gia"); lời kể dùng "cô ta" cho bà già (nên "mụ/bà ta" — chờ narrator reference Q1).
+- n1033: "điện hạ công chúa" (phải "công chúa điện hạ"); "càn khôn phạm thượng" (以下犯上 = "phạm thượng").
+- n1043: dịch ngược nghĩa "tiên sinh khó xử" thành "tiên sinh thương tình" (bịa ý) — loại lỗi chỉ người đọc/reviewer bắt được.

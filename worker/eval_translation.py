@@ -51,6 +51,11 @@ _RULES: list[tuple[str, re.Pattern]] = [
     # trùng tiếng Việt; pinyin dạng "láng yá" phải nhờ người đọc thẩm định
     ("pinyin lọt (ā ǎ ē...)", re.compile(r"[āēīōūǖǎěǐǒǔǘǚǜ]")),
     ("'gia tộc X' (nên 'X Gia/X thị')", re.compile(r"\b[Gg]ia tộc\s+[A-ZĐ][a-zà-ỹ]*\b")),
+    # n1007: 咳咳 dịch thành "Cough cough" — tượng thanh phải là âm Việt
+    ("tượng thanh tiếng Anh", re.compile(r"\b(?:cough|sigh|ahem|gasp|hmph|tsk)\b", re.I)),
+    ("convert 'tổng cảm thấy' (总感觉)", re.compile(r"\btổng cảm thấy\b", re.I)),
+    # fuse chỉ chặn ≥5% — chữ Hán lẻ ("truyền来") vẫn lọt, eval bắt hết
+    ("chữ Hán sót lẻ", re.compile(r"[一-鿿㐀-䶿]+")),
 ]
 
 # feedback user 2026-07-11: "chẳng" rải khắp nơi đọc gượng — mặc định phải là "không"
