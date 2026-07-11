@@ -199,6 +199,11 @@ Future<Rec> cultAdvance() async =>
 Future<Rec> cultAscend() async =>
     Map<String, dynamic>.from(await sb.rpc('cult_ascend') as Map);
 
+/// CÔNG CỤ TEST (admin, chỉ dùng ở debug UI): đặt nhanh realm/stage + đầy tu vi.
+Future<Rec> cultDebugSet(int realm, int stage, {bool fill = true}) async =>
+    Map<String, dynamic>.from(await sb.rpc('cult_debug_set',
+        params: {'p_realm': realm, 'p_stage': stage, 'p_fill': fill}) as Map);
+
 /// Chọn dung mạo (tộc + giới tính) — user thường chỉ MỘT lần, admin đổi tự do.
 Future<Rec> cultSetAvatar(String race, String gender) async =>
     Map<String, dynamic>.from(await sb.rpc('cult_set_avatar',
