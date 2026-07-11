@@ -45,7 +45,16 @@ _RULES: list[tuple[str, re.Pattern]] = [
     ("convert 'căn bản là'", re.compile(r"\bcăn bản là\b", re.I)),
     ("convert 'rốt cuộc là'", re.compile(r"\brốt cuộc là\b", re.I)),
     ("convert 'trực tiếp + động từ'", re.compile(r"\btrực tiếp\s+(?:đi|đến|nói|hỏi|ra tay|đánh|giết|ném|đẩy|mở|đóng)\b", re.I)),
+    # feedback user 2026-07-11: lượng từ 一头 bê nguyên ("một đầu tam đầu ma long")
+    ("lượng từ 'một đầu' (一头)", re.compile(r"\bmột đầu\b(?!\s+tiên)", re.I)),
+    # pinyin lọt vào bản dịch — chỉ bắt được dấu macron/caron (ā ǎ) vì sắc/huyền
+    # trùng tiếng Việt; pinyin dạng "láng yá" phải nhờ người đọc thẩm định
+    ("pinyin lọt (ā ǎ ē...)", re.compile(r"[āēīōūǖǎěǐǒǔǘǚǜ]")),
+    ("'gia tộc X' (nên 'X Gia/X thị')", re.compile(r"\b[Gg]ia tộc\s+[A-ZĐ][a-zà-ỹ]*\b")),
 ]
+
+# feedback user 2026-07-11: "chẳng" rải khắp nơi đọc gượng — mặc định phải là "không"
+_CHANG_THRESHOLD = 4
 
 # Tự xưng có sắc thái trong gốc không được rút hết thành "ta/tôi" hoặc biến mất.
 # Đây là warning theo constraint từ vựng; reviewer vẫn quyết định cách Việt hóa đúng ngữ cảnh.
@@ -107,6 +116,18 @@ def _self_reference_omissions(zh: str, vi: str) -> list[str]:
     return missing
 
 
+def _dialogue_self_minh(vi: str) -> list[str]:
+    """'mình' làm chủ ngữ tự xưng trong thoại/độc thoại — bối cảnh kỳ ảo phải là 'ta'
+    hoặc lược. Chỉ bắt dạng chủ ngữ; bỏ qua 'chúng mình/của mình/tự mình/một mình'."""
+    hits = []
+    for m in _DIALOGUE.finditer(vi):
+        seg = m.group(0)
+        for hit in re.finditer(r"(?:^|[\"“,.!?…:]\s*)[Mm]ình\s+(?:đã|chắc|sẽ|không|chẳng|phải|cũng|còn|vừa|mới|chết|bị|đang)", seg):
+            hits.append(seg[:60])
+            break
+    return hits
+
+
 def lint(zh: str, vi: str) -> list[str]:
     problems: list[str] = []
     mech = check_translation(zh, vi)          # fuse cơ học: sót Hán/cụt/mất đoạn
@@ -126,6 +147,11 @@ def lint(zh: str, vi: str) -> list[str]:
     n = _exclaim_density(vi)
     if n:
         problems.append(f"[lint] {n} đoạn quá 2 dấu '!'")
+    chang = len(re.findall(r"\bchẳng\b", vi, re.I))
+    if chang >= _CHANG_THRESHOLD:
+        problems.append(f"[văn phong] 'chẳng' ×{chang} — mặc định dùng 'không'")
+    for seg in _dialogue_self_minh(vi)[:3]:
+        problems.append(f"[xưng hô] 'mình' tự xưng trong thoại (nghi vấn): {seg}")
     return problems
 
 
@@ -135,6 +161,13 @@ def _self_check() -> None:
     terms = narrator_terms('Hắn quay đi. “Lão tử không sợ!” Nàng im lặng.')
     assert terms == {"hắn": 1, "nàng": 1}, terms
     assert any("không khỏi" in p for p in lint("他笑了。", "Hắn không khỏi bật cười."))
+    assert any("một đầu" in p for p in lint("一头魔龙。", "Một đầu ma long kinh khủng."))
+    assert not any("một đầu" in p for p in lint("首先。", "Một đầu tiên là vậy."))
+    assert any("pinyin" in p for p in lint("狼牙棒。", "Cây lāng yá bàng."))
+    assert any("'chẳng'" in p for p in lint("。", "Chẳng ai. Chẳng thể. Chẳng còn. Chẳng biết."))
+    assert _dialogue_self_minh('“Mình chắc chắn đã bỏ lỡ điều gì đó.”')
+    assert not _dialogue_self_minh('“Chúng mình đi thôi, của mình đây.”')
+    assert any("gia tộc" in p for p in lint("洛家。", "Gia tộc Lạc không đồng ý."))
 
 
 # ---------- lấy mẫu ----------

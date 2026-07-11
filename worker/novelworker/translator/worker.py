@@ -383,9 +383,10 @@ def _extract_json(text: str) -> dict | list:
 # lời KỂ cứng hắn/nàng; THOẠI linh hoạt theo bối cảnh (fuse cũng chỉ soi lời kể).
 REGISTER_LINE = (
     "[Xưng hô — LỜI KỂ ngôi ba: nam 'hắn', nữ 'nàng'; TUYỆT ĐỐI KHÔNG "
-    "'anh/anh ta/ông ta/cậu ta/tôi/cô/cô ấy' làm đại từ trong lời kể. THOẠI linh hoạt theo "
-    "bối cảnh: tu tiên/cổ trang ta–ngươi, ca ca/đệ đệ/sư huynh; nhân vật hiện đại "
-    "với nhau được anh/em hoặc 'ca'; nhắc người thứ ba trong thoại: hắn ta/anh ta đều được.]")
+    "'anh/anh ta/ông ta/cậu ta/tôi/cô/cô ấy' làm đại từ trong lời kể. Ngôi nhất/độc thoại "
+    "bối cảnh kỳ ảo: xưng 'ta', KHÔNG 'tôi/mình'. THOẠI: tu tiên/cổ trang ta–ngươi, "
+    "ca/huynh/tỷ/muội, KHÔNG anh/chị/em/mày; nhân vật hiện đại với nhau được anh/em hoặc "
+    "'ca'; nhắc người thứ ba trong thoại: hắn ta/anh ta đều được.]")
 
 
 # ---------- xử lý từng loại job ----------

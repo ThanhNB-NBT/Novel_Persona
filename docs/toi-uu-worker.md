@@ -670,3 +670,23 @@ Kết luận tạm thời:
 - Các model còn lại trong shortlist chưa chạy vì phiên công cụ chạm giới hạn gọi ngoài; phải ghi là `not_run`, không xếp hạng.
 
 Artifact local: các file JSON trong `worker/benchmark_out/` (batch1, batch1a, deepseek_pro, synthetic_one, qwen397, qwen122, gemma4, diffusiongemma...).
+
+## 12. Bộ Q0 đầu tiên — feedback người đọc 2026-07-11
+
+User đã đọc 7/12 file baseline (`worker/eval_out_baseline/feedback_user_2026-07-11.txt`, giữ local). Nhóm lỗi theo tần suất:
+
+| Nhóm lỗi | Ví dụ | Đã xử lý |
+|:--|:--|:--|
+| "tôi/mình" trong lời kể ngôi nhất + độc thoại kỳ ảo (nhiều nhất, n962/n967) | "mình chết ngay lập tức" → "ta/lược" | Prompt + REGISTER_LINE: ngôi nhất/độc thoại kỳ ảo xưng "ta"; lint `mình` tự xưng trong thoại |
+| "anh/chị/em/mày" trong thoại cổ trang (n967/n969/n974) | chị→tỷ, em→muội, mày→ngươi | Prompt + REGISTER_LINE: cấm trong thoại cổ trang; chửi mắng vẫn "ngươi" |
+| "chẳng" rải khắp nơi (n969/n972/n974) | "chẳng thể sống nổi" → "không thể" | Prompt: mặc định "không"; lint đếm ≥4 lần/chương |
+| Chữ đệm thừa "kia/chứ" (n967) | "chọn hết đi chứ" | Prompt: không rải chữ đệm gốc không nhấn |
+| Lượng từ 一头 bê nguyên (n967) | "một đầu tam đầu ma long" | Prompt: 一头/一只→"một con"; lint "một đầu" |
+| Tiếng Anh thường lọt (n967 "all-in") | → "tất tay/dốc hết" | Prompt: thêm ví dụ all-in |
+| "Gia tộc Lạc" (n969) | → "Lạc Gia/Lạc thị" | Prompt + lint |
+| Pinyin lọt (n987) | | Lint bắt macron/caron; dạng sắc/huyền trùng tiếng Việt phải đọc tay |
+| Đảo thứ tự âm Hán-Việt (n967 "Hồn Võ Đại lục") | phải "Võ Hồn Đại Lục" | Prompt: giữ đúng thứ tự; tên đã sai trong glossary phải sửa glossary + patch |
+| Người kể đổi cách gọi cùng nhân vật (n972 ông↔hắn) | | CHƯA — đúng bài narrator reference pha Q1 |
+| Tên nhân vật dịch dính liền (n967 "Lạc A Phiêu Phàm Trần"), câu vô nghĩa (n987 d.258) | | CHƯA — lỗi cấp glossary/chương, sửa bằng patch/dịch lại chương đó |
+
+Lưu ý vận hành: prompt mới chỉ ăn vào chương dịch MỚI; chương cũ muốn sạch phải dịch lại. pytest đã cài local (không đưa vào requirements worker — VPS không cần).
