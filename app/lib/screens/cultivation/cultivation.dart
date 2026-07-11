@@ -2355,16 +2355,44 @@ Future<void> _showItemPopup(
             ],
           ),
         ),
+      // Bản dư (qty > 1) → luyện hóa thành tu vi; luôn chừa 1 bản
+      if ((qty ?? 0) > 1)
+        PopupMenuItem(
+          value: 'recycle',
+          height: 40,
+          child: Row(
+            children: [
+              Icon(Icons.auto_awesome_rounded, size: 18, color: cs.tertiary),
+              const SizedBox(width: 8),
+              Text(
+                'Luyện hóa ${qty! - 1} bản dư',
+                style: t.labelLarge?.copyWith(
+                  color: cs.tertiary,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ),
     ],
   );
 
-  if (action != 'use') return;
+  if (action == null) return;
   if (_cultItemBusy) return; // đang xử lý món trước → bỏ qua tap lặp
   _cultItemBusy = true;
   try {
-    isDan
-        ? await cultUseItem(it['id'] as int)
-        : await cultEquip(it['id'] as int);
+    if (action == 'recycle') {
+      final r = await cultRecycle(it['id'] as int);
+      if (tileCtx.mounted) {
+        ScaffoldMessenger.of(tileCtx).showSnackBar(SnackBar(
+          content: Text('Luyện hóa ${r['recycled']} bản → +${r['linh_khi']} tu vi'),
+        ));
+      }
+    } else {
+      isDan
+          ? await cultUseItem(it['id'] as int)
+          : await cultEquip(it['id'] as int);
+    }
     ref.invalidate(cultStateProvider);
     ref.invalidate(cultInventoryProvider);
   } catch (e) {

@@ -183,6 +183,11 @@ Future<Rec> cultUseItem(int itemId) async =>
     Map<String, dynamic>.from(
         await sb.rpc('cult_use_item', params: {'p_item_id': itemId}) as Map);
 
+/// Luyện hóa bản dư (qty > 1) → linh khí → tu vi. Trả {recycled, linh_khi}.
+Future<Rec> cultRecycle(int itemId) async =>
+    Map<String, dynamic>.from(
+        await sb.rpc('cult_recycle', params: {'p_item_id': itemId}) as Map);
+
 Future<Rec> cultEquip(int itemId) async =>
     Map<String, dynamic>.from(
         await sb.rpc('cult_equip', params: {'p_item_id': itemId}) as Map);
