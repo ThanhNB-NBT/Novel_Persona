@@ -180,8 +180,10 @@ def genre_blocked(meta) -> str | None:
     hit = next((b for b in _BLOCKED_CATS if b in cats), None)
     if not hit:
         return None
-    hay = cats + " " + (meta.description_zh or "")
-    if any(k in hay for k in _ALLOW_KEYWORDS):
+    # Cắt đuôi "小说推荐：..." (nguồn đính tên truyện KHÁC vào cuối mô tả) trước khi
+    # xét từ khoá miễn trừ — không thì 系统/修仙 trong tên truyện đề cử miễn tội oan.
+    desc = (meta.description_zh or "").split("小说推荐")[0]
+    if any(k in cats + " " + desc for k in _ALLOW_KEYWORDS):
         return None
     return hit
 
