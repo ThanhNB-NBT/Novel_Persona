@@ -52,6 +52,7 @@ dependencies:
   # Cập nhật trong app: so version với GitHub Releases + mở link tải APK
   package_info_plus: ^9.0.1
   url_launcher: ^6.3.1
+  lottie: ^3.5.1
 
 dev_dependencies:
   flutter_test:
@@ -96,7 +97,7 @@ flutter:
     - assets/cultivators/
     - assets/bg/cultivation_bg.webp
     - assets/bg/cultivation_bg_night.webp
-    - assets/cult_fx/sword_wheel.webp
+    - assets/cult_fx/
     - assets/cult_items/
 
   # Fragment shader hiệu ứng Độ Kiếp/đại cảnh giới (nấc 2 — bloom + godray)
