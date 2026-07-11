@@ -13,6 +13,15 @@ import '../../data.dart';
 import '../../theme.dart' show monoStyle;
 import 'pixel.dart';
 
+// ponytail: cờ toàn cục chống double-tap dùng/trang bị đồ — app 1 user, 1 màn Tu Tiên
+// mở cùng lúc; nếu sau này có nhiều màn song song thì chuyển sang state cục bộ.
+bool _cultItemBusy = false;
+
+String cultivationBackgroundAsset(Brightness brightness) =>
+    brightness == Brightness.dark
+        ? 'assets/bg/cultivation_bg_night.webp'
+        : 'assets/bg/cultivation_bg.webp';
+
 /// Màn Tu Tiên: card cảnh giới + exp bar tick sống, nút Lên Tầng/Đột Phá,
 /// 4 slot trang bị, kho đồ. Server là chuẩn (cult_state đã tick); client chỉ
 /// ước lượng exp chạy mượt giữa 2 lần gọi.
@@ -27,6 +36,7 @@ class _CultivationScreenState extends ConsumerState<CultivationScreen> {
   final _exp = ValueNotifier<double>(0);
   double _base = 0, _rate = 0, _req = 1;
   DateTime _since = DateTime.now();
+  bool _advancing = false; // khóa nút đột phá/lên tầng khi RPC đang chạy
 
   @override
   void dispose() {
@@ -50,6 +60,8 @@ class _CultivationScreenState extends ConsumerState<CultivationScreen> {
   }
 
   Future<void> _advance(Rec st) async {
+    if (_advancing) return; // chống double-tap: 1 lần đột phá mỗi lần bấm
+    setState(() => _advancing = true);
     final major = (st['stage'] as int) >= 9; // đột phá đại cảnh giới
     try {
       final r = await cultAdvance();
@@ -71,8 +83,11 @@ class _CultivationScreenState extends ConsumerState<CultivationScreen> {
         ),
       );
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      }
+    } finally {
+      if (mounted) setState(() => _advancing = false);
     }
   }
 
@@ -114,7 +129,20 @@ class _CultivationScreenState extends ConsumerState<CultivationScreen> {
               bottom: false,
               child: state.when(
                 loading: () => const Center(child: CircularProgressIndicator()),
-                error: (e, _) => Center(child: Text('Lỗi: $e')),
+                error: (e, _) => Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text('Lỗi: $e', textAlign: TextAlign.center),
+                      const SizedBox(height: 12),
+                      FilledButton.icon(
+                        onPressed: () => ref.invalidate(cultStateProvider),
+                        icon: const Icon(Icons.refresh_rounded),
+                        label: const Text('Thử lại'),
+                      ),
+                    ],
+                  ),
+                ),
                 data: (st) {
                   if (st == null) {
                     return Center(
@@ -152,6 +180,7 @@ class _CultivationScreenState extends ConsumerState<CultivationScreen> {
                               _RealmCard(
                                 st: st,
                                 exp: _exp,
+                                busy: _advancing,
                                 onAdvance: () => _advance(st),
                               ),
                               const SizedBox(height: 14),
@@ -196,6 +225,7 @@ class _CultivationBackdrop extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final asset = cultivationBackgroundAsset(Theme.of(context).brightness);
     // gradient nhuộm màu cảnh giới — fallback khi asset nền lỗi tải.
     final fallback = DecoratedBox(
       decoration: BoxDecoration(
@@ -215,7 +245,7 @@ class _CultivationBackdrop extends StatelessWidget {
       children: [
         // Nền tranh thủy mặc, lỗi tải thì tự về gradient để không vỡ màn.
         Image.asset(
-          'assets/bg/cultivation_bg.webp',
+          asset,
           fit: BoxFit.cover,
           errorBuilder: (_, _, _) => fallback,
         ),
@@ -593,10 +623,12 @@ class _RealmCard extends StatelessWidget {
   final Rec st;
   final ValueNotifier<double> exp;
   final VoidCallback onAdvance;
+  final bool busy;
   const _RealmCard({
     required this.st,
     required this.exp,
     required this.onAdvance,
+    required this.busy,
   });
 
   @override
@@ -609,16 +641,8 @@ class _RealmCard extends StatelessWidget {
     final rc = gradeColor((realm + 1) ~/ 2); // màu phẩm/cảnh giới
     final major = stage >= 9 && realm < 9;
     final peak = stage >= 9 && realm >= 9;
-    // tỷ lệ đột phá hiển thị = công thức server (đan hộ thân + pháp chú đã cộng)
-    final chance =
-        (85 -
-                8 * (realm - 1) +
-                (st['bt_bonus_pct'] as num? ?? 0).toInt() +
-                ((st['equipped'] as Rec?)?['phapchu']?['effect']?['bt_pct']
-                            as num? ??
-                        0)
-                    .toInt())
-            .clamp(10, 100);
+    // tỷ lệ đột phá hiển thị = công thức server (đan hộ thân + pháp chú + tộc đã cộng)
+    final chance = cultBreakthroughChance(st);
     final now = DateTime.now();
     final buffUntil = DateTime.tryParse(st['buff_until'] as String? ?? '');
     final stoneUntil = DateTime.tryParse(st['stone_until'] as String? ?? '');
@@ -775,13 +799,19 @@ class _RealmCard extends StatelessWidget {
                     SizedBox(
                       width: double.infinity,
                       child: FilledButton.icon(
-                        onPressed: full && !peak ? onAdvance : null,
-                        icon: Icon(
-                          major
-                              ? Icons.bolt_rounded
-                              : Icons.arrow_upward_rounded,
-                          size: 18,
-                        ),
+                        onPressed: full && !peak && !busy ? onAdvance : null,
+                        icon: busy
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : Icon(
+                                major
+                                    ? Icons.bolt_rounded
+                                    : Icons.arrow_upward_rounded,
+                                size: 18,
+                              ),
                         label: Text(
                           major
                               ? 'Đột phá ${realmNames[realm]} ($chance%)'
@@ -2329,6 +2359,8 @@ Future<void> _showItemPopup(
   );
 
   if (action != 'use') return;
+  if (_cultItemBusy) return; // đang xử lý món trước → bỏ qua tap lặp
+  _cultItemBusy = true;
   try {
     isDan
         ? await cultUseItem(it['id'] as int)
@@ -2339,5 +2371,7 @@ Future<void> _showItemPopup(
     if (tileCtx.mounted) {
       ScaffoldMessenger.of(tileCtx).showSnackBar(SnackBar(content: Text('$e')));
     }
+  } finally {
+    _cultItemBusy = false;
   }
 }

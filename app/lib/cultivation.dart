@@ -89,6 +89,24 @@ int giftHash(String uid, int novelId, int index) => int.parse(
 bool giftAt(String uid, int novelId, int index) =>
     giftHash(uid, novelId, index) % 100 < 50;
 
+/// Tỷ lệ đột phá đại cảnh giới — mirror Y HỆT SQL cult_advance() (migration 044):
+/// 85 − 8·(realm−1) + bt_bonus_pct + pháp-chú bt_pct + tộc(nhân +5 / ma −5), kẹp [10,100].
+/// Đổi ở đây PHẢI đổi cả SQL (và ngược lại) — lệch là hiển thị sai tỷ lệ cho người chơi.
+int cultBreakthroughChance(Rec st) {
+  final realm = st['realm'] as int;
+  final phapchu =
+      ((st['equipped'] as Rec?)?['phapchu']?['effect']?['bt_pct'] as num?)
+              ?.toInt() ??
+          0;
+  final race = switch (st['race']) { 'nhan' => 5, 'ma' => -5, _ => 0 };
+  return (85 -
+          8 * (realm - 1) +
+          (st['bt_bonus_pct'] as num? ?? 0).toInt() +
+          phapchu +
+          race)
+      .clamp(10, 100);
+}
+
 /// State tu luyện (đã tick exp phía server): realm/stage/exp/req/rate/equipped...
 final cultStateProvider = FutureProvider.autoDispose<Rec?>((ref) async {
   ref.watch(authStateProvider);

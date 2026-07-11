@@ -2,7 +2,7 @@
 
 > Tài liệu này để MỌI phiên làm việc (Claude, ChatGPT/Codex, người) đọc trước khi
 > đụng vào hệ Tu Tiên. Đổi thiết kế → SỬA FILE NÀY TRONG CÙNG COMMIT.
-> Cập nhật lần cuối: 2026-07-10.
+> Cập nhật lần cuối: 2026-07-11.
 
 ## 1. Tư tưởng chung
 
@@ -54,6 +54,9 @@ trong `_sprites` (pixel.dart), không có thì fallback 'pill' xấu.
   (Linh tộc mất nửa), Nhân +5%, Ma −5%.
 - **Cơ duyên**: chương có quà ⇔ `md5(uid:novel:index)[0..6] % 100 < 50` (~50% chương).
   Rơi đồ: `select * from cult_items order by random() limit 1` — đều tăm tắp.
+- **Đan/linh thạch tăng tốc (`buff`/`stone`)**: `cult_use_item` (migration 052) TỪ CHỐI
+  nếu đang có buff cùng loại MẠNH HƠN còn hạn (dùng `>` → cùng mức vẫn làm mới được).
+  Không tiêu mất món khi bị từ chối (raise → rollback). Tránh bấm nhầm đè +300% bằng +30%.
 
 ### ⚠️ Các cặp MIRROR SQL ↔ Dart — sửa một là PHẢI sửa hai
 
@@ -61,7 +64,7 @@ trong `_sprites` (pixel.dart), không có thì fallback 'pill' xấu.
 |---|---|---|
 | Chương có quà (50%) | `cult_gift_at` (049) | `giftAt` — app/lib/cultivation.dart |
 | Hash vị trí quà trong chương | như trên | `giftHash` (cùng file) |
-| Tỷ lệ đột phá hiển thị | `cult_advance` | `_RealmCard.chance` — cultivation.dart màn hình |
+| Tỷ lệ đột phá hiển thị (có +5/−5 tộc) | `cult_advance` (044) | `cultBreakthroughChance` — app/lib/cultivation.dart (có test `cult_chance_test.dart`) |
 | Hệ số công pháp ×1.5→×24 | `cult_mult` | `_cpMult` + `_EquipRow._bonus` |
 
 ## 3. Lớp hình ảnh (client-only, không đụng DB)
@@ -100,8 +103,10 @@ cd app && flutter test test/scene_render_test.dart
 # → build/scene_preview.png — MỞ RA NHÌN trước khi commit
 ```
 
-**Nền tranh màn Tu Tiên**: `app/assets/bg/cultivation_bg.webp` là tranh thủy mặc
-dọc, vùng giữa thoáng để đặt nhân vật; code tự về gradient nếu asset lỗi tải.
+**Nền tranh màn Tu Tiên**: `app/assets/bg/cultivation_bg.webp` là bản ban ngày,
+`app/assets/bg/cultivation_bg_night.webp` là bản Dạ Lam; app tự chọn theo theme.
+Cả hai là tranh thủy mặc dọc, vùng giữa thoáng để đặt nhân vật; code tự về gradient
+nếu asset lỗi tải.
 
 **Cơ chế màu vòng/aura** (`_auraFor`): 1. code công pháp có kiểu riêng →
 override; 2. hệ trong effect công pháp; 3. hệ LINH CĂN người chơi; 4. màu cảnh
