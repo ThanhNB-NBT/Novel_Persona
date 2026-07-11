@@ -95,6 +95,7 @@ flutter:
     # cả thư mục (chỉ chứa webp) — thả frame idle phụ _f2.._f4 vào là tự bundle
     - assets/cultivators/
     - assets/bg/cultivation_bg.webp
+    - assets/bg/cultivation_bg_night.webp
     - assets/cult_fx/sword_wheel.webp
     - assets/cult_items/
 

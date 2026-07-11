@@ -11,6 +11,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:novel_reader/screens/cultivation/cultivation.dart';
 
 void main() {
+  test('nền Tu Tiên đổi đúng theo sáng/tối', () {
+    expect(cultivationBackgroundAsset(Brightness.light),
+        'assets/bg/cultivation_bg.webp');
+    expect(cultivationBackgroundAsset(Brightness.dark),
+        'assets/bg/cultivation_bg_night.webp');
+  });
+
   testWidgets('render cảnh tu luyện ra PNG', (tester) async {
     await tester.binding.setSurfaceSize(const Size(640, 700));
     final key = GlobalKey();
