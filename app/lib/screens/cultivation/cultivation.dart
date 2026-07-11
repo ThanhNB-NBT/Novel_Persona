@@ -925,7 +925,8 @@ class _AdvanceFxDialogState extends State<_AdvanceFxDialog>
     with SingleTickerProviderStateMixin {
   late final _ctrl = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 1100),
+    // đại cảnh giới: dài để diễn điện ảnh; lên tầng: ngắn cho snappy
+    duration: Duration(milliseconds: widget.major ? 1700 : 850),
   )..forward();
   bool _tammaPhase = false; // pha Tâm Ma trước khi lộ kết quả đột phá
   Timer? _tammaTimer;
@@ -936,14 +937,29 @@ class _AdvanceFxDialogState extends State<_AdvanceFxDialog>
     // đại cảnh giới có Tâm Ma → diễn ~1.9s rồi mới sang kết quả đột phá
     if (widget.result['tamma'] != null) {
       _tammaPhase = true;
+      HapticFeedback.mediumImpact(); // vào khảo nghiệm
       _tammaTimer = Timer(const Duration(milliseconds: 1900), () {
         if (mounted) {
           setState(() => _tammaPhase = false);
           _ctrl
             ..reset()
             ..forward();
+          _impactHaptic();
         }
       });
+    } else {
+      _impactHaptic();
+    }
+  }
+
+  void _impactHaptic() {
+    final ok = widget.result['success'] == true;
+    if (!ok) {
+      HapticFeedback.mediumImpact();
+    } else if (widget.major) {
+      HapticFeedback.heavyImpact(); // đại cảnh giới thành công = cú va chạm mạnh
+    } else {
+      HapticFeedback.lightImpact();
     }
   }
 
@@ -976,11 +992,18 @@ class _AdvanceFxDialogState extends State<_AdvanceFxDialog>
           builder: (_, child) {
             final v = _ctrl.value;
             // thất bại: rung ngang tắt dần trong nửa đầu
-            final dx = ok ? 0.0 : math.sin(v * math.pi * 10) * 8 * (1 - v);
+            var dx = ok ? 0.0 : math.sin(v * math.pi * 10) * 8 * (1 - v);
+            var dy = 0.0;
+            // major thành công: giật máy quanh lúc va chạm (0.30→0.60) rồi tắt
+            if (ok && widget.major && v > 0.30 && v < 0.60) {
+              final s = 1 - ((v - 0.30) / 0.30).clamp(0.0, 1.0);
+              dx += math.sin(v * math.pi * 26) * 7 * s;
+              dy += math.cos(v * math.pi * 22) * 7 * s;
+            }
             return Transform.translate(
-              offset: Offset(dx, 0),
+              offset: Offset(dx, dy),
               child: CustomPaint(
-                painter: _BurstPainter(v, color, ok, loi),
+                painter: _BurstPainter(v, color, ok, loi, major: widget.major),
                 child: child,
               ),
             );
@@ -1005,20 +1028,39 @@ class _AdvanceFxDialogState extends State<_AdvanceFxDialog>
                       : const PixelIcon('talisman', grade: 1, size: 80),
                 ),
                 const SizedBox(height: 10),
-                Text(
-                  widget.ascend
-                      ? (ok ? 'PHI THĂNG THÀNH CÔNG' : 'PHI THĂNG THẤT BẠI')
-                      : widget.major
-                      ? (ok
-                            ? (loi
-                                  ? 'VƯỢT LÔI KIẾP THÀNH CÔNG'
-                                  : 'ĐỘT PHÁ THÀNH CÔNG')
-                            : 'ĐỘT PHÁ THẤT BẠI')
-                      : 'LÊN TẦNG',
-                  style: t.titleLarge?.copyWith(
-                    color: ok ? Colors.white : color,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 1.5,
+                // major thành công: tên "slam" vào (phóng to → co về, nảy) sau va chạm
+                FadeTransition(
+                  opacity: widget.major && ok
+                      ? CurvedAnimation(
+                          parent: _ctrl,
+                          curve: const Interval(0.30, 0.5),
+                        )
+                      : const AlwaysStoppedAnimation(1.0),
+                  child: ScaleTransition(
+                    scale: widget.major && ok
+                        ? Tween(begin: 1.5, end: 1.0).animate(
+                            CurvedAnimation(
+                              parent: _ctrl,
+                              curve: const Interval(0.32, 0.85, curve: Curves.elasticOut),
+                            ),
+                          )
+                        : const AlwaysStoppedAnimation(1.0),
+                    child: Text(
+                      widget.ascend
+                          ? (ok ? 'PHI THĂNG THÀNH CÔNG' : 'PHI THĂNG THẤT BẠI')
+                          : widget.major
+                          ? (ok
+                                ? (loi
+                                      ? 'VƯỢT LÔI KIẾP THÀNH CÔNG'
+                                      : 'ĐỘT PHÁ THÀNH CÔNG')
+                                : 'ĐỘT PHÁ THẤT BẠI')
+                          : 'LÊN TẦNG',
+                      style: t.titleLarge?.copyWith(
+                        color: ok ? Colors.white : color,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1.5,
+                      ),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 6),
@@ -1144,94 +1186,173 @@ class _BurstPainter extends CustomPainter {
   final Color color;
   final bool ok;
   final bool loi;
-  _BurstPainter(this.t, this.color, this.ok, this.loi);
+  final bool major; // true = đại cảnh giới → bản điện ảnh; false = lên tầng snappy
+  _BurstPainter(this.t, this.color, this.ok, this.loi, {this.major = false});
 
-  /// Một tia sét gãy khúc tất định theo seed (không random — khỏi nhảy mỗi frame).
-  void _bolt(Canvas canvas, Offset from, Offset to, int seed, Paint paint) {
+  /// Tia sét gãy khúc tất định theo seed (không random — khỏi nhảy mỗi frame);
+  /// branch = thêm nhánh con ngắn cho major.
+  void _bolt(Canvas canvas, Offset from, Offset to, int seed, Paint paint,
+      {bool branch = false}) {
     final path = Path()..moveTo(from.dx, from.dy);
-    const n = 5;
+    const n = 6;
     for (var i = 1; i <= n; i++) {
       final b = Offset.lerp(from, to, i / n)!;
-      final jit = i == n ? 0.0 : (((seed * 73 + i * 37) % 17) - 8).toDouble();
-      path.lineTo(b.dx + jit, b.dy);
+      final jit = i == n ? 0.0 : (((seed * 73 + i * 37) % 19) - 9).toDouble();
+      final p = Offset(b.dx + jit, b.dy);
+      path.lineTo(p.dx, p.dy);
+      if (branch && (i == 2 || i == 4)) {
+        final off = ((seed * 17 + i * 29) % 24) - 12.0;
+        path
+          ..moveTo(p.dx, p.dy)
+          ..lineTo(p.dx + off, p.dy + 11)
+          ..moveTo(p.dx, p.dy);
+      }
     }
     canvas.drawPath(path, paint);
   }
 
+  Offset _spoke(Offset c, int i, int count, double radius, double ang0) {
+    final ang = ang0 + i * (math.pi * 2 / count);
+    return c + Offset(math.cos(ang), math.sin(ang)) * radius;
+  }
+
   @override
   void paint(Canvas canvas, Size size) {
-    // tâm hiệu ứng đặt ở giữa vùng nhân vật (phía trên cột chữ)
     final c = Offset(size.width / 2, size.height * 0.32);
-    // thiên lôi: 3 tia giáng xuống trong 45% đầu, nhấp nháy rồi tắt
-    if (loi && t < 0.45) {
-      final a = (1 - t / 0.45) * (math.sin(t * 60) > -0.5 ? 1.0 : 0.25);
-      final bolt = Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeCap = StrokeCap.round
-        ..color = const Color(0xFFFFE066).withValues(alpha: a);
-      for (final (i, dx) in [-38.0, 4.0, 32.0].indexed) {
-        bolt.strokeWidth = i == 1 ? 2.6 : 1.6; // tia giữa to nhất
-        _bolt(
-          canvas,
-          Offset(c.dx + dx * 1.6, 0),
-          c + Offset(dx * 0.2, -6),
-          i + 3,
-          bolt,
-        );
-      }
-      // lóe sáng nơi sét chạm
-      canvas.drawCircle(
-        c,
-        10 + t * 8,
-        Paint()..color = const Color(0xFFFFE066).withValues(alpha: a * 0.4),
-      );
-    }
+
+    // ---- THẤT BẠI: quầng đỏ + tàn tro rơi ----
     if (!ok) {
-      // quầng đỏ phụt lên rồi tắt
       final a = (1 - t) * 0.35;
       canvas.drawCircle(
         c,
         70 + t * 30,
         Paint()
-          ..shader = RadialGradient(
-            colors: [
-              color.withValues(alpha: a),
-              color.withValues(alpha: 0),
-            ],
-          ).createShader(Rect.fromCircle(center: c, radius: 100 + t * 30)),
+          ..shader = RadialGradient(colors: [
+            color.withValues(alpha: a),
+            color.withValues(alpha: 0),
+          ]).createShader(Rect.fromCircle(center: c, radius: 100 + t * 30)),
       );
+      final ash = Paint()..color = color.withValues(alpha: (1 - t) * 0.6);
+      for (var i = 0; i < 8; i++) {
+        final p = _spoke(c, i, 8, 30 + t * 40, i.toDouble());
+        canvas.drawCircle(Offset(p.dx, p.dy + t * 60), (1 - t) * 2.2, ash);
+      }
       return;
     }
-    // chớp sáng trắng 15% đầu
-    if (t < 0.15) {
+
+    // ================= THÀNH CÔNG =================
+    // 1) HỘI TỤ linh khí (major): hạt xoáy vào tâm, sáng dần trước va chạm
+    if (major && t < 0.34) {
+      final g = t / 0.34;
+      final gp = Paint();
+      for (var i = 0; i < 16; i++) {
+        final p = _spoke(c, i, 16, (1 - g) * 120 + 8, g * 3 + i.toDouble());
+        gp.color = color.withValues(alpha: g * 0.9);
+        canvas.drawCircle(p, 1.5 + g * 1.5, gp);
+      }
       canvas.drawCircle(
         c,
-        140,
-        Paint()..color = Colors.white.withValues(alpha: (1 - t / 0.15) * 0.75),
+        130 * (1 - g),
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2
+          ..color = color.withValues(alpha: g * 0.4),
       );
     }
-    // 2 vòng xung kích lan ra, mảnh dần
-    for (final delay in [0.0, 0.18]) {
+
+    // 2) THIÊN LÔI phân nhánh có quầng glow
+    if (loi && t > 0.18 && t < 0.62) {
+      final lt = (t - 0.18) / 0.44;
+      final a = (1 - lt) * (math.sin(t * 70) > -0.4 ? 1.0 : 0.3);
+      final core = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round
+        ..color = const Color(0xFFFFF3BF).withValues(alpha: a);
+      final glow = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6)
+        ..color = const Color(0xFFFFE066).withValues(alpha: a * 0.7);
+      for (final (i, dx) in [-46.0, 2.0, 40.0].indexed) {
+        final w = i == 1 ? 3.0 : 1.8;
+        glow.strokeWidth = w + 4;
+        core.strokeWidth = w;
+        final from = Offset(c.dx + dx * 1.7, 0);
+        final to = c + Offset(dx * 0.2, -6);
+        _bolt(canvas, from, to, i + 3, glow, branch: major);
+        _bolt(canvas, from, to, i + 3, core, branch: major);
+      }
+    }
+
+    // 3) CHỚP TRẮNG va chạm (major nổ muộn hơn, sau khi hội tụ)
+    final flashStart = major ? 0.30 : 0.0;
+    const flashLen = 0.15;
+    if (t >= flashStart && t < flashStart + flashLen) {
+      final ft = (t - flashStart) / flashLen;
+      canvas.drawCircle(
+        c,
+        major ? 210 : 140,
+        Paint()
+          ..color = Colors.white.withValues(alpha: (1 - ft) * (major ? 0.9 : 0.72)),
+      );
+    }
+
+    // 4) TRỤ SÁNG dựng lên (major)
+    if (major && t > 0.34) {
+      final pt = ((t - 0.34) / 0.4).clamp(0.0, 1.0);
+      final h = size.height * 0.85 * Curves.easeOut.transform(pt);
+      final w = (32 + 18 * math.sin(t * 30)) * (1 - pt * 0.3);
+      final rect = Rect.fromLTWH(c.dx - w / 2, c.dy - h, w, h + 20);
+      canvas.drawRect(
+        rect,
+        Paint()
+          ..shader = LinearGradient(
+            begin: Alignment.bottomCenter,
+            end: Alignment.topCenter,
+            colors: [color.withValues(alpha: (1 - t) * 0.85), color.withValues(alpha: 0)],
+          ).createShader(rect)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8),
+      );
+    }
+
+    // 5) VÒNG XUNG KÍCH (major dày hơn + glow)
+    final rings = major ? const [0.30, 0.42, 0.54] : const [0.0, 0.18];
+    for (final delay in rings) {
       final v = ((t - delay) / (1 - delay)).clamp(0.0, 1.0);
       if (v <= 0) continue;
       canvas.drawCircle(
         c,
-        20 + v * 130,
+        20 + v * (major ? 190 : 130),
         Paint()
           ..style = PaintingStyle.stroke
           ..strokeWidth = (1 - v) * 5 + 0.5
+          ..maskFilter = major ? const MaskFilter.blur(BlurStyle.normal, 2) : null
           ..color = color.withValues(alpha: (1 - v) * 0.8),
       );
     }
-    // 12 tia sáng phóng ra rồi mờ
+
+    // 6) TIA SÁNG phóng ra
     final ray = Paint()
       ..strokeWidth = 2
       ..strokeCap = StrokeCap.round
       ..color = color.withValues(alpha: (1 - t) * 0.85);
-    for (var i = 0; i < 12; i++) {
-      final ang = i * math.pi / 6 + 0.26; // xoay lệch cho khỏi thẳng đứng cứng
+    final rayN = major ? 16 : 12;
+    for (var i = 0; i < rayN; i++) {
+      final ang = i * math.pi * 2 / rayN + 0.26;
       final dir = Offset(math.cos(ang), math.sin(ang));
       canvas.drawLine(c + dir * (30 + t * 95), c + dir * (46 + t * 120), ray);
+    }
+
+    // 7) ĐỐM LINH KHÍ bay lên
+    final emberN = major ? 18 : 8;
+    final ember = Paint();
+    for (var i = 0; i < emberN; i++) {
+      final seed = (i * 53) % 100 / 100.0;
+      final x = c.dx + ((i * 37 % 200) - 100) * (0.4 + seed);
+      final y = c.dy + 40 - t * (major ? 260 : 150) * (0.6 + seed);
+      final a = (1 - t) * 0.9 * (t > 0.2 ? 1.0 : t / 0.2);
+      ember.color = color.withValues(alpha: a);
+      canvas.drawCircle(Offset(x, y), (1 - t) * 2.2 + 0.6, ember);
     }
   }
 
@@ -1314,6 +1435,29 @@ class CultivatorPreview extends StatelessWidget {
     halo: halo,
     weaponSprite: weaponSprite,
     phapbaoSprite: phapbaoSprite,
+  );
+}
+
+/// Preview TĨNH 1 frame hiệu ứng đột phá tại thời điểm [t] (0..1) — cho render
+/// test soi filmstrip khi sửa _BurstPainter (docs/tu-tien.md §3, bước soi PNG).
+class BurstPreview extends StatelessWidget {
+  final double t;
+  final Color color;
+  final bool ok;
+  final bool loi;
+  final bool major;
+  const BurstPreview({
+    super.key,
+    required this.t,
+    required this.color,
+    this.ok = true,
+    this.loi = false,
+    this.major = false,
+  });
+  @override
+  Widget build(BuildContext context) => CustomPaint(
+    painter: _BurstPainter(t, color, ok, loi, major: major),
+    child: const SizedBox.expand(),
   );
 }
 
