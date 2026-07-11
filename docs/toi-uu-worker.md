@@ -691,6 +691,27 @@ Còn lại sau revise (đúng phạm vi các pha sau): "chị gái/em" trong tho
 - Worker: chưa có style bible → `_init_style_bible` sinh MỘT lần từ metadata + 2000 ký tự đầu chương (`SYSTEM_STYLE`, JSON {pov, setting, han_viet, tone, rules[]}), lưu vào novels, mọi chương sau tái dùng qua `build_style_line` chèn vào prompt. Sinh lỗi → chương đó dịch không style line, chương sau tự thử lại. Worker không tự ghi đè style đã có (user chỉnh trong DB/app thì giữ).
 - Narrator reference: `glossary_terms.narrator_term` (user/app đặt, worker không tự ghi) → dòng nhân vật trong prompt thêm `[người kể gọi: y]`, trị lỗi người kể đổi cách gọi (n972 ông↔hắn, n1043 "lão" cho cậu bé). App cần thêm ô nhập ở màn Thuật ngữ (chưa làm).
 
+## 11.6. Q2 scene contract + kết quả vòng 3 (2026-07-12)
+
+Q2: pass phân tích tên sẵn có trả THÊM `{speakers[], pov}` (không thêm lượt LLM nào) — từng cặp người nói→người nghe kèm self_term/address_term/tone, giữ sắc thái tự xưng gốc, cặp "?" bị bỏ; `build_scene_line` chèn vào prompt dịch. Scene contract đi kèm 2-pass, truyện tắt 2-pass thì thôi.
+
+Đo vòng 3 (pipeline đầy đủ Q1+Q2+Q3, mỗi chương: style bible + analyze/scene + dịch có retry + vá máy móc + revise):
+
+| Bộ đo | Vòng 1 (chỉ prompt mới) | Vòng 3 (đủ pipeline) |
+|:--|--:|--:|
+| 8 chương test cố định — tổng lint | 25 | **9** |
+| 8 chương — flags văn phong sau revise | 48 | **1** |
+| 8 chương — "chẳng" thừa | hàng chục | **0** |
+| 6 chương NGẪU NHIÊN bộ khác — lint | — | 10 (flags 0, chẳng 0) |
+
+Điểm sáng: n1043 người kể đã gọi cậu bé bằng "hắn" thay vì "lão"; n962 hết "mình" độc thoại; không chương nào còn bị fuse chặn ở bản cuối.
+
+Tồn dư sau vòng 3 (nhỏ, đã có chủ):
+
+- 'anh ta/cô ấy/cô ta' lời kể ở 4/6 chương random (đa số ngôn tình/đô thị) — script test KHÔNG chạy `_fix_register`; worker thật vá máy móc + retry nên production sạch hơn số đo này.
+- Omission 在下/老子 còn 2–3 chỗ — revise hiện không thấy bản gốc zh; muốn sửa tự động cần đưa câu nguồn vào lượt revise (Q3 full, làm sau khi có thêm số liệu).
+- "gia tộc X" ×1, "một đầu" ×1, chữ Hán lẻ ×2 — lint theo dõi tiếp.
+
 ## 12. Bộ Q0 đầu tiên — feedback người đọc 2026-07-11
 
 User đã đọc 7/12 file baseline (`worker/eval_out_baseline/feedback_user_2026-07-11.txt`, giữ local). Nhóm lỗi theo tần suất:
