@@ -39,7 +39,15 @@ void main() {
   float rays = streak * rayFall * fade * 1.2;
 
   float glow = core + ring + rays;
-  vec3 col = uColor * glow + vec3(1.0) * pow(core, 2.2) * 0.7;
+
+  // Làm mờ dần về 0 ở sát 4 mép khung vẽ → KHÔNG còn đường cắt hình chữ nhật
+  // (trước đây additive lấp đầy rect rồi dừng đột ngột = "ô vuông" thấy rõ).
+  vec2 uv = fc / uSize;
+  float edge = smoothstep(0.0, 0.14, uv.x) * smoothstep(0.0, 0.14, 1.0 - uv.x)
+             * smoothstep(0.0, 0.14, uv.y) * smoothstep(0.0, 0.14, 1.0 - uv.y);
+  glow *= edge;
+
+  vec3 col = uColor * glow + vec3(1.0) * pow(core, 2.2) * 0.7 * edge;
 
   fragColor = vec4(col, clamp(glow, 0.0, 1.0));
 }
