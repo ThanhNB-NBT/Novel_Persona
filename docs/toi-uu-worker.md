@@ -681,7 +681,15 @@ Model lì với luật văn phong mềm trong prompt ("chẳng" tràn lan, chữ
 
 Đo thật trên n967 c1: 9 câu đánh dấu → 0, "chẳng" ×9 → 0, câu đọc tự nhiên. Chi phí: +1 call/chương chỉ khi có lỗi.
 
+**Chỉnh v2 (cùng ngày, sau khi đo 8 chương):** lượt revise LLM lúc sửa lúc không (n1030 vòng 1: 11 câu đánh dấu, 0 thay dù JSON hợp lệ ở lượt debug) → "chẳng"→"không" chuyển thành **vá máy móc** `_fix_soft_style` (giữ "chẳng lẽ/chẳng qua"), chạy trước revise; LLM revise chỉ còn lo chữ đệm cuối câu, "mình" tự xưng trong thoại (rule mới, Q0 n962), convertese, "X một cái", lặp "hắn". `max_tokens` revise 2048→4096. Vòng 2 trên 4 chương từng lỗi: "chẳng" 5–11 → 0–1 (còn lại là "chẳng lẽ" hợp lệ), flags 4→0 (n962), thi thoảng 1 câu model từ chối sửa → giữ nguyên có log.
+
 Còn lại sau revise (đúng phạm vi các pha sau): "chị gái/em" trong thoại cổ trang lọt lẻ tẻ (chờ Q2 scene contract), 在下 sót "tại hạ" (chờ Q1 constraint theo truyện), chữ Hán lẻ dưới ngưỡng fuse (lưới glossary thay được một phần).
+
+## 11.5. Q1 đã triển khai (2026-07-12): style bible + narrator reference
+
+- Migration `059_translation_style.sql`: `novels.translation_style jsonb` + `glossary_terms.narrator_term text`. **PHẢI push migration trước khi deploy worker** (worker select cột mới).
+- Worker: chưa có style bible → `_init_style_bible` sinh MỘT lần từ metadata + 2000 ký tự đầu chương (`SYSTEM_STYLE`, JSON {pov, setting, han_viet, tone, rules[]}), lưu vào novels, mọi chương sau tái dùng qua `build_style_line` chèn vào prompt. Sinh lỗi → chương đó dịch không style line, chương sau tự thử lại. Worker không tự ghi đè style đã có (user chỉnh trong DB/app thì giữ).
+- Narrator reference: `glossary_terms.narrator_term` (user/app đặt, worker không tự ghi) → dòng nhân vật trong prompt thêm `[người kể gọi: y]`, trị lỗi người kể đổi cách gọi (n972 ông↔hắn, n1043 "lão" cho cậu bé). App cần thêm ô nhập ở màn Thuật ngữ (chưa làm).
 
 ## 12. Bộ Q0 đầu tiên — feedback người đọc 2026-07-11
 

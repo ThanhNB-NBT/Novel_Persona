@@ -69,34 +69,56 @@ def test_han_residue_single_char():
     assert any("Hán sót lẻ" in p for p in lint("门外传来。", "Bên ngoài cửa truyền来 tiếng ồn."))
 
 
+def test_fix_soft_style_chang():
+    from novelworker.translator.worker import _fix_soft_style
+    out = _fix_soft_style("Hắn chẳng nói. Chẳng ai tin. Chẳng lẽ vậy sao? Nó chẳng qua là mơ.")
+    assert out == "Hắn không nói. Không ai tin. Chẳng lẽ vậy sao? Nó chẳng qua là mơ."
+
+
 def test_style_flags_and_apply():
     from novelworker.translator.worker import _apply_fixes, _style_flags
-    vi = ('Hắn chẳng thể tin nổi. "Ngài cần phu nhân chăng?" Chẳng lẽ vậy sao?\n'
-          "Nàng gật đầu một cái rồi rời đi.")
+    vi = ('"Ngài cần phu nhân chăng?" "Mình chắc chắn đã bỏ lỡ gì đó."\n'
+          "Nàng gật đầu một cái rồi rời đi. Hắn im lặng.")
     flags = _style_flags(vi)
     flagged = " | ".join(s for s, _ in flags)
-    assert "chẳng thể tin" in flagged and "chăng?" in flagged and "gật đầu một cái" in flagged
-    assert all("Chẳng lẽ vậy sao" not in s for s, _ in flags)  # 'chẳng lẽ' hợp lệ
+    assert "chăng?" in flagged and "Mình chắc chắn" in flagged and "một cái" in flagged
+    assert all("Hắn im lặng" not in s for s, _ in flags)
     fixed, n = _apply_fixes(vi, [
-        {"old": "Hắn chẳng thể tin nổi.", "new": "Hắn không thể tin nổi."},
+        {"old": '"Ngài cần phu nhân chăng?"', "new": '"Ngài có cần phu nhân không?"'},
         {"old": "không có trong bản dịch", "new": "bị bỏ qua"},
         {"old": "Nàng gật đầu một cái rồi rời đi.", "new": "Nàng gật đầu rồi rời đi."},
     ])
-    assert n == 2 and "không thể tin" in fixed and "gật đầu rồi rời đi" in fixed
+    assert n == 2 and "có cần phu nhân không" in fixed and "gật đầu rồi rời đi" in fixed
+
+
+def test_style_line_and_narrator_term():
+    from novelworker.translator import prompts
+    line = prompts.build_style_line({
+        "pov": "ngôi ba", "setting": "tu tiên cổ đại", "han_viet": "đậm",
+        "tone": "gọn, lạnh", "rules": ["hệ thống nói giọng tưng tửng"]})
+    assert "ngôi ba" in line and "tu tiên cổ đại" in line and "tưng tửng" in line
+    assert prompts.build_style_line(None) is None
+    assert prompts.build_style_line({}) is None
+    system = prompts.build_chapter_system(
+        [{"term_zh": "洛离", "correct_vi": "Lạc Ly", "term_type": "person",
+          "note": "nam, thiếu niên", "narrator_term": "y"}], "洛离睁开双目")
+    assert "[người kể gọi: y]" in system
+    user = prompts.build_chapter_user(None, "原文", style_line="[Văn phong truyện: X]")
+    assert "[Văn phong truyện: X]" in user
 
 
 def test_style_revise_with_fake_llm():
     from novelworker.translator.worker import _style_revise
 
     class FakeRes:
-        text = '[{"old": "Hắn chẳng nói gì.", "new": "Hắn không nói gì."}]'
+        text = '[{"old": "Ngài cần phu nhân chăng?", "new": "Ngài có cần phu nhân không?"}]'
 
     class FakeLLM:
         def complete(self, system, user, **kw):
             assert "CÂU:" in user
             return FakeRes()
 
-    assert _style_revise(FakeLLM(), "Hắn chẳng nói gì.") == "Hắn không nói gì."
+    assert _style_revise(FakeLLM(), "Ngài cần phu nhân chăng?") == "Ngài có cần phu nhân không?"
     # không có câu lỗi → không gọi LLM, trả nguyên văn
     class Boom:
         def complete(self, *a, **k):

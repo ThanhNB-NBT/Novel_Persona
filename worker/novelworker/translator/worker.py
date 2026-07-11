@@ -404,9 +404,20 @@ def _extract_json(text: str) -> dict | list:
 # Prompt cấm nhưng model vẫn lì các lỗi văn phong mềm (Q0: "chẳng" tràn lan, chữ đệm
 # "chăng/chứ" cuối câu, convertese, lặp từ). Retry cả chunk vừa đắt vừa không chắc
 # hơn → soi câu lỗi rồi gọi MỘT lượt LLM sửa đúng các câu đó, thay lại bằng máy.
+# "chẳng" → "không" là phép thay an toàn (giữ "chẳng lẽ/chẳng qua") → vá MÁY MÓC,
+# không phó mặc LLM (đo thật: lượt revise LLM lúc sửa lúc không).
+_CHANG_RE = re.compile(r"\b[Cc]hẳng\b(?!\s+lẽ|\s+qua)")
+
+
+def _fix_soft_style(vi: str) -> str:
+    return _CHANG_RE.sub(lambda m: "Không" if m.group(0).startswith("C") else "không", vi)
+
+
 _REVISE_RULES: list[tuple[str, re.Pattern]] = [
-    ("dùng 'không' thay 'chẳng'", re.compile(r"\bchẳng\b(?!\s+lẽ|\s+qua)", re.I)),
     ("chữ đệm thừa cuối câu", re.compile(r"\b(?:chăng|chứ|nha)\s*[?!.…”\"]", re.I)),
+    # độc thoại/thoại xưng "mình" — kỳ ảo phải là "ta" hoặc lược (Q0 n962)
+    ("tự xưng 'mình' → 'ta' hoặc lược", re.compile(
+        r"(?:^|[\"“…,.!?:]\s*)[Mm]ình\s+(?:đã|chắc|sẽ|không|phải|cũng|còn|vừa|mới|chết|bị|đang)")),
     ("lỗi convert", re.compile(
         r"\b(?:không khỏi|căn bản là|rốt cuộc là|trên thực tế|tổng cảm thấy)\b", re.I)),
     ("'X một cái' convert", re.compile(
@@ -441,6 +452,28 @@ def _apply_fixes(vi: str, fixes) -> tuple[str, int]:
     return vi, applied
 
 
+def _init_style_bible(chapter_llm, nv: dict, novel_id: int, content_zh: str) -> dict | None:
+    """Sinh style bible MỘT lần từ metadata + đầu chương rồi lưu vào novels.
+    Lỗi thì trả None — chương này dịch không style line, chương sau thử lại."""
+    meta = json.dumps({
+        "title": nv.get("title_zh") or nv.get("title_vi"),
+        "genres": nv.get("genres") or [],
+    }, ensure_ascii=False)
+    try:
+        res = chapter_llm.complete(
+            prompts.SYSTEM_STYLE, f"{meta}\n\nĐoạn mở đầu:\n{content_zh[:2000]}",
+            max_tokens=512)
+        style = _extract_json(res.text)
+        if not isinstance(style, dict) or not style:
+            return None
+        db.sb().table("novels").update({"translation_style": style}).eq("id", novel_id).execute()
+        log.info("Novel %s: đã sinh style bible %s", novel_id, style)
+        return style
+    except Exception as e:
+        log.warning("Novel %s: sinh style bible lỗi (bỏ qua): %s", novel_id, e)
+        return None
+
+
 def _style_revise(chapter_llm, vi: str) -> str:
     """Lượt biên tập có mục tiêu; mọi lỗi ở đây đều không được phá bản dịch gốc."""
     flags = _style_flags(vi)
@@ -448,7 +481,7 @@ def _style_revise(chapter_llm, vi: str) -> str:
         return vi
     listing = "\n\n".join(f"CÂU: {s}\nLỖI: {i}" for s, i in flags)
     try:
-        res = chapter_llm.complete(prompts.SYSTEM_REVISE, listing, max_tokens=2048)
+        res = chapter_llm.complete(prompts.SYSTEM_REVISE, listing, max_tokens=4096)
         vi, applied = _apply_fixes(vi, _extract_json(res.text))
         log.info("Revise văn phong: %d câu đánh dấu, %d câu thay", len(flags), applied)
     except Exception as e:
@@ -510,7 +543,7 @@ def handle_chapter(job: dict, llm) -> None:
     # 2-pass thích ứng + bối cảnh truyện (thể loại → register xưng hô).
     nv = (
         db.sb().table("novels")
-        .select("twopass_active,twopass_low_streak,title_vi,title_zh,genres,translation_provider,translation_model")
+        .select("twopass_active,twopass_low_streak,title_vi,title_zh,genres,translation_provider,translation_model,translation_style")
         .eq("id", ch["novel_id"]).single().execute()
     ).data or {}
     novel_line = None
@@ -525,6 +558,10 @@ def handle_chapter(job: dict, llm) -> None:
     if nv.get("translation_provider") and nv.get("translation_model"):
         chapter_llm = llm.pin(nv["translation_provider"], nv["translation_model"])
     twopass = nv.get("twopass_active", True)
+    # style bible (Q1): có sẵn thì dùng, chưa có thì sinh 1 lần từ chương đang dịch
+    style = nv.get("translation_style") or _init_style_bible(
+        chapter_llm, nv, ch["novel_id"], ch["content_zh"])
+    style_line = prompts.build_style_line(style)
     existing_zh = {t["term_zh"] for t in terms if t.get("term_zh")}
     # snapshot TRƯỚC khi merge tên mới: chỉ insert gợi ý chưa có trong DB, tránh nhân bản
     # (bảng không có unique constraint — try/except dưới chỉ là phòng hờ)
@@ -552,7 +589,8 @@ def handle_chapter(job: dict, llm) -> None:
             # chunk sau nhận tóm tắt + đuôi bản dịch chunk trước làm ngữ cảnh nối mạch
             prompts.build_chapter_user(
                 ch.get("title_zh") if i == 0 else None, chunk, prev_summary,
-                prev_tail=prev_tail, novel_line=novel_line, register_line=register_line),
+                prev_tail=prev_tail, novel_line=novel_line, register_line=register_line,
+                style_line=style_line),
             # fuse chất lượng NẰM TRONG chain: output kém → tự đổi provider kế, không fail oan
             validate=_quality_fuse(chunk),
         )
@@ -589,7 +627,8 @@ def handle_chapter(job: dict, llm) -> None:
             log.info("Chương %s: chunk %d/%d xong", ch["id"], i + 1, len(chunks))
 
     text = "\n\n".join(parts)
-    # sửa văn phong có mục tiêu: 1 lượt LLM/chương, chỉ khi có câu bị đánh dấu
+    # vá văn phong máy móc (chẳng→không) rồi mới sửa có mục tiêu bằng LLM
+    text = _fix_soft_style(text)
     text = _style_revise(chapter_llm, text)
 
     # Lưới an toàn: tên/thuật ngữ trong glossary còn SÓT dạng chữ Hán trong bản dịch

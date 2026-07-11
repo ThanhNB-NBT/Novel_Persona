@@ -323,7 +323,7 @@ def get_glossary(novel_id: int) -> tuple[list[dict], int]:
     gợi ý CŨ nhất thắng (giữ cách phiên âm xuất hiện đầu tiên)."""
     terms = (
         sb().table("glossary_terms")
-        .select("id,novel_id,term_zh,wrong_vi,correct_vi,term_type,note")
+        .select("id,novel_id,term_zh,wrong_vi,correct_vi,term_type,note,narrator_term")
         .eq("approved", True)
         .or_(f"novel_id.eq.{novel_id},novel_id.is.null")
         .execute()
@@ -331,7 +331,7 @@ def get_glossary(novel_id: int) -> tuple[list[dict], int]:
     seen = {t["term_zh"] for t in terms if t.get("term_zh")}
     pending = (
         sb().table("glossary_terms")
-        .select("id,novel_id,term_zh,wrong_vi,correct_vi,term_type,note")
+        .select("id,novel_id,term_zh,wrong_vi,correct_vi,term_type,note,narrator_term")
         .eq("approved", False).eq("novel_id", novel_id)
         .order("created_at")
         .execute()
