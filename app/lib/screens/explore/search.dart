@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -16,9 +18,11 @@ class SearchScreen extends ConsumerStatefulWidget {
 class _SearchScreenState extends ConsumerState<SearchScreen> {
   final _ctrl = TextEditingController();
   String _query = '';
+  Timer? _debounce; // gõ liên tục → chờ ngưng 300ms mới truy vấn (khỏi 1 query/phím)
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _ctrl.dispose();
     super.dispose();
   }
@@ -58,13 +62,25 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                         ? null
                         : IconButton(
                             icon: const Icon(Icons.close_rounded, size: 18),
-                            onPressed: () => setState(() {
-                              _ctrl.clear();
-                              _query = '';
-                            }),
+                            onPressed: () {
+                              _debounce?.cancel();
+                              setState(() {
+                                _ctrl.clear();
+                                _query = '';
+                              });
+                            },
                           ),
                   ),
-                  onChanged: (v) => setState(() => _query = v.trim()),
+                  onChanged: (v) {
+                    _debounce?.cancel();
+                    _debounce = Timer(const Duration(milliseconds: 300), () {
+                      if (mounted) setState(() => _query = v.trim());
+                    });
+                  },
+                  onSubmitted: (v) {
+                    _debounce?.cancel();
+                    setState(() => _query = v.trim()); // Enter = tìm ngay, khỏi chờ
+                  },
                 ),
               ),
             ]),
@@ -74,8 +90,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
             child: results == null
                 ? Center(child: Text('Nhập tên truyện để tìm.', style: t.bodyMedium))
                 : results.when(
-                    loading: () => const AppLoading(),
-                    error: (e, _) => Center(child: Text('Lỗi: $e')),
+                    loading: () => const SkeletonList(),
+                    error: (e, _) => AppError(e,
+                        onRetry: () => ref.invalidate(
+                            searchProvider(SearchFilter(query: _query)))),
                     data: (list) => list.isEmpty
                         // không có trong kho → mời yêu cầu crawl luôn với tên đang gõ
                         ? Center(

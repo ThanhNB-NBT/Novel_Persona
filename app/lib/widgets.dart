@@ -168,6 +168,204 @@ class AppLoading extends StatelessWidget {
   }
 }
 
+/// Trạng thái lỗi toàn màn: thông báo THÂN THIỆN (không đập exception thô vào mặt
+/// user) + nút Thử lại. Phân biệt mất mạng với lỗi khác. Thay cho `Text('Lỗi: $e')`
+/// rải khắp — màn lỗi trước đây là ngõ cụt (list có RefreshIndicator nhưng nhánh
+/// error trả Center không cuộn được nên không kéo làm mới được).
+class AppError extends StatelessWidget {
+  final Object error;
+  final VoidCallback? onRetry;
+  const AppError(this.error, {super.key, this.onRetry});
+
+  /// Lỗi mạng → nói "mất kết nối" thay vì phơi SocketException/ClientException.
+  static bool _isOffline(Object e) {
+    final s = e.toString().toLowerCase();
+    return s.contains('socketexception') ||
+        s.contains('clientexception') ||
+        s.contains('failed host lookup') ||
+        s.contains('connection') ||
+        s.contains('network');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final t = Theme.of(context).textTheme;
+    final offline = _isOffline(error);
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Icon(offline ? Icons.wifi_off_rounded : Icons.error_outline_rounded,
+              size: 44, color: cs.onSurfaceVariant),
+          const SizedBox(height: 12),
+          Text(offline ? 'Mất kết nối mạng' : 'Có lỗi xảy ra',
+              style: t.titleMedium, textAlign: TextAlign.center),
+          const SizedBox(height: 4),
+          Text(
+              offline
+                  ? 'Kiểm tra mạng rồi thử lại.'
+                  : 'Vui lòng thử lại sau ít phút.',
+              style: t.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+              textAlign: TextAlign.center),
+          if (onRetry != null) ...[
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh_rounded, size: 18),
+              label: const Text('Thử lại'),
+            ),
+          ],
+        ]),
+      ),
+    );
+  }
+}
+
+/// Skeleton có VỆT SÁNG chạy ngang (như skeleton web) — không phải chỉ mờ dần.
+/// ShaderMask phủ gradient [nền→sáng→nền] lên cả cây con, dịch ngang mỗi frame;
+/// blend srcATop nên chỉ tô lên các ô xám (nền trong suốt giữ nguyên). Một
+/// controller cho cả cây: rẻ hơn mỗi ô một animation.
+class _Shimmer extends StatefulWidget {
+  final Widget child;
+  const _Shimmer({required this.child});
+  @override
+  State<_Shimmer> createState() => _ShimmerState();
+}
+
+class _ShimmerState extends State<_Shimmer> with SingleTickerProviderStateMixin {
+  late final _c = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 1200))
+    ..repeat();
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final onSurf = Theme.of(context).colorScheme.onSurface;
+    final base = onSurf.withValues(alpha: 0.09); // ô nền
+    final glow = onSurf.withValues(alpha: 0.22); // vệt sáng lướt qua
+    // người dùng tắt hoạt ảnh → đứng yên (không có ShaderMask nhấp nháy)
+    if (MediaQuery.of(context).disableAnimations) return widget.child;
+    return AnimatedBuilder(
+      animation: _c,
+      child: widget.child,
+      builder: (context, child) => ShaderMask(
+        blendMode: BlendMode.srcATop,
+        shaderCallback: (bounds) => LinearGradient(
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+          colors: [base, glow, base],
+          stops: const [0.3, 0.5, 0.7],
+          // vệt (rộng ~40% ô) trượt từ ngoài trái sang ngoài phải mỗi vòng
+          transform: _SlideGradient(_c.value * 1.8 - 0.9),
+        ).createShader(bounds),
+        child: child,
+      ),
+    );
+  }
+}
+
+/// Dịch ngang gradient theo bội số bề rộng vùng vẽ (cho vệt shimmer chạy).
+class _SlideGradient extends GradientTransform {
+  final double ratio;
+  const _SlideGradient(this.ratio);
+  @override
+  Matrix4? transform(Rect bounds, {TextDirection? textDirection}) =>
+      Matrix4.translationValues(bounds.width * ratio, 0, 0);
+}
+
+/// Một ô xám bo góc — viên gạch dựng skeleton.
+Widget _skelBox(BuildContext context, {double? width, double height = 12, double radius = 7}) {
+  return Container(
+    width: width,
+    height: height,
+    decoration: BoxDecoration(
+      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.09),
+      borderRadius: BorderRadius.circular(radius),
+    ),
+  );
+}
+
+/// Skeleton cho danh sách truyện (Tủ truyện / Tìm kiếm / Lọc) — nhại NovelListRow:
+/// bìa + 2 dòng chữ. Hiện ~6 dòng khi đang tải.
+class SkeletonList extends StatelessWidget {
+  final int rows;
+  const SkeletonList({super.key, this.rows = 6});
+  @override
+  Widget build(BuildContext context) {
+    return _Shimmer(
+      child: ListView.builder(
+        physics: const NeverScrollableScrollPhysics(),
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        itemCount: rows,
+        itemBuilder: (context, _) => Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            _skelBox(context, width: 76, height: 76 * 1.36, radius: 8),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const SizedBox(height: 2),
+                _skelBox(context, width: double.infinity, height: 15),
+                const SizedBox(height: 10),
+                _skelBox(context, width: 120, height: 12),
+                const SizedBox(height: 18),
+                _skelBox(context, width: 90, height: 12),
+              ]),
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
+/// Skeleton cho trang Khám phá: 1 khối hero + vài rail bìa ngang.
+class SkeletonHome extends StatelessWidget {
+  const SkeletonHome({super.key});
+  @override
+  Widget build(BuildContext context) {
+    Widget rail() => Padding(
+          padding: const EdgeInsets.only(bottom: 24),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 0, 12),
+              child: _skelBox(context, width: 140, height: 20),
+            ),
+            SizedBox(
+              height: 150,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                physics: const NeverScrollableScrollPhysics(),
+                padding: const EdgeInsets.only(left: 20),
+                itemCount: 4,
+                itemBuilder: (context, _) => Padding(
+                  padding: const EdgeInsets.only(right: 12),
+                  child: _skelBox(context, width: 108, height: 150, radius: 8),
+                ),
+              ),
+            ),
+          ]),
+        );
+    return _Shimmer(
+      child: ListView(
+        physics: const NeverScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+        children: [
+          _skelBox(context, width: double.infinity, height: 170, radius: 16),
+          const SizedBox(height: 24),
+          rail(),
+          rail(),
+        ],
+      ),
+    );
+  }
+}
+
 /// Ô bấm được kiểu NEO: co nhẹ khi nhấn (spring press) + haptic.
 class TapScale extends StatefulWidget {
   final Widget child;
@@ -233,7 +431,10 @@ class Cover extends StatelessWidget {
                   fontSize: width * 0.42,
                   fontWeight: FontWeight.w800)),
     );
-    return Container(
+    return Semantics(
+      image: true,
+      label: initial.isEmpty ? 'Bìa truyện' : 'Bìa truyện $label',
+      child: Container(
       decoration: BoxDecoration(
         borderRadius: radius,
         // tech-minimal: viền 1px mờ + bóng rất nhẹ thay bóng nặng
@@ -269,7 +470,7 @@ class Cover extends StatelessWidget {
                     : SizedBox(width: width, height: h, child: fallback),
               ),
       ),
-    );
+    ));
   }
 }
 
@@ -311,13 +512,17 @@ class ProgressRibbon extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(3),
-      child: LinearProgressIndicator(
-        value: value.clamp(0, 1),
-        minHeight: 5,
-        backgroundColor: cs.outlineVariant.withValues(alpha: 0.5),
-        valueColor: AlwaysStoppedAnimation(cs.primary),
+    return Semantics(
+      label: 'Tiến độ đọc',
+      value: '${(value.clamp(0, 1) * 100).round()}%',
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(3),
+        child: LinearProgressIndicator(
+          value: value.clamp(0, 1),
+          minHeight: 5,
+          backgroundColor: cs.outlineVariant.withValues(alpha: 0.5),
+          valueColor: AlwaysStoppedAnimation(cs.primary),
+        ),
       ),
     );
   }

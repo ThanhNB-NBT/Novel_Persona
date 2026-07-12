@@ -20,7 +20,7 @@ class NovelDetailScreen extends ConsumerWidget {
     return Scaffold(
       body: novel.when(
         loading: () => const AppLoading(),
-        error: (e, _) => Center(child: Text('Lỗi: $e')),
+        error: (e, _) => AppError(e, onRetry: () => ref.invalidate(novelProvider(novelId))),
         data: (n) {
           // nền khí quyển kiểu NEO: màu trích từ bìa loãng dần vào nền chung
           final amb = ref.watch(ambientProvider(n['cover_url'] as String?)).value ??
@@ -272,7 +272,7 @@ class _ChapterListTabState extends ConsumerState<_ChapterListTab> {
     final cs = Theme.of(context).colorScheme;
     return chapters.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(child: Text('Lỗi mục lục: $e')),
+      error: (e, _) => AppError(e, onRetry: () => ref.invalidate(chapterListProvider(widget.novelId))),
       data: (list) {
         final ordered = _asc ? list : list.reversed.toList();
         // Mục lục lười: truyện chưa ai đọc chỉ giữ vài chương đọc thử. Xem thông tin

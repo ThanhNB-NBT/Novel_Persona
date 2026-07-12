@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../data.dart';
 import '../../hanviet.dart';
+import '../../widgets.dart';
 
 const _typeLabels = {
   'person': 'Nhân vật',
@@ -72,7 +73,7 @@ class _GlossaryScreenState extends ConsumerState<GlossaryScreen> {
             ),
       body: terms.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Lỗi: $e')),
+        error: (e, _) => AppError(e, onRetry: () => ref.invalidate(glossaryProvider(novelId))),
         data: (list) {
           if (sb.auth.currentUser == null) {
             return Center(

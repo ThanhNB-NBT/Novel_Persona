@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../data.dart';
+import '../../widgets.dart';
 import '../cultivation/pixel.dart';
 
 /// Sửa hồ sơ: tên hiển thị + chọn avatar preset (emoji, không cần upload ảnh)
@@ -51,7 +52,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
       appBar: AppBar(title: const Text('Sửa thông tin')),
       body: profile.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Lỗi: $e')),
+        error: (e, _) => AppError(e, onRetry: () => ref.invalidate(profileProvider)),
         data: (p) {
           // nạp giá trị hiện tại 1 lần (không đè khi user đang gõ)
           if (!_init) {

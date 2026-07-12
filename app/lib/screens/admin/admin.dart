@@ -17,7 +17,8 @@ class AdminScreen extends ConsumerWidget {
     final admin = ref.watch(isAdminProvider);
     return admin.when(
       loading: () => const Scaffold(body: Center(child: CircularProgressIndicator())),
-      error: (e, _) => Scaffold(body: Center(child: Text('Lỗi: $e'))),
+      error: (e, _) => Scaffold(
+          body: AppError(e, onRetry: () => ref.invalidate(isAdminProvider))),
       data: (ok) {
         if (!ok) {
           return Scaffold(
@@ -111,7 +112,7 @@ class _Refreshable extends StatelessWidget {
   Widget build(BuildContext context) {
     return async.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(child: Text('Lỗi: $e')),
+      error: (e, _) => AppError(e, onRetry: () => onRefresh()),
       data: (list) => RefreshIndicator(
         onRefresh: onRefresh,
         child: list.isEmpty
@@ -1268,7 +1269,7 @@ class AdminNovelScreen extends ConsumerWidget {
       ),
       body: chapters.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Lỗi: $e')),
+        error: (e, _) => AppError(e, onRetry: () => ref.invalidate(adminChaptersProvider(novelId))),
         data: (list) => RefreshIndicator(
           onRefresh: () async {
             ref.invalidate(adminChaptersProvider(novelId));

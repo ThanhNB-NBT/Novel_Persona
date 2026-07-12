@@ -18,7 +18,7 @@ class OfflineLibraryScreen extends ConsumerWidget {
       appBar: AppBar(title: const Text('Bản offline')),
       body: novels.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Lỗi: $e')),
+        error: (e, _) => AppError(e, onRetry: () => ref.invalidate(offlineNovelsProvider)),
         data: (list) {
           if (list.isEmpty) {
             return const Center(

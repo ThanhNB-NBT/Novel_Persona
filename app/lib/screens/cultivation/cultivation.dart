@@ -12,6 +12,7 @@ import 'package:lottie/lottie.dart';
 
 import '../../cultivation.dart';
 import '../../data.dart';
+import '../../widgets.dart';
 import '../../theme.dart' show monoStyle;
 import 'pixel.dart';
 
@@ -172,20 +173,8 @@ class _CultivationScreenState extends ConsumerState<CultivationScreen> {
               bottom: false,
               child: state.when(
                 loading: () => const Center(child: CircularProgressIndicator()),
-                error: (e, _) => Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text('Lỗi: $e', textAlign: TextAlign.center),
-                      const SizedBox(height: 12),
-                      FilledButton.icon(
-                        onPressed: () => ref.invalidate(cultStateProvider),
-                        icon: const Icon(Icons.refresh_rounded),
-                        label: const Text('Thử lại'),
-                      ),
-                    ],
-                  ),
-                ),
+                error: (e, _) =>
+                    AppError(e, onRetry: () => ref.invalidate(cultStateProvider)),
                 data: (st) {
                   if (st == null) {
                     return Center(
@@ -2676,7 +2665,7 @@ class _CollectionSheet extends ConsumerWidget {
       height: MediaQuery.sizeOf(context).height * 0.72,
       child: catalog.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Lỗi: $e')),
+        error: (e, _) => AppError(e, onRetry: () => ref.invalidate(cultCatalogProvider)),
         data: (items) {
           if (collection.isLoading) {
             return const Center(child: CircularProgressIndicator());
