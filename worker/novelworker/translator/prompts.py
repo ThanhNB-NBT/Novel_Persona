@@ -31,6 +31,7 @@ XƯNG HÔ — yếu tố quyết định độ tự nhiên. Trước MỖI câu 
   CẤM "cậu/bạn/anh/em" trong câu kể — đó là ngôi hai, CHỈ dùng trong lời thoại. Sai: "bố mẹ kỳ vọng cậu thành tài" → đúng: "...kỳ vọng hắn thành tài". Không gọi người là "nó" trừ khi cố ý khinh miệt.
 - GIỚI TÍNH LÀ LUẬT CỨNG với từ TỰ XƯNG. CHỈ NỮ mới được: "thiếp" (với chồng/tình lang), "nô tì"/"nô gia" (hầu gái), "bổn cung" (phi tần/công chúa), "ai gia" (thái hậu), "bổn cô nương". CHỈ NAM: "lão phu" (ông già), "bổn thiếu gia", "trẫm" (vua), "bần tăng" (hòa thượng), "mỗ". Nhân vật NAM tự xưng "thiếp" là LỖI NẶNG NHẤT. Không chắc giới tính → dùng "ta".
 - Vai vế: đệ tử với sư phụ xưng "đồ nhi/con", sư phụ tự xưng "vi sư"; với tiền bối xưng "vãn bối"; quan/tướng với vua xưng "thần"; kẻ dưới với chủ nhân xưng "thuộc hạ"; người tu đạo gặp nhau gọi "đạo hữu". Bề trên nói với kẻ dưới dùng "ngươi", không "ngài".
+- TỰ XƯNG GIÀU SẮC THÁI trong thoại phải GIỮ DẤU VẾT, không rút phẳng thành "ta": 老子→"ông đây/lão tử/bố mày" (ngông/chửi), 老夫→"lão phu", 在下→"tại hạ", 本座→"bổn tọa", 本尊→"bản tôn", 晚辈→"vãn bối", 贫道→"bần đạo", 朕→"trẫm". Vd: "老子撕烂他的嘴!" → "Ông đây xé nát mồm nó!", KHÔNG phải "Ta xé nát mồm nó!".
 - Đã gọi danh xưng đối phương (nhị thúc, sư phụ, chưởng môn...) MỘT lần trong lượt thoại thì câu sau dùng đại từ ("ngài"/"người"), ĐỪNG lặp danh xưng mỗi câu. Tự xưng giữ "ta" (mặc định kỳ ảo), chỉ "con/đồ nhi" khi thật sự là cha–con hoặc sư đồ ràng buộc. Vd: "Nhị thúc! Con hiểu ý tốt của nhị thúc, nhưng con đã có mục tiêu." → "Nhị thúc, ta hiểu ý ngài, nhưng ta đã có mục tiêu rồi."
 - Độc thoại/nghĩ thầm và truyện kể NGÔI THỨ NHẤT bối cảnh kỳ ảo/cổ đại/hệ thống: tự xưng "ta" hoặc LƯỢC hẳn, KHÔNG "mình"/"tôi" ("Bình tĩnh, mình chắc chắn đã bỏ lỡ gì đó" → "Bình tĩnh, chắc chắn đã bỏ lỡ gì đó"). Cũng KHÔNG nhét "hắn" vào lời nhân vật tự nhủ về chính mình ("Xem ra hắn thật sự đã tái sinh" là SAI — phải "Xem ra ta thật sự đã tái sinh" hoặc lược). Chỉ bối cảnh hiện đại thuần mới kể bằng "tôi".
 - Register THOẠI theo bối cảnh + quan hệ người nói (thoại linh hoạt, KHÔNG cứng như lời kể): bối cảnh tu tiên/cổ đại/huyền huyễn → ta–ngươi, huynh–đệ–tỷ–muội, ca ca/đệ đệ/sư huynh/sư tỷ. CẤM "anh/chị/em/mày" trong thoại cổ trang: anh trai→"ca ca/huynh", chị→"tỷ/tỷ tỷ", em (gái)→"muội", tự xưng "em"→"muội/đệ", "chị em thân thiết"→"tỷ muội thân thiết", "mày"→"ngươi". Chửi mắng vẫn dùng "ngươi" ("lão súc sinh nhà ngươi"); mày–tao CHỈ giữa bằng hữu suồng sã đã thân. Nhân vật HIỆN ĐẠI nói chuyện với nhau (game, xuyên về đời thực, hồi tưởng hiện đại) → được dùng anh/em, "ca" (哥/老哥 → "ca", "Lâm ca"). Trong thoại nhắc tới NGƯỜI THỨ BA → "hắn ta"/"anh ta" đều được. Phân vân → chọn ta–ngươi. Không "cậu/các cậu/các bạn" trong thoại cổ trang: "Các cậu có biết không?" → "Các ngươi có biết không?".
@@ -81,10 +82,10 @@ Cách sửa các lỗi thường gặp:
 - Chữ đệm thừa cuối câu ("chăng", "chứ", "kia", "nha") → bỏ, hoặc diễn đạt gọn ("ngài cần phu nhân chăng?" → "ngài có cần phu nhân không?").
 - Lỗi convert: "không khỏi" → "bất giác"; "căn bản là" → "vốn dĩ"; "trên thực tế" → "thật ra"; "cười một cái" → "bật cười".
 - Câu lặp cùng một từ sát nhau → lược bớt hoặc thay từ đồng nghĩa cho xuôi.
-Trả về DUY NHẤT một mảng JSON, mỗi phần tử {"old": "...", "new": "..."}:
-- "old" CHÉP NGUYÊN VĂN câu trong bản dịch (kể cả dấu câu) — hệ thống thay thế bằng máy.
-- "new" là câu đã sửa, cùng số câu, không thêm nội dung mới.
-- Không chắc cách sửa thì BỎ QUA câu đó. Không giải thích, không markdown."""
+Trả về DUY NHẤT một mảng JSON, mỗi phần tử {"line": N, "new": "..."}:
+- "line" là SỐ DÒNG được ghi kèm câu lỗi trong yêu cầu — hệ thống thay theo số dòng bằng máy.
+- "new" là TOÀN BỘ dòng đã sửa, không thêm nội dung mới.
+- Không chắc cách sửa thì BỎ QUA dòng đó. Không giải thích, không markdown."""
 
 SYSTEM_ANALYZE = """Bạn là trợ lý phân tích tiểu thuyết mạng Trung. Đọc đoạn văn sau, TUYỆT ĐỐI KHÔNG dịch nội dung.
 Liệt kê MỌI tên riêng / thuật ngữ quan trọng xuất hiện (người, môn phái, địa danh, chiêu thức, pháp bảo, cảnh giới tu luyện) kèm phiên âm Hán-Việt chuẩn. Với "person": "note" BẮT BUỘC mở đầu bằng giới tính "nam"/"nữ" — suy từ 他/她, 少年/少女, danh xưng (公子/姑娘/小姐), tên gọi; thật sự không suy ra được mới ghi "?". Sau giới tính ghi vai vế/quan hệ (sư huynh, tỷ tỷ, chưởng môn...) — bảng này quyết định xưng hô khi dịch.

@@ -19,7 +19,16 @@ from collections import defaultdict
 import json
 import random
 import re
+import sys
 from pathlib import Path
+
+# console Windows mặc định cp1252 — in tiếng Việt ("BỎ QUA...") là chết cả run
+sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
+# lộ log các lượt sửa (revise/omission/residue) — không có thì lỗi lì không chẩn đoán được
+import logging
+logging.basicConfig(level=logging.INFO, format="%(levelname).1s %(name)s: %(message)s")
 
 from novelworker import db
 from novelworker.translator.worker import (
@@ -55,7 +64,7 @@ _RULES: list[tuple[str, re.Pattern]] = [
     # n1007: 咳咳 dịch thành "Cough cough" — tượng thanh phải là âm Việt
     ("tượng thanh tiếng Anh", re.compile(r"\b(?:cough|sigh|ahem|gasp|hmph|tsk)\b", re.I)),
     ("convert 'tổng cảm thấy' (总感觉)", re.compile(r"\btổng cảm thấy\b", re.I)),
-    # fuse chỉ chặn ≥5% — chữ Hán lẻ ("truyền来") vẫn lọt, eval bắt hết
+    # Báo chi tiết chuỗi Hán còn sót; production fuse/repair cũng chặn ở lớp cuối.
     ("chữ Hán sót lẻ", re.compile(r"[一-鿿㐀-䶿]+")),
 ]
 
@@ -64,7 +73,8 @@ _CHANG_THRESHOLD = 4
 
 _DIALOGUE = re.compile(r'"[^"\n]*"|“[^”]*”|「[^」]*」')
 _NARRATOR_TERMS = re.compile(
-    r"\b(?:hắn|nàng|y|gã|lão|anh(?:\s+ta)?|cậu(?:\s+ta)?|cô(?:\s+ấy|\s+ta)?|ông\s+ta)\b",
+    r"\b(?:hắn|nàng|y|gã|lão|tôi|mình|(?<!chúng\s)(?<!người\s)ta|"
+    r"anh(?:\s+ta)?|cậu(?:\s+ta)?|cô(?:\s+ấy|\s+ta)?|ông\s+ta)\b",
     re.I,
 )
 
@@ -72,7 +82,7 @@ _NARRATOR_TERMS = re.compile(
 def _han_repeat_density(vi: str) -> list[str]:
     """Câu có ≥3 lần 'hắn' → prompt bắt lược chủ ngữ, model lười thì lộ ngay."""
     out = []
-    for sent in re.split(r"[.!?…]\s+", vi):
+    for sent in re.split(r"[.!?…][\"”’]*\s+|\n+", vi):
         if len(re.findall(r"\bhắn\b", sent, re.I)) >= 3:
             out.append(sent.strip()[:90])
     return out
@@ -208,19 +218,23 @@ def translate_fresh(rows: list[dict]) -> list[dict]:
     llm = build_chain(0)
     out = []
     for r in rows:
-        try:
-            out.append(_translate_one(r, llm))
-        except Exception as e:
-            print(f"  BỎ QUA n{r['novel_id']} c{r['chapter_index']}: {str(e)[:120]}")
+        # model lì theo lượt (đo v4/v5: chạy lại là qua) → thử lại 1 lần như queue production
+        for attempt in (1, 2):
+            try:
+                out.append(_translate_one(r, llm))
+                break
+            except Exception as e:
+                verdict = "thử lại" if attempt == 1 else "BỎ QUA"
+                print(f"  {verdict} n{r['novel_id']} c{r['chapter_index']}: {str(e)[:120]}")
     return out
 
 
 def _translate_one(r: dict, llm) -> dict:
     from novelworker.translator import prompts
     from novelworker.translator.worker import (
-        GLOSSARY_LINE, REGISTER_LINE, _ZH_DIALOGUE_RE, _analyze_names, _clean_output,
-        _extract_json, _fix_omissions, _fix_soft_style, _merge_names, _pop_summary,
-        _quality_fuse, _split_chunks, _style_revise, _tail,
+        GLOSSARY_LINE, _ZH_DIALOGUE_RE, _analyze_names, _clean_output,
+        _extract_json, _fix_han_residue, _fix_omissions, _fix_soft_style, _merge_names, _pop_summary,
+        _is_first_person, _quality_fuse, _register_line, _split_chunks, _style_revise, _tail,
     )
     if True:  # giữ indent thân cũ — nội dung y nguyên translate_fresh trước đây
         if r.get("_from_file"):
@@ -263,6 +277,8 @@ def _translate_one(r: dict, llm) -> dict:
 
         existing_zh = {t["term_zh"] for t in terms if t.get("term_zh")}
         twopass = nv.get("twopass_active", True)
+        first_person = _is_first_person(r["content_zh"])
+        register_line = _register_line(r["content_zh"])
         parts = []
         for i, chunk in enumerate(_split_chunks(r["content_zh"])):
             scene_line = None
@@ -274,9 +290,9 @@ def _translate_one(r: dict, llm) -> dict:
                 prompts.build_chapter_system(terms, chunk),
                 prompts.build_chapter_user(
                     r.get("title_zh") if i == 0 else None, chunk, prev_summary,
-                    prev_tail=prev_tail, novel_line=novel_line, register_line=REGISTER_LINE,
+                    prev_tail=prev_tail, novel_line=novel_line, register_line=register_line,
                     style_line=style_line, scene_line=scene_line),
-                validate=_quality_fuse(chunk),
+                validate=_quality_fuse(chunk, first_person),
             )
             text = res.text
             m = GLOSSARY_LINE.search(text)
@@ -284,9 +300,11 @@ def _translate_one(r: dict, llm) -> dict:
                 text = text[:m.start()].rstrip()
             text, summary = _pop_summary(text)
             prev_summary = summary or prev_summary
-            parts.append(_fix_omissions(chapter_llm, chunk, _clean_output(text)))
+            fixed = _fix_omissions(chapter_llm, chunk, _clean_output(text))
+            parts.append(_fix_han_residue(chapter_llm, fixed))
             prev_tail = _tail(parts[-1])
-        text = _style_revise(chapter_llm, _fix_soft_style("\n\n".join(parts)))
+        text = _style_revise(chapter_llm, _fix_soft_style("\n\n".join(parts)), r["content_zh"])
+        text = _fix_omissions(chapter_llm, r["content_zh"], text)
         return {**r, "content_vi": text, "model_used": "(fresh-full)"}
 
 
