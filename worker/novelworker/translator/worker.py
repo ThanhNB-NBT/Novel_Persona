@@ -10,6 +10,7 @@ import time
 from .. import db
 from ..config import settings
 from . import hanviet, prompts
+from . import providers
 from .providers import build_chain
 
 log = logging.getLogger(__name__)
@@ -168,7 +169,8 @@ def check_translation(content_zh: str, content_vi: str) -> str | None:
 
 # Thoại nằm trong "..." hoặc “...” (prompt bắt thoại dùng ngoặc kép kiểu Việt).
 # Giới hạn độ dài + không ăn qua xuống dòng để câu kể thiếu ngoặc đóng không bị nuốt oan.
-_DIALOGUE_RE = re.compile(r'"[^"\n]{1,500}"|“[^”\n]{1,500}”')
+_DIALOGUE_RE = re.compile(
+    r'"[^"\n]{1,500}"|“[^”\n]{1,500}”|^[ \t]*[—–-]\s+[^\n]{1,500}', re.M)
 
 
 # Đại từ kể sai có thể vá MÁY MÓC an toàn (ngôi ba rõ ràng, giới tính rõ ràng).
@@ -239,6 +241,13 @@ def _register_violation(content_vi: str, allow_toi: bool = False) -> str | None:
     return None
 
 
+def _audit_reason(content_zh: str, content_vi: str) -> str | None:
+    """Lỗi cứng đáng xếp lại dịch; không kéo lỗi văn phong mềm vào audit hàng loạt."""
+    return (check_translation(content_zh, content_vi)
+            or _register_violation(content_vi, allow_toi=_is_first_person(content_zh))
+            or next(iter(self_reference_omissions(content_zh, content_vi)), None))
+
+
 def _quality_fuse(chunk: str, first_person: bool | None = None):
     """Validator chạy TRONG FallbackChain — raise khi output kém để tự đổi provider.
     Đo trên phần THÂN bản dịch (đã bỏ GLOSSARY_JSON/SUMMARY) — đo text thô sẽ lệch:
@@ -284,7 +293,7 @@ def scan_bad_chapters(since: str | None = None) -> list[tuple[dict, str]]:
         frm += 500
     bad: list[tuple[dict, str]] = []
     for c in rows:
-        reason = check_translation(c.get("content_zh") or "", c.get("content_vi") or "")
+        reason = _audit_reason(c.get("content_zh") or "", c.get("content_vi") or "")
         if reason:
             bad.append((c, reason))
     return bad
@@ -385,64 +394,20 @@ def _merge_names(terms: list[dict], existing_zh: set[str], names: list[dict]) ->
     return added
 
 
-def _analyze_names(llm, chunk: str) -> tuple[list[dict], dict | None]:
-    """Pass 1: tên riêng + scene contract (speakers/POV) trong CÙNG một lượt gọi.
-    Trả (terms, scene); lỗi thì ([], None) — dịch vẫn chạy, chỉ thiếu gợi ý."""
+def _analyze_names(llm, chunk: str) -> list[dict]:
+    """Pass 1: trích tên riêng / thuật ngữ để chốt phiên âm vào glossary TRƯỚC khi dịch.
+    Lỗi thì [] — dịch vẫn chạy, chỉ thiếu gợi ý tên."""
     try:
         res = llm.complete(prompts.SYSTEM_ANALYZE, chunk, max_tokens=1536)
         data = _extract_json(res.text)
     except Exception:
-        return [], None
+        return []
     if isinstance(data, list):        # model trả shape mảng cũ → vẫn nhận tên
-        return data, None
+        return data
     if isinstance(data, dict):
         terms = data.get("terms")
-        return (terms if isinstance(terms, list) else []), data
-    return [], None
-
-
-def _load_relations(novel_id: int) -> dict[tuple[str, str], dict]:
-    """Cặp xưng hô đã chốt của truyện. Bảng chưa migrate/DB lỗi → rỗng, dịch vẫn chạy."""
-    try:
-        rows = (db.sb().table("speaker_relations").select("*")
-                .eq("novel_id", novel_id).execute().data or [])
-    except Exception as e:
-        log.info("speaker_relations chưa dùng được (%s) — dịch không có memory xưng hô", e)
-        return {}
-    return {(r["speaker"], r["addressee"]): r for r in rows}
-
-
-def _merge_scene_relations(relations: dict, scene, novel_id: int,
-                           chapter_index: int) -> list[dict]:
-    """Cặp đã chốt ghi đè lên đoán của analyzer (một cặp một kiểu xưng hô suốt truyện);
-    cặp mới có term thì trả về để lưu. ponytail: bản lưu luôn thắng — quan hệ đổi
-    (bái sư/trở mặt) thì sửa tay dòng DB, nâng cấp = thêm confidence/chapter range."""
-    if not isinstance(scene, dict):
-        return []
-    new = []
-    for s in scene.get("speakers") or []:
-        if not isinstance(s, dict):
-            continue
-        sp, ad = s.get("speaker"), s.get("addressee")
-        if not sp or not ad or "?" in (sp, ad):
-            continue
-        known = relations.get((sp, ad))
-        if known:
-            for k in ("self_term", "address_term", "tone"):
-                if known.get(k):
-                    s[k] = known[k]
-        elif s.get("self_term") or s.get("address_term"):
-            row = {"novel_id": novel_id, "speaker": sp, "addressee": ad,
-                   "self_term": s.get("self_term"), "address_term": s.get("address_term"),
-                   "tone": s.get("tone"), "last_chapter": chapter_index}
-            relations[(sp, ad)] = row
-            new.append(row)
-    return new
-
-
-def _needs_scene_analysis(chunk: str, twopass: bool) -> bool:
-    """Pass tên có thể tắt, nhưng chunk có hội thoại vẫn cần speaker/addressee."""
-    return twopass or bool(_ZH_DIALOGUE_RE.search(chunk))
+        return terms if isinstance(terms, list) else []
+    return []
 
 
 def _split_chunks(text: str, limit: int = CHUNK_LIMIT) -> list[str]:
@@ -764,6 +729,8 @@ def handle_chapter(job: dict, llm) -> None:
 
     db.sb().table("chapters").update({"translation_status": "translating"}).eq("id", ch["id"]).execute()
 
+    providers.reset_call_stats()  # đếm LLM call/token cả chương (analyze + dịch + repair)
+    t_start = time.time()
     terms, glossary_version = db.get_glossary(ch["novel_id"])
 
     # ngữ cảnh chương trước (nếu đã dịch): tóm tắt + ĐUÔI bản dịch (nối giọng văn/xưng hô)
@@ -802,9 +769,6 @@ def handle_chapter(job: dict, llm) -> None:
     # style bible (Q1): có sẵn thì dùng, chưa có thì sinh 1 lần từ chương đang dịch
     style = nv.get("translation_style") or _init_style_bible(
         chapter_llm, nv, ch["novel_id"], ch["content_zh"], ch["chapter_index"])
-    # bộ nhớ xưng hô xuyên truyện (P1-4): cặp đã chốt đè lên đoán mới của analyzer
-    relations = _load_relations(ch["novel_id"])
-    new_relations: list[dict] = []
     style_line = prompts.build_style_line(style)
     existing_zh = {t["term_zh"] for t in terms if t.get("term_zh")}
     # snapshot TRƯỚC khi merge tên mới: chỉ insert gợi ý chưa có trong DB, tránh nhân bản
@@ -821,17 +785,11 @@ def handle_chapter(job: dict, llm) -> None:
     for i, chunk in enumerate(chunks):
         # Pass 1 (chỉ khi 2-pass còn bật): chốt phiên âm tên riêng vào glossary TRƯỚC khi dịch,
         # để mọi lần tên xuất hiện trong chunk này đều dùng đúng một cách phiên âm.
-        scene_line = None
-        # Tên mới có thể hết sau arc đầu, nhưng speaker/addressee vẫn đổi ở mọi chương.
-        # Vì vậy chunk có thoại luôn giữ scene pass, không phụ thuộc twopass tên riêng.
-        if _needs_scene_analysis(chunk, twopass):
-            names, scene = _analyze_names(chapter_llm, chunk)
+        if twopass:
+            names = _analyze_names(chapter_llm, chunk)
             added = _merge_names(terms, existing_zh, names)
             new_names_this_chapter += len(added)
             detected += added  # tên pass-1 cũng phải vào DB — trước đây chỉ nằm RAM, chương sau mất
-            new_relations += _merge_scene_relations(
-                relations, scene, ch["novel_id"], ch["chapter_index"])
-            scene_line = prompts.build_scene_line(scene)
 
         res = chapter_llm.complete(
             # chỉ chèn term xuất hiện trong chunk này → prompt gọn, model bám sát hơn
@@ -840,7 +798,7 @@ def handle_chapter(job: dict, llm) -> None:
             prompts.build_chapter_user(
                 ch.get("title_zh") if i == 0 else None, chunk, prev_summary,
                 prev_tail=prev_tail, novel_line=novel_line, register_line=register_line,
-                style_line=style_line, scene_line=scene_line),
+                style_line=style_line),
             # fuse chất lượng NẰM TRONG chain: output kém → tự đổi provider kế, không fail oan
             validate=_quality_fuse(chunk, first_person),
         )
@@ -910,14 +868,6 @@ def handle_chapter(job: dict, llm) -> None:
     )
     db.bump_translated_count(ch["novel_id"])
 
-    if new_relations:
-        try:
-            db.sb().table("speaker_relations").upsert(
-                new_relations, on_conflict="novel_id,speaker,addressee").execute()
-            log.info("Chương %s: lưu %d cặp xưng hô mới", ch["id"], len(new_relations))
-        except Exception as e:  # bảng chưa migrate → chương vẫn done, chỉ mất memory
-            log.info("Lưu speaker_relations lỗi (bỏ qua): %s", e)
-
     # lưu tên riêng phát hiện được làm term "gợi ý" (approved=false, scope=novel)
     # — get_glossary lấy cả gợi ý nên chương sau dùng lại ngay, giữ phiên âm nhất quán
     inserted_zh: set[str] = set()
@@ -954,7 +904,10 @@ def handle_chapter(job: dict, llm) -> None:
         if not still_active:
             log.info("Novel %s: tắt 2-pass (arc mở đầu xong, hết tên mới)", ch["novel_id"])
 
-    log.info("Đã dịch chương %s/%s (novel %s)", ch["chapter_index"], ch["novel_id"], model)
+    st = providers.get_call_stats()
+    log.info("Đã dịch chương %s/%s (novel %s) — %d chunk, %d LLM call, %d+%d tok, %.1fs",
+             ch["chapter_index"], ch["novel_id"], model, len(chunks), st["calls"],
+             st["prompt_tokens"], st["completion_tokens"], time.time() - t_start)
 
 
 def handle_patch(job: dict, llm=None) -> None:
@@ -1001,10 +954,16 @@ def handle_audit(job: dict, llm=None) -> None:
     hàng đợi các chương hỏng để dịch lại. Không tốn LLM (chỉ heuristic)."""
     bad = scan_bad_chapters()
     if bad:
-        for c, reason in bad:
+        # ponytail: batch cố định để nút Quét lỗi không đẩy cả kho cũ vào hàng dịch;
+        # bấm lại sau khi batch xong sẽ lấy các chapter done còn lại.
+        batch = bad[:25]
+        for c, reason in batch:
             log.info("Audit: chương %s (novel %s) hỏng — %s", c["chapter_index"], c["novel_id"], reason)
-        requeue_bad(bad)
-    log.info("Audit xong: %d chương hỏng đã xếp lại dịch", len(bad))
+        requeue_bad(batch)
+        log.info("Audit: xếp lại %d/%d chương hỏng (bấm Quét lỗi lần nữa cho batch kế)",
+                 len(batch), len(bad))
+    else:
+        log.info("Audit xong: không có chương hỏng")
 
 
 HANDLERS = {

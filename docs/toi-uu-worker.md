@@ -2,7 +2,9 @@
 
 **Ngày lập:** 2026-07-11  
 **Phạm vi:** `worker/novelworker`, cấu hình Docker và các RPC phục vụ worker  
-**Trạng thái:** Kế hoạch, chưa triển khai
+**Trạng thái:** Đang triển khai — Q1/Q2/Q3 và bộ nhớ xưng hô đã có; ưu tiên tiếp theo là kiểm chứng xuyên chương, đúng nghĩa/tên riêng và baseline hiệu năng crawl.
+
+> **Rà soát 2026-07-12:** `39 passed`; relation memory đã có regression Chapter 1 → Chapter 2, audit đọc toàn kho tìm 502 hard error nhưng chỉ requeue 25 chương mỗi lần. Không tiếp tục mở rộng prompt chung trước khi hoàn thành bộ eval xuyên chương và số liệu vận hành.
 
 ## 1. Mục tiêu
 
@@ -804,3 +806,203 @@ Kiểm chứng local: `py_compile` đạt, self-check đạt, 18/18 regression t
 Evaluator mới chạy hoàn toàn local trên `eval_out_baseline`: **30 vấn đề/12 chương cũ**. Số lỗi tăng từ baseline trước vì rule mới bắt thêm phiên âm nguyên chương, Hán sót lẻ, pinyin, “mình”, “chẳng”, tượng thanh Anh và omission tự xưng. Đây là kết quả của bản dịch **cũ**, không phải output sau ba P0.
 
 Agent chưa chạy được lượt `--fresh` qua NVIDIA vì lớp an toàn công cụ không cho gửi nội dung file dự án ra endpoint ngoài. `--from-dir` đã được bổ sung để user chạy đúng bộ cố định mà không cần đọc DB; lệnh A/B nằm trong phần bàn giao.
+
+## 14. Rà soát hiện trạng và roadmap tiếp theo (2026-07-12)
+
+### 14.1. Những phần đã hoàn thành — không làm lại
+
+- Style bible được lưu ở `novels.translation_style`; POV được suy từ lời kể Trung và đã gia cố bằng biểu quyết, không còn lật ngôi chỉ vì một chữ `我`.
+- Scene analysis vẫn chạy cho đoạn có thoại dù adaptive two-pass đã tắt.
+- Glossary có `narrator_term`, app đã có ô “Người kể gọi”.
+- `speaker_relations` đã lưu cặp có hướng `speaker → addressee`; memory cũ được ưu tiên hơn suy đoán mới.
+- Pipeline đã có quality fuse, sửa Hán tự sót, omission tự xưng và revise văn phong theo dòng; model được pin theo truyện.
+- Evaluator chạy lại bộ file cố định, có retry tương tự production và đã bao phủ các lỗi convert/xưng hô/Hán tự phổ biến.
+- Crawl đã có adapter theo template, đa nguồn, discovery/ranking, dedup canonical, lazy TOC/chapter, ưu tiên người đọc, sức khỏe nguồn và cache bìa.
+- Kiểm chứng hiện tại: toàn bộ `worker/test` **39/39 passed**. Re-lint local v6: bắt 2 lỗi fidelity tên nhân vật và 2 cảnh báo nhẹ về quá nhiều dấu `!`.
+
+### 14.2. Khoảng trống thật sự còn lại
+
+| Ưu tiên | Khoảng trống | Vì sao quan trọng | Tiêu chí hoàn thành |
+|:--|:--|:--|:--|
+| Q0 | Eval chưa tách chắc lời thoại dạng gạch đầu dòng `—`; thống kê `mình/cậu/ta` có thể là false positive | Số liệu đại từ hiện chưa đủ tin cậy | Cùng một output dùng ngoặc kép hoặc gạch đầu dòng cho cùng kết quả narrator lint |
+| Q0 | Bộ eval chủ yếu là chương 1 độc lập; dry-run từ file không chứng minh memory qua nhiều chương | Mục tiêu chính là nhất quán toàn truyện | Có ít nhất 3 truyện × 3 chương liên tiếp, gồm một quan hệ đổi theo chương |
+| Q0 | Lint chưa bắt tốt lỗi đúng mặt chữ nhưng sai nghĩa/tên, ví dụ `棒梗 → Xoạ Trụ`, `一大爷 → dượng` | Đây là lỗi đọc tay thấy nặng hơn dấu `!` | Mỗi lỗi thực tế có source, bản sai, bản chấp nhận và regression chạy lại được |
+| Q1 | `speaker_relations` có memory nhưng chưa có bài test integration load → merge → prompt → save giữa hai chương | Unit test từng helper chưa chứng minh đường production | Test nhỏ với DB giả hoặc fixture chứng minh chương N+1 dùng cặp chương N |
+| Q1 | Style bible và relation do LLM sinh chưa có confidence/evidence đủ để tránh ghi nhớ sai | Memory sai sẽ khuếch đại qua cả truyện | Chỉ persist cặp đầy đủ, có evidence; xung đột không tự đè memory đã duyệt |
+| P0 | Chưa có baseline throughput/queue age/API calls/chapter | Chưa biết tối ưu crawl hay translate trước | Có p50/p95 và số call/chapter từ ít nhất một ngày chạy thật |
+| P1 | Crawl các source vẫn nằm trong một vòng điều phối; ranking/source chậm có thể kéo dài cycle | Ảnh hưởng chương người đọc đang chờ | Đo được thời gian từng source/cycle trước; chỉ tách concurrency nếu có source vượt ngưỡng |
+
+### 14.3. Kế hoạch triển khai chốt lại
+
+#### Bước 1 — Làm evaluator đáng tin trước
+
+1. Chuẩn hóa hàm tách thoại dùng chung cho evaluator và production: ngoặc kép Trung/Việt, `「」`, và dòng bắt đầu bằng `—`.
+2. Bổ sung corpus tuần tự `novel/chapter` thay vì chỉ các file chương 1 rời rạc; fixture giữ style, glossary và relations giữa các chương nhưng không ghi DB thật.
+3. Thêm 10–15 case fidelity lấy từ lỗi đã đọc tay: tên nhân vật, chức danh, thành ngữ, vật phẩm và câu bị thêm/bớt ý.
+4. Báo riêng `hard_fail`, `pronoun_warning`, `style_warning`; dấu `!` không được làm một bản đúng nghĩa trông ngang mức lỗi sai tên.
+
+**Gate:** evaluator không false-positive lời thoại và phát hiện được các lỗi `棒梗/一大爷/老子` đã gặp.
+
+#### Bước 2 — Chứng minh nhất quán xuyên chương
+
+1. Chạy A/B trên 3 truyện, mỗi truyện 3–5 chương liên tiếp: tắt memory so với bật style + narrator + relation memory.
+2. Ghi snapshot prompt context thực sự được inject cho từng chương: POV, narrator term và các cặp speaker.
+3. Chỉ thêm `confidence/evidence_zh` vào relation nếu A/B cho thấy memory sai đang được lưu; chưa cần vector DB hay knowledge graph.
+4. Dùng correction người đọc làm dữ liệu ưu tiên cao hơn LLM và không cho analyzer tự ghi đè.
+
+**Gate:** cùng nhân vật/cặp quan hệ giữ cách gọi qua các chương; khi quan hệ đổi, quy tắc mới chỉ có hiệu lực từ chương có bằng chứng.
+
+#### Bước 3 — Tối ưu chi phí dịch bằng số liệu
+
+1. Log tối thiểu: `analyze_calls`, `translate_calls`, `repair_calls`, token và latency theo chapter/model.
+2. Tắt scene pass cho chunk không có thoại và không có nhân vật mới; giữ selective glossary hiện tại.
+3. So sánh chi phí của targeted repair với retry nguyên chunk. Giữ repair nếu rẻ hơn và không giảm fidelity.
+4. Chỉ benchmark model khác trên corpus Bước 1; Mistral vẫn là mặc định cho đến khi model khác thắng cả median lẫn worst case.
+
+**Gate:** giảm call/token mỗi chương mà hard-fail và điểm đọc tay không xấu đi.
+
+#### Bước 4 — Baseline rồi mới tối ưu crawl
+
+1. Ghi thời gian từng source/cycle, request thành công/thất bại, queue age từ yêu cầu đọc → có `content_zh`, và `content_zh` → dịch xong.
+2. Xác nhận ordering của batch fetch theo priority/created time và đo số lần translator gặp thiếu raw content.
+3. Nếu ranking/discovery chặn reader fetch: cắt công việc nền thành budget nhỏ mỗi cycle trước; chỉ dùng thread pool theo source khi số đo vẫn không đạt.
+4. Chưa thêm Playwright/proxy/nguồn chống bot; hai nguồn HTTP hiện tại đủ cho app cá nhân, chỉ mở rộng khi thiếu truyện thật.
+
+**Gate:** p95 chương người đọc yêu cầu đạt mục tiêu đã chốt; một source lỗi không kéo source khác quá một cycle.
+
+### 14.4. Thứ tự thực hiện
+
+`evaluator tách thoại + fidelity cases` → `corpus 3×3 chương` → `A/B relation memory` → `metric LLM` → `metric crawl` → chỉ tối ưu nút thắt đã đo được.
+
+Không làm tiếp lúc này: fine-tune, model Hugging Face local, vector DB, knowledge graph nhân vật, Playwright/proxy, hoặc tăng concurrency mù.
+
+### 14.5. Kết quả Bước 1a — thoại dòng gạch đầu dòng (2026-07-12)
+
+Đã hoàn thành phần đầu của Bước 1:
+
+- Regex thoại dùng chung ở production và evaluator nhận thêm dòng mở đầu bằng `—`, `–` hoặc `-`.
+- Các dòng này bị loại khỏi thống kê narrator term và khỏi fuse xưng hô lời kể; `ta/mình/cậu` trong thoại không còn làm báo cáo xuyên truyện nhiễu.
+- Có regression cho narrator statistic và `_register_violation` với thoại gạch đầu dòng; không đếm nhầm `mình` phản thân hoặc `cậu` trong danh xưng.
+- Re-lint local `eval_out_p0_fresh_v6`: report narrator đã bỏ các nhiễu này, còn 2 cảnh báo `!` trên 4 chương.
+- Kiểm chứng: `39 passed` (`worker/test`); warning duy nhất là pytest không ghi được cache, không phải lỗi test.
+
+**Việc kế tiếp:** bổ sung corpus fidelity có nguồn–bản sai–bản chấp nhận cho tên riêng/chức danh/sai nghĩa; không thêm rule heuristic cho từng tên trước khi có case tái sử dụng được.
+
+### 14.6. Kết quả Bước 1b — fidelity corpus khởi đầu (2026-07-12)
+
+- Evaluator có lớp `[fidelity]` riêng, không đưa lỗi nghĩa/tên vào quality fuse.
+- Ba rule đầu tiên chỉ dựa trên lỗi đã xác nhận: `棒梗 → Xoạ Trụ`, `傻柱 → Xoạ Trụ` và `一/二/三大爷 → dượng`.
+- Re-lint `eval_out_p0_fresh_v6` bắt đúng hai lỗi độc lập ở novel 1007: nhầm `棒梗` với `傻柱`, và phiên âm `傻柱` thành pinyin lai `Xoạ Trụ`; không tạo false positive ở ba chương còn lại.
+- Kiểm chứng: `36 passed` (`worker/test`).
+
+**Việc kế tiếp:** tăng corpus lên 10–15 case từ các bản dịch do người đọc chấm, ưu tiên nhầm tên, chức danh, thành ngữ và thêm/bớt ý. Chỉ sau đó mới cân nhắc targeted reviewer có source span.
+
+### 14.7. Kết quả Bước 1c — audit kho bản dịch cũ (2026-07-12)
+
+- Audit production trước đây chỉ dùng `check_translation()`, nên không tự xếp lại chương có `anh ta/cô ấy/ông ta` trong lời kể hoặc mất `老子`.
+- `scan_bad_chapters()` nay dùng `_audit_reason()`: lỗi cơ học, lệch xưng hô lời kể và tự xưng đặc thù bị mất là hard error; dấu `!`, “chẳng” và các cảnh báo văn phong mềm không bị requeue hàng loạt.
+- Lấy ngẫu nhiên 12 chương done từ DB rồi lint local: 27 vấn đề; phần lớn là kho cũ trước prompt/fuse mới. Đây là bằng chứng audit có chọn lọc cần thiết, không phải lỗi của pipeline v6.
+- Đo read-only toàn kho: **502 chapter** đủ điều kiện audit, trong đó nhiều nhất là `cô ấy` (52), `cô ta` (46), `anh ta` (33), `ông ta` (24) trong lời kể; sau đó là Hán tự sót.
+- Nút audit nay chỉ requeue **25 chapter/lần**; các chapter đã queue rời khỏi tập `done`, nên lần bấm sau tự lấy batch kế. Không tự chạy audit thật trong đợt này.
+- Kiểm chứng: `38 passed` (`worker/test`).
+
+### 14.8. Baseline live worker — read-only (2026-07-12 07:59 UTC)
+
+- Hàng đợi: `0 pending`; lịch sử gồm 445 chapter done, 333 metadata done, 218 patch done, 3 audit done và 1 chapter failed.
+- Heartbeat crawler/translator đều mới trong vòng một phút tại thời điểm đo; hai nguồn đang bật là `ddxs` và `shuhaige`, đều `fail_count=0`.
+- Mistral `mistral-small-4-119b-2603`: 5.581 call OK, 738 fail (**11,7%**), latency trung bình xấp xỉ **16 giây/call**. Lỗi gần nhất là quality gate Hán tự sót, cho thấy một phần fail là guardrail có chủ ý.
+- Gemma free: 20 OK / 216 fail (**91,5%**), chủ yếu 429; Fireworks DeepSeek: 140 OK / 294 fail (**67,7%**). Không đưa hai lane này vào tối ưu chất lượng/tốc độ trước khi provider ổn định.
+
+**Quyết định:** giữ Mistral làm mặc định. Nút thắt đo được tiếp theo là giảm fail có chủ ý bằng repair chính xác và audit theo batch; chưa có bằng chứng để tăng concurrency crawl hoặc đổi model.
+
+### 14.9. Kết quả Bước 2a — regression relation xuyên chương (2026-07-12)
+
+- Test mô phỏng Chapter 1 phát hiện `Lâm Tùng → Lão giả: vãn bối/tiền bối`, lưu relation trong memory, rồi Chapter 2 analyzer đoán sai `ta/ngươi`.
+- Memory đã ghi đè lời đoán mới và `build_scene_line()` inject lại `vãn bối/tiền bối` vào prompt Chapter 2.
+- Kiểm chứng: `39 passed` (`worker/test`).
+
+**Việc còn thiếu của Bước 2:** A/B thật trên 3 truyện có nhiều chương liên tiếp. Chưa thể chứng minh chất lượng LLM xuyên chương chỉ bằng test giả; cần một bộ source/correction do người đọc chấm trước khi gọi NVIDIA.
+
+### 14.10. Benchmark candidate — timeout riêng (2026-07-12)
+
+- Không có ba raw chapter liên tiếp trong DB: worker xóa `content_zh` sau khi dịch, nên A/B chapter-to-chapter thật cần corpus được giữ riêng hoặc fetch lại từ source.
+- Lượt benchmark synthetic toàn bộ quality candidate cho thấy timeout production 150 giây × retry làm một endpoint chết giữ cả batch quá lâu.
+- `benchmark_nim.py` nay có `--timeout` (mặc định 45 giây) và truyền override này riêng cho benchmark; timeout worker production không đổi.
+- `py_compile` và `git diff --check` đạt. Regression đầy đủ cho thay đổi timeout đang chờ quota dependency của môi trường mở lại.
+
+## 14.11. Bước 3 step 1 — metric LLM per-chương (2026-07-12)
+
+`record_model_call` đã ghi latency/ok theo model (số aggregate 14.8) nhưng KHÔNG cho biết mỗi chương tốn bao nhiêu call — analyze + dịch + repair (`_fix_omissions`/`_fix_han_residue`/`_style_revise`) trước đây vô hình, và token lưu DB chỉ đếm lượt dịch chunk. Không biết điều này thì không quyết được scene/repair pass có đắt không (Bước 3 step 3).
+
+- `providers.py`: counter thread-local `_stats` (mỗi luồng dịch một chương). Mọi call đều qua `FallbackChain.complete` nên đếm ở đó là đủ; sống sót qua `pin()` vì không gắn vào instance. `reset_call_stats()` / `get_call_stats()` → `{calls, prompt_tokens, completion_tokens}`.
+- `worker.py handle_chapter`: reset đầu chương + `t_start`; log cuối chương thêm `N chunk, N LLM call, P+C tok, Ts`. Không đụng token lưu DB (giữ nguyên nghĩa "chi phí dịch chunk"), chỉ thêm observability qua log.
+- Regression: counter cộng dồn qua `pin()` (điểm mấu chốt — pin tạo chain mới). `41 passed`.
+
+Đây là log, không phải bảng metric — đủ để đọc từ `docker compose logs translator` mà không thêm hạ tầng. Ceiling (ghi trong comment): tenacity/fuse-retry ẩn trong `p.complete` không đếm riêng; tỷ lệ retry thật vẫn ở `record_model_call`. **Việc kế tiếp (Bước 3 step 3):** đọc log vài chục chương thật để xem repair call/chương có đáng, rồi mới quyết tắt bớt pass nào — chưa tối ưu mù.
+
+## 14.12. Bước 2 unblock — corpus liên tiếp + A/B chuỗi memory (2026-07-12)
+
+§14.10 chặn A/B xuyên chương vì worker xoá content_zh → DB chỉ còn 48 chương rời, **không novel nào có run ≥3 liên tiếp**. Nhưng `chapters.source_chapter_id` vẫn còn → crawl lại được.
+
+- **`worker/fetch_corpus.py`** (mới): `--pick N` liệt kê truyện trên nguồn đang bật có run chapter_index liên tiếp; `--novel ID --start S --count K` crawl lại raw zh K chương liên tiếp (tái dùng `build_adapters` + `adapter.fetch_chapter`, sleep 1,5s tôn trọng nguồn), lưu `n<novel>_c<ch>.zh.txt`.
+- **Đã chạy**: `worker/corpus_ab/` = 3 truyện × 4 chương liên tiếp (n293 Kiếm Đế Cuồng Thần, n1223 Thiên Khuyết Trường Sinh, n1281 Kiếm Đạo Chúa Tể) — mỗi chương ~2–4k ký tự zh, giữ local, không commit corpus.
+- **`eval_translation.py`**: `sample_zh_files` đọc corpus; `_translate_one(carry=...)` nối prev_summary/prev_tail + relations XUYÊN CHƯƠNG cùng truyện (mutate tại chỗ); `--ab-dir` dịch corpus 2 lần (memory off/on), xuất `<out>/mem_off` vs `<out>/mem_on` + in narrator theo chương để so ổn định cách gọi nhân vật.
+- Regression `test_ab_memory_carries_context_across_chapters`: chương N mutate carry → N+1 nhận lại; OFF thì carry=None. `42 passed`.
+
+**Lượt chạy A/B thật là của user** (agent bị chặn gửi nội dung ra NVIDIA — §13.2):
+
+```powershell
+$env:PYTHONIOENCODING='utf-8'; $env:PYTHONPATH='.'
+E:\Novel_Project\.venv\Scripts\python.exe eval_translation.py --ab-dir corpus_ab --out eval_out_ab
+```
+
+Đọc `eval_out_ab/mem_on` vs `eval_out_ab/mem_off`: **gate Bước 2** = cùng nhân vật/cặp quan hệ giữ cách gọi qua 4 chương ở mem_on, còn mem_off trôi. Nếu mem_on KHÔNG ổn định hơn → memory chưa ăn, xem lại `build_scene_line`/`_load_relations` trước khi thêm confidence/evidence.
+
+### 14.12.1. Lượt A/B đầu (user chạy) — INCONCLUSIVE + chỉnh công cụ (2026-07-12)
+
+Chạy đủ 12 chương × 2 biến thể qua Mistral. Kết quả **chưa kết luận được gate**, vì hai lỗ hổng đo lường:
+
+1. **Nhiễu sampling lấn át.** temperature 0.3 → chương 1 (memory KHÔNG thể tác động vì chưa có gì carry) vẫn lệch mạnh giữa 2 lượt: `n293 c1` mem_off `hắn=24, cô=8` vs mem_on `hắn=1, cô=12`. c1 lẽ ra gần giống nhau → chênh ở c2–c4 cũng không quy cho memory được.
+2. **`narrator_terms` trộn mọi nhân vật**, không theo từng người → proxy yếu cho "cùng nhân vật giữ cách gọi".
+3. **Zero visibility**: dry-run không in cặp relations được carry (log đó ở production `handle_chapter`), nên không biết memory có populate/carry gì không.
+
+Lỗi thật lộ ra (không phải noise, đáng theo dõi riêng):
+- **Hán tự sót → BỎ QUA**: `n1223 c4`, `n1281 c1` fail ở **cả hai** biến thể → hard case thật (model để nguyên chữ Hán ở tên/thuật ngữ truyện này), không sửa hết trong 3 lượt `_fix_han_residue`.
+- **Repair JSON hỏng** (`Expecting ',' delimiter`): lượt sửa Hán/revise âm thầm no-op khi model trả JSON lỗi → chương rơi vào skip. Prompt/parse repair còn giòn.
+- 1 chunk chạm `max_tokens` 8192.
+
+**Chỉnh công cụ (đã làm):** `run_ab` giờ in per-chương ở mem_on: `[memory nX sau cY] N cặp | speaker→addressee:self/address`. Lần chạy sau sẽ THẤY memory có carry cặp nào không. Giả thuyết cần kiểm: analyzer hiếm resolve cặp speaker→addressee cụ thể (nhiều "?") trên xianxia → relations gần rỗng → mem_on ≈ mem_off (đúng như run này). Nếu vậy, việc cần cải thiện là **scene analyzer**, không phải plumbing carry (unit test đã chứng minh carry đúng).
+
+**Chưa làm (chờ số liệu run 2):** đừng thêm confidence/evidence hay đổi prompt analyzer vội. Chạy lại A/B đọc dòng `[memory ...]`: nếu N cặp ≈ 0 khắp nơi → sửa analyzer/`build_scene_line`; nếu có cặp mà mem_on vẫn trôi → mới xét reviewer source-aware.
+
+### 14.12.2. Lượt A/B thứ 2 — memory CÓ carry, nhưng persist cặp rác (2026-07-12)
+
+Dòng `[memory ...]` chứng minh **memory hoạt động thật**, cặp cộng dồn qua từng chương: n293 3→6→6→7, n1223 7→11→15→19, n1281 12→12→18→21. Giả thuyết "analyzer hiếm resolve cặp" **bị bác** — nó resolve rất nhiều. Gate thực không phải "carry được không" (được) mà "**carry có SẠCH không**" — và đây là chỗ hỏng.
+
+Cặp bị persist thành memory vĩnh viễn có rác **cấu trúc** (không phán xét nghĩa):
+- **`?` trong tên**: `Vương Trường Sinh→? (vong linh)` — chưa xác định được người nghe thì không nên chốt quan hệ. Filter cũ `"?" in (sp, ad)` chỉ bắt tên bằng đúng `"?"`, lọt `"? (vong linh)"`.
+- **chữ Hán lọt term**: `...→Tiểu Nhị: lão phu/小二` (address_term chưa dịch).
+- **gộp nhiều người một ô**: `gia nô→Cố Trường/Cố Dương`, address_term `phụ thân, nhị thúc` / `đại tộc lão/tôn tôn` — không phải quan hệ có hướng đơn.
+- **cặp rỗng term**: `Trương Bân→Lâm Hiên: ?/?` vẫn được lưu (term `"?"` là chuỗi truthy).
+
+(Lưu ý: term NGHĨA như `trẫm`, `lão phu`, `tại hạ` KHÔNG bị đụng — trẫm hợp lệ cho bậc đế vương, truyện tu tiên có thể có vua; filter chỉ loại rác cấu trúc, đúng/sai nghĩa để reviewer/người đọc xét.)
+
+**Fix (đã làm):** helper dùng chung `prompts.valid_speaker_pair` + `prompts.clean_term` cho **cả** `_merge_scene_relations` (lưu) lẫn `build_scene_line` (inject) — loại `?`/gộp (`,` `/` `、` `&`)/chữ Hán, giữ mọi term nghĩa. Cặp `Vương→Tiểu Nhị: lão phu/小二` giờ lưu `lão phu`, bỏ `小二` (giữ nửa sạch). Regression: `_merge_scene_relations`/`build_scene_line` loại đúng 4 ca rác, `44 passed`.
+
+Tồn dư (không giải bằng filter cấu trúc): term đúng mặt chữ nhưng có thể sai vai (vd `trẫm` nếu nhân vật KHÔNG phải vua) — cần người đọc/reviewer, không hardcode blocklist.
+
+**Việc kế tiếp:** chạy lại A/B lần 3 sau fix — kỳ vọng số cặp giảm (rác bị loại) và cặp còn lại sạch. Vẫn chưa đủ để chốt gate chất lượng bằng narrator count (nhiễu sampling); gate thật là đọc tay `mem_on` vs `mem_off` xem cùng nhân vật giữ cách gọi. Lỗi Hán-sót/`max_tokens`/repair-JSON-giòn ở §14.12.1 theo dõi riêng, chưa đụng.
+
+## 14.13. GỠ toàn bộ relationship-memory + scene-contract + A/B (2026-07-12) — quyết định phạm vi
+
+Sau khi soi 2 lượt A/B, chốt lại với user: **cơ chế nhớ quan hệ xuyên chương + scene contract là over-engineered cho bài toán thật.** Lý do (user nêu, đúng): tiểu thuyết viết THẲNG xưng hô vào câu thoại (`老夫`, `在下`, `本座`...), nên giữ tự xưng đồng nhất là bài **render trong một câu**, không cần suy "ai nói với ai" rồi nhớ xuyên chương. Vấn đề thật của user hôm 07-11 (§12) là tự xưng lộn xộn — đã giải bằng lớp **within-chunk**: `self_reference_omissions` + `_fix_omissions`, register/soft-style/`_style_revise`, prompt rules.
+
+Đã gỡ (A+B+C+D):
+- **A — A/B tooling** (chưa từng commit): xoá `fetch_corpus.py`, `corpus_ab/`, `sample_zh_files`/`run_ab`/`_run_ab_report`/`--ab-dir`/tham số `carry` trong `eval_translation.py`, dòng `.gitignore`, các test A/B.
+- **B — scene contract**: gỡ ô `speakers`/`pov` khỏi `SYSTEM_ANALYZE`, xoá `build_scene_line`, `scene_line` khỏi `build_chapter_user`. `_analyze_names` giờ trả **list term** (lượt LLM học tên GIỮ NGUYÊN — đó là phần có giá trị cho glossary).
+- **C — relationship memory**: xoá `_load_relations`, `_merge_scene_relations`, `_needs_scene_analysis` và wiring load/merge/upsert trong `handle_chapter`. Pass tên giờ chạy khi `twopass` bật (như ban đầu). Bảng `speaker_relations` **để rỗng nằm im trong DB** — không migration drop (drop rủi ro hơn để bảng không dùng).
+- **D — filter cặp rác** (§14.12.2): xoá `valid_speaker_pair`/`clean_term` vì hết nơi gọi.
+
+Giữ nguyên (không đụng): omission gate + `_fix_omissions`, register/soft-style/revise, prompt rules, style bible (Q1, per-novel — khác memory quan hệ), `prev_summary/prev_tail` nối mạch chương, quality fuse, name-learning pass, metric call logging (§14.11).
+
+Kiểm chứng: `py_compile` 3 file sạch; quét không còn tham chiếu chết; `37 passed` (`worker/test`). **Đụng đường dịch production** → cần user smoke test 1 chương thật (queue dịch hoặc `eval_translation.py --fresh 1`) rồi đọc output trước khi deploy VPS. Các mục §14.12.x là lịch sử điều tra, giữ lại làm ghi chép; kết luận cuối là mục này.

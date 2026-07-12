@@ -1,6 +1,7 @@
 """Tầng trừu tượng LLM — đổi provider không sửa pipeline."""
 from __future__ import annotations
 
+import threading
 from dataclasses import dataclass, replace
 from typing import Callable
 
@@ -8,6 +9,22 @@ from openai import OpenAI
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from ..config import settings
+
+# Đếm LLM call + token cho MỘT chương (per-thread: mỗi luồng dịch một chương).
+# Sống sót qua pin() vì mọi call đều đi qua FallbackChain.complete, không phụ thuộc instance.
+# ponytail: đếm call logic thành công; tenacity/fuse-retry ẩn bên trong không tính riêng —
+# tỷ lệ retry đã có ở record_model_call, số này chỉ để soi chi phí analyze/repair mỗi chương.
+_stats = threading.local()
+
+
+def reset_call_stats() -> None:
+    _stats.calls = _stats.prompt_tokens = _stats.completion_tokens = 0
+
+
+def get_call_stats() -> dict:
+    return {"calls": getattr(_stats, "calls", 0),
+            "prompt_tokens": getattr(_stats, "prompt_tokens", 0),
+            "completion_tokens": getattr(_stats, "completion_tokens", 0)}
 
 
 @dataclass
@@ -22,18 +39,20 @@ class LLMResult:
 class TranslationProvider:
     """OpenAI-compatible client — dùng chung cho OpenRouter / Fireworks / NVIDIA NIM."""
 
-    def __init__(self, base_url: str, api_key: str, model: str, provider: str = ""):
+    def __init__(self, base_url: str, api_key: str, model: str, provider: str = "",
+                 timeout_sec: int | None = None):
         # timeout ngắn + không retry ngầm: provider nghẽn (NIM free hay xếp hàng)
         # phải fail nhanh để FallbackChain chuyển provider kế, thay vì treo 10'+
+        self.timeout_sec = timeout_sec or settings.llm_timeout_sec
         self.client = OpenAI(base_url=base_url, api_key=api_key,
-                             timeout=settings.llm_timeout_sec, max_retries=0)
+                             timeout=self.timeout_sec, max_retries=0)
         self.model = model
         self.provider = provider
         self.base_url = base_url
         self.api_key = api_key
 
     def with_model(self, model: str) -> "TranslationProvider":
-        return TranslationProvider(self.base_url, self.api_key, model, self.provider)
+        return TranslationProvider(self.base_url, self.api_key, model, self.provider, self.timeout_sec)
 
     @retry(stop=stop_after_attempt(2), wait=wait_exponential(min=2, max=10), reraise=True)
     def complete(
@@ -96,6 +115,9 @@ class FallbackChain:
                 res = p.complete(system, user, temperature=temperature,
                                  max_tokens=max_tokens, validate=validate)
                 db.record_model_call(res.model, (time.time() - t0) * 1000, ok=True)
+                _stats.calls = getattr(_stats, "calls", 0) + 1
+                _stats.prompt_tokens = getattr(_stats, "prompt_tokens", 0) + (res.prompt_tokens or 0)
+                _stats.completion_tokens = getattr(_stats, "completion_tokens", 0) + (res.completion_tokens or 0)
                 return replace(res, provider=name)
             except Exception as e:
                 db.record_model_call(p.model, (time.time() - t0) * 1000, ok=False, error=str(e))

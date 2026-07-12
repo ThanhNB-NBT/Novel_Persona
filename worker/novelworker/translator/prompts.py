@@ -90,12 +90,9 @@ Trả về DUY NHẤT một mảng JSON, mỗi phần tử {"line": N, "new": ".
 SYSTEM_ANALYZE = """Bạn là trợ lý phân tích tiểu thuyết mạng Trung. Đọc đoạn văn sau, TUYỆT ĐỐI KHÔNG dịch nội dung.
 Liệt kê MỌI tên riêng / thuật ngữ quan trọng xuất hiện (người, môn phái, địa danh, chiêu thức, pháp bảo, cảnh giới tu luyện) kèm phiên âm Hán-Việt chuẩn. Với "person": "note" BẮT BUỘC mở đầu bằng giới tính "nam"/"nữ" — suy từ 他/她, 少年/少女, danh xưng (公子/姑娘/小姐), tên gọi; thật sự không suy ra được mới ghi "?". Sau giới tính ghi vai vế/quan hệ (sư huynh, tỷ tỷ, chưởng môn...) — bảng này quyết định xưng hô khi dịch.
 Tên vốn viết bằng chữ Latin/tiếng Anh → "vi" giữ nguyên tiếng Anh. Tên ngoại quốc viết bằng chữ Hán (安娜, 杰克, 伦敦, 汉森) → "vi" là dạng Latin thông dụng (Anna, Jack, London, Hansen), KHÔNG phiên âm Hán-Việt, KHÔNG phiên âm gạch nối ("An-đê-ri-an", "Héc-nơ" là SAI). Từ mượn fantasy/game phiên âm bằng chữ Hán → "vi" là từ tiếng Anh quen thuộc (哥布林→goblin, 史莱姆→slime, 兽人→orc), KHÔNG phiên âm Hán-Việt kiểu "Ca Bố Lâm".
-Đoạn có HỘI THOẠI thì phân tích thêm scene contract: từng cặp người nói → người nghe, kèm cách xưng hô NÊN dùng trong bản Việt. Giữ nguyên sắc thái tự xưng gốc: 老夫→"lão phu", 老子→"lão tử/ông đây", 在下→"tại hạ", 本座→"bổn tọa", 晚辈→"vãn bối", 朕→"trẫm" — KHÔNG rút hết thành "ta". Không xác định được người nói/nghe thì ghi "?", ĐỪNG đoán quan hệ.
 Trả về DUY NHẤT một JSON object, không giải thích, không văn bản thừa:
-{"terms": [{"zh": "林松", "vi": "Lâm Tùng", "type": "person", "note": "nam, sư huynh"}],
- "speakers": [{"speaker": "Lâm Tùng", "addressee": "lão giả", "self_term": "vãn bối", "address_term": "tiền bối", "tone": "cung kính"}],
- "pov": "ngôi ba bám theo Lâm Tùng"}
-type ∈ person|place|sect|item|skill|other. Không có tên riêng → "terms": []; không có hội thoại → "speakers": [].
+{"terms": [{"zh": "林松", "vi": "Lâm Tùng", "type": "person", "note": "nam, sư huynh"}]}
+type ∈ person|place|sect|item|skill|other. Không có tên riêng → "terms": [].
 """
 
 SYSTEM_METADATA = """Bạn là biên tập viên truyện dịch kỳ cựu. Dịch metadata truyện Trung sau sang tiếng Việt cho độc giả Việt.
@@ -130,32 +127,6 @@ def build_style_line(style: dict | None) -> str | None:
     if rules:
         bits.append("luật riêng: " + "; ".join(rules))
     return f"[Văn phong truyện — giữ xuyên suốt: {'; '.join(bits)}]" if bits else None
-
-
-def build_scene_line(scene: dict | None) -> str | None:
-    """Nén scene contract (speakers + POV từ pass phân tích) thành một dòng chỉ thị.
-    Cặp nói–nghe có "?" bị bỏ — không ép model theo quan hệ đoán mò."""
-    if not isinstance(scene, dict):
-        return None
-    bits = []
-    for s in (scene.get("speakers") or [])[:8]:
-        if not isinstance(s, dict):
-            continue
-        sp, ad = s.get("speaker"), s.get("addressee")
-        if not sp or not ad or "?" in (sp, ad):  # addressee None từng lọt "nói với None"
-            continue
-        seg = f"{sp} nói với {ad}"
-        if s.get("self_term"):
-            seg += f", tự xưng '{s['self_term']}'"
-        if s.get("address_term"):
-            seg += f", gọi đối phương '{s['address_term']}'"
-        if s.get("tone"):
-            seg += f" — giọng {s['tone']}"
-        bits.append(seg)
-    pov = scene.get("pov")
-    if pov and isinstance(pov, str):
-        bits.append(f"người kể: {pov}")
-    return f"[Cảnh trong đoạn — xưng hô thoại PHẢI theo: {'; '.join(bits)}]" if bits else None
 
 
 def build_chapter_system(glossary_terms: list[dict], content_zh: str = "") -> str:
@@ -197,7 +168,6 @@ def build_chapter_user(
     novel_line: str | None = None,
     register_line: str | None = None,
     style_line: str | None = None,
-    scene_line: str | None = None,
 ) -> str:
     parts = []
     # tên truyện + thể loại → model chọn ĐÚNG register xưng hô (tu tiên: ta-ngươi;
@@ -211,9 +181,6 @@ def build_chapter_user(
     # style bible của truyện — sinh 1 lần từ chương 1, giữ giọng xuyên suốt (Q1)
     if style_line:
         parts.append(style_line)
-    # scene contract của chunk — ai nói với ai, xưng hô gì (Q2, từ pass phân tích)
-    if scene_line:
-        parts.append(scene_line)
     if prev_summary:
         parts.append(f"[Ngữ cảnh chương trước: {prev_summary}]")
     # đuôi bản dịch liền trước → nối mạch giọng văn + xưng hô qua ranh giới chương/chunk

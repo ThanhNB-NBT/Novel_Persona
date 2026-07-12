@@ -68,13 +68,23 @@ _RULES: list[tuple[str, re.Pattern]] = [
     ("chữ Hán sót lẻ", re.compile(r"[一-鿿㐀-䶿]+")),
 ]
 
+# Corpus fidelity: chỉ ghi các nhầm lẫn đã được đọc tay xác nhận. Đây là cảnh báo
+# evaluator, không phải fuse — retry mù không thể tự suy ra tên/chức danh đúng.
+_FIDELITY_CASES: list[tuple[str, re.Pattern, str]] = [
+    ("棒梗", re.compile(r"\bXoạ\s+Trụ\b", re.I), "nhầm 棒梗 thành 傻柱/Xoạ Trụ"),
+    ("傻柱", re.compile(r"\bXoạ\s+Trụ\b", re.I), "phiên âm 傻柱 thành pinyin lai 'Xoạ Trụ'"),
+    ("一大爷|二大爷|三大爷", re.compile(r"\bdượng\b", re.I),
+     "đổi 一/二/三大爷 thành quan hệ 'dượng'"),
+]
+
 # feedback user 2026-07-11: "chẳng" rải khắp nơi đọc gượng — mặc định phải là "không"
 _CHANG_THRESHOLD = 4
 
-_DIALOGUE = re.compile(r'"[^"\n]*"|“[^”]*”|「[^」]*」')
+_DIALOGUE = re.compile(
+    r'"[^"\n]*"|“[^”]*”|「[^」]*」|^[ \t]*[—–-]\s+[^\n]*', re.M)
 _NARRATOR_TERMS = re.compile(
-    r"\b(?:hắn|nàng|y|gã|lão|tôi|mình|(?<!chúng\s)(?<!người\s)ta|"
-    r"anh(?:\s+ta)?|cậu(?:\s+ta)?|cô(?:\s+ấy|\s+ta)?|ông\s+ta)\b",
+    r"\b(?:hắn|nàng|y|gã|lão|tôi|(?<!chúng\s)(?<!người\s)ta|"
+    r"anh(?:\s+ta)?|cậu\s+ta|cô(?:\s+ấy|\s+ta)?|ông\s+ta)\b",
     re.I,
 )
 
@@ -100,6 +110,12 @@ def narrator_terms(vi: str) -> dict[str, int]:
     for term in _NARRATOR_TERMS.findall(narration):
         out[term.lower()] += 1
     return dict(out)
+
+
+def fidelity_issues(zh: str, vi: str) -> list[str]:
+    """Các lỗi nghĩa/tên đã được xác nhận từ corpus đọc tay."""
+    return [label for source, bad, label in _FIDELITY_CASES
+            if re.search(source, zh) and bad.search(vi)]
 
 
 def _self_reference_omissions(zh: str, vi: str) -> list[str]:
@@ -131,6 +147,8 @@ def lint(zh: str, vi: str) -> list[str]:
     # eval vẫn phải báo để biết lượt sửa có sót không
     for missing in self_reference_omissions(zh, vi):
         problems.append(f"[xưng hô] {missing}")
+    for issue in fidelity_issues(zh, vi):
+        problems.append(f"[fidelity] {issue}")
     for name, pat in _RULES:
         hits = pat.findall(vi)
         if hits:
@@ -230,86 +248,80 @@ def translate_fresh(rows: list[dict]) -> list[dict]:
 
 
 def _translate_one(r: dict, llm) -> dict:
+    """Dry-run 1 chương qua pipeline production (không ghi DB)."""
     from novelworker.translator import prompts
     from novelworker.translator.worker import (
-        GLOSSARY_LINE, _ZH_DIALOGUE_RE, _analyze_names, _clean_output,
-        _extract_json, _fix_han_residue, _fix_omissions, _fix_soft_style, _load_relations,
-        _merge_names, _merge_scene_relations, _pop_summary,
+        GLOSSARY_LINE, _analyze_names, _clean_output,
+        _extract_json, _fix_han_residue, _fix_omissions, _fix_soft_style,
+        _merge_names, _pop_summary,
         _is_first_person, _quality_fuse, _register_line, _split_chunks, _style_revise, _tail,
     )
-    if True:  # giữ indent thân cũ — nội dung y nguyên translate_fresh trước đây
-        if r.get("_from_file"):
-            terms = []
-            nv = {**(r.get("novels") or {}), "twopass_active": True}
-        else:
-            terms, _ = db.get_glossary(r["novel_id"])
-            nv = (db.sb().table("novels").select(
-                "title_vi,title_zh,genres,translation_provider,translation_model,"
-                "translation_style,twopass_active")
-                .eq("id", r["novel_id"]).single().execute().data or {})
-        chapter_llm = llm
-        if nv.get("translation_provider") and nv.get("translation_model"):
-            chapter_llm = llm.pin(nv["translation_provider"], nv["translation_model"])
+    if r.get("_from_file"):
+        terms = []
+        nv = {**(r.get("novels") or {}), "twopass_active": True}
+    else:
+        terms, _ = db.get_glossary(r["novel_id"])
+        nv = (db.sb().table("novels").select(
+            "title_vi,title_zh,genres,translation_provider,translation_model,"
+            "translation_style,twopass_active")
+            .eq("id", r["novel_id"]).single().execute().data or {})
+    chapter_llm = llm
+    if nv.get("translation_provider") and nv.get("translation_model"):
+        chapter_llm = llm.pin(nv["translation_provider"], nv["translation_model"])
 
-        style = nv.get("translation_style")
-        if not style:
-            meta = json.dumps({"title": nv.get("title_zh") or nv.get("title_vi"),
-                               "genres": nv.get("genres") or []}, ensure_ascii=False)
-            try:
-                style = _extract_json(chapter_llm.complete(
-                    prompts.SYSTEM_STYLE,
-                    f"{meta}\n\nĐoạn mở đầu:\n{r['content_zh'][:2000]}",
-                    max_tokens=512).text)
-            except Exception:
-                style = None
-        style_line = prompts.build_style_line(style)
-        title = nv.get("title_vi") or nv.get("title_zh")
-        novel_line = title + (f" — thể loại: {', '.join(nv.get('genres') or [])}"
-                              if title and nv.get("genres") else "") if title else None
+    style = nv.get("translation_style")
+    if not style:
+        meta = json.dumps({"title": nv.get("title_zh") or nv.get("title_vi"),
+                           "genres": nv.get("genres") or []}, ensure_ascii=False)
+        try:
+            style = _extract_json(chapter_llm.complete(
+                prompts.SYSTEM_STYLE,
+                f"{meta}\n\nĐoạn mở đầu:\n{r['content_zh'][:2000]}",
+                max_tokens=512).text)
+        except Exception:
+            style = None
+    style_line = prompts.build_style_line(style)
+    title = nv.get("title_vi") or nv.get("title_zh")
+    novel_line = title + (f" — thể loại: {', '.join(nv.get('genres') or [])}"
+                          if title and nv.get("genres") else "") if title else None
 
-        prev_summary = prev_tail = None
-        if r["chapter_index"] > 1 and not r.get("_from_file"):
-            prev = (db.sb().table("chapters").select("summary_vi,content_vi")
-                    .eq("novel_id", r["novel_id"])
-                    .eq("chapter_index", r["chapter_index"] - 1)
-                    .maybe_single().execute())
-            pd = getattr(prev, "data", None) or {}
-            prev_summary, prev_tail = pd.get("summary_vi"), _tail(pd.get("content_vi"))
+    prev_summary = prev_tail = None
+    if r["chapter_index"] > 1 and not r.get("_from_file"):
+        prev = (db.sb().table("chapters").select("summary_vi,content_vi")
+                .eq("novel_id", r["novel_id"])
+                .eq("chapter_index", r["chapter_index"] - 1)
+                .maybe_single().execute())
+        pd = getattr(prev, "data", None) or {}
+        prev_summary, prev_tail = pd.get("summary_vi"), _tail(pd.get("content_vi"))
 
-        existing_zh = {t["term_zh"] for t in terms if t.get("term_zh")}
-        # dry-run: ĐỌC memory xưng hô như production nhưng không ghi cặp mới
-        relations = {} if r.get("_from_file") else _load_relations(r["novel_id"])
-        twopass = nv.get("twopass_active", True)
-        first_person = _is_first_person(r["content_zh"])
-        register_line = _register_line(r["content_zh"])
-        parts = []
-        for i, chunk in enumerate(_split_chunks(r["content_zh"])):
-            scene_line = None
-            if twopass or _ZH_DIALOGUE_RE.search(chunk):
-                names, scene = _analyze_names(chapter_llm, chunk)
-                _merge_names(terms, existing_zh, names)
-                _merge_scene_relations(relations, scene, r["novel_id"], r["chapter_index"])
-                scene_line = prompts.build_scene_line(scene)
-            res = chapter_llm.complete(
-                prompts.build_chapter_system(terms, chunk),
-                prompts.build_chapter_user(
-                    r.get("title_zh") if i == 0 else None, chunk, prev_summary,
-                    prev_tail=prev_tail, novel_line=novel_line, register_line=register_line,
-                    style_line=style_line, scene_line=scene_line),
-                validate=_quality_fuse(chunk, first_person),
-            )
-            text = res.text
-            m = GLOSSARY_LINE.search(text)
-            if m:
-                text = text[:m.start()].rstrip()
-            text, summary = _pop_summary(text)
-            prev_summary = summary or prev_summary
-            fixed = _fix_omissions(chapter_llm, chunk, _clean_output(text))
-            parts.append(_fix_han_residue(chapter_llm, fixed))
-            prev_tail = _tail(parts[-1])
-        text = _style_revise(chapter_llm, _fix_soft_style("\n\n".join(parts)), r["content_zh"])
-        text = _fix_omissions(chapter_llm, r["content_zh"], text)
-        return {**r, "content_vi": text, "model_used": "(fresh-full)"}
+    existing_zh = {t["term_zh"] for t in terms if t.get("term_zh")}
+    twopass = nv.get("twopass_active", True)
+    first_person = _is_first_person(r["content_zh"])
+    register_line = _register_line(r["content_zh"])
+    parts = []
+    for i, chunk in enumerate(_split_chunks(r["content_zh"])):
+        if twopass:
+            _merge_names(terms, existing_zh, _analyze_names(chapter_llm, chunk))
+        res = chapter_llm.complete(
+            prompts.build_chapter_system(terms, chunk),
+            prompts.build_chapter_user(
+                r.get("title_zh") if i == 0 else None, chunk, prev_summary,
+                prev_tail=prev_tail, novel_line=novel_line, register_line=register_line,
+                style_line=style_line),
+            validate=_quality_fuse(chunk, first_person),
+        )
+        text = res.text
+        m = GLOSSARY_LINE.search(text)
+        if m:
+            text = text[:m.start()].rstrip()
+        text, summary = _pop_summary(text)
+        prev_summary = summary or prev_summary
+        fixed = _fix_omissions(chapter_llm, chunk, _clean_output(text))
+        parts.append(_fix_han_residue(chapter_llm, fixed))
+        prev_tail = _tail(parts[-1])
+    text = _style_revise(chapter_llm, _fix_soft_style("\n\n".join(parts)), r["content_zh"])
+    text = _fix_omissions(chapter_llm, r["content_zh"], text)
+    return {**r, "content_vi": text, "model_used": "(fresh-full)"}
 
 
 def main() -> None:

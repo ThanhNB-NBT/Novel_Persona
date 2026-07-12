@@ -85,9 +85,9 @@ def fetch_sample(chars: int, novel_id: int | None = None, chapter_index: int = 1
     return rows[0]["content_zh"][:chars]
 
 
-def bench_model(model: str, zh: str, runs: int) -> dict:
+def bench_model(model: str, zh: str, runs: int, timeout_sec: int) -> dict:
     key = settings.nvidia_keys[0]
-    p = TranslationProvider(NVIDIA_BASE_URL, key, model, "nvidia")
+    p = TranslationProvider(NVIDIA_BASE_URL, key, model, "nvidia", timeout_sec=timeout_sec)
     system = prompts.build_chapter_system([], zh)
     user = prompts.build_chapter_user("测试章节", zh, None, register_line=REGISTER_LINE)
     out = {"model": model, "ok": 0, "fail": 0, "lat": [], "tps": [], "han": [],
@@ -122,6 +122,8 @@ def main() -> None:
     ap.add_argument("--models", help="danh sách model id, phân cách phẩy",
                     default=",".join(DEFAULT_MODELS))
     ap.add_argument("--runs", type=int, default=2, help="số lượt mỗi model (mặc định 2)")
+    ap.add_argument("--timeout", type=int, default=45,
+                    help="timeout mỗi request benchmark, giây (không đổi worker production)")
     ap.add_argument("--chars", type=int, default=3000, help="độ dài đề bài (ký tự Hán)")
     ap.add_argument("--novel", type=int, help="novel id dùng làm mẫu benchmark")
     ap.add_argument("--chapter", type=int, default=1, help="chapter_index của mẫu")
@@ -151,7 +153,7 @@ def main() -> None:
     models = (candidates if args.all else QUALITY_CANDIDATES if args.quality_candidates
               else [x.strip() for x in args.models.split(",") if x.strip()])
     for m in models:
-        r = bench_model(m, zh, args.runs)
+        r = bench_model(m, zh, args.runs, args.timeout)
         results.append(r)
         avg = lambda xs: sum(xs) / len(xs) if xs else 0
         print(f"{r['model']:<45} {r['ok']}/{args.runs:<3} {avg(r['lat']):>8.1f} "

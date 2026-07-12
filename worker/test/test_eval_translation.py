@@ -1,4 +1,6 @@
-from eval_translation import _dialogue_self_minh, _self_reference_omissions, lint, narrator_terms
+from eval_translation import (
+    _dialogue_self_minh, _self_reference_omissions, fidelity_issues, lint, narrator_terms,
+)
 
 
 def test_self_reference_omission():
@@ -23,15 +25,6 @@ def test_quality_fuse_does_not_block_omission():
     _quality_fuse("老夫不答应。" * 30)(res)  # không raise
 
 
-def test_scene_line_drops_none_addressee():
-    """addressee=None từng lọt thành 'X nói với None' trong prompt (P2-7)."""
-    from novelworker.translator.prompts import build_scene_line
-    assert build_scene_line({"speakers": [{"speaker": "Lâm Tùng", "addressee": None}]}) is None
-    out = build_scene_line({"speakers": [
-        {"speaker": "Lâm Tùng", "addressee": "lão giả", "self_term": "vãn bối"}]})
-    assert "Lâm Tùng nói với lão giả" in out and "None" not in out
-
-
 def test_clean_style_drops_junk():
     """Style bible JSON rác không được sống xuyên truyện (P2-8)."""
     from novelworker.translator.worker import _clean_style
@@ -41,20 +34,40 @@ def test_clean_style_drops_junk():
     assert _clean_style({"junk": 1}) is None
 
 
-def test_merge_scene_relations():
-    """Cặp đã chốt đè lên đoán mới; cặp mới có term thì trả về để lưu (P1-4)."""
-    from novelworker.translator.worker import _merge_scene_relations
-    relations = {("A", "B"): {"self_term": "vi sư", "address_term": "đồ nhi"}}
-    scene = {"speakers": [
-        {"speaker": "A", "addressee": "B", "self_term": "ta", "address_term": "ngươi"},
-        {"speaker": "C", "addressee": "D", "self_term": "tại hạ"},
-        {"speaker": "E", "addressee": None, "self_term": "ta"},
-    ]}
-    new = _merge_scene_relations(relations, scene, 7, 12)
-    assert scene["speakers"][0]["self_term"] == "vi sư"  # bản lưu thắng
-    assert new == [{"novel_id": 7, "speaker": "C", "addressee": "D", "self_term": "tại hạ",
-                    "address_term": None, "tone": None, "last_chapter": 12}]
-    assert ("C", "D") in relations  # chunk sau cùng chương cũng dùng ngay
+def test_benchmark_timeout_override_does_not_change_provider_default(monkeypatch):
+    import novelworker.translator.providers as providers
+    seen = []
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            seen.append(kwargs)
+
+    monkeypatch.setattr(providers, "OpenAI", FakeClient)
+    p = providers.TranslationProvider("https://example.test", "key", "model", timeout_sec=45)
+    assert p.timeout_sec == 45 and seen[-1]["timeout"] == 45
+    assert p.with_model("other").timeout_sec == 45
+
+
+def test_call_stats_accumulate_across_pin(monkeypatch):
+    """Counter per-chương phải cộng dồn qua pin() (pin tạo FallbackChain mới)."""
+    from novelworker import db
+    from novelworker.translator import providers as P
+    from novelworker.translator.providers import FallbackChain, LLMResult
+
+    monkeypatch.setattr(db, "record_model_call", lambda *a, **k: None)
+
+    class FakeP:
+        model = "m"
+        def complete(self, *a, **k):
+            return LLMResult(text="x", model="m", prompt_tokens=10, completion_tokens=5)
+        def with_model(self, m):
+            return self
+
+    chain = FallbackChain([("nvidia", FakeP())])
+    P.reset_call_stats()
+    chain.complete("s", "u")
+    chain.pin("nvidia", "m2").complete("s", "u")
+    assert P.get_call_stats() == {"calls": 2, "prompt_tokens": 20, "completion_tokens": 10}
 
 
 def test_register_violation_ta_threshold():
@@ -64,6 +77,24 @@ def test_register_violation_ta_threshold():
     assert _register_violation("Ta đi tới. Ta nhìn quanh. Ta thở dài.") is not None
     assert _register_violation("Anh ta cười.") is not None  # cụm không thể nhầm: chặn từ 1
     assert _register_violation("Tôi đi. Tôi về. Tôi ngủ.", allow_toi=True) is None
+    assert _register_violation("Hắn nhìn quanh.\n— Ta không sợ.") is None
+
+
+def test_audit_reason_includes_hard_register_and_self_reference_errors():
+    from novelworker.translator.worker import _audit_reason
+    assert _audit_reason("他笑了。", "Anh ta bật cười.")
+    assert _audit_reason("老子不服。", "Ta không phục.")
+    assert _audit_reason("他笑了。", "Hắn bật cười.") is None
+
+
+def test_audit_requeues_at_most_25_chapters(monkeypatch):
+    import novelworker.translator.worker as worker
+    bad = [({"id": i, "novel_id": 1, "chapter_index": i}, "lỗi") for i in range(40)]
+    queued = []
+    monkeypatch.setattr(worker, "scan_bad_chapters", lambda: bad)
+    monkeypatch.setattr(worker, "requeue_bad", lambda batch: queued.extend(batch))
+    worker.handle_audit({})
+    assert len(queued) == 25 and queued == bad[:25]
 
 
 def test_apply_line_fixes_accepts_wrapped_object():
@@ -115,6 +146,24 @@ def test_narrator_terms_ignore_dialogue():
         "hắn": 1,
         "nàng": 1,
     }
+
+
+def test_narrator_terms_ignore_dash_dialogue():
+    assert narrator_terms('Hắn quay đi.\n— Mình không sợ!\nNàng im lặng.') == {
+        "hắn": 1,
+        "nàng": 1,
+    }
+
+
+def test_narrator_terms_ignore_reflexive_and_kinship_words():
+    assert narrator_terms('Hắn thấy mình trong gương. Cậu Lưu đi tới.') == {"hắn": 1}
+
+
+def test_fidelity_cases_for_confirmed_name_and_title_errors():
+    assert fidelity_issues("棒梗那个小屁孩偷东西。", "Xoạ Trụ từ nhỏ đã trộm cắp.")
+    assert fidelity_issues("傻柱走上前。", "Xoạ Trụ bước tới.")
+    assert fidelity_issues("一大爷易中海站出来。", "Dượng Dịch Trung Hải bước ra.")
+    assert not fidelity_issues("傻柱走上前。", "Ngốc Trụ bước tới.")
 
 
 def test_convertese_warning():
@@ -233,20 +282,9 @@ def test_style_line_and_narrator_term():
     assert "[Văn phong truyện: X]" in user
 
 
-def test_scene_line_and_analyze_shapes():
-    from novelworker.translator import prompts
+def test_analyze_names_shapes():
+    """Pass tên trả LIST term; nhận cả shape object {terms:[...]} lẫn mảng cũ; rác → []."""
     from novelworker.translator.worker import _analyze_names
-    line = prompts.build_scene_line({
-        "speakers": [
-            {"speaker": "Lâm Tùng", "addressee": "lão giả", "self_term": "vãn bối",
-             "address_term": "tiền bối", "tone": "cung kính"},
-            {"speaker": "?", "addressee": "Lâm Tùng"},  # uncertain → bỏ
-        ],
-        "pov": "ngôi ba bám theo Lâm Tùng"})
-    assert "Lâm Tùng nói với lão giả" in line and "vãn bối" in line
-    assert line.count("nói với") == 1
-    assert prompts.build_scene_line(None) is None
-    assert prompts.build_scene_line({"speakers": []}) is None
 
     class FakeLLM:
         def __init__(self, text):
@@ -254,22 +292,9 @@ def test_scene_line_and_analyze_shapes():
         def complete(self, *a, **k):
             return type("R", (), {"text": self._t})()
 
-    # shape object mới
-    terms, scene = _analyze_names(FakeLLM(
-        '{"terms": [{"zh": "林松", "vi": "Lâm Tùng"}], "speakers": [], "pov": "ngôi ba"}'), "x")
-    assert terms[0]["vi"] == "Lâm Tùng" and scene["pov"] == "ngôi ba"
-    # shape mảng cũ vẫn nhận
-    terms, scene = _analyze_names(FakeLLM('[{"zh": "林松", "vi": "Lâm Tùng"}]'), "x")
-    assert terms and scene is None
-    # rác → không vỡ
-    assert _analyze_names(FakeLLM("not json"), "x") == ([], None)
-
-
-def test_scene_analysis_survives_twopass_off():
-    from novelworker.translator.worker import _needs_scene_analysis
-    assert _needs_scene_analysis("“Ngươi là ai?”", False)
-    assert _needs_scene_analysis("Không có hội thoại.", True)
-    assert not _needs_scene_analysis("Không có hội thoại.", False)
+    assert _analyze_names(FakeLLM('{"terms": [{"zh": "林松", "vi": "Lâm Tùng"}]}'), "x")[0]["vi"] == "Lâm Tùng"
+    assert _analyze_names(FakeLLM('[{"zh": "林松", "vi": "Lâm Tùng"}]'), "x")  # mảng cũ
+    assert _analyze_names(FakeLLM("not json"), "x") == []
 
 
 def test_fix_omissions_with_fake_llm():
