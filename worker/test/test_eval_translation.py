@@ -7,7 +7,7 @@ def test_self_reference_omission():
 
 
 def test_self_reference_no_false_block():
-    """Check này giờ nằm trong fuse production — từ ghép trùng mặt chữ không được chặn oan."""
+    """Từ ghép trùng mặt chữ không được tính là tự xưng — check này từng gây oan."""
     assert not _self_reference_omissions("他站在下面看着。", "Hắn đứng phía dưới nhìn lên.")
     assert not _self_reference_omissions("他们是老夫老妻了。", "Bọn họ là vợ chồng già rồi.")
     assert not _self_reference_omissions("晚辈不敢。", "Hậu bối không dám.")
@@ -15,16 +15,12 @@ def test_self_reference_no_false_block():
     assert _self_reference_omissions("在下告辞。", "Ta xin cáo từ.")  # tự xưng thật vẫn bắt
 
 
-def test_quality_fuse_blocks_self_reference_omission():
+def test_quality_fuse_does_not_block_omission():
+    """Omission KHÔNG nằm trong fuse: retry mù không chữa được model lì (n1007 kẹt
+    3/3 lượt → job fail vĩnh viễn). Lượt _fix_omissions sửa có mục tiêu sau dịch."""
     from novelworker.translator.worker import _quality_fuse
-    bad = type("R", (), {"text": "Ta không đồng ý.", "model": "test"})()
-    try:
-        _quality_fuse("老夫不答应。")(bad)
-        raise AssertionError("quality fuse phải chặn khi mất 老夫")
-    except RuntimeError as exc:
-        assert "mất tự xưng" in str(exc)
-    good = type("R", (), {"text": "Lão phu không đồng ý.", "model": "test"})()
-    _quality_fuse("老夫不答应。")(good)
+    res = type("R", (), {"text": "Ta không đồng ý. " * 30, "model": "test"})()
+    _quality_fuse("老夫不答应。" * 30)(res)  # không raise
 
 
 def test_narrator_terms_ignore_dialogue():
@@ -165,6 +161,29 @@ def test_scene_analysis_survives_twopass_off():
     assert _needs_scene_analysis("“Ngươi là ai?”", False)
     assert _needs_scene_analysis("Không có hội thoại.", True)
     assert not _needs_scene_analysis("Không có hội thoại.", False)
+
+
+def test_fix_omissions_with_fake_llm():
+    from novelworker.translator.worker import _fix_omissions, check_translation
+
+    class FakeRes:
+        text = '[{"old": "Ai nói bậy, ta xé nát mồm!", "new": "Ai nói bậy, ông đây xé nát mồm!"}]'
+
+    class FakeLLM:
+        def complete(self, system, user, **kw):
+            assert "老子" in user and "BẢN DỊCH" in user
+            return FakeRes()
+
+    zh = "谁在胡说八道，老子撕烂他的嘴！"
+    vi = "Ai nói bậy, ta xé nát mồm!"
+    assert _fix_omissions(FakeLLM(), zh, vi) == "Ai nói bậy, ông đây xé nát mồm!"
+
+    class Boom:
+        def complete(self, *a, **k):
+            raise AssertionError("không được gọi khi không thiếu gì")
+    assert _fix_omissions(Boom(), "他笑了。", "Hắn bật cười.") == "Hắn bật cười."
+    # omission KHÔNG còn chặn ở fuse — không tạo job kẹt vĩnh viễn
+    assert check_translation(zh * 30, ("Ai nói bậy, ta xé nát mồm! Hắn nhìn quanh đầy giận dữ. " * 30)) is None
 
 
 def test_style_revise_with_fake_llm():

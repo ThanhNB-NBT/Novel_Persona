@@ -97,7 +97,7 @@ def _translit_ratio(vi: str) -> float:
 # phải nhận đủ biến thể hợp lệ — dính oan là đốt retry/fallback cả chunk.
 SELF_REFERENCE_CONSTRAINTS: list[tuple[re.Pattern, tuple[str, ...]]] = [
     (re.compile(r"老夫(?!老妻)"), ("lão phu", "lão già này", "lão đây")),
-    (re.compile(r"老子"), ("lão tử", "ông đây", "bố đây", "ta đây")),
+    (re.compile(r"老子"), ("lão tử", "ông đây", "bố đây", "ta đây", "bố mày", "ông mày", "lão đây")),
     (re.compile(r"本座"), ("bổn tọa", "bản tọa")),
     # 本尊 còn nghĩa "chân thân/bản thể" (phân thân–chân thân) — không phải tự xưng
     (re.compile(r"本尊"), ("bản tôn", "bổn tôn", "chân thân", "bản thể")),
@@ -146,10 +146,9 @@ def check_translation(content_zh: str, content_vi: str) -> str | None:
             return f"phiên âm Hán-Việt thay vì dịch nghĩa (mật độ hư từ {t:.1%})"
     # zh→vi bình thường phình 2.5-3.5x (tính KÝ TỰ) → dưới 1.2x là dịch sót đoạn.
     # Ngưỡng 0.3 cũ chỉ bắt được cụt thảm họa; chương ngắn (lời tác giả) giữ ngưỡng lỏng.
+    # LƯU Ý: omission tự xưng KHÔNG nằm ở gate này — retry mù không chữa được model lì
+    # (n1007 kẹt vĩnh viễn 3/3 lượt), phải sửa có mục tiêu bằng _fix_omissions sau dịch.
     if content_zh:
-        missing = self_reference_omissions(content_zh, content_vi)
-        if missing:
-            return "mất tự xưng: " + "; ".join(missing)
         ratio_min = 1.2 if len(content_zh) > 300 else 0.3
         if len(content_vi) < ratio_min * len(content_zh):
             return f"quá ngắn ({len(content_vi)}/{len(content_zh)} ký tự)"
@@ -497,6 +496,37 @@ def _apply_fixes(vi: str, fixes) -> tuple[str, int]:
     return vi, applied
 
 
+_ZH_SENT_SPLIT = re.compile(r"(?<=[。！？!?\n])")
+
+
+def _fix_omissions(chapter_llm, zh_chunk: str, vi: str) -> str:
+    """Q3 cho omission tự xưng: đưa CÂU GỐC chứa tự xưng bị mất cho LLM, sửa đúng câu
+    dịch tương ứng. Retry mù trong fuse không chữa được model lì (n1007 fail 3/3 lượt)."""
+    low = vi.lower()
+    lines = []
+    for pat, accepted in SELF_REFERENCE_CONSTRAINTS:
+        m = pat.search(zh_chunk)
+        if m and not any(term in low for term in accepted):
+            sent = next((s for s in _ZH_SENT_SPLIT.split(zh_chunk) if pat.search(s)), m.group(0))
+            lines.append(f"- Câu gốc: {sent.strip()[:200]} — tự xưng {m.group(0)} phải để lại "
+                         f"dấu vết trong bản dịch ({'/'.join(accepted)})")
+    if not lines:
+        return vi
+    user = ("Bản dịch dưới đây làm MẤT sắc thái tự xưng của các câu gốc sau:\n"
+            + "\n".join(lines)
+            + "\n\nBẢN DỊCH:\n" + vi
+            + "\n\nTìm câu dịch tương ứng với từng câu gốc, sửa TỐI THIỂU để giữ đúng "
+              "sắc thái tự xưng. Trả JSON [{\"old\": \"...\", \"new\": \"...\"}], "
+              "\"old\" chép NGUYÊN VĂN từ bản dịch.")
+    try:
+        fixes = _extract_json(chapter_llm.complete(prompts.SYSTEM_REVISE, user, max_tokens=2048).text)
+        vi, applied = _apply_fixes(vi, fixes)
+        log.info("Fix omission tự xưng: %d marker, %d câu thay", len(lines), applied)
+    except Exception as e:
+        log.warning("Fix omission lỗi (giữ bản gốc): %s", e)
+    return vi
+
+
 def _init_style_bible(chapter_llm, nv: dict, novel_id: int, content_zh: str) -> dict | None:
     """Sinh style bible MỘT lần từ metadata + đầu chương rồi lưu vào novels.
     Lỗi thì trả None — chương này dịch không style line, chương sau thử lại."""
@@ -667,7 +697,8 @@ def handle_chapter(job: dict, llm) -> None:
         prev_summary = summary_vi or prev_summary
         # Cầu chì chất lượng đã chạy TRONG llm.complete (validate=_quality_fuse) → tới đây
         # output chắc chắn đạt: đủ tiếng Việt, đủ độ dài, còn xuống dòng.
-        parts.append(_clean_output(text))
+        text = _fix_omissions(chapter_llm, chunk, _clean_output(text))
+        parts.append(text)
         prev_tail = _tail(parts[-1])  # chunk sau nối giọng văn từ đuôi chunk này
         prompt_tokens += res.prompt_tokens or 0
         completion_tokens += res.completion_tokens or 0

@@ -24,6 +24,7 @@ from pathlib import Path
 from novelworker import db
 from novelworker.translator.worker import (
     _is_first_person, _register_violation, check_translation, han_ratio,
+    self_reference_omissions,
 )
 
 # ---------- lint: mỗi luật = (tên, regex | hàm) — ăn khớp với điều prompt CẤM ----------
@@ -61,25 +62,6 @@ _RULES: list[tuple[str, re.Pattern]] = [
 # feedback user 2026-07-11: "chẳng" rải khắp nơi đọc gượng — mặc định phải là "không"
 _CHANG_THRESHOLD = 4
 
-# Tự xưng có sắc thái trong gốc không được rút hết thành "ta/tôi" hoặc biến mất.
-# Đây là warning theo constraint từ vựng; reviewer vẫn quyết định cách Việt hóa đúng ngữ cảnh.
-_SELF_REFERENCE_CONSTRAINTS: list[tuple[str, tuple[str, ...]]] = [
-    ("老夫", ("lão phu", "lão già này", "lão đây")),
-    ("老子", ("lão tử", "ông đây", "bố đây", "ta đây")),
-    ("本座", ("bổn tọa",)),
-    ("本尊", ("bản tôn", "bổn tôn")),
-    ("在下", ("tại hạ",)),
-    ("晚辈", ("vãn bối",)),
-    ("贫道", ("bần đạo",)),
-    ("贫僧", ("bần tăng",)),
-    ("哀家", ("ai gia",)),
-    ("朕", ("trẫm",)),
-    # ponytail: 臣 trần nằm trong 大臣/臣子... và "thần" trần nằm trong tinh thần/thần thông...
-    # nên hai chiều đều nhiễu — chỉ match cụm tự xưng rõ
-    ("微臣", ("vi thần",)),
-    ("臣妾", ("thần thiếp",)),
-]
-
 _DIALOGUE = re.compile(r'"[^"\n]*"|“[^”]*”|「[^」]*」')
 _NARRATOR_TERMS = re.compile(
     r"\b(?:hắn|nàng|y|gã|lão|anh(?:\s+ta)?|cậu(?:\s+ta)?|cô(?:\s+ấy|\s+ta)?|ông\s+ta)\b",
@@ -111,14 +93,8 @@ def narrator_terms(vi: str) -> dict[str, int]:
 
 
 def _self_reference_omissions(zh: str, vi: str) -> list[str]:
-    """Bắt tự xưng giàu sắc thái xuất hiện trong gốc nhưng mất khỏi bản dịch."""
-    low = vi.lower()
-    missing = []
-    for source, accepted in _SELF_REFERENCE_CONSTRAINTS:
-        count = zh.count(source)
-        if count and not any(term in low for term in accepted):
-            missing.append(f"{source}×{count} thiếu dấu vết ({'/'.join(accepted)})")
-    return missing
+    """Alias tương thích cho test/report cũ; luật thật nằm trong production worker."""
+    return self_reference_omissions(zh, vi)
 
 
 def _dialogue_self_minh(vi: str) -> list[str]:
@@ -141,7 +117,9 @@ def lint(zh: str, vi: str) -> list[str]:
     reg = _register_violation(vi, allow_toi=_is_first_person(zh))  # xưng hô lời kể
     if reg:
         problems.append(f"[fuse] {reg}")
-    for missing in _self_reference_omissions(zh, vi):
+    # omission tự xưng KHÔNG còn nằm trong fuse (worker sửa bằng _fix_omissions) —
+    # eval vẫn phải báo để biết lượt sửa có sót không
+    for missing in self_reference_omissions(zh, vi):
         problems.append(f"[xưng hô] {missing}")
     for name, pat in _RULES:
         hits = pat.findall(vi)
@@ -181,7 +159,7 @@ def sample_existing(n: int) -> list[dict]:
     """N chương done ngẫu nhiên, rải đều nhiều truyện (mỗi truyện tối đa 2 chương)."""
     rows = (
         db.sb().table("chapters")
-        .select("id, novel_id, chapter_index, content_zh, content_vi, model_used, novels(title_vi, genres)")
+        .select("id, novel_id, chapter_index, title_zh, content_zh, content_vi, model_used, novels(title_vi, genres)")
         .eq("translation_status", "done").not_.is_("content_vi", "null")
         .not_.is_("content_zh", "null")
         .order("translated_at", desc=True).limit(400).execute()
@@ -198,25 +176,118 @@ def sample_existing(n: int) -> list[dict]:
     return picked
 
 
+def sample_files(path: str, n: int) -> list[dict]:
+    """Đọc bộ eval cố định n<novel>_c<chapter>.txt thay vì chọn DB ngẫu nhiên."""
+    rows = []
+    for file in sorted(Path(path).glob("n*_c*.txt"))[:n]:
+        m = re.fullmatch(r"n(\d+)_c(\d+)\.txt", file.name)
+        if not m:
+            continue
+        novel_id, chapter_index = map(int, m.groups())
+        text = file.read_text(encoding="utf-8")
+        try:
+            payload = text.split("--- GỐC (zh) ---\n", 1)[1]
+            zh, vi = payload.split("\n\n--- DỊCH (vi) ---\n", 1)
+        except IndexError:
+            continue
+        title_m = re.search(r"^=== novel .*? \((.*?)\) \[", text, re.M)
+        genres_m = re.search(r"^=== thể loại:\s*(.*)$", text, re.M)
+        genres = [x.strip() for x in (genres_m.group(1) if genres_m else "").split(",") if x.strip()]
+        rows.append({"id": 0, "novel_id": novel_id, "chapter_index": chapter_index,
+                     "title_zh": None, "content_zh": zh, "content_vi": vi,
+                     "model_used": "(file)", "_from_file": True,
+                     "novels": {"title_vi": title_m.group(1) if title_m else "?",
+                                "genres": genres}})
+    return rows
+
+
 def translate_fresh(rows: list[dict]) -> list[dict]:
-    """Dịch mới bằng pipeline thật (glossary + prompt + fuse trong chain)."""
-    from novelworker.translator import prompts
+    """Dry-run pipeline production đầy đủ, không ghi chapter/glossary/style vào DB.
+    Một chương lì (fuse chặn hết chuỗi provider) chỉ bị BỎ QUA, không giết cả run."""
     from novelworker.translator.providers import build_chain
-    from novelworker.translator.worker import REGISTER_LINE, _quality_fuse, _split_chunks, _strip_meta
     llm = build_chain(0)
     out = []
     for r in rows:
-        terms, _ = db.get_glossary(r["novel_id"])
+        try:
+            out.append(_translate_one(r, llm))
+        except Exception as e:
+            print(f"  BỎ QUA n{r['novel_id']} c{r['chapter_index']}: {str(e)[:120]}")
+    return out
+
+
+def _translate_one(r: dict, llm) -> dict:
+    from novelworker.translator import prompts
+    from novelworker.translator.worker import (
+        GLOSSARY_LINE, REGISTER_LINE, _ZH_DIALOGUE_RE, _analyze_names, _clean_output,
+        _extract_json, _fix_omissions, _fix_soft_style, _merge_names, _pop_summary,
+        _quality_fuse, _split_chunks, _style_revise, _tail,
+    )
+    if True:  # giữ indent thân cũ — nội dung y nguyên translate_fresh trước đây
+        if r.get("_from_file"):
+            terms = []
+            nv = {**(r.get("novels") or {}), "twopass_active": True}
+        else:
+            terms, _ = db.get_glossary(r["novel_id"])
+            nv = (db.sb().table("novels").select(
+                "title_vi,title_zh,genres,translation_provider,translation_model,"
+                "translation_style,twopass_active")
+                .eq("id", r["novel_id"]).single().execute().data or {})
+        chapter_llm = llm
+        if nv.get("translation_provider") and nv.get("translation_model"):
+            chapter_llm = llm.pin(nv["translation_provider"], nv["translation_model"])
+
+        style = nv.get("translation_style")
+        if not style:
+            meta = json.dumps({"title": nv.get("title_zh") or nv.get("title_vi"),
+                               "genres": nv.get("genres") or []}, ensure_ascii=False)
+            try:
+                style = _extract_json(chapter_llm.complete(
+                    prompts.SYSTEM_STYLE,
+                    f"{meta}\n\nĐoạn mở đầu:\n{r['content_zh'][:2000]}",
+                    max_tokens=512).text)
+            except Exception:
+                style = None
+        style_line = prompts.build_style_line(style)
+        title = nv.get("title_vi") or nv.get("title_zh")
+        novel_line = title + (f" — thể loại: {', '.join(nv.get('genres') or [])}"
+                              if title and nv.get("genres") else "") if title else None
+
+        prev_summary = prev_tail = None
+        if r["chapter_index"] > 1 and not r.get("_from_file"):
+            prev = (db.sb().table("chapters").select("summary_vi,content_vi")
+                    .eq("novel_id", r["novel_id"])
+                    .eq("chapter_index", r["chapter_index"] - 1)
+                    .maybe_single().execute())
+            pd = getattr(prev, "data", None) or {}
+            prev_summary, prev_tail = pd.get("summary_vi"), _tail(pd.get("content_vi"))
+
+        existing_zh = {t["term_zh"] for t in terms if t.get("term_zh")}
+        twopass = nv.get("twopass_active", True)
         parts = []
         for i, chunk in enumerate(_split_chunks(r["content_zh"])):
-            res = llm.complete(
+            scene_line = None
+            if twopass or _ZH_DIALOGUE_RE.search(chunk):
+                names, scene = _analyze_names(chapter_llm, chunk)
+                _merge_names(terms, existing_zh, names)
+                scene_line = prompts.build_scene_line(scene)
+            res = chapter_llm.complete(
                 prompts.build_chapter_system(terms, chunk),
-                prompts.build_chapter_user(None, chunk, None, register_line=REGISTER_LINE),
+                prompts.build_chapter_user(
+                    r.get("title_zh") if i == 0 else None, chunk, prev_summary,
+                    prev_tail=prev_tail, novel_line=novel_line, register_line=REGISTER_LINE,
+                    style_line=style_line, scene_line=scene_line),
                 validate=_quality_fuse(chunk),
             )
-            parts.append(_strip_meta(res.text))
-        out.append({**r, "content_vi": "\n\n".join(parts), "model_used": "(fresh)"})
-    return out
+            text = res.text
+            m = GLOSSARY_LINE.search(text)
+            if m:
+                text = text[:m.start()].rstrip()
+            text, summary = _pop_summary(text)
+            prev_summary = summary or prev_summary
+            parts.append(_fix_omissions(chapter_llm, chunk, _clean_output(text)))
+            prev_tail = _tail(parts[-1])
+        text = _style_revise(chapter_llm, _fix_soft_style("\n\n".join(parts)))
+        return {**r, "content_vi": text, "model_used": "(fresh-full)"}
 
 
 def main() -> None:
@@ -224,6 +295,7 @@ def main() -> None:
     ap.add_argument("--existing", type=int, default=0)
     ap.add_argument("--fresh", type=int, default=0)
     ap.add_argument("--out", default="eval_out", help="thư mục xuất cặp zh/vi")
+    ap.add_argument("--from-dir", help="dùng bộ n*_c*.txt cố định thay vì lấy mẫu DB")
     ap.add_argument("--self-check", action="store_true", help="chạy kiểm tra evaluator, không gọi DB/API")
     args = ap.parse_args()
     if args.self_check:
@@ -233,7 +305,8 @@ def main() -> None:
     if not (args.existing or args.fresh):
         ap.error("cần --existing N hoặc --fresh N")
 
-    rows = sample_existing(max(args.existing, args.fresh))
+    count = max(args.existing, args.fresh)
+    rows = sample_files(args.from_dir, count) if args.from_dir else sample_existing(count)
     if args.fresh:
         rows = translate_fresh(rows[:args.fresh])
     outdir = Path(args.out)
