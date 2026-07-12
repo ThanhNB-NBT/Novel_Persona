@@ -191,6 +191,8 @@ def test_third_person_rejects_narrator_ta_but_not_dialogue():
     assert not _register_violation('Hắn nhìn quanh. "Ta không sợ." Ta sai rồi chăng?')
     assert "NGÔI BA" in _register_line('他看向四周。“我不怕。”')
     assert "NGÔI NHẤT" in _register_line('我看向四周。')
+    # 1 chữ 我 lẻ (từ ghép 自我安慰) giữa 36 chữ 他 KHÔNG được lật cả chương sang ngôi nhất
+    assert "NGÔI BA" in _register_line('他也只能自我安慰。' + '他走了。' * 3)
 
 
 def test_fix_soft_style_chang():

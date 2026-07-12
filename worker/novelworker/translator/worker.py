@@ -211,8 +211,11 @@ _ZH_DIALOGUE_RE = re.compile(r'“[^”]*”|「[^」]*」|"[^"\n]*"')
 
 
 def _is_first_person(zh: str) -> bool:
-    """Gốc có 我 trong LỜI KỂ (ngoài thoại) = truyện ngôi thứ nhất → 'tôi' hợp lệ."""
-    return "我" in _ZH_DIALOGUE_RE.sub("", zh)
+    """Truyện ngôi nhất khi 我 ÁP ĐẢO 他/她 trong lời kể. Đếm 1 chữ là dính oan:
+    n1043 có đúng 1 我 (trong từ ghép 自我安慰) vs 36 他 → cả chương bị lật sang
+    'ta' ngôi nhất. Truyện ngôi nhất thật thì 我 nhiều hơn hẳn."""
+    narr = _ZH_DIALOGUE_RE.sub("", zh)
+    return narr.count("我") > narr.count("他") + narr.count("她")
 
 
 def _register_violation(content_vi: str, allow_toi: bool = False) -> str | None:
