@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../../cultivation.dart';
 import '../../data.dart';
@@ -123,6 +124,10 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     _persistChapter(); // tiến độ cấp chương (server, cho "đọc tiếp")
     _percent.value = chapterPercent(novelId, chapterIndex);
     _scroll.addListener(_onScroll);
+    // Giữ màn hình sáng khi đang đọc/nghe — không phải chạm liên tục cho khỏi tắt.
+    // ponytail: gắn theo vòng đời reader; chuyển chương (pushReplacement) enable lại
+    // ngay ở initState mới nên khoảng hở dưới giây, thừa dưới ngưỡng tắt màn ~30s.
+    WakelockPlus.enable();
   }
 
   /// Ghi chương đang đọc rồi làm mới các provider — novel_detail nằm dưới reader
@@ -143,6 +148,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     _correctFocus.dispose();
     _sel.dispose();
     _editing.dispose();
+    WakelockPlus.disable();
     super.dispose();
   }
 
@@ -333,7 +339,9 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
       ),
       body: chapter.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Lỗi: $e')),
+        error: (e, _) => AppError(e,
+            onRetry: () =>
+                ref.invalidate(chapterProvider(ChapterKey(novelId, chapterIndex)))),
         data: (c) {
           if (c == null) return Center(child: Text('Không có chương này', style: TextStyle(color: col.fg)));
           final status = c['translation_status'];

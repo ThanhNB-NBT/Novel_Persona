@@ -27,7 +27,7 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
       appBar: AppBar(title: const Text('Thông báo')),
       body: items.when(
         loading: () => const AppLoading(),
-        error: (e, _) => Center(child: Text('Lỗi: $e')),
+        error: (e, _) => AppError(e, onRetry: () => ref.invalidate(notificationsProvider)),
         data: (list) {
           if (list.isEmpty) {
             return Center(

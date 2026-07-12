@@ -17,7 +17,7 @@ class QueueScreen extends ConsumerWidget {
       appBar: AppBar(title: const Text('Hàng đợi dịch')),
       body: q.when(
         loading: () => const AppLoading(),
-        error: (e, _) => Center(child: Text('Lỗi: $e')),
+        error: (e, _) => AppError(e, onRetry: () => ref.invalidate(translateQueueProvider)),
         data: (state) => RefreshIndicator(
           onRefresh: () async => ref.invalidate(translateQueueProvider),
           child: ListView(

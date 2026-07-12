@@ -195,8 +195,8 @@ class _FilterResultsScreenState extends ConsumerState<FilterResultsScreen> {
         _activeChips(context),
         Expanded(
           child: results.when(
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (e, _) => Center(child: Text('Lỗi: $e')),
+            loading: () => const SkeletonList(),
+            error: (e, _) => AppError(e, onRetry: () => ref.invalidate(searchProvider(_filter))),
             data: (list) => list.isEmpty
                 ? Center(
                     child: Text('Không có truyện phù hợp bộ lọc.',

@@ -51,8 +51,8 @@ class LibraryScreen extends ConsumerWidget {
         const SizedBox(width: 4),
       ]),
       body: reading.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Lỗi: $e')),
+        loading: () => const SkeletonList(),
+        error: (e, _) => AppError(e, onRetry: () => ref.invalidate(readingProvider)),
         data: (list) {
           if (sb.auth.currentUser == null) {
             return _Empty(

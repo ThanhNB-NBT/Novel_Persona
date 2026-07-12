@@ -517,7 +517,14 @@ final chapterProvider = FutureProvider.autoDispose.family<Rec?, ChapterKey>((
           column: 'novel_id',
           value: key.novelId,
         ),
-        callback: (_) => ref.invalidateSelf(),
+        callback: (payload) {
+          // filter realtime chỉ lọc được 1 cột (novel_id) ở server → lọc thêm
+          // chapter_index phía client: dịch hàng loạt bắn update mọi chương của
+          // truyện, không lọc thì chương đang đọc refetch liên tục dù không đổi.
+          if (payload.newRecord['chapter_index'] == key.index) {
+            ref.invalidateSelf();
+          }
+        },
       )
       .subscribe();
   ref.onDispose(() => sb.removeChannel(channel));

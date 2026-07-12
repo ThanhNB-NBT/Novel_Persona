@@ -23,13 +23,8 @@ class HomeScreen extends ConsumerWidget {
     return Scaffold(
       body: SafeArea(
         child: sections.when(
-          loading: () => const AppLoading(),
-          error: (e, _) => Center(
-            child: Text(
-              'Không tải được truyện.\n$e',
-              textAlign: TextAlign.center,
-            ),
-          ),
+          loading: () => const SkeletonHome(),
+          error: (e, _) => AppError(e, onRetry: () => ref.invalidate(homeSectionsProvider)),
           data: (s) => RefreshIndicator(
             onRefresh: () async => ref.invalidate(homeSectionsProvider),
             child: ListView(
