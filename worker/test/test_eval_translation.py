@@ -6,6 +6,27 @@ def test_self_reference_omission():
     assert not _self_reference_omissions("老夫不答应。", "Lão phu không đồng ý.")
 
 
+def test_self_reference_no_false_block():
+    """Check này giờ nằm trong fuse production — từ ghép trùng mặt chữ không được chặn oan."""
+    assert not _self_reference_omissions("他站在下面看着。", "Hắn đứng phía dưới nhìn lên.")
+    assert not _self_reference_omissions("他们是老夫老妻了。", "Bọn họ là vợ chồng già rồi.")
+    assert not _self_reference_omissions("晚辈不敢。", "Hậu bối không dám.")
+    assert not _self_reference_omissions("分身与本尊汇合。", "Phân thân hợp nhất với chân thân.")
+    assert _self_reference_omissions("在下告辞。", "Ta xin cáo từ.")  # tự xưng thật vẫn bắt
+
+
+def test_quality_fuse_blocks_self_reference_omission():
+    from novelworker.translator.worker import _quality_fuse
+    bad = type("R", (), {"text": "Ta không đồng ý.", "model": "test"})()
+    try:
+        _quality_fuse("老夫不答应。")(bad)
+        raise AssertionError("quality fuse phải chặn khi mất 老夫")
+    except RuntimeError as exc:
+        assert "mất tự xưng" in str(exc)
+    good = type("R", (), {"text": "Lão phu không đồng ý.", "model": "test"})()
+    _quality_fuse("老夫不答应。")(good)
+
+
 def test_narrator_terms_ignore_dialogue():
     assert narrator_terms('Hắn quay đi. “Lão tử không sợ!” Nàng im lặng.') == {
         "hắn": 1,
@@ -137,6 +158,13 @@ def test_scene_line_and_analyze_shapes():
     assert terms and scene is None
     # rác → không vỡ
     assert _analyze_names(FakeLLM("not json"), "x") == ([], None)
+
+
+def test_scene_analysis_survives_twopass_off():
+    from novelworker.translator.worker import _needs_scene_analysis
+    assert _needs_scene_analysis("“Ngươi là ai?”", False)
+    assert _needs_scene_analysis("Không có hội thoại.", True)
+    assert not _needs_scene_analysis("Không có hội thoại.", False)
 
 
 def test_style_revise_with_fake_llm():

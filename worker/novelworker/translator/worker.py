@@ -92,6 +92,37 @@ def _translit_ratio(vi: str) -> float:
     return len(_TRANSLIT_MARKERS.findall(vi)) / max(words, 1)
 
 
+# Check này giờ nằm TRONG fuse production (chặn + retry) nên phía gốc phải loại
+# từ ghép trùng mặt chữ (在下面 "ở dưới", 老夫老妻 "vợ chồng già"...) và phía dịch
+# phải nhận đủ biến thể hợp lệ — dính oan là đốt retry/fallback cả chunk.
+SELF_REFERENCE_CONSTRAINTS: list[tuple[re.Pattern, tuple[str, ...]]] = [
+    (re.compile(r"老夫(?!老妻)"), ("lão phu", "lão già này", "lão đây")),
+    (re.compile(r"老子"), ("lão tử", "ông đây", "bố đây", "ta đây")),
+    (re.compile(r"本座"), ("bổn tọa", "bản tọa")),
+    # 本尊 còn nghĩa "chân thân/bản thể" (phân thân–chân thân) — không phải tự xưng
+    (re.compile(r"本尊"), ("bản tôn", "bổn tôn", "chân thân", "bản thể")),
+    (re.compile(r"在下(?![面方风头边来去])"), ("tại hạ",)),
+    (re.compile(r"晚辈"), ("vãn bối", "hậu bối")),
+    (re.compile(r"贫道"), ("bần đạo",)),
+    (re.compile(r"贫僧"), ("bần tăng",)),
+    (re.compile(r"哀家"), ("ai gia",)),
+    (re.compile(r"朕"), ("trẫm",)),
+    (re.compile(r"微臣"), ("vi thần", "thần")),
+    (re.compile(r"臣妾"), ("thần thiếp",)),
+]
+
+
+def self_reference_omissions(zh: str, vi: str) -> list[str]:
+    """Tự xưng giàu sắc thái có trong gốc nhưng biến mất khỏi bản dịch."""
+    low = vi.lower()
+    out = []
+    for pat, accepted in SELF_REFERENCE_CONSTRAINTS:
+        hits = pat.findall(zh)
+        if hits and not any(term in low for term in accepted):
+            out.append(f"{hits[0]}×{len(hits)} thiếu dấu vết ({'/'.join(accepted)})")
+    return out
+
+
 def check_translation(content_zh: str, content_vi: str) -> str | None:
     """Trả LÝ DO nếu bản dịch hỏng, None nếu đạt. Dùng chung cho: fuse lúc dịch (chunk vs
     output) VÀ lệnh `audit` quét chương đã lưu (content_zh vs content_vi).
@@ -116,6 +147,9 @@ def check_translation(content_zh: str, content_vi: str) -> str | None:
     # zh→vi bình thường phình 2.5-3.5x (tính KÝ TỰ) → dưới 1.2x là dịch sót đoạn.
     # Ngưỡng 0.3 cũ chỉ bắt được cụt thảm họa; chương ngắn (lời tác giả) giữ ngưỡng lỏng.
     if content_zh:
+        missing = self_reference_omissions(content_zh, content_vi)
+        if missing:
+            return "mất tự xưng: " + "; ".join(missing)
         ratio_min = 1.2 if len(content_zh) > 300 else 0.3
         if len(content_vi) < ratio_min * len(content_zh):
             return f"quá ngắn ({len(content_vi)}/{len(content_zh)} ký tự)"
@@ -172,7 +206,7 @@ def _fix_register(vi: str) -> str:
     return "".join(out)
 
 
-_ZH_DIALOGUE_RE = re.compile(r"“[^”]*”|「[^」]*」")
+_ZH_DIALOGUE_RE = re.compile(r'“[^”]*”|「[^」]*」|"[^"\n]*"')
 
 
 def _is_first_person(zh: str) -> bool:
@@ -347,6 +381,11 @@ def _analyze_names(llm, chunk: str) -> tuple[list[dict], dict | None]:
         terms = data.get("terms")
         return (terms if isinstance(terms, list) else []), data
     return [], None
+
+
+def _needs_scene_analysis(chunk: str, twopass: bool) -> bool:
+    """Pass tên có thể tắt, nhưng chunk có hội thoại vẫn cần speaker/addressee."""
+    return twopass or bool(_ZH_DIALOGUE_RE.search(chunk))
 
 
 def _split_chunks(text: str, limit: int = CHUNK_LIMIT) -> list[str]:
@@ -584,13 +623,13 @@ def handle_chapter(job: dict, llm) -> None:
         # Pass 1 (chỉ khi 2-pass còn bật): chốt phiên âm tên riêng vào glossary TRƯỚC khi dịch,
         # để mọi lần tên xuất hiện trong chunk này đều dùng đúng một cách phiên âm.
         scene_line = None
-        if twopass:
-            names, scene = _analyze_names(llm, chunk)
+        # Tên mới có thể hết sau arc đầu, nhưng speaker/addressee vẫn đổi ở mọi chương.
+        # Vì vậy chunk có thoại luôn giữ scene pass, không phụ thuộc twopass tên riêng.
+        if _needs_scene_analysis(chunk, twopass):
+            names, scene = _analyze_names(chapter_llm, chunk)
             added = _merge_names(terms, existing_zh, names)
             new_names_this_chapter += len(added)
             detected += added  # tên pass-1 cũng phải vào DB — trước đây chỉ nằm RAM, chương sau mất
-            # ponytail: scene contract sống nhờ 2-pass; truyện đã tắt 2-pass thì thôi —
-            # bật lại khi Q0 cho thấy thoại chương sau vẫn lệch
             scene_line = prompts.build_scene_line(scene)
 
         res = chapter_llm.complete(
