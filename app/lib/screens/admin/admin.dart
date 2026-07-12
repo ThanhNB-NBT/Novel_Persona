@@ -935,7 +935,7 @@ class _StatsCard extends ConsumerWidget {
           const SizedBox(height: 14),
           Row(children: [
             cell(_fmt(s['done'] ?? 0), 'chương đã dịch', color: cs.primary),
-            cell(_fmt(s['chapters'] ?? 0), 'chương đã sync'),
+            cell(_fmt(s['chapters'] ?? 0), 'dòng mục lục lưu'),
             cell(_fmt(s['doneToday'] ?? 0), 'dịch hôm nay'),
             cell(_fmt(s['failed'] ?? 0), 'chương lỗi',
                 color: (s['failed'] ?? 0) > 0 ? cs.error : null),

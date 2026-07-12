@@ -54,6 +54,7 @@ class Settings(BaseSettings):
     prio_follow: int = 30        # chương MỚI của truyện trong tủ sách — dịch đón trước
     prio_idle: int = 75          # chương đọc thử + chương truyện không ai đọc — nền
     sample_chapters: int = 1     # số chương dịch sẵn "đọc thử" khi có truyện mới
+    crawl_fetch_batch: int = 20  # số chương tải nguồn tối đa cho một novel mỗi tick
     # Timeout 1 call LLM (giây) — quá là fail nhanh để fallback sang provider kế
     llm_timeout_sec: int = 150
 

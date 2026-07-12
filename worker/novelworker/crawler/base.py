@@ -92,13 +92,20 @@ class SourceAdapter(ABC):
         for attempt in range(3):
             if attempt:
                 time.sleep(2 * attempt)  # 2s, 4s
+            status = None
             try:
                 r = self._session.get(url)
+                status = getattr(r, "status_code", None)
+                if status in {400, 401, 403, 404, 410}:
+                    r.raise_for_status()
                 r.raise_for_status()
                 self.fetch_ok += 1
                 return r.content.decode(self.encoding, "ignore")
             except Exception as e:
                 last = e
+                status = getattr(getattr(e, "response", None), "status_code", None) or status
+                if status in {400, 401, 403, 404, 410}:
+                    break
         self.fetch_err += 1
         raise last  # type: ignore[misc]
 

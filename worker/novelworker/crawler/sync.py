@@ -14,6 +14,24 @@ from .base import ChapterNotReady, SourceAdapter
 log = logging.getLogger(__name__)
 
 
+def _chapter_sync_fields(
+    old_count: int, old_status: str | None, source_status: str | None,
+    total: int, full_toc: bool, now: str,
+) -> dict:
+    fields: dict = {}
+    if source_status and source_status != old_status:
+        fields["status"] = source_status
+    if total > old_count:
+        fields.update({
+            "chapter_count_source": total,
+            "last_chapter_at": now,
+            "updated_at": now,
+        })
+    if full_toc and total > 0:
+        fields["toc_synced_at"] = now
+    return fields
+
+
 def _source_id(adapter: SourceAdapter) -> int:
     sid = adapter.source_row.get("id")
     if sid is not None:  # adapter dựng từ bảng sources → có sẵn, khỏi query lại
@@ -163,29 +181,47 @@ def _cache_cover_and_update(adapter: SourceAdapter, novel_id: int, external_url:
         db.sb().table("novels").update({"cover_url": cached}).eq("id", novel_id).execute()
 
 
-# Lọc thể loại lúc discovery (2026-07-10): chặn đô thị/lịch sử/ngôn tình, TRỪ khi
-# category/mô tả có yếu tố kỳ ảo (dị năng, cao võ, võng du, hệ thống, tu tiên...).
-# Tag nguồn là tiếng Trung (og:novel:category); ddxs không có tag → không lọc được.
-_BLOCKED_CATS = ("都市", "历史", "言情", "现言", "古言")
-_ALLOW_KEYWORDS = ("异能", "高武", "网游", "游戏", "系统", "修仙", "修真", "玄幻",
-                   "武侠", "仙侠", "末世", "科幻", "无限")
+# Lọc thể loại lúc discovery: ưu tiên fantasy/tu tiên; romance được giữ nếu đi
+# cùng thể loại mạnh, chỉ chặn romance/đô thị/lịch sử thuần.
+# Nguồn có thể thiếu category (ddxs), nên title + mô tả cũng tham gia lọc.
+_BLOCKED_CATS = (
+    "都市", "历史", "言情", "现言", "古言", "现代言情", "都市言情", "爱情", "恋爱", "婚恋",
+    "đô thị", "lịch sử", "ngôn tình", "hiện đại", "tình cảm",
+)
+_STRONG_ALLOWED = (
+    "玄幻", "修仙", "修真", "仙侠", "武侠", "灵异", "悬疑", "诡异", "恐怖", "惊悚",
+    "末世", "末日", "天灾", "科幻", "无限流", "网游", "游戏异界", "诸天", "御兽",
+    "高武", "废土", "huyền huyễn", "tu tiên", "tiên hiệp", "võ hiệp", "linh dị",
+    "võng du", "tận thế", "khoa huyễn", "vô hạn lưu", "chư thiên", "ngự thú",
+)
+_BLOCKED_TEXT = (
+    "都市", "现代都市", "都市生活", "历史", "言情", "现言", "古言", "总裁", "霸总",
+    "校花", "娱乐圈", "明星", "豪门", "甜宠", "宠妻", "虐恋",
+    "年代文", "知青", "四合院", "官场", "抗战", "娇妻", "sủng", "tổng tài",
+    "hào môn", "giới giải trí", "quân hôn", "đô thị", "lịch sử", "ngôn tình",
+)
 # ponytail: cache RAM để mỗi chu kỳ ranking khỏi fetch lại metadata truyện đã chặn;
 # worker restart thì fetch lại 1 lần — chấp nhận được
 _genre_skipped: set[tuple[int, str]] = set()
 
 
 def genre_blocked(meta) -> str | None:
-    """Trả về category bị chặn nếu truyện thuộc diện hạn chế, None nếu cho qua."""
-    cats = " ".join(meta.genres_zh or [])
+    """Trả lý do chặn; không dùng từ yếu như 系统 để miễn cho đô thị."""
+    def get(name: str, fallback):
+        return getattr(meta, name, meta.get(name, fallback) if isinstance(meta, dict) else fallback)
+
+    cats = " ".join(get("genres_zh", get("genres", [])) or []).lower()
+    title = " ".join(filter(None, [get("title_zh", ""), get("title_vi", "")])).lower()
+    desc = (get("description_zh", "") or "").split("小说推荐")[0].lower()
+    text = f"{cats} {title} {desc}"
     hit = next((b for b in _BLOCKED_CATS if b in cats), None)
-    if not hit:
-        return None
-    # Cắt đuôi "小说推荐：..." (nguồn đính tên truyện KHÁC vào cuối mô tả) trước khi
-    # xét từ khoá miễn trừ — không thì 系统/修仙 trong tên truyện đề cử miễn tội oan.
-    desc = (meta.description_zh or "").split("小说推荐")[0]
-    if any(k in cats + " " + desc for k in _ALLOW_KEYWORDS):
-        return None
-    return hit
+    strong = any(k.lower() in text for k in _STRONG_ALLOWED)
+    if hit:
+        # Ngôn tình/tình cảm vẫn hợp lệ nếu đi cùng fantasy mạnh (玄幻/修仙/灵异…);
+        # chỉ chặn khi nó đứng một mình hoặc chỉ pha tag yếu như 系统.
+        return None if strong else hit
+    text_hit = next((k for k in _BLOCKED_TEXT if k.lower() in text), None)
+    return text_hit if text_hit and not strong else None
 
 
 def _skip_by_genre(sid: int, meta) -> bool:
@@ -562,23 +598,21 @@ def sync_chapter_list(
         db.sb().table("novels").select("chapter_count_source, status")
         .eq("id", novel_id).single().execute()
     ).data or {}
-    fields: dict = {}
     # status parse ké từ chính trang mục lục vừa tải (khuôn biquge; nguồn không lộ →
     # None, bỏ qua) → truyện hoàn thành SAU discovery tự flip completed (rời vòng
     # refresh), truyện completed viết tiếp tự flip ongoing (quay lại vòng).
     src_status = getattr(adapter, "last_toc_status", None)
+    fields = _chapter_sync_fields(
+        old_count=row.get("chapter_count_source") or 0,
+        old_status=row.get("status"),
+        source_status=src_status,
+        total=total,
+        full_toc=limit_stubs is None,
+        now=db.utc_now(),
+    )
     if src_status and src_status != row.get("status"):
-        fields["status"] = src_status
         log.info("Truyện %s đổi trạng thái %s → %s (theo nguồn)",
                  novel_id, row.get("status"), src_status)
-    if total > (row.get("chapter_count_source") or 0):
-        now = db.utc_now()
-        fields = {"chapter_count_source": total, "last_chapter_at": now, "updated_at": now}
-    if limit_stubs is None and total > 0:
-        # đã có mục lục đầy đủ → refresh giữ tiếp. total=0 (nguồn chặn/đổi layout)
-        # thì KHÔNG đánh dấu — đánh dấu là request_toc no-op vĩnh viễn, truyện kẹt
-        # không bao giờ có mục lục dù nguồn sống lại.
-        fields["toc_synced_at"] = db.utc_now()
     if fields:
         db.sb().table("novels").update(fields).eq("id", novel_id).execute()
     return total, added
@@ -608,6 +642,8 @@ def sync_followed_novels(adapter: SourceAdapter) -> None:
                 queued = queue_followed_new_chapters(nv["id"], total, n)
                 if queued:
                     log.info("Tủ sách: tự dịch đón %d chương mới truyện %s", queued, nv["id"])
+            db.sb().table("novels").update(
+                {"last_checked_at": db.utc_now()}).eq("id", nv["id"]).execute()
         except Exception:
             log.exception("Lỗi sync truyện %s", nv["id"])
         time.sleep(2.0)
@@ -682,6 +718,7 @@ def refresh_canonical_updates(adapter: SourceAdapter, limit: int) -> None:
                      adapter.name, i, len(rows))
             break
         db.heartbeat("crawler", note=f"soi mục lục novel {nv['id']} ({i + 1}/{len(rows)})")
+        synced = False
         try:
             # truyện lười (chưa ai đọc) → limit_stubs=0: chỉ cập nhật số chương, không đẻ stub
             total, n = sync_chapter_list(
@@ -691,10 +728,13 @@ def refresh_canonical_updates(adapter: SourceAdapter, limit: int) -> None:
                 log.info("Truyện %s +%d chương mới", nv["id"], n)
             if n or total:
                 _maybe_unhide_grown(nv)
+            synced = True
         except Exception:
             log.exception("Lỗi refresh truyện %s", nv["id"])
-        # đánh dấu đã soi (kể cả khi không có chương mới) → xoay vòng đúng
-        db.sb().table("novels").update({"last_checked_at": db.utc_now()}).eq("id", nv["id"]).execute()
+        # Chỉ đánh dấu đã soi khi parse thành công; lỗi tạm phải được retry sớm.
+        if synced:
+            db.sb().table("novels").update(
+                {"last_checked_at": db.utc_now()}).eq("id", nv["id"]).execute()
         time.sleep(2.0)
 
 
@@ -796,6 +836,7 @@ def ensure_chapters_fetched(adapter: SourceAdapter, novel_id: int) -> None:
         .eq("translation_status", "queued")
         .is_("content_zh", "null")
         .order("chapter_index")
+        .limit(max(1, settings.crawl_fetch_batch))
         .execute()
     ).data or []
     for i, ch in enumerate(rows):
