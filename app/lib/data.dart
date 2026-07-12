@@ -860,7 +860,7 @@ final appStatsProvider = FutureProvider.autoDispose<Map<String, int>>((ref) asyn
     sb.from('novels').count().eq('is_canonical', true).eq('hidden', false),
     sb.from('novels').count().eq('meta_translated', false),
     sb.from('novels').count().eq('status', 'completed').eq('is_canonical', true),
-    sb.from('chapters').count(), // tổng chương đã sync mục lục
+    sb.from('chapters').count(), // tổng dòng mục lục đang lưu (stub + chương đã làm)
     sb.from('chapters').count().eq('translation_status', 'done'),
     sb.from('chapters').count().eq('translation_status', 'done').gte('translated_at', day0),
     sb.from('chapters').count().eq('translation_status', 'failed'),
