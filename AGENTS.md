@@ -2,6 +2,20 @@
 
 Đọc file này TRƯỚC khi sửa bất cứ gì. Vi phạm mục "Bất di bất dịch" = làm lại.
 
+## Agent skills
+
+### Issue tracker
+
+Issues are tracked in GitHub Issues for this repo. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Use the default five-label triage vocabulary. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Use the single-context domain-doc layout. See `docs/agents/domain.md`.
+
 ## Bất di bất dịch
 
 1. **KHÔNG commit khi chưa kiểm chứng.** Tối thiểu:
