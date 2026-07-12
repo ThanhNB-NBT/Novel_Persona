@@ -119,6 +119,7 @@ class _GlossaryScreenState extends ConsumerState<GlossaryScreen> {
                   subtitle: Text([
                     _typeLabels[t['term_type']] ?? t['term_type'],
                     if (t['wrong_vi'] != null) 'không dịch: "${t['wrong_vi']}"',
+                    if (t['narrator_term'] != null) 'kể: ${t['narrator_term']}',
                     if (t['scope'] == 'global') 'toàn cục',
                   ].join(' · ')),
                   trailing: Row(mainAxisSize: MainAxisSize.min, children: [
@@ -267,6 +268,7 @@ class _GlossaryScreenState extends ConsumerState<GlossaryScreen> {
     final zh = TextEditingController(text: term?['term_zh'] ?? '');
     final vi = TextEditingController(text: term?['correct_vi'] ?? '');
     final wrong = TextEditingController(text: term?['wrong_vi'] ?? '');
+    final narr = TextEditingController(text: term?['narrator_term'] ?? '');
     String type = term?['term_type'] ?? 'other';
     showDialog(
       context: context,
@@ -329,6 +331,17 @@ class _GlossaryScreenState extends ConsumerState<GlossaryScreen> {
               ],
               onChanged: (v) => setState(() => type = v ?? 'other'),
             ),
+            // narrator reference (Q1): worker đọc cột này khi dịch — chỉ có nghĩa với nhân vật
+            if (type == 'person') ...[
+              const SizedBox(height: 8),
+              TextField(
+                controller: narr,
+                decoration: const InputDecoration(
+                    labelText: 'Người kể gọi (không bắt buộc)',
+                    hintText: 'hắn / nàng / y / lão / tên riêng',
+                    helperText: 'Cách LỜI KỂ gọi nhân vật này — bỏ trống = mặc định'),
+              ),
+            ],
           ]);
         }),
         actions: [
@@ -352,6 +365,10 @@ class _GlossaryScreenState extends ConsumerState<GlossaryScreen> {
                 'correct_vi': vi.text.trim(),
                 'wrong_vi': wrong.text.trim().isEmpty ? null : wrong.text.trim(),
                 'term_type': type,
+                // đổi loại khỏi person thì xoá luôn cách gọi cũ
+                'narrator_term': type == 'person' && narr.text.trim().isNotEmpty
+                    ? narr.text.trim()
+                    : null,
               };
               if (term == null) {
                 await sb.from('glossary_terms').insert({

@@ -776,7 +776,7 @@ final glossaryProvider = FutureProvider.autoDispose.family<List<Rec>, int>((
   return List<Rec>.from(
     await sb
         .from('glossary_terms')
-        .select('id, term_zh, wrong_vi, correct_vi, term_type, scope, approved')
+        .select('id, term_zh, wrong_vi, correct_vi, term_type, scope, approved, narrator_term')
         .or('novel_id.eq.$novelId,novel_id.is.null')
         .order('approved')
         .order('created_at', ascending: false),
