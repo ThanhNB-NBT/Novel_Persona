@@ -398,6 +398,45 @@ def _analyze_names(llm, chunk: str) -> tuple[list[dict], dict | None]:
     return [], None
 
 
+def _load_relations(novel_id: int) -> dict[tuple[str, str], dict]:
+    """Cặp xưng hô đã chốt của truyện. Bảng chưa migrate/DB lỗi → rỗng, dịch vẫn chạy."""
+    try:
+        rows = (db.sb().table("speaker_relations").select("*")
+                .eq("novel_id", novel_id).execute().data or [])
+    except Exception as e:
+        log.info("speaker_relations chưa dùng được (%s) — dịch không có memory xưng hô", e)
+        return {}
+    return {(r["speaker"], r["addressee"]): r for r in rows}
+
+
+def _merge_scene_relations(relations: dict, scene, novel_id: int,
+                           chapter_index: int) -> list[dict]:
+    """Cặp đã chốt ghi đè lên đoán của analyzer (một cặp một kiểu xưng hô suốt truyện);
+    cặp mới có term thì trả về để lưu. ponytail: bản lưu luôn thắng — quan hệ đổi
+    (bái sư/trở mặt) thì sửa tay dòng DB, nâng cấp = thêm confidence/chapter range."""
+    if not isinstance(scene, dict):
+        return []
+    new = []
+    for s in scene.get("speakers") or []:
+        if not isinstance(s, dict):
+            continue
+        sp, ad = s.get("speaker"), s.get("addressee")
+        if not sp or not ad or "?" in (sp, ad):
+            continue
+        known = relations.get((sp, ad))
+        if known:
+            for k in ("self_term", "address_term", "tone"):
+                if known.get(k):
+                    s[k] = known[k]
+        elif s.get("self_term") or s.get("address_term"):
+            row = {"novel_id": novel_id, "speaker": sp, "addressee": ad,
+                   "self_term": s.get("self_term"), "address_term": s.get("address_term"),
+                   "tone": s.get("tone"), "last_chapter": chapter_index}
+            relations[(sp, ad)] = row
+            new.append(row)
+    return new
+
+
 def _needs_scene_analysis(chunk: str, twopass: bool) -> bool:
     """Pass tên có thể tắt, nhưng chunk có hội thoại vẫn cần speaker/addressee."""
     return twopass or bool(_ZH_DIALOGUE_RE.search(chunk))
@@ -601,7 +640,28 @@ def _fix_omissions(chapter_llm, zh_chunk: str, vi: str) -> str:
     return vi
 
 
-def _init_style_bible(chapter_llm, nv: dict, novel_id: int, content_zh: str) -> dict | None:
+_STYLE_KEYS = ("pov", "setting", "han_viet", "tone", "rules")
+
+
+def _clean_style(style) -> dict | None:
+    """Chỉ giữ key/độ dài hợp lệ — JSON rác của model không được sống xuyên truyện."""
+    if not isinstance(style, dict):
+        return None
+    out = {}
+    for k in _STYLE_KEYS:
+        v = style.get(k)
+        if k == "rules":
+            rules = [r.strip()[:120] for r in v if isinstance(r, str) and r.strip()] \
+                if isinstance(v, list) else []
+            if rules:
+                out[k] = rules[:5]
+        elif isinstance(v, str) and v.strip():
+            out[k] = v.strip()[:80]
+    return out or None
+
+
+def _init_style_bible(chapter_llm, nv: dict, novel_id: int, content_zh: str,
+                      chapter_index: int | None = None) -> dict | None:
     """Sinh style bible MỘT lần từ metadata + đầu chương rồi lưu vào novels.
     Lỗi thì trả None — chương này dịch không style line, chương sau thử lại."""
     meta = json.dumps({
@@ -612,9 +672,13 @@ def _init_style_bible(chapter_llm, nv: dict, novel_id: int, content_zh: str) -> 
         res = chapter_llm.complete(
             prompts.SYSTEM_STYLE, f"{meta}\n\nĐoạn mở đầu:\n{content_zh[:2000]}",
             max_tokens=512)
-        style = _extract_json(res.text)
-        if not isinstance(style, dict) or not style:
+        style = _clean_style(_extract_json(res.text))
+        if not style:
             return None
+        if chapter_index is not None:
+            # style sinh từ chương giữa truyện kém đại diện hơn chương 1 — ghi lại
+            # nguồn để biết bản nào đáng tái tạo
+            style["src_chapter"] = chapter_index
         db.sb().table("novels").update({"translation_style": style}).eq("id", novel_id).execute()
         log.info("Novel %s: đã sinh style bible %s", novel_id, style)
         return style
@@ -734,7 +798,10 @@ def handle_chapter(job: dict, llm) -> None:
     twopass = nv.get("twopass_active", True)
     # style bible (Q1): có sẵn thì dùng, chưa có thì sinh 1 lần từ chương đang dịch
     style = nv.get("translation_style") or _init_style_bible(
-        chapter_llm, nv, ch["novel_id"], ch["content_zh"])
+        chapter_llm, nv, ch["novel_id"], ch["content_zh"], ch["chapter_index"])
+    # bộ nhớ xưng hô xuyên truyện (P1-4): cặp đã chốt đè lên đoán mới của analyzer
+    relations = _load_relations(ch["novel_id"])
+    new_relations: list[dict] = []
     style_line = prompts.build_style_line(style)
     existing_zh = {t["term_zh"] for t in terms if t.get("term_zh")}
     # snapshot TRƯỚC khi merge tên mới: chỉ insert gợi ý chưa có trong DB, tránh nhân bản
@@ -759,6 +826,8 @@ def handle_chapter(job: dict, llm) -> None:
             added = _merge_names(terms, existing_zh, names)
             new_names_this_chapter += len(added)
             detected += added  # tên pass-1 cũng phải vào DB — trước đây chỉ nằm RAM, chương sau mất
+            new_relations += _merge_scene_relations(
+                relations, scene, ch["novel_id"], ch["chapter_index"])
             scene_line = prompts.build_scene_line(scene)
 
         res = chapter_llm.complete(
@@ -837,6 +906,14 @@ def handle_chapter(job: dict, llm) -> None:
         glossary_version, summary_vi,
     )
     db.bump_translated_count(ch["novel_id"])
+
+    if new_relations:
+        try:
+            db.sb().table("speaker_relations").upsert(
+                new_relations, on_conflict="novel_id,speaker,addressee").execute()
+            log.info("Chương %s: lưu %d cặp xưng hô mới", ch["id"], len(new_relations))
+        except Exception as e:  # bảng chưa migrate → chương vẫn done, chỉ mất memory
+            log.info("Lưu speaker_relations lỗi (bỏ qua): %s", e)
 
     # lưu tên riêng phát hiện được làm term "gợi ý" (approved=false, scope=novel)
     # — get_glossary lấy cả gợi ý nên chương sau dùng lại ngay, giữ phiên âm nhất quán

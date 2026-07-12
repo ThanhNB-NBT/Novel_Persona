@@ -23,6 +23,40 @@ def test_quality_fuse_does_not_block_omission():
     _quality_fuse("老夫不答应。" * 30)(res)  # không raise
 
 
+def test_scene_line_drops_none_addressee():
+    """addressee=None từng lọt thành 'X nói với None' trong prompt (P2-7)."""
+    from novelworker.translator.prompts import build_scene_line
+    assert build_scene_line({"speakers": [{"speaker": "Lâm Tùng", "addressee": None}]}) is None
+    out = build_scene_line({"speakers": [
+        {"speaker": "Lâm Tùng", "addressee": "lão giả", "self_term": "vãn bối"}]})
+    assert "Lâm Tùng nói với lão giả" in out and "None" not in out
+
+
+def test_clean_style_drops_junk():
+    """Style bible JSON rác không được sống xuyên truyện (P2-8)."""
+    from novelworker.translator.worker import _clean_style
+    st = _clean_style({"pov": "ngôi ba", "junk": "x" * 999, "rules": ["a", 5, "b" * 200]})
+    assert st == {"pov": "ngôi ba", "rules": ["a", "b" * 120]}
+    assert _clean_style("không phải dict") is None
+    assert _clean_style({"junk": 1}) is None
+
+
+def test_merge_scene_relations():
+    """Cặp đã chốt đè lên đoán mới; cặp mới có term thì trả về để lưu (P1-4)."""
+    from novelworker.translator.worker import _merge_scene_relations
+    relations = {("A", "B"): {"self_term": "vi sư", "address_term": "đồ nhi"}}
+    scene = {"speakers": [
+        {"speaker": "A", "addressee": "B", "self_term": "ta", "address_term": "ngươi"},
+        {"speaker": "C", "addressee": "D", "self_term": "tại hạ"},
+        {"speaker": "E", "addressee": None, "self_term": "ta"},
+    ]}
+    new = _merge_scene_relations(relations, scene, 7, 12)
+    assert scene["speakers"][0]["self_term"] == "vi sư"  # bản lưu thắng
+    assert new == [{"novel_id": 7, "speaker": "C", "addressee": "D", "self_term": "tại hạ",
+                    "address_term": None, "tone": None, "last_chapter": 12}]
+    assert ("C", "D") in relations  # chunk sau cùng chương cũng dùng ngay
+
+
 def test_register_violation_ta_threshold():
     """'ta' lẻ tẻ = nghĩ thầm không ngoặc (hợp lệ); dày ≥3 = trôi POV (bug n1007 v3)."""
     from novelworker.translator.worker import _register_violation

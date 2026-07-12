@@ -233,7 +233,8 @@ def _translate_one(r: dict, llm) -> dict:
     from novelworker.translator import prompts
     from novelworker.translator.worker import (
         GLOSSARY_LINE, _ZH_DIALOGUE_RE, _analyze_names, _clean_output,
-        _extract_json, _fix_han_residue, _fix_omissions, _fix_soft_style, _merge_names, _pop_summary,
+        _extract_json, _fix_han_residue, _fix_omissions, _fix_soft_style, _load_relations,
+        _merge_names, _merge_scene_relations, _pop_summary,
         _is_first_person, _quality_fuse, _register_line, _split_chunks, _style_revise, _tail,
     )
     if True:  # giữ indent thân cũ — nội dung y nguyên translate_fresh trước đây
@@ -276,6 +277,8 @@ def _translate_one(r: dict, llm) -> dict:
             prev_summary, prev_tail = pd.get("summary_vi"), _tail(pd.get("content_vi"))
 
         existing_zh = {t["term_zh"] for t in terms if t.get("term_zh")}
+        # dry-run: ĐỌC memory xưng hô như production nhưng không ghi cặp mới
+        relations = {} if r.get("_from_file") else _load_relations(r["novel_id"])
         twopass = nv.get("twopass_active", True)
         first_person = _is_first_person(r["content_zh"])
         register_line = _register_line(r["content_zh"])
@@ -285,6 +288,7 @@ def _translate_one(r: dict, llm) -> dict:
             if twopass or _ZH_DIALOGUE_RE.search(chunk):
                 names, scene = _analyze_names(chapter_llm, chunk)
                 _merge_names(terms, existing_zh, names)
+                _merge_scene_relations(relations, scene, r["novel_id"], r["chapter_index"])
                 scene_line = prompts.build_scene_line(scene)
             res = chapter_llm.complete(
                 prompts.build_chapter_system(terms, chunk),

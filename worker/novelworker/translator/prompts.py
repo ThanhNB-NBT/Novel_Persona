@@ -142,7 +142,7 @@ def build_scene_line(scene: dict | None) -> str | None:
         if not isinstance(s, dict):
             continue
         sp, ad = s.get("speaker"), s.get("addressee")
-        if not sp or "?" in (sp, ad):
+        if not sp or not ad or "?" in (sp, ad):  # addressee None từng lọt "nói với None"
             continue
         seg = f"{sp} nói với {ad}"
         if s.get("self_term"):
