@@ -793,7 +793,7 @@ def handle_chapter(job: dict, llm) -> None:
 
         res = chapter_llm.complete(
             # chỉ chèn term xuất hiện trong chunk này → prompt gọn, model bám sát hơn
-            prompts.build_chapter_system(terms, chunk),
+            prompts.build_main_chapter_system(terms, chunk),
             # chunk sau nhận tóm tắt + đuôi bản dịch chunk trước làm ngữ cảnh nối mạch
             prompts.build_chapter_user(
                 ch.get("title_zh") if i == 0 else None, chunk, prev_summary,

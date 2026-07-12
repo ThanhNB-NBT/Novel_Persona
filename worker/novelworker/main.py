@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import random
 import time
 
 from . import db
@@ -356,10 +357,112 @@ def run_request(novel_id: int, up_to: int) -> None:
           " và `... translate` để dịch; theo dõi bảng chapters trong Supabase.")
 
 
+def run_ab(novel_id: int | None, up_to: int, out_dir: str, *, parallel: bool = True,
+           refetch: bool = False) -> None:
+    """Chay hai bo prompt tren cung chuong, chi ghi file test, khong ghi DB."""
+    from pathlib import Path
+
+    from .translator.ab import compare_chapter, dumps, render_html
+    from .translator.providers import build_chain
+
+    if refetch and novel_id is None:
+        candidates = (db.sb().table("chapters").select("novel_id")
+                      .limit(max(500, up_to * 20)).execute().data or [])
+        novel_ids = list({row["novel_id"] for row in candidates if row.get("novel_id")})
+        if not novel_ids:
+            raise RuntimeError("Khong tim thay truyen de refetch")
+        novel_id = random.choice(novel_ids)
+        print(f"AB refetch chon ngau nhien novel {novel_id}")
+    if refetch:
+        nv = (db.sb().table("novels").select("source_id,source_novel_id")
+              .eq("id", novel_id).single().execute().data)
+        source = (db.sb().table("sources").select("name")
+                  .eq("id", nv["source_id"]).single().execute().data)
+        adapter = build_adapters().get(source["name"])
+        if not adapter:
+            raise RuntimeError(f"Khong tim thay crawler dang bat cho source {source['name']}")
+        sync.sync_chapter_list(adapter, novel_id, nv["source_novel_id"])
+        missing = (db.sb().table("chapters").select("id,translation_status")
+                   .eq("novel_id", novel_id).is_("content_zh", "null")
+                   .order("chapter_index").limit(up_to).execute().data or [])
+        if missing:
+            ids = [row["id"] for row in missing]
+            db.sb().table("chapters").update({"translation_status": "queued"}).in_("id", ids).execute()
+            sync.ensure_chapters_fetched(adapter, novel_id)
+            for row in missing:
+                db.sb().table("chapters").update(
+                    {"translation_status": row["translation_status"]}).eq("id", row["id"]).execute()
+        print(f"AB refetch xong, da tai lai toi da {up_to} chuong cho novel {novel_id}")
+
+    def load_chapters(book_id: int) -> list[dict]:
+        return (db.sb().table("chapters")
+                .select("id,novel_id,chapter_index,title_zh,content_zh,summary_vi,content_vi")
+                .eq("novel_id", book_id)
+                .not_.is_("content_zh", "null").order("chapter_index")
+                .execute().data or [])
+
+    rows: list[dict] = []
+    if novel_id is None:
+        candidates = (db.sb().table("chapters").select("novel_id,chapter_index")
+                      .not_.is_("content_zh", "null")
+                      .limit(max(500, up_to * 20)).execute().data or [])
+        novel_ids = list({row["novel_id"] for row in candidates if row.get("novel_id")})
+        random.shuffle(novel_ids)
+        best_id: int | None = None
+        best_rows: list[dict] = []
+        for candidate in novel_ids:
+            possible = load_chapters(candidate)
+            if len(possible) > len(best_rows):
+                best_id, best_rows = candidate, possible
+            if len(possible) >= up_to:
+                novel_id, rows = candidate, possible[:up_to]
+                break
+        if novel_id is None and best_id is not None:
+            novel_id, rows = best_id, best_rows[:up_to]
+        if novel_id is None:
+            raise RuntimeError("Khong tim thay chuong nao co content_zh de chon ngau nhien")
+        print(f"AB chon ngau nhien novel {novel_id}, co {len(rows)} chuong co content_zh")
+
+    novel = db.sb().table("novels").select("id,title_vi,title_zh,genres").eq(
+        "id", novel_id).single().execute().data
+    if not rows:
+        rows = load_chapters(novel_id)[:up_to]
+    if not rows:
+        raise RuntimeError(f"Khong co chuong co content_zh cho novel {novel_id}")
+
+    terms, _ = db.get_glossary(novel_id)
+    chains = (build_chain(0), build_chain(1), build_chain(2))
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    novel_line = novel.get("title_vi") or novel.get("title_zh")
+    if novel_line and novel.get("genres"):
+        novel_line += " — thể loại: " + ", ".join(novel["genres"])
+
+    payloads = []
+    for row in rows:
+        previous = next((item for item in rows
+                         if item["chapter_index"] == row["chapter_index"] - 1), None)
+        payload = compare_chapter({
+            **row,
+            "novel_line": novel_line,
+            "prev_summary": (previous or {}).get("summary_vi"),
+            "prev_tail": (previous or {}).get("content_vi", "")[-1800:] or None,
+        }, terms, chains, parallel=parallel)
+        payloads.append(payload)
+        target = out / f"n{novel_id}_c{row['chapter_index']}.json"
+        target.write_text(dumps(payload), encoding="utf-8")
+        print(f"AB xong n{novel_id} c{row['chapter_index']} -> {target}")
+
+    (out / "index.html").write_text(
+        render_html(payloads, f"A/B translation — novel {novel_id}"), encoding="utf-8")
+    print(f"Da luu {len(rows)} cap ban dich vao {out.resolve()}")
+    print(f"Mo viewer: {(out / 'index.html').resolve()}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="novelworker")
     parser.add_argument("mode",
-                        choices=["crawl", "translate", "request", "add", "cost", "audit", "quality", "meta"])
+                        choices=["crawl", "translate", "request", "add", "cost", "audit", "quality", "meta", "ab"])
     parser.add_argument("--book-id", help="add: id truyện (số trong URL nguồn)")
     parser.add_argument("--source", default="shuhaige",
                         help="add: sources.name của nguồn crawl (mặc định shuhaige)")
@@ -367,6 +470,10 @@ def main() -> None:
     parser.add_argument("--up-to", type=int, default=10, help="request: dịch tới chương N")
     parser.add_argument("--fix", action="store_true",
                         help="audit: xếp lại hàng đợi các chương hỏng để dịch lại")
+    parser.add_argument("--out", default="ab_out", help="ab: thư mục lưu kết quả JSON")
+    parser.add_argument("--serial", action="store_true", help="ab: chạy tuần tự thay vì song song")
+    parser.add_argument("--refetch", action="store_true",
+                        help="ab: tải lại content_zh cho các chương thiếu nguyên văn")
     args = parser.parse_args()
     if args.mode == "cost":
         run_cost()
@@ -378,6 +485,8 @@ def main() -> None:
         if args.novel is None:
             parser.error("meta cần --novel <id>")
         run_meta(args.novel)
+    elif args.mode == "ab":
+        run_ab(args.novel, args.up_to, args.out, parallel=not args.serial, refetch=args.refetch)
     elif args.mode == "crawl":
         run_crawler()
     elif args.mode == "translate":

@@ -7,7 +7,9 @@ os.environ.setdefault("SUPABASE_URL", "https://example.supabase.co")
 os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "test")
 
 from novelworker.translator.prompts import (
-    MAX_TERMS_IN_PROMPT, build_chapter_system, build_chapter_user, build_metadata_user,
+    MAX_TERMS_IN_PROMPT, build_chapter_system, build_main_chapter_system,
+    build_reference_chapter_system,
+    build_chapter_user, build_metadata_user,
 )
 
 
@@ -56,6 +58,13 @@ def main() -> None:
     meta = build_metadata_user(novel, terms)
     assert "林松 → Lâm Tùng" in meta and "苏雨" not in meta
     assert "Bảng thuật ngữ" not in build_metadata_user(novel)
+    reference = build_reference_chapter_system(terms, "林松看着苏雨。")
+    assert "CHIẾN LƯỢC DỊCH CHÍNH" in reference
+    assert "SUMMARY và GLOSSARY_JSON" in reference
+    main = build_main_chapter_system(terms, "林松看着苏雨。")
+    assert "KẾT HỢP REFERENCE + V2" in main
+    assert "Xác định người nói" in main
+    assert "Không gộp hai đoạn" in main
 
 
 if __name__ == "__main__":
