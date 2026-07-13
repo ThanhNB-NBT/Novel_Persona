@@ -31,10 +31,7 @@ import logging
 logging.basicConfig(level=logging.INFO, format="%(levelname).1s %(name)s: %(message)s")
 
 from novelworker import db
-from novelworker.translator.worker import (
-    _is_first_person, _register_violation, check_translation, han_ratio,
-    self_reference_omissions,
-)
+from novelworker.translator.worker import check_translation, han_ratio
 
 # ---------- lint: mỗi luật = (tên, regex | hàm) — ăn khớp với điều prompt CẤM ----------
 
@@ -119,8 +116,18 @@ def fidelity_issues(zh: str, vi: str) -> list[str]:
 
 
 def _self_reference_omissions(zh: str, vi: str) -> list[str]:
-    """Alias tương thích cho test/report cũ; luật thật nằm trong production worker."""
-    return self_reference_omissions(zh, vi)
+    """Metric evaluator; production chỉ nhắc trong prompt và không sửa hậu kỳ."""
+    rules = [
+        (r"老夫(?!老妻)", ("lão phu", "lão già này", "lão đây")),
+        (r"老子", ("lão tử", "ông đây", "bố đây", "ta đây", "bố mày", "ông mày")),
+        (r"本座", ("bổn tọa", "bản tọa")),
+        (r"在下(?![面方风头边来去])", ("tại hạ",)),
+        (r"晚辈", ("vãn bối", "hậu bối")),
+    ]
+    low = vi.lower()
+    return [f"{m.group(0)} thiếu dấu vết ({'/'.join(accepted)})"
+            for pat, accepted in rules if (m := re.search(pat, zh))
+            and not any(term in low for term in accepted)]
 
 
 def _dialogue_self_minh(vi: str) -> list[str]:
@@ -140,12 +147,8 @@ def lint(zh: str, vi: str) -> list[str]:
     mech = check_translation(zh, vi)          # fuse cơ học: sót Hán/cụt/mất đoạn
     if mech:
         problems.append(f"[fuse] {mech}")
-    reg = _register_violation(vi, allow_toi=_is_first_person(zh))  # xưng hô lời kể
-    if reg:
-        problems.append(f"[fuse] {reg}")
-    # omission tự xưng KHÔNG còn nằm trong fuse (worker sửa bằng _fix_omissions) —
-    # eval vẫn phải báo để biết lượt sửa có sót không
-    for missing in self_reference_omissions(zh, vi):
+    # Xưng hô/tự xưng là metric đánh giá prompt, không phải fuse production.
+    for missing in _self_reference_omissions(zh, vi):
         problems.append(f"[xưng hô] {missing}")
     for issue in fidelity_issues(zh, vi):
         problems.append(f"[fidelity] {issue}")
@@ -252,9 +255,9 @@ def _translate_one(r: dict, llm) -> dict:
     from novelworker.translator import prompts
     from novelworker.translator.worker import (
         GLOSSARY_LINE, _analyze_names, _clean_output,
-        _extract_json, _fix_han_residue, _fix_omissions, _fix_soft_style,
+        _extract_json, _fix_han_residue,
         _merge_names, _pop_summary,
-        _is_first_person, _quality_fuse, _register_line, _split_chunks, _style_revise, _tail,
+        _quality_fuse, _register_line, _split_chunks, _tail,
     )
     if r.get("_from_file"):
         terms = []
@@ -296,19 +299,18 @@ def _translate_one(r: dict, llm) -> dict:
 
     existing_zh = {t["term_zh"] for t in terms if t.get("term_zh")}
     twopass = nv.get("twopass_active", True)
-    first_person = _is_first_person(r["content_zh"])
     register_line = _register_line(r["content_zh"])
     parts = []
     for i, chunk in enumerate(_split_chunks(r["content_zh"])):
         if twopass:
             _merge_names(terms, existing_zh, _analyze_names(chapter_llm, chunk))
         res = chapter_llm.complete(
-            prompts.build_chapter_system(terms, chunk),
+            prompts.build_main_chapter_system(terms, chunk),
             prompts.build_chapter_user(
                 r.get("title_zh") if i == 0 else None, chunk, prev_summary,
                 prev_tail=prev_tail, novel_line=novel_line, register_line=register_line,
                 style_line=style_line),
-            validate=_quality_fuse(chunk, first_person),
+            validate=_quality_fuse(chunk),
         )
         text = res.text
         m = GLOSSARY_LINE.search(text)
@@ -316,11 +318,9 @@ def _translate_one(r: dict, llm) -> dict:
             text = text[:m.start()].rstrip()
         text, summary = _pop_summary(text)
         prev_summary = summary or prev_summary
-        fixed = _fix_omissions(chapter_llm, chunk, _clean_output(text))
-        parts.append(_fix_han_residue(chapter_llm, fixed))
+        parts.append(_fix_han_residue(chapter_llm, _clean_output(text), terms))
         prev_tail = _tail(parts[-1])
-    text = _style_revise(chapter_llm, _fix_soft_style("\n\n".join(parts)), r["content_zh"])
-    text = _fix_omissions(chapter_llm, r["content_zh"], text)
+    text = "\n\n".join(parts)
     return {**r, "content_vi": text, "model_used": "(fresh-full)"}
 
 

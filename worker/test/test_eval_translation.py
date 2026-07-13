@@ -18,8 +18,7 @@ def test_self_reference_no_false_block():
 
 
 def test_quality_fuse_does_not_block_omission():
-    """Omission KHÔNG nằm trong fuse: retry mù không chữa được model lì (n1007 kẹt
-    3/3 lượt → job fail vĩnh viễn). Lượt _fix_omissions sửa có mục tiêu sau dịch."""
+    """Omission chỉ dùng để đánh giá prompt; production không sửa lại bản dịch hậu kỳ."""
     from novelworker.translator.worker import _quality_fuse
     res = type("R", (), {"text": "Hắn không đồng ý. " * 30, "model": "test"})()
     _quality_fuse("老夫不答应。" * 30)(res)  # không raise
@@ -70,20 +69,10 @@ def test_call_stats_accumulate_across_pin(monkeypatch):
     assert P.get_call_stats() == {"calls": 2, "prompt_tokens": 20, "completion_tokens": 10}
 
 
-def test_register_violation_ta_threshold():
-    """'ta' lẻ tẻ = nghĩ thầm không ngoặc (hợp lệ); dày ≥3 = trôi POV (bug n1007 v3)."""
-    from novelworker.translator.worker import _register_violation
-    assert _register_violation("Xem ra ta đã tái sinh. Hắn đứng dậy.") is None
-    assert _register_violation("Ta đi tới. Ta nhìn quanh. Ta thở dài.") is not None
-    assert _register_violation("Anh ta cười.") is not None  # cụm không thể nhầm: chặn từ 1
-    assert _register_violation("Tôi đi. Tôi về. Tôi ngủ.", allow_toi=True) is None
-    assert _register_violation("Hắn nhìn quanh.\n— Ta không sợ.") is None
-
-
-def test_audit_reason_includes_hard_register_and_self_reference_errors():
+def test_audit_reason_only_blocks_structural_errors():
     from novelworker.translator.worker import _audit_reason
-    assert _audit_reason("他笑了。", "Anh ta bật cười.")
-    assert _audit_reason("老子不服。", "Ta không phục.")
+    assert _audit_reason("他笑了。", "Anh ta bật cười.") is None
+    assert _audit_reason("老子不服。", "Ta không phục.") is None
     assert _audit_reason("他笑了。", "Hắn bật cười.") is None
 
 
@@ -104,6 +93,15 @@ def test_apply_line_fixes_accepts_wrapped_object():
     assert applied == 1 and fixed.endswith("Rồi đi ra ngoài.")
 
 
+def test_apply_line_fixes_accepts_single_object_and_line_map():
+    from novelworker.translator.worker import _apply_line_fixes
+    vi = "Hắn cúi đầu.\nTrên áo còn chữ Trung."
+    fixed, n = _apply_line_fixes(vi, {"line": 2, "new": "Trên áo viết chữ tù."})
+    assert n == 1 and fixed.endswith("chữ tù.")
+    fixed, n = _apply_line_fixes(vi, {"2": "Trên áo viết chữ tù."})
+    assert n == 1 and fixed.endswith("chữ tù.")
+
+
 def test_apply_line_fixes_accepts_old_new_format():
     """SYSTEM_REVISE cũ dạy old/new — model trả kiểu đó vẫn phải áp được (v5: 0 câu thay)."""
     from novelworker.translator.worker import _apply_line_fixes
@@ -111,27 +109,6 @@ def test_apply_line_fixes_accepts_old_new_format():
     fixed, applied = _apply_line_fixes(
         vi, [{"old": "Hắn không khỏi thở dài.", "new": "Hắn bất giác thở dài."}])
     assert applied == 1 and fixed.endswith("Hắn bất giác thở dài.")
-
-
-def test_fix_soft_style_convertese():
-    """'không khỏi'/'tổng cảm thấy' lì đòn → vá máy móc, không phó mặc LLM revise (v4)."""
-    from novelworker.translator.worker import _fix_soft_style
-    assert _fix_soft_style("Diệp Lăng không khỏi thở dài.") == "Diệp Lăng thở dài."
-    assert _fix_soft_style("Không khỏi bật cười.") == "Bật cười."
-    # nghĩa thật (y học/kết quả) phải giữ nguyên
-    assert _fix_soft_style("Bệnh này chữa không khỏi.") == "Bệnh này chữa không khỏi."
-    assert _fix_soft_style("Hắn lo mãi không khỏi bệnh.") == "Hắn lo mãi không khỏi bệnh."
-    assert _fix_soft_style("Tổng cảm thấy có gì đó sai.") == "Cứ cảm thấy có gì đó sai."
-
-
-def test_revise_rule_han_repeat_any_distance():
-    """Luật lặp 'hắn' của worker phải khớp evaluator: ≥3/câu kể cả cách nhau >60 ký tự."""
-    from novelworker.translator.worker import _style_flags
-    sent = ("Hắn vẫn còn nhớ rõ cảnh hoàng đế nghe tin con gái yêu bị một kẻ bạc phận "
-            "tam đẳng bá tước như hắn hủy hoại thanh danh, định lăng trì xử hắn.")
-    assert any("lặp 'hắn'" in issue for _, issue in _style_flags(sent))
-    assert not any("lặp 'hắn'" in issue
-                   for _, issue in _style_flags("Hắn cười. Hắn đi. Hắn ngủ."))
 
 
 def test_han_repeat_not_across_paragraphs():
@@ -199,19 +176,11 @@ def test_gia_toc_style():
 # lỗi tự tìm thấy khi đọc 5 file baseline chưa được user chấm (2026-07-12)
 
 def test_transliteration_fuse():
-    """n1052: cả chương phiên âm Hán-Việt từng chữ, 0% chữ Hán nên fuse cũ lọt."""
-    from novelworker.translator.worker import check_translation
-    translit = ("Vân Ẩn quần sơn chiếm địa thiên lý, chủ phong cao sủng nhập vân, "
-                "thường niên vân vụ liễu nhiễu, do như tiên cảnh! Lạc Ly thán hơi "
-                "nhất thanh, song mục mãn thị ngưng trọng, chúng nhân giai thị hữu "
-                "đại sự phát sinh, thử tam nhân kỳ trung nhất nhân tức thị tự kỷ. ") * 8
-    problem = check_translation("原文" * 200, translit)
-    assert problem and "phiên âm" in problem, problem
-    real = ("Hắn nhìn quanh bốn phía, mục đích của chuyến đi này là tìm linh dược. "
-            "Giai đoạn đầu tu luyện tốn không ít chi phí, nhưng theo nguyên tắc của "
-            "tông môn, đệ tử nội môn được cấp linh thạch hàng tháng. Nàng khẽ gật đầu, "
-            "đưa cho hắn một chiếc túi gấm, bên trong là hài nhi thảo vừa hái sáng nay. ") * 8
-    assert check_translation("原文" * 100, real) is None
+    """Văn phiên âm máy móc được ngăn từ prompt, không hard-fail hậu kỳ bằng heuristic."""
+    from novelworker.translator import prompts
+    system = prompts.build_main_chapter_system([], "原文")
+    assert "Không ghép nửa dịch nghĩa nửa phiên âm" in system
+    assert "Tránh văn convert" in system
 
 
 def test_english_onomatopoeia():
@@ -227,43 +196,12 @@ def test_quality_fuse_blocks_any_han_residue():
     assert "ký tự Hán" in check_translation("衣服写着囚字。", 'Áo viết chữ "囚".')
 
 
-def test_fix_register_bare_anh_in_narration_only():
-    from novelworker.translator.worker import _fix_register
-    text = 'Linh hồn anh chiếm lấy thân xác. Anh nhìn quanh. "Anh đi đâu?" Một vị anh hùng tới.'
-    assert _fix_register(text) == 'Linh hồn hắn chiếm lấy thân xác. Hắn nhìn quanh. "Anh đi đâu?" Một vị anh hùng tới.'
-
-
-def test_third_person_rejects_narrator_ta_but_not_dialogue():
-    from novelworker.translator.worker import _register_line, _register_violation
-    # 'ta' trong thoại không tính; lời kể chỉ chặn khi dày ≥3 (nghĩ thầm lẻ tẻ hợp lệ)
-    assert _register_violation('Ta nhìn quanh. Ta bước đi. Ta dừng lại. "Ta không sợ."')
-    assert not _register_violation('Hắn nhìn quanh. "Ta không sợ." Ta sai rồi chăng?')
+def test_register_line_uses_source_pov():
+    from novelworker.translator.worker import _register_line
     assert "NGÔI BA" in _register_line('他看向四周。“我不怕。”')
     assert "NGÔI NHẤT" in _register_line('我看向四周。')
     # 1 chữ 我 lẻ (từ ghép 自我安慰) giữa 36 chữ 他 KHÔNG được lật cả chương sang ngôi nhất
     assert "NGÔI BA" in _register_line('他也只能自我安慰。' + '他走了。' * 3)
-
-
-def test_fix_soft_style_chang():
-    from novelworker.translator.worker import _fix_soft_style
-    out = _fix_soft_style("Hắn chẳng nói. Chẳng ai tin. Chẳng lẽ vậy sao? Nó chẳng qua là mơ.")
-    assert out == "Hắn không nói. Không ai tin. Chẳng lẽ vậy sao? Nó chẳng qua là mơ."
-
-
-def test_style_flags_and_apply():
-    from novelworker.translator.worker import _apply_fixes, _style_flags
-    vi = ('"Ngài cần phu nhân chăng?" "Mình chắc chắn đã bỏ lỡ gì đó."\n'
-          "Nàng gật đầu một cái rồi rời đi. Hắn im lặng.")
-    flags = _style_flags(vi)
-    flagged = " | ".join(s for s, _ in flags)
-    assert "chăng?" in flagged and "Mình chắc chắn" in flagged and "một cái" in flagged
-    assert all("Hắn im lặng" not in s for s, _ in flags)
-    fixed, n = _apply_fixes(vi, [
-        {"old": '"Ngài cần phu nhân chăng?"', "new": '"Ngài có cần phu nhân không?"'},
-        {"old": "không có trong bản dịch", "new": "bị bỏ qua"},
-        {"old": "Nàng gật đầu một cái rồi rời đi.", "new": "Nàng gật đầu rồi rời đi."},
-    ])
-    assert n == 2 and "có cần phu nhân không" in fixed and "gật đầu rồi rời đi" in fixed
 
 
 def test_style_line_and_narrator_term():
@@ -297,31 +235,8 @@ def test_analyze_names_shapes():
     assert _analyze_names(FakeLLM("not json"), "x") == []
 
 
-def test_fix_omissions_with_fake_llm():
-    from novelworker.translator.worker import _fix_omissions, check_translation
-
-    class FakeRes:
-        text = '[{"line": 1, "new": "Ai nói bậy, ông đây xé nát mồm!"}]'
-
-    class FakeLLM:
-        def complete(self, system, user, **kw):
-            assert "老子" in user and "BẢN DỊCH" in user
-            return FakeRes()
-
-    zh = "谁在胡说八道，老子撕烂他的嘴！"
-    vi = "Ai nói bậy, ta xé nát mồm!"
-    assert _fix_omissions(FakeLLM(), zh, vi) == "Ai nói bậy, ông đây xé nát mồm!"
-
-    class Boom:
-        def complete(self, *a, **k):
-            raise AssertionError("không được gọi khi không thiếu gì")
-    assert _fix_omissions(Boom(), "他笑了。", "Hắn bật cười.") == "Hắn bật cười."
-    # omission KHÔNG còn chặn ở fuse — không tạo job kẹt vĩnh viễn
-    assert check_translation(zh * 30, ("Ai nói bậy, ta xé nát mồm! Hắn nhìn quanh đầy giận dữ. " * 30)) is None
-
-
 def test_fix_han_residue_by_line():
-    from novelworker.translator.worker import _fix_han_residue
+    from novelworker.translator.worker import _fix_han_residue, _hanviet_fallback
 
     class FakeLLM:
         def complete(self, *a, **k):
@@ -331,26 +246,31 @@ def test_fix_han_residue_by_line():
     assert _fix_han_residue(FakeLLM(), "Hắn cúi đầu.\nTrên áo viết chữ 囚.") == (
         "Hắn cúi đầu.\nTrên áo viết chữ tù.")
 
-
-def test_style_revise_with_fake_llm():
-    from novelworker.translator.worker import _style_revise
-
-    class FakeRes:
-        text = '[{"line": 1, "new": "Ngài có cần phu nhân không?"}]'
-
-    class FakeLLM:
-        def complete(self, system, user, **kw):
-            assert "DÒNG 1:" in user
-            return FakeRes()
-
-    assert _style_revise(FakeLLM(), "Ngài cần phu nhân chăng?") == "Ngài có cần phu nhân không?"
-
-    class BadLLM:
+    class NoFixLLM:
         def complete(self, *a, **k):
-            return type("R", (), {"text": '[{"line": 1, "new": "囚"}]'})()
-    assert _style_revise(BadLLM(), "Ngài cần phu nhân chăng?", "他说。") == "Ngài cần phu nhân chăng?"
-    # không có câu lỗi → không gọi LLM, trả nguyên văn
-    class Boom:
-        def complete(self, *a, **k):
-            raise AssertionError("không được gọi")
-    assert _style_revise(Boom(), "Hắn im lặng rời đi.") == "Hắn im lặng rời đi."
+            return type("R", (), {"text": '{"line": 2, "new": "Trên áo vẫn viết chữ 囚."}'})()
+
+    # Glossary chính xác hơn phiên âm từng chữ và phải chạy trước LLM.
+    assert _fix_han_residue(NoFixLLM(), "Dòng 鲜血 tràn ra.", [
+        {"term_zh": "鲜血", "correct_vi": "máu tươi"}
+    ]) == "Dòng máu tươi tràn ra."
+    # LLM không sửa được → bảng Hán-Việt là fallback cuối, không làm fail cả chương.
+    fixed, n = _hanviet_fallback("Trên áo còn chữ 囚.")
+    assert fixed == "Trên áo còn chữ Tù." and n == 1
+    fixed, _ = _hanviet_fallback("Vết thương phun 鲜血 tung tóe.")
+    assert fixed == "Vết thương phun máu tươi tung tóe."
+    fixed, _ = _hanviet_fallback("Nhận được vật phẩm 鲜血 trong kho đồ.")
+    assert fixed == "Nhận được vật phẩm Tiên Huyết trong kho đồ."
+    # Ngữ cảnh hành động phải thắng từ khóa vật phẩm; không nhìn lố sang câu bên cạnh.
+    fixed, _ = _hanviet_fallback("Hắn đánh rơi vật phẩm. Vết thương phun 鲜血 tung tóe.")
+    assert fixed.endswith("Vết thương phun máu tươi tung tóe.")
+    fixed, _ = _hanviet_fallback("Bình linh dược vỡ, tay hắn chảy 鲜血.")
+    assert fixed == "Bình linh dược vỡ, tay hắn chảy máu tươi."
+    # Tên được đóng ngoặc hoặc có hậu tố loại vật phẩm thì giữ âm Hán-Việt.
+    fixed, _ = _hanviet_fallback("Nhận được 【鲜血】.")
+    assert fixed == "Nhận được 【Tiên Huyết】."
+    fixed, _ = _hanviet_fallback("Hắn luyện thành 鲜血丹.")
+    assert fixed == "Hắn luyện thành Tiên Huyết Đan."
+    # Glossary rác từ model không được làm hỏng lượt sửa.
+    assert _fix_han_residue(NoFixLLM(), "Trên áo còn chữ 囚.", ["bad"]) == (
+        "Trên áo còn chữ Tù.")

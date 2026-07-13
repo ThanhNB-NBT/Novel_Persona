@@ -6,8 +6,8 @@ os.environ.setdefault("SUPABASE_URL", "https://example.supabase.co")
 os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "test")
 
 from novelworker.translator.worker import (
-    GLOSSARY_LINE, _clean_output, _extract_json, _merge_names, _pop_summary,
-    _fix_register, _is_unique_violation, _register_violation, _split_chunks, _strip_meta,
+    GLOSSARY_LINE, _clean_output, _extract_json, _merge_names, _pop_summary, _term_dicts,
+    _is_unique_violation, _split_chunks, _strip_meta,
     check_translation, han_ratio,
 )
 
@@ -62,45 +62,18 @@ def main() -> None:
     assert "mất hết xuống dòng" in (check_translation(zh5, "một khối chữ liền dài " * 3) or "")
     assert check_translation("原文本", "Bản dịch ổn.\nĐủ dòng.") is None
     assert check_translation("", "Chỉ soi tỷ lệ Hán khi thiếu bản gốc.") is None
-    # lời kể: chỉ bắt cụm không thể nhầm (anh ta/cô ấy/tôi...)
-    assert _register_violation("Anh ta quay người.")
-    assert _register_violation("Tôi bước tới.")
-    assert _register_violation("Tôi bước tới.", allow_toi=True) is None  # truyện ngôi nhất
     from novelworker.translator.worker import _is_first_person
     assert _is_first_person("我走了过去。“你好。”")            # 我 trong lời kể
     assert not _is_first_person("他走了。“我不去！”他说。")     # 我 chỉ trong thoại
-    assert _register_violation("Cô ta bước đi.")   # nữ trong lời kể phải 'nàng'
-    assert _register_violation("Hắn quay người.") is None
-    assert _register_violation("Cô gái bước đi.") is None   # danh từ, hợp lệ
-    # từ ghép chứa 'anh/cô/tôi' KHÔNG được dính oan (từng chặn nhầm cả chương)
-    for ok in ("Anh hùng xuất thiếu niên.", "Hắn đạt tới Nguyên Anh kỳ.",
-               "Đám tinh anh của tông môn.", "Anh trai quay người.",
-               "Cô nương kia cười.", "Hắn tôi luyện thân thể."):
-        assert _register_violation(ok) is None, ok
-    # thoại trong ngoặc kép: anh/em/tôi được phép, cả ngoặc thẳng lẫn ngoặc cong
-    assert _register_violation('"Anh chờ em với!" Nàng gọi.') is None
-    assert _register_violation("“Tôi không tin anh.” Hắn lắc đầu.") is None
-    assert _register_violation("“Cô ấy đâu rồi?” Hắn hỏi.") is None
-    assert _register_violation('"Lâm ca, anh xem này." Hắn đưa kiếm cho anh ta.')  # ngoài ngoặc vẫn bắt
-    # vá máy móc đại từ kể sai: ngoài ngoặc thay, trong thoại giữ nguyên
-    assert _fix_register("Cô ta bước đi. Anh ta cười.") == "Nàng bước đi. Hắn cười."
-    assert _fix_register("Ông ta gật đầu.") == "Lão gật đầu."
-    # 'Cô/Anh' trần đầu câu kể → vá; danh từ/từ ghép/giữa câu giữ nguyên
-    assert _fix_register("Cô không tin. Cô gái cười.") == "Nàng không tin. Cô gái cười."
-    assert _fix_register("Anh bước tới. Anh hùng cứu mỹ nhân.") == "Hắn bước tới. Anh hùng cứu mỹ nhân."
-    assert _fix_register("Cô Lâm dạy học.") == "Cô Lâm dạy học."  # 'Cô' + tên riêng giữ nguyên
-    assert _fix_register('"Cô ấy đâu?" Cô ấy đã đi rồi.') == '"Cô ấy đâu?" Nàng đã đi rồi.'
-    assert _fix_register("Anh trai hắn tới.") == "Anh trai hắn tới."  # 'anh trai' không bị vá
-    assert _register_violation(_fix_register("Cô ta nhìn anh ta.")) is None
-    # gốc dài mà bản dịch < 1.2x → dịch sót (ngưỡng 0.3 cũ chỉ bắt cụt thảm họa)
-    assert "quá ngắn" in (check_translation("字" * 400, "v" * 450) or "")
-    assert check_translation("字" * 400, "v" * 500) is None
-    # gốc ≥10 đoạn mà bản dịch mất >40% số đoạn → model nuốt đoạn
+    # Chỉ chặn bản cụt rõ ràng (<60% gốc), không bắt oan văn dịch cô đọng.
+    assert "quá ngắn" in (check_translation("字" * 400, "v" * 200) or "")
+    assert check_translation("字" * 400, "v" * 250) is None
+    # Gốc ≥10 đoạn: chỉ chặn khi mất >70% số đoạn.
     zh12 = "\n".join("第几行内容在这里" * 8 for _ in range(12))
-    vi5_du_dai = "\n".join("dòng dịch đủ dài để qua kiểm tra độ dài tổng thể nhé " * 8 for _ in range(5))
-    assert "mất đoạn" in (check_translation(zh12, vi5_du_dai) or "")
-    vi12 = "\n".join("dòng dịch đủ dài để qua kiểm tra độ dài tổng thể nhé " * 4 for _ in range(12))
-    assert check_translation(zh12, vi12) is None
+    vi3_du_dai = "\n".join("dòng dịch đủ dài để qua kiểm tra độ dài tổng thể nhé " * 8 for _ in range(3))
+    assert "mất đoạn" in (check_translation(zh12, vi3_du_dai) or "")
+    vi4 = "\n".join("dòng dịch đủ dài để qua kiểm tra độ dài tổng thể nhé " * 12 for _ in range(4))
+    assert check_translation(zh12, vi4) is None
 
     # _pop_title: khuôn «TIÊU ĐỀ: ...», nhãn biến thể, fallback dòng đầu ngắn, dòng đầu dài → không bóc
     from novelworker.translator.worker import _pop_title
@@ -150,6 +123,9 @@ def main() -> None:
     assert terms[-1]["term_zh"] == "苏雨" and terms[-1]["note"] == "nữ"
     # gọi lại với chính tên đó → không thêm nữa
     assert _merge_names(terms, existing, [{"zh": "苏雨", "vi": "Tô Vũ"}]) == []
+    assert _term_dicts(["rác", {"zh": "鲜血", "vi": "máu tươi"}, None]) == [
+        {"zh": "鲜血", "vi": "máu tươi"}
+    ]
 
     # _tail: cắt đuôi tại ranh giới đoạn, ngắn thì giữ nguyên, rỗng → None
     from novelworker.translator.worker import _tail

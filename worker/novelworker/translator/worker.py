@@ -71,6 +71,17 @@ def _keep_job_lock(job_id: int, worker_id: str, stop: threading.Event, interval:
 
 
 HAN_CHARS = re.compile(r"[一-鿿㐀-䶿]")
+HAN_RUNS = re.compile(r"[一-鿿㐀-䶿]+")
+_ITEM_CONTEXT = re.compile(
+    r"\b(?:vật phẩm|nguyên liệu|đạo cụ|đan dược|linh dược|bình|lọ|thu thập|"
+    r"luyện chế|phẩm cấp|kho đồ|túi đồ|trang bị|nhận được|phần thưởng|"
+    r"công thức|dược liệu|tên gọi)\b", re.I)
+_BLOOD_ACTION_CONTEXT = re.compile(
+    r"\b(?:chảy|phun|trào|tuôn|rỉ|ứa|nhỏ|bắn|văng|phun ra|trào ra|ho ra|"
+    r"nôn ra|ọc ra|mất máu|vết thương|miệng|mũi|khóe môi|cơ thể|thi thể|"
+    r"nhuộm đỏ|đầm đìa)\b", re.I)
+_ITEM_WRAPPER = re.compile(r"[《〈「『【\[（(]\s*$")
+_ITEM_SUFFIX = re.compile(r"^\s*(?:丹|丸|瓶|精华|药|液|晶|石|符|剑|刀|珠|草|花|果)")
 
 
 def han_ratio(text: str) -> float:
@@ -78,59 +89,13 @@ def han_ratio(text: str) -> float:
     return len(HAN_CHARS.findall(text)) / max(len(text), 1)
 
 
-# Hư từ Hán-Việt dày đặc = model PHIÊN ÂM từng chữ thay vì dịch nghĩa (novel 1052:
-# "chủ phong cao sủng nhập vân, thường niên vân vụ liễu nhiễu" — 0% chữ Hán nên các
-# fuse khác đều lọt). Văn Việt thật các từ này hiếm ("mục đích/giai đoạn/chi phí"
-# chỉ vài lần/chương) → mật độ cao là phiên âm chắc chắn.
-_TRANSLIT_MARKERS = re.compile(
-    r"\b(?:(?<!mục )đích(?! thân| thị| đáng)|chi(?! phí| tiêu| tiết| nhánh)"
-    r"|hữu(?! ích| hạn| nghị| dụng)|(?<!quy )(?<!nguyên )tắc|giai(?! đoạn| nhân| điệu)"
-    r"|(?<!hài )(?<!nữ )nhi(?! đồng)|nãi|liễu|chúng nhân|khai khẩu|nhất cá)\b", re.I)
-
-
-def _translit_ratio(vi: str) -> float:
-    words = len(vi.split())
-    return len(_TRANSLIT_MARKERS.findall(vi)) / max(words, 1)
-
-
-# Check này giờ nằm TRONG fuse production (chặn + retry) nên phía gốc phải loại
-# từ ghép trùng mặt chữ (在下面 "ở dưới", 老夫老妻 "vợ chồng già"...) và phía dịch
-# phải nhận đủ biến thể hợp lệ — dính oan là đốt retry/fallback cả chunk.
-SELF_REFERENCE_CONSTRAINTS: list[tuple[re.Pattern, tuple[str, ...]]] = [
-    (re.compile(r"老夫(?!老妻)"), ("lão phu", "lão già này", "lão đây")),
-    (re.compile(r"老子"), ("lão tử", "ông đây", "bố đây", "ta đây", "bố mày", "ông mày", "lão đây")),
-    (re.compile(r"本座"), ("bổn tọa", "bản tọa")),
-    # 本尊 còn nghĩa "chân thân/bản thể" (phân thân–chân thân) — không phải tự xưng
-    (re.compile(r"本尊"), ("bản tôn", "bổn tôn", "chân thân", "bản thể")),
-    (re.compile(r"在下(?![面方风头边来去])"), ("tại hạ",)),
-    (re.compile(r"晚辈"), ("vãn bối", "hậu bối")),
-    (re.compile(r"贫道"), ("bần đạo",)),
-    (re.compile(r"贫僧"), ("bần tăng",)),
-    (re.compile(r"哀家"), ("ai gia",)),
-    (re.compile(r"朕"), ("trẫm",)),
-    (re.compile(r"微臣"), ("vi thần", "thần")),
-    (re.compile(r"臣妾"), ("thần thiếp",)),
-]
-
-
-def self_reference_omissions(zh: str, vi: str) -> list[str]:
-    """Tự xưng giàu sắc thái có trong gốc nhưng biến mất khỏi bản dịch."""
-    low = vi.lower()
-    out = []
-    for pat, accepted in SELF_REFERENCE_CONSTRAINTS:
-        hits = pat.findall(zh)
-        if hits and not any(term in low for term in accepted):
-            out.append(f"{hits[0]}×{len(hits)} thiếu dấu vết ({'/'.join(accepted)})")
-    return out
-
-
 def check_translation(content_zh: str, content_vi: str) -> str | None:
     """Trả LÝ DO nếu bản dịch hỏng, None nếu đạt. Dùng chung cho: fuse lúc dịch (chunk vs
     output) VÀ lệnh `audit` quét chương đã lưu (content_zh vs content_vi).
 
-    - còn >5% ký tự Hán → trả nguyên văn tiếng Trung.
-    - ngắn <120% gốc (zh→vi bình thường 2.5-3.5x) → dịch sót đoạn; chương ngắn ngưỡng 30%.
-    - gốc ≥10 đoạn mà bản dịch mất >40% số đoạn → model nuốt đoạn.
+    - còn ký tự Hán → repair hoặc trả nguyên văn tiếng Trung.
+    - ngắn <60% gốc → bản cụt rõ ràng.
+    - gốc ≥10 đoạn mà bản dịch mất >70% số đoạn → model nuốt đoạn nghiêm trọng.
     - gốc nhiều đoạn nhưng bản dịch mất hết xuống dòng → gộp thành 1 khối chữ liền.
     (content_zh rỗng thì bỏ qua 2 kiểm tra cần đối chiếu gốc — chỉ soi tỷ lệ Hán.)
     """
@@ -139,24 +104,15 @@ def check_translation(content_zh: str, content_vi: str) -> str | None:
     han = HAN_CHARS.search(content_vi)
     if han:
         return f"còn ký tự Hán '{han.group(0)}'"
-    # ponytail: ngưỡng 2% ~ gấp 6 lần văn Việt thật (mục đích/giai đoạn/chi phí...);
-    # bản phiên âm thật sự đo được ~6%
-    if len(content_vi.split()) > 100:
-        t = _translit_ratio(content_vi)
-        if t > 0.02:
-            return f"phiên âm Hán-Việt thay vì dịch nghĩa (mật độ hư từ {t:.1%})"
-    # zh→vi bình thường phình 2.5-3.5x (tính KÝ TỰ) → dưới 1.2x là dịch sót đoạn.
-    # Ngưỡng 0.3 cũ chỉ bắt được cụt thảm họa; chương ngắn (lời tác giả) giữ ngưỡng lỏng.
-    # LƯU Ý: omission tự xưng KHÔNG nằm ở gate này — retry mù không chữa được model lì
-    # (n1007 kẹt vĩnh viễn 3/3 lượt), phải sửa có mục tiêu bằng _fix_omissions sau dịch.
+    # Chỉ chặn bản cụt rõ ràng; tỷ lệ zh→vi dao động mạnh theo thể loại/câu thoại.
     if content_zh:
-        ratio_min = 1.2 if len(content_zh) > 300 else 0.3
+        ratio_min = 0.6 if len(content_zh) > 300 else 0.3
         if len(content_vi) < ratio_min * len(content_zh):
             return f"quá ngắn ({len(content_vi)}/{len(content_zh)} ký tự)"
-    # prompt yêu cầu mỗi dòng gốc ↔ một dòng dịch → mất >40% số đoạn = model nuốt đoạn
+    # Chỉ chặn khi mất >70% đoạn; LLM có thể gộp hợp lý vài dòng thoại/ngắt nguồn.
     zh_lines = sum(1 for line in content_zh.split("\n") if line.strip())
     vi_lines = sum(1 for line in content_vi.split("\n") if line.strip())
-    if zh_lines >= 10 and vi_lines < 0.6 * zh_lines:
+    if zh_lines >= 10 and vi_lines < 0.3 * zh_lines:
         return f"mất đoạn (dịch {vi_lines}/{zh_lines} đoạn gốc)"
     # phình bất thường (bình thường ~2.5-3.5x vì zh→vi tính KÝ TỰ) → nghi chèn rác/bịa thêm;
     # chỉ soi khi gốc đủ dài, chương ngắn (lời nhắn tác giả…) tỉ lệ nhiễu
@@ -165,48 +121,6 @@ def check_translation(content_zh: str, content_vi: str) -> str | None:
     if content_zh.count("\n") >= 5 and content_vi.count("\n") == 0:
         return "mất hết xuống dòng (gộp đoạn thành khối chữ liền)"
     return None
-
-
-# Thoại nằm trong "..." hoặc “...” (prompt bắt thoại dùng ngoặc kép kiểu Việt).
-# Giới hạn độ dài + không ăn qua xuống dòng để câu kể thiếu ngoặc đóng không bị nuốt oan.
-_DIALOGUE_RE = re.compile(
-    r'"[^"\n]{1,500}"|“[^”\n]{1,500}”|^[ \t]*[—–-]\s+[^\n]{1,500}', re.M)
-
-
-# Đại từ kể sai có thể vá MÁY MÓC an toàn (ngôi ba rõ ràng, giới tính rõ ràng).
-# "tôi"/"cô" trần không vá được (không rõ thay bằng gì) → vẫn để fuse chặn + retry.
-_REG_FIX = [
-    (re.compile(r"\b[Cc]ô (?:ta|ấy)\b"), "nàng"),
-    (re.compile(r"\b[Aa]nh (?!trai\b)(?:ta|ấy)\b"), "hắn"),
-    (re.compile(r"\b[Cc]ậu ta\b"), "hắn"),
-    (re.compile(r"\b[Ôô]ng (?:ta|ấy)\b"), "lão"),
-    # Đại từ "anh" trần trong lời kể; chừa các từ ghép/danh xưng thông dụng.
-    (re.compile(r"(?<!tinh )\b[Aa]nh\b(?!\s+(?:trai|em\b|chị\b|hùng|tài|kiệt|linh|hào|dũng|quốc))"), "hắn"),
-]
-# "Cô/Anh" TRẦN chỉ vá khi mở đầu câu kể + chữ thường theo sau (chắc chắn là đại từ);
-# giữa câu để yên — "cô" còn là danh từ (cô nương/cô gái), "anh" còn là anh hùng/tinh anh.
-_REG_FIX_HEAD = [
-    (re.compile(r"(^|[.!?…]\s+)Cô\s+(?=[a-zà-ỹ])(?!ta\b|ấy\b|nương|gái|em\b|đơn|độc|bé\b)", re.M), r"\1Nàng "),
-    (re.compile(r"(^|[.!?…]\s+)Anh\s+(?=[a-zà-ỹ])(?!ta\b|ấy\b|trai|em\b|hùng|tài|kiệt|linh|hào|dũng)", re.M), r"\1Hắn "),
-]
-
-
-def _fix_register(vi: str) -> str:
-    """Vá đại từ kể sai phổ biến NGOÀI ngoặc kép (model quen 'cô ấy/anh ta' với truyện
-    nữ chính/hiện đại — vá máy móc đỡ đốt lượt retry; thoại giữ nguyên)."""
-    def fix_seg(seg: str) -> str:
-        for pat, rep in _REG_FIX:
-            seg = pat.sub(lambda m, r=rep: r.capitalize() if m.group(0)[0].isupper() else r, seg)
-        for pat, rep in _REG_FIX_HEAD:
-            seg = pat.sub(rep, seg)
-        return seg
-    out, last = [], 0
-    for m in _DIALOGUE_RE.finditer(vi):
-        out.append(fix_seg(vi[last:m.start()]))
-        out.append(m.group(0))
-        last = m.end()
-    out.append(fix_seg(vi[last:]))
-    return "".join(out)
 
 
 _ZH_DIALOGUE_RE = re.compile(r'“[^”]*”|「[^」]*」|"[^"\n]*"')
@@ -220,42 +134,16 @@ def _is_first_person(zh: str) -> bool:
     return narr.count("我") > narr.count("他") + narr.count("她")
 
 
-def _register_violation(content_vi: str, allow_toi: bool = False) -> str | None:
-    """Chặn đại từ sai trong LỜI KỂ (user chốt 2026-07-10: chỉ lời kể mới cấm —
-    thoại được linh hoạt anh/em/ca theo bối cảnh, nên bỏ qua khi soi).
-    CHỈ bắt cụm không thể nhầm ("anh ta", "cô ấy", "tôi"...) — "anh"/"cô" trần
-    KHÔNG bắt vì dính oan từ ghép: anh hùng/tinh anh/Nguyên Anh/nước Anh/cô nương.
-    `allow_toi`: truyện kể ngôi thứ nhất → "tôi" là đúng, không bắt."""
-    narration = _DIALOGUE_RE.sub(" ", content_vi)
-    bad = re.search(r"\b(?:anh\s+(?:ta|ấy)|cậu ta|ông ta|cô\s+(?:ta|ấy))\b", narration, re.I)
-    if bad:
-        return f"lệch xưng hô '{bad.group(0)}' trong lời kể"
-    if not allow_toi:
-        # 'ta/tôi' lẻ tẻ ngoài ngoặc có thể là nghĩ thầm không ngoặc kép — prompt CHO PHÉP
-        # xưng 'ta' ở đó, chặn từ 1 lần làm chương nhiều độc thoại kẹt vĩnh viễn (n1007
-        # fail 6/6 lượt). Chỉ coi là TRÔI POV khi dày.
-        # ponytail: ngưỡng 3 là số thô, chỉnh khi đo thêm chương
-        hits = re.findall(r"\b(?:tôi(?!\s+luyện)|(?<!chúng\s)(?<!người\s)ta)\b", narration, re.I)
-        if len(hits) >= 3:
-            return f"lệch xưng hô '{hits[0]}' ×{len(hits)} trong lời kể"
-    return None
-
-
 def _audit_reason(content_zh: str, content_vi: str) -> str | None:
     """Lỗi cứng đáng xếp lại dịch; không kéo lỗi văn phong mềm vào audit hàng loạt."""
-    return (check_translation(content_zh, content_vi)
-            or _register_violation(content_vi, allow_toi=_is_first_person(content_zh))
-            or next(iter(self_reference_omissions(content_zh, content_vi)), None))
+    return check_translation(content_zh, content_vi)
 
 
-def _quality_fuse(chunk: str, first_person: bool | None = None):
+def _quality_fuse(chunk: str):
     """Validator chạy TRONG FallbackChain — raise khi output kém để tự đổi provider.
     Đo trên phần THÂN bản dịch (đã bỏ GLOSSARY_JSON/SUMMARY) — đo text thô sẽ lệch:
     tên Trung trong GLOSSARY_JSON tính nhầm vào tỷ lệ Hán, JSON dài tính nhầm vào độ phình."""
     def check(res) -> None:
-        # vá đại từ kể sai vá được TRƯỚC khi soi — res.text sửa tại chỗ để pipeline
-        # nhận bản đã vá (validator là chỗ duy nhất thấy text trước khi chain trả về)
-        res.text = _fix_register(res.text)
         content_vi = _strip_meta(res.text)
         # Vài chữ Hán sót được sửa đúng dòng ngay sau complete; loại cả bản ở đây gây
         # mất chương chỉ vì nhãn như 囚/死. Đếm chữ KHÁC NHAU chứ không đếm lượt:
@@ -263,8 +151,7 @@ def _quality_fuse(chunk: str, first_person: bool | None = None):
         # _fix_han_residue sửa được hết. Bản trả nguyên văn Hán vẫn bị fuse chặn.
         checked_vi = (HAN_CHARS.sub("x", content_vi)
                       if len(set(HAN_CHARS.findall(content_vi))) <= 8 else content_vi)
-        problem = check_translation(chunk, checked_vi) or _register_violation(
-            content_vi, allow_toi=_is_first_person(chunk) if first_person is None else first_person)
+        problem = check_translation(chunk, checked_vi)
         if problem:
             raise RuntimeError(f"Bản dịch {problem} (model {res.model})")
     return check
@@ -394,6 +281,11 @@ def _merge_names(terms: list[dict], existing_zh: set[str], names: list[dict]) ->
     return added
 
 
+def _term_dicts(value) -> list[dict]:
+    """Model nhỏ đôi khi trả GLOSSARY_JSON là mảng chuỗi; chỉ giữ object hợp lệ."""
+    return [item for item in value if isinstance(item, dict)] if isinstance(value, list) else []
+
+
 def _analyze_names(llm, chunk: str) -> list[dict]:
     """Pass 1: trích tên riêng / thuật ngữ để chốt phiên âm vào glossary TRƯỚC khi dịch.
     Lỗi thì [] — dịch vẫn chạy, chỉ thiếu gợi ý tên."""
@@ -467,58 +359,6 @@ def _extract_json(text: str) -> dict | list:
         raise
 
 
-# --- Sửa có mục tiêu (Q3-lite, 2026-07-12) -----------------------------------
-# Prompt cấm nhưng model vẫn lì các lỗi văn phong mềm (Q0: "chẳng" tràn lan, chữ đệm
-# "chăng/chứ" cuối câu, convertese, lặp từ). Retry cả chunk vừa đắt vừa không chắc
-# hơn → soi câu lỗi rồi gọi MỘT lượt LLM sửa đúng các câu đó, thay lại bằng máy.
-# "chẳng" → "không" là phép thay an toàn (giữ "chẳng lẽ/chẳng qua") → vá MÁY MÓC,
-# không phó mặc LLM (đo thật: lượt revise LLM lúc sửa lúc không).
-_CHANG_RE = re.compile(r"\b[Cc]hẳng\b(?!\s+lẽ|\s+qua)")
-# 不禁/不由得 dịch phẳng "không khỏi" — lược thẳng khi đứng trước động từ cảm xúc
-# (đo v4: LLM revise được nhắc vẫn bỏ sót). Giữ nghĩa thật "chữa/trị... không khỏi"
-# bằng lookbehind + không đụng khi theo sau là "được/bệnh/hẳn" hoặc dấu câu.
-_KHONG_KHOI_RE = re.compile(
-    r"(?<!chữa )(?<!trị )(?<!mãi )\b([Kk])hông khỏi\s+(?!được\b|bệnh\b|hẳn\b)([a-zà-ỹ])")
-# 总感觉 dịch phẳng "tổng cảm thấy/giác" → "cứ cảm thấy/giác"
-_TONG_CAM_RE = re.compile(r"\b([Tt])ổng cảm (thấy|giác)\b")
-
-
-def _fix_soft_style(vi: str) -> str:
-    vi = _CHANG_RE.sub(lambda m: "Không" if m.group(0).startswith("C") else "không", vi)
-    vi = _KHONG_KHOI_RE.sub(
-        lambda m: m.group(2).upper() if m.group(1) == "K" else m.group(2), vi)
-    return _TONG_CAM_RE.sub(
-        lambda m: ("Cứ" if m.group(1) == "T" else "cứ") + " cảm " + m.group(2), vi)
-
-
-_REVISE_RULES: list[tuple[str, re.Pattern]] = [
-    ("chữ đệm thừa cuối câu", re.compile(r"\b(?:chăng|chứ|nha)\s*[?!.…”\"]", re.I)),
-    # độc thoại/thoại xưng "mình" — kỳ ảo phải là "ta" hoặc lược (Q0 n962)
-    ("tự xưng 'mình' → 'ta' hoặc lược", re.compile(
-        r"(?:^|[\"“…,.!?:]\s*)[Mm]ình\s+(?:đã|chắc|sẽ|không|phải|cũng|còn|vừa|mới|chết|bị|đang)")),
-    ("lỗi convert", re.compile(
-        r"\b(?:không khỏi|căn bản là|rốt cuộc là|trên thực tế|tổng cảm thấy)\b", re.I)),
-    ("'X một cái' convert", re.compile(
-        r"(?:cười|nhìn|liếc|gật đầu|thở dài|vỗ|lắc đầu)\s+một cái", re.I)),
-    # đồng bộ với evaluator: ≥3 'hắn' trong CÙNG câu là dày, bất kể cách nhau bao xa
-    # (v4: câu dài 3 'hắn' cách >60 ký tự lọt lưới worker nhưng evaluator vẫn bắt)
-    ("lặp 'hắn' dày trong câu", re.compile(r"(?:\bhắn\b.*?){2}\bhắn\b", re.I)),
-]
-_SENT_SPLIT = re.compile(r'(?<=[.!?…”"])\s+')
-MAX_REVISE_SENTENCES = 12  # ponytail: quá ngần này = bản dịch hỏng diện rộng, retry rẻ hơn revise
-
-
-def _style_flags(vi: str) -> list[tuple[str, str]]:
-    """(câu, lỗi) cho từng câu vi phạm luật văn phong mềm."""
-    flags = []
-    for para in vi.split("\n"):
-        for sent in _SENT_SPLIT.split(para):
-            issues = [name for name, pat in _REVISE_RULES if pat.search(sent)]
-            if issues:
-                flags.append((sent.strip(), "; ".join(issues)))
-    return flags
-
-
 def _apply_fixes(vi: str, fixes) -> tuple[str, int]:
     """Thay câu sửa vào bản dịch — chỉ nhận bản sửa khớp nguyên văn và lành mạnh."""
     applied = 0
@@ -535,8 +375,19 @@ def _apply_fixes(vi: str, fixes) -> tuple[str, int]:
 def _apply_line_fixes(vi: str, fixes) -> tuple[str, int]:
     """Áp bản sửa theo số dòng, tránh LLM chép lệch dấu câu làm `old` không khớp."""
     lines, applied = vi.splitlines(), 0
-    if isinstance(fixes, dict):  # model hay gói mảng trong object ({"fixes": [...]})
-        fixes = next((v for v in fixes.values() if isinstance(v, list)), [])
+    if isinstance(fixes, dict):
+        if "line" in fixes and "new" in fixes:  # model trả thẳng một object
+            fixes = [fixes]
+        else:
+            wrapped = next((v for v in fixes.values() if isinstance(v, list)), None)
+            if wrapped is not None:  # {"fixes": [...]}
+                fixes = wrapped
+            else:  # {"2": "toàn bộ dòng đã sửa"}
+                fixes = [
+                    {"line": int(line), "new": new}
+                    for line, new in fixes.items()
+                    if str(line).isdigit() and isinstance(new, str)
+                ]
     for fx in fixes if isinstance(fixes, list) else []:
         line, new = (fx or {}).get("line"), (fx or {}).get("new")
         if line is None and (fx or {}).get("old"):  # model trả format cũ old/new → vẫn áp
@@ -555,10 +406,72 @@ def _apply_line_fixes(vi: str, fixes) -> tuple[str, int]:
     return "\n".join(lines), applied
 
 
-def _fix_han_residue(chapter_llm, vi: str) -> str:
-    """Sửa tối thiểu các dòng còn Hán tự; không dịch lại cả chunk."""
+def _fresh_blood_vi(text: str, start: int, end: int) -> str:
+    """鲜血: hành động/cơ thể = máu tươi; tên vật phẩm = Tiên Huyết."""
+    # Chỉ xét cùng câu để chữ "vật phẩm" ở câu trước không làm lệch nghĩa câu sau.
+    left = max((text.rfind(ch, 0, start) for ch in ".!?。！？;；\n"), default=-1)
+    rights = [i for ch in ".!?。！？;；\n" if (i := text.find(ch, end)) >= 0]
+    right = min(rights, default=len(text))
+    context = text[left + 1:right]
+    if _BLOOD_ACTION_CONTEXT.search(context):
+        fixed = "máu tươi"
+    else:
+        named = _ITEM_WRAPPER.search(text[left + 1:start]) or _ITEM_SUFFIX.search(text[end:right])
+        fixed = "Tiên Huyết" if named or _ITEM_CONTEXT.search(context) else "máu tươi"
+    # Tách khỏi phần Hán còn lại để fallback sau không tạo "Tiên HuyếtĐan".
+    return fixed + (" " if end < len(text) and HAN_CHARS.match(text[end]) else "")
+
+
+def _replace_glossary_han(vi: str, terms: list[dict]) -> tuple[str, int]:
+    """Thay cụm Hán đã có glossary, ưu tiên cụm dài để không đè cụm con."""
+    replaced = 0
+    for term in sorted(_term_dicts(terms), key=lambda t: -len(t.get("term_zh") or "")):
+        zh, correct = term.get("term_zh"), term.get("correct_vi")
+        if zh == "鲜血" and zh in vi:
+            # Cùng mặt chữ nhưng hai nghĩa: vật phẩm = Tiên Huyết; máu cơ thể = máu tươi.
+            out, last = [], 0
+            for match in re.finditer(zh, vi):
+                out.append(vi[last:match.start()])
+                out.append(_fresh_blood_vi(vi, match.start(), match.end()))
+                last = match.end()
+                replaced += 1
+            out.append(vi[last:])
+            vi = "".join(out)
+        elif zh and correct and zh in vi:
+            replaced += vi.count(zh)
+            vi = vi.replace(zh, correct)
+    return vi, replaced
+
+
+def _hanviet_fallback(vi: str) -> tuple[str, int]:
+    """Fallback cuối: phiên âm run Hán bằng bảng TSV; không đoán chữ ngoài bảng."""
+    replaced = 0
+
+    def repl(match: re.Match) -> str:
+        nonlocal replaced
+        raw = match.group(0)
+        fixed = hanviet.han_viet(raw)
+        if fixed:
+            replaced += len(raw)
+            return fixed
+        parts = [hanviet.han_viet(ch) or ch for ch in raw]
+        replaced += sum(1 for old, new in zip(raw, parts) if old != new)
+        return " ".join(parts)
+
+    # 鲜血 cần dịch theo nghĩa, không được fallback mù thành "Tiên Huyết" mọi ngữ cảnh.
+    if "鲜血" in vi:
+        vi, n = _replace_glossary_han(vi, [{"term_zh": "鲜血", "correct_vi": "máu tươi"}])
+        replaced += n * 2
+    return HAN_RUNS.sub(repl, vi), replaced
+
+
+def _fix_han_residue(chapter_llm, vi: str, terms: list[dict] | None = None) -> str:
+    """Glossary → LLM dịch theo nghĩa → Hán-Việt fallback; không dịch lại cả chunk."""
+    vi, glossary_n = _replace_glossary_han(vi, terms or [])
     bad = [(i, line) for i, line in enumerate(vi.splitlines(), 1) if HAN_CHARS.search(line)]
     if not bad:
+        if glossary_n:
+            log.info("Fix Hán tự sót bằng glossary: %d lượt thay", glossary_n)
         return vi
     user = ("Các dòng sau còn ký tự Hán. Chỉ dịch phần chữ Hán sang tiếng Việt tự nhiên, "
             "giữ nguyên mọi nội dung khác. Trả JSON "
@@ -566,45 +479,18 @@ def _fix_han_residue(chapter_llm, vi: str) -> str:
             + "\n".join(f"{i}: {line}" for i, line in bad))
     try:
         fixes = _extract_json(chapter_llm.complete(
-            prompts.SYSTEM_REVISE, user, max_tokens=2048).text)
+            prompts.SYSTEM_REVISE, user, max_tokens=4096).text)
         vi, applied = _apply_line_fixes(vi, fixes)
         log.info("Fix Hán tự sót: %d dòng lỗi, %d dòng thay", len(bad), applied)
     except Exception as e:
         log.warning("Fix Hán tự sót lỗi: %s", e)
+    vi, glossary_after = _replace_glossary_han(vi, terms or [])
+    vi, hanviet_n = _hanviet_fallback(vi)
+    if glossary_n or glossary_after or hanviet_n:
+        log.info("Fix Hán tự fallback: glossary=%d, Hán-Việt=%d ký tự",
+                 glossary_n + glossary_after, hanviet_n)
     if HAN_CHARS.search(vi):
         raise RuntimeError("không sửa hết ký tự Hán sót")
-    return vi
-
-
-_ZH_SENT_SPLIT = re.compile(r"(?<=[。！？!?\n])")
-
-
-def _fix_omissions(chapter_llm, zh_chunk: str, vi: str) -> str:
-    """Q3 cho omission tự xưng: đưa CÂU GỐC chứa tự xưng bị mất cho LLM, sửa đúng câu
-    dịch tương ứng. Retry mù trong fuse không chữa được model lì (n1007 fail 3/3 lượt)."""
-    low = vi.lower()
-    lines = []
-    for pat, accepted in SELF_REFERENCE_CONSTRAINTS:
-        m = pat.search(zh_chunk)
-        if m and not any(term in low for term in accepted):
-            sent = next((s for s in _ZH_SENT_SPLIT.split(zh_chunk) if pat.search(s)), m.group(0))
-            lines.append(f"- Câu gốc: {sent.strip()[:200]} — tự xưng {m.group(0)} phải để lại "
-                         f"dấu vết trong bản dịch ({'/'.join(accepted)})")
-    if not lines:
-        return vi
-    numbered = "\n".join(f"{i}: {line}" for i, line in enumerate(vi.splitlines(), 1))
-    user = ("Bản dịch dưới đây làm MẤT sắc thái tự xưng của các câu gốc sau:\n"
-            + "\n".join(lines)
-            + "\n\nBẢN DỊCH ĐÁNH SỐ DÒNG:\n" + numbered
-            + "\n\nTìm dòng dịch tương ứng với từng câu gốc, sửa TỐI THIỂU để giữ đúng "
-              "sắc thái tự xưng. Trả JSON "
-              "[{\"line\": N, \"new\": \"toàn bộ dòng đã sửa\"}].")
-    try:
-        fixes = _extract_json(chapter_llm.complete(prompts.SYSTEM_REVISE, user, max_tokens=2048).text)
-        vi, applied = _apply_line_fixes(vi, fixes)
-        log.info("Fix omission tự xưng: %d marker, %d câu thay", len(lines), applied)
-    except Exception as e:
-        log.warning("Fix omission lỗi (giữ bản gốc): %s", e)
     return vi
 
 
@@ -653,36 +539,6 @@ def _init_style_bible(chapter_llm, nv: dict, novel_id: int, content_zh: str,
     except Exception as e:
         log.warning("Novel %s: sinh style bible lỗi (bỏ qua): %s", novel_id, e)
         return None
-
-
-def _style_revise(chapter_llm, vi: str, zh: str = "") -> str:
-    """Lượt biên tập có mục tiêu; mọi lỗi ở đây đều không được phá bản dịch gốc."""
-    flags = _style_flags(vi)
-    if not flags or len(flags) > MAX_REVISE_SENTENCES:
-        return vi
-    bad_lines = []
-    for line_no, line in enumerate(vi.splitlines(), 1):
-        issues = sorted({issue for _, issue in _style_flags(line)})
-        if issues:
-            bad_lines.append((line_no, line, "; ".join(issues)))
-    listing = "\n\n".join(
-        f"DÒNG {line_no}: {line}\nLỖI: {issues}" for line_no, line, issues in bad_lines)
-    listing += ("\n\nTrả JSON [{\"line\": N, \"new\": \"toàn bộ dòng đã sửa\"}]. "
-                "Giữ nguyên ý và chỉ sửa lỗi được đánh dấu.")
-    try:
-        res = chapter_llm.complete(prompts.SYSTEM_REVISE, listing, max_tokens=4096)
-        original = vi
-        vi, applied = _apply_line_fixes(vi, _extract_json(res.text))
-        vi = _fix_register(vi)
-        problem = check_translation(zh, vi) or _register_violation(
-            vi, allow_toi=_is_first_person(zh))
-        if problem:
-            log.warning("Revise văn phong làm giảm chất lượng (%s), giữ bản trước revise", problem)
-            return original
-        log.info("Revise văn phong: %d câu đánh dấu, %d câu thay", len(flags), applied)
-    except Exception as e:
-        log.warning("Revise văn phong lỗi (giữ bản gốc): %s", e)
-    return vi
 
 
 # Xưng hô: MỘT luật cho mọi truyện (2026-07-10, đã bỏ nhánh đô thị tôi–anh):
@@ -758,7 +614,6 @@ def handle_chapter(job: dict, llm) -> None:
     if title:
         genres = ", ".join(nv.get("genres") or [])
         novel_line = f"{title}" + (f" — thể loại: {genres}" if genres else "")
-    first_person = _is_first_person(ch["content_zh"])
     register_line = _register_line(ch["content_zh"])
     # Một truyện chỉ dùng đúng provider + model chốt ở chương đầu. Khi model lỗi,
     # job sẽ retry cùng cặp thay vì fallback âm thầm sang giọng khác.
@@ -800,7 +655,7 @@ def handle_chapter(job: dict, llm) -> None:
                 prev_tail=prev_tail, novel_line=novel_line, register_line=register_line,
                 style_line=style_line),
             # fuse chất lượng NẰM TRONG chain: output kém → tự đổi provider kế, không fail oan
-            validate=_quality_fuse(chunk, first_person),
+            validate=_quality_fuse(chunk),
         )
         if not nv.get("translation_model"):
             db.sb().table("novels").update({
@@ -815,7 +670,7 @@ def handle_chapter(job: dict, llm) -> None:
         if m:
             text = text[: m.start()].rstrip()
             try:
-                chunk_detected = json.loads(m.group(1))
+                chunk_detected = _term_dicts(json.loads(m.group(1)))
                 detected += chunk_detected
                 # gộp luôn vào glossary cho chunk sau (miễn phí, giữ tên nhất quán cross-chunk)
                 _merge_names(terms, existing_zh, chunk_detected)
@@ -826,8 +681,8 @@ def handle_chapter(job: dict, llm) -> None:
         prev_summary = summary_vi or prev_summary
         # Cầu chì chất lượng đã chạy TRONG llm.complete (validate=_quality_fuse) → tới đây
         # output chắc chắn đạt: đủ tiếng Việt, đủ độ dài, còn xuống dòng.
-        text = _fix_omissions(chapter_llm, chunk, _clean_output(text))
-        text = _fix_han_residue(chapter_llm, text)
+        text = _clean_output(text)
+        text = _fix_han_residue(chapter_llm, text, terms)
         parts.append(text)
         prev_tail = _tail(parts[-1])  # chunk sau nối giọng văn từ đuôi chunk này
         prompt_tokens += res.prompt_tokens or 0
@@ -837,12 +692,6 @@ def handle_chapter(job: dict, llm) -> None:
             log.info("Chương %s: chunk %d/%d xong", ch["id"], i + 1, len(chunks))
 
     text = "\n\n".join(parts)
-    # vá văn phong máy móc (chẳng→không) rồi mới sửa có mục tiêu bằng LLM
-    text = _fix_soft_style(text)
-    text = _style_revise(chapter_llm, text, ch["content_zh"])
-    # Revise có thể làm mất sắc thái tự xưng; lượt này chỉ gọi LLM khi thật sự còn thiếu.
-    text = _fix_omissions(chapter_llm, ch["content_zh"], text)
-
     # Lưới an toàn: tên/thuật ngữ trong glossary còn SÓT dạng chữ Hán trong bản dịch
     # (lọt fuse vì dưới ngưỡng 5%) → thay thẳng bằng bản dịch chuẩn. Dài trước để
     # không đè cụm con (幻妖王 phải thay trước 幻妖).

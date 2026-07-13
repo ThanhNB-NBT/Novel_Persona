@@ -76,7 +76,7 @@ def translate_variant(
     """Dịch một bản thử nghiệm; không ghi chương/glossary và không sửa dữ liệu dịch."""
     # Lazy import để self-check prompt chạy được trong môi trường không cài DB client.
     from .worker import (
-        GLOSSARY_LINE, _clean_output, _fix_han_residue, _fix_omissions,
+        GLOSSARY_LINE, _clean_output, _fix_han_residue,
         _pop_summary, _quality_fuse, _split_chunks, _tail,
     )
     if variant not in {"current", "v2", "reference"}:
@@ -108,9 +108,9 @@ def translate_variant(
             text = text[:match.start()].rstrip()
         text, summary = _pop_summary(text)
         prev_summary = summary or prev_summary
-        text = _fix_omissions(llm, chunk, _clean_output(text))
+        text = _clean_output(text)
         try:
-            text = _fix_han_residue(llm, text)
+            text = _fix_han_residue(llm, text, terms)
         except RuntimeError as exc:
             # A/B phải giữ được các bản còn lại khi một model không sửa được Hán tự sót.
             errors.append(str(exc))

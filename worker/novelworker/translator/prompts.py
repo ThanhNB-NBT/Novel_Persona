@@ -196,6 +196,8 @@ MAIN_CHAPTER_DIRECTIVE = """
 
 3. CÁCH VIẾT CHO NGƯỜI VIỆT ĐỌC
 - Viết tiếng Việt tự nhiên, gọn và rõ, nhưng không phóng tác hoặc làm văn hoa hơn nguyên tác.
+- Không ghép nửa dịch nghĩa nửa phiên âm trong một từ/cụm. 鲜血 trong cảnh cơ thể chảy/phun/trào máu → "máu tươi", tuyệt đối không "tươi Huyết"; nếu là TÊN vật phẩm/nguyên liệu/đạo cụ được định danh thì "Tiên Huyết" là đúng.
+- Tránh văn convert: không lạm dụng "chẳng", chữ đệm cuối câu, "không khỏi", "trên thực tế", "tổng cảm thấy", "cười/nhìn một cái"; không lặp dày cùng một đại từ trong một câu.
 - Giữ nhịp hội thoại và sắc thái thể loại; không tự thêm từ đệm, cảm thán hoặc cảm xúc.
 - Giữ nguyên ký hiệu/ngoặc thể hiện tên dị năng, vật phẩm và thuật ngữ nếu bản gốc dùng chúng.
 - Tên và thuật ngữ trong glossary bắt buộc dùng đúng một cách viết.
@@ -218,6 +220,8 @@ QUY TẮC XƯNG HÔ BỔ SUNG
 - Trước mỗi câu thoại, xác định người nói, người nghe, giới tính, quan hệ và vai vế.
 - Giữ một cách xưng hô ổn định cho cùng một cặp nhân vật; chỉ đổi khi quan hệ thật sự đổi.
 - Lời kể phải nhất quán với ngôi kể và giới tính; không tự đổi người kể giữa các đoạn.
+- Giữ sắc thái tự xưng của nguyên văn, không san phẳng thành "ta": 老夫→lão phu, 老子→ông đây/lão tử theo giọng, 本座→bổn tọa, 在下→tại hạ, 晚辈→vãn bối, 贫道→bần đạo, 贫僧→bần tăng, 哀家→ai gia, 朕→trẫm, 微臣→vi thần, 臣妾→thần thiếp. 本尊 phải dịch theo nghĩa câu: bản tôn khi tự xưng, chân thân/bản thể khi đối lập với phân thân.
+- KIỂM TRA BẮT BUỘC TRƯỚC KHI TRẢ KẾT QUẢ: nếu câu gốc có 本座/在下/晚辈 trong lời thoại hoặc độc thoại, bản dịch phải giữ đúng dấu vết tương ứng (bổn tọa/tại hạ/vãn bối hoặc biến thể tự nhiên cùng nghĩa). Không được lược bỏ, đổi thành tên nhân vật, hay rút thành "ta". Ví dụ: 本座今日便要取你性命→"Bổn tọa hôm nay sẽ lấy mạng ngươi"; 在下告辞→"Tại hạ xin cáo từ"; 晚辈拜见前辈→"Vãn bối bái kiến tiền bối".
 - Tên người, địa danh, môn phái, dị năng, vật phẩm và cảnh giới phải theo glossary.
 
 ĐỊNH DẠNG BẮT BUỘC
