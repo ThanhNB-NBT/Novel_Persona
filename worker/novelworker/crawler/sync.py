@@ -283,6 +283,7 @@ def discover_latest(adapter: SourceAdapter, max_new: int = 50) -> None:
     cands = adapter.fetch_latest(limit=max_new * 20)
     known = _existing_novels(sid, [c.source_novel_id for c in cands])  # check theo lô
     bl_ids, bl_keys = _blacklist(sid)
+    consec_fail = 0
     for cand in cands:
         if added >= max_new:
             break
@@ -293,16 +294,24 @@ def discover_latest(adapter: SourceAdapter, max_new: int = 50) -> None:
         scanned += 1
         try:
             meta = adapter.fetch_novel_meta(cand.source_novel_id)
-        except ValueError as e:
-            # trang bị xoá / chống bot HTTP 200 thiếu metadata — bỏ qua mềm, đừng bơm
-            # traceback làm log rối; chu kỳ sau nếu là chống bot tạm thì thử lại.
-            skipped += 1
-            log.info("Discovery: bỏ qua %s (%s) — %s", cand.source_novel_id, adapter.name, e)
+        except Exception as e:
+            # Đếm thất bại LIÊN TIẾP: nguồn (faloo) chặn IP datacenter theo tần suất —
+            # thất bại mà cứ quét tiếp = hammer, block càng cứng. 8 phát liền = coi như
+            # nguồn đang chặn/chết, dừng chu kỳ, thử lại lượt sau (IP thường tự thả).
+            consec_fail += 1
+            if isinstance(e, ValueError):
+                skipped += 1  # trang xoá / chống bot 200 thiếu metadata — bỏ qua mềm
+                log.info("Discovery: bỏ qua %s (%s) — %s", cand.source_novel_id, adapter.name, e)
+            else:
+                errors += 1
+                log.exception("Discovery: lỗi lấy metadata %s (%s)", cand.source_novel_id, adapter.name)
+            if consec_fail >= 8:
+                log.warning("Discovery %s: %d truyện liên tiếp thất bại — nguồn có vẻ bị "
+                            "chặn, dừng chu kỳ (thử lại lượt sau)", adapter.name, consec_fail)
+                break
+            time.sleep(0.5)  # fail cũng nghỉ, đừng hammer nguồn đang chập chờn
             continue
-        except Exception:
-            errors += 1
-            log.exception("Discovery: lỗi lấy metadata %s (%s)", cand.source_novel_id, adapter.name)
-            continue
+        consec_fail = 0  # lấy được metadata → nguồn còn sống, reset đếm
         if _skip_by_source_policy(adapter, meta):
             skipped += 1
             continue
@@ -357,6 +366,8 @@ def discover_ranking(adapter: SourceAdapter, max_new: int = 30) -> None:
     ranked = list(fetch(limit=1000))
     known = _existing_novels(sid, [r[0] for r in ranked])  # check theo lô
     bl_ids, bl_keys = _blacklist(sid)
+    consec_fail = 0
+    blocked = False  # nguồn bị chặn → thôi thử metadata mới, vẫn cập nhật rank truyện đã có
     for i, (source_novel_id, rank) in enumerate(ranked):
         # Cập nhật rank cho hàng trăm truyện đã có là chuỗi UPDATE lặng (không log,
         # không tải gì) — điểm danh định kỳ để Worker tab không tưởng crawler chết.
@@ -373,19 +384,26 @@ def discover_ranking(adapter: SourceAdapter, max_new: int = 30) -> None:
         if source_novel_id in bl_ids or (sid, source_novel_id) in _genre_skipped:
             skipped += 1
             continue  # admin đã xoá vĩnh viễn / thể loại hạn chế — không crawl lại dù trong top
-        if added >= max_new:
-            continue  # hết quota thêm mới nhưng vẫn quét nốt để cập nhật rank truyện đã có
+        if added >= max_new or blocked:
+            continue  # hết quota / nguồn bị chặn — vẫn quét nốt để cập nhật rank truyện đã có
         scanned += 1
         try:
             meta = adapter.fetch_novel_meta(source_novel_id)
-        except ValueError as e:
-            skipped += 1
-            log.info("Ranking: bỏ qua %s (%s) — %s", source_novel_id, adapter.name, e)
+        except Exception as e:
+            consec_fail += 1
+            if isinstance(e, ValueError):
+                skipped += 1
+                log.info("Ranking: bỏ qua %s (%s) — %s", source_novel_id, adapter.name, e)
+            else:
+                errors += 1
+                log.exception("Ranking: lỗi metadata %s (%s)", source_novel_id, adapter.name)
+            if consec_fail >= 8:
+                blocked = True
+                log.warning("Ranking %s: %d truyện liên tiếp thất bại — nguồn có vẻ bị chặn, "
+                            "dừng thêm mới (vẫn cập nhật rank truyện đã có)", adapter.name, consec_fail)
+            time.sleep(0.5)
             continue
-        except Exception:
-            errors += 1
-            log.exception("Ranking: lỗi metadata %s (%s)", source_novel_id, adapter.name)
-            continue
+        consec_fail = 0  # lấy được metadata → nguồn còn sống, reset đếm
         if _skip_by_source_policy(adapter, meta):
             skipped += 1
             continue
