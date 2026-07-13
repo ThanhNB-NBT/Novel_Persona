@@ -3,6 +3,8 @@
     <uses-permission android:name="android.permission.INTERNET"/>
     <!-- flutter_local_notifications: hiện thông báo trên thanh hệ thống (Android 13+) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <!-- Tự cập nhật: tải APK mới rồi gọi trình cài hệ thống cài đè (open_filex) -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
     <!-- label theo buildType (manifestPlaceholders): release "Gác Truyện", debug "Gác Truyện dev" -->
     <application
         android:label="${appName}"

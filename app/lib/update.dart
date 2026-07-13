@@ -3,17 +3,23 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:open_filex/open_filex.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'data.dart';
 
 /// Cập nhật trong app: đọc release mới nhất trên GitHub (repo public, khỏi cần
-/// server riêng), so với version đang chạy → mời tải APK. iOS sideload thì chỉ
-/// nhắc build qua SideStore (không tự cài được).
+/// server riêng), so version → tải THẲNG trong app.
+///   Android: tải APK rồi gọi trình cài hệ thống cài đè (1 hộp thoại xác nhận).
+///   iOS sideload: tải IPA rồi mở khay chia sẻ để lưu vào Tệp / mở bằng SideStore
+///                 (iOS cấm app tự cài app khác — SideStore mới cài được).
 const _repo = 'ThanhNB-NBT/Novel_Persona';
 
-typedef UpdateInfo = ({String version, String? apkUrl, String notes});
+typedef Asset = ({String name, String url});
+typedef UpdateInfo = ({String version, Asset? apk, Asset? ipa, String notes});
 
 /// Release mới hơn bản đang chạy, null nếu đã mới nhất (hoặc lỗi mạng — im lặng).
 final updateProvider = FutureProvider<UpdateInfo?>((ref) async {
@@ -26,13 +32,16 @@ final updateProvider = FutureProvider<UpdateInfo?>((ref) async {
     final r = jsonDecode(await resp.transform(utf8.decoder).join()) as Map;
     final latest = (r['tag_name'] as String? ?? '').replaceFirst('v', '');
     if (!_newer(latest, cur)) return null;
-    final apk = (r['assets'] as List? ?? const [])
-        .cast<Map>()
-        .where((a) => '${a['name']}'.endsWith('.apk'))
-        .firstOrNull;
+    final assets = (r['assets'] as List? ?? const []).cast<Map>();
+    Asset? pick(String ext) {
+      final a = assets.where((a) => '${a['name']}'.toLowerCase().endsWith(ext)).firstOrNull;
+      return a == null ? null : (name: '${a['name']}', url: '${a['browser_download_url']}');
+    }
+
     return (
       version: latest,
-      apkUrl: apk?['browser_download_url'] as String?,
+      apk: pick('.apk'),
+      ipa: pick('.ipa'),
       notes: r['body'] as String? ?? '',
     );
   } catch (_) {
@@ -64,32 +73,28 @@ Future<void> maybePromptUpdate(BuildContext context, WidgetRef ref) async {
 }
 
 void showUpdateDialog(BuildContext context, UpdateInfo info) {
+  // Android cần APK, iOS cần IPA. Thiếu asset đúng nền → chỉ mở trang release.
+  final asset = Platform.isAndroid ? info.apk : (Platform.isIOS ? info.ipa : null);
+  final body = Platform.isAndroid
+      ? (info.notes.isEmpty ? 'Tải bản mới rồi cài đè bản đang dùng.' : info.notes)
+      : 'Tải IPA về máy rồi lưu vào Tệp / mở bằng SideStore để cài đè.';
   showDialog(
     context: context,
     builder: (ctx) => AlertDialog(
       title: Text('Có bản mới ${info.version}'),
-      content: Text(
-        Platform.isAndroid
-            ? (info.notes.isEmpty
-                ? 'Tải về rồi mở file APK để cài đè bản đang dùng.'
-                : info.notes)
-            : 'Build IPA mới qua GitHub Actions rồi cập nhật bằng SideStore.',
-        maxLines: 10,
-        overflow: TextOverflow.ellipsis,
-      ),
+      content: Text(body, maxLines: 12, overflow: TextOverflow.ellipsis),
       actions: [
         TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Để sau')),
-        if (Platform.isAndroid && info.apkUrl != null)
+        if (asset != null)
           FilledButton(
             onPressed: () {
               Navigator.pop(ctx);
-              launchUrl(Uri.parse(info.apkUrl!), mode: LaunchMode.externalApplication);
+              _downloadAndInstall(context, asset);
             },
-            child: const Text('Tải bản mới'),
+            child: Text(Platform.isAndroid ? 'Tải & cài' : 'Tải về máy'),
           )
         else
-          // iOS (hoặc Android thiếu APK): không tự cài được → mở trang release
-          // để xem ghi chú + tải asset, cài qua SideStore.
+          // nền không có asset (vd web) → mở trang release
           FilledButton(
             onPressed: () {
               Navigator.pop(ctx);
@@ -102,3 +107,66 @@ void showUpdateDialog(BuildContext context, UpdateInfo info) {
     ),
   );
 }
+
+/// Tải asset (apk/ipa) kèm thanh tiến trình → Android gọi trình cài; iOS mở khay
+/// chia sẻ để lưu Tệp / mở SideStore. Dùng chung cho hộp thoại tự-hỏi lẫn nút
+/// "Kiểm tra cập nhật" trong Cài đặt.
+Future<void> _downloadAndInstall(BuildContext context, Asset asset) async {
+  final progress = ValueNotifier<double>(0);
+  showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (_) => AlertDialog(
+      title: const Text('Đang tải bản mới…'),
+      content: ValueListenableBuilder<double>(
+        valueListenable: progress,
+        builder: (_, p, _) => Column(mainAxisSize: MainAxisSize.min, children: [
+          LinearProgressIndicator(value: p > 0 ? p : null),
+          const SizedBox(height: 10),
+          Text(p > 0 ? '${(p * 100).toStringAsFixed(0)}%' : 'Bắt đầu tải…'),
+        ]),
+      ),
+    ),
+  );
+  try {
+    // Tải mới vào thư mục tạm (ghi đè bản tải dở lần trước).
+    final dir = await getTemporaryDirectory();
+    final file = File('${dir.path}/${asset.name}');
+    final req = await HttpClient().getUrl(Uri.parse(asset.url)); // theo 302 tới CDN
+    final resp = await req.close();
+    if (resp.statusCode != 200) throw HttpException('HTTP ${resp.statusCode}');
+    final total = resp.contentLength;
+    final sink = file.openWrite();
+    var got = 0;
+    await for (final chunk in resp) {
+      sink.add(chunk);
+      got += chunk.length;
+      if (total > 0) progress.value = got / total;
+    }
+    await sink.close();
+    if (context.mounted) Navigator.pop(context); // đóng thanh tiến trình
+
+    if (Platform.isAndroid) {
+      // mở APK → trình cài hệ thống (cần quyền REQUEST_INSTALL_PACKAGES)
+      final res = await OpenFilex.open(file.path);
+      if (res.type != ResultType.done && context.mounted) {
+        _snack(context, 'Không mở được trình cài: ${res.message}');
+      }
+    } else {
+      // iOS: khay chia sẻ → "Lưu vào Tệp" hoặc mở thẳng SideStore
+      await SharePlus.instance.share(ShareParams(
+        files: [XFile(file.path)],
+        subject: asset.name,
+        text: 'Bản cập nhật Gác Truyện — mở bằng SideStore để cài.',
+      ));
+    }
+  } catch (e) {
+    if (context.mounted) {
+      Navigator.pop(context);
+      _snack(context, 'Tải bản mới lỗi: $e');
+    }
+  }
+}
+
+void _snack(BuildContext context, String msg) =>
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
