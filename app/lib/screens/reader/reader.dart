@@ -1054,7 +1054,114 @@ class _EndPanelState extends ConsumerState<_EndPanel> {
   }
 }
 
-/// Thanh điều khiển nghe truyện: play/pause + chương đang đọc + tốc độ + tắt.
+Future<void> _showTtsVoiceSheet(
+    BuildContext context, TtsState state, Color fg, Color bg) async {
+  final messenger = ScaffoldMessenger.of(context);
+  if (state.playing) await TtsPlayer.i.pause();
+  if (!context.mounted) return;
+
+  var selected = TtsPlayer.i.selectedVoiceKey;
+  final voices = TtsPlayer.i.availableVoices();
+  await showModalBottomSheet<void>(
+    context: context,
+    backgroundColor: bg,
+    isScrollControlled: true,
+    showDragHandle: true,
+    builder: (sheetContext) => StatefulBuilder(
+      builder: (_, setLocal) => SizedBox(
+        height: MediaQuery.sizeOf(sheetContext).height * 0.68,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('Giọng đọc tiếng Việt',
+                style: TextStyle(color: fg, fontSize: 18, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 4),
+            Text('Chạm để chọn · nút phát để nghe thử',
+                style: TextStyle(color: fg.withValues(alpha: 0.6), fontSize: 13)),
+            const SizedBox(height: 12),
+            Expanded(
+              child: FutureBuilder<List<TtsVoice>>(
+                future: voices,
+                builder: (_, snapshot) {
+                  if (snapshot.connectionState != ConnectionState.done) {
+                    return Center(
+                        child: CircularProgressIndicator(color: fg.withValues(alpha: 0.7)));
+                  }
+                  final items = snapshot.data ?? const [];
+                  selected ??= TtsPlayer.i.selectedVoiceKey;
+                  if (items.isEmpty) {
+                    return Center(
+                      child: Text(
+                        'Chưa tìm thấy giọng Tiếng Việt.\n'
+                        'Hãy tải voice Tiếng Việt trong cài đặt TTS/Trợ năng của máy.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: fg.withValues(alpha: 0.7), height: 1.5),
+                      ),
+                    );
+                  }
+                  return ListView.separated(
+                    itemCount: items.length,
+                    separatorBuilder: (_, _) =>
+                        Divider(height: 1, color: fg.withValues(alpha: 0.1)),
+                    itemBuilder: (_, index) {
+                      final voice = items[index];
+                      final active = selected == voice.key;
+
+                      Future<void> choose({required bool preview}) async {
+                        try {
+                          if (preview) {
+                            await TtsPlayer.i.previewVoice(voice);
+                          } else {
+                            await TtsPlayer.i.selectVoice(voice);
+                          }
+                          if (sheetContext.mounted) setLocal(() => selected = voice.key);
+                        } catch (e) {
+                          messenger.showSnackBar(
+                              SnackBar(content: Text('Không dùng được giọng này: $e')));
+                        }
+                      }
+
+                      return ListTile(
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+                        selected: active,
+                        selectedTileColor: fg.withValues(alpha: 0.06),
+                        leading: Icon(
+                            active ? Icons.radio_button_checked : Icons.radio_button_off,
+                            color: active ? fg : fg.withValues(alpha: 0.45)),
+                        title: Text(voice.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(color: fg, fontWeight: FontWeight.w600)),
+                        subtitle: Text(
+                          '${voice.qualityLabel}${voice.networkRequired ? ' · cần mạng' : ' · offline'}',
+                          style: TextStyle(color: fg.withValues(alpha: 0.58)),
+                        ),
+                        trailing: IconButton(
+                          tooltip: 'Nghe thử ${voice.name}',
+                          icon: Icon(Icons.play_circle_outline_rounded,
+                              color: fg.withValues(alpha: 0.7)),
+                          onPressed: () => choose(preview: true),
+                        ),
+                        onTap: () => choose(preview: false),
+                      );
+                    },
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Giọng Nâng cao/Premium chỉ xuất hiện sau khi được tải về máy.',
+              style: TextStyle(color: fg.withValues(alpha: 0.5), fontSize: 12),
+            ),
+          ]),
+        ),
+      ),
+    ),
+  );
+}
+
+/// Thanh điều khiển nghe truyện: play/pause + chương đang đọc + giọng + tốc độ + tắt.
 class _TtsBar extends StatelessWidget {
   final TtsState state;
   final Color fg, bg;
@@ -1089,6 +1196,12 @@ class _TtsBar extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             style: TextStyle(color: soft, fontSize: 13),
           ),
+        ),
+        IconButton(
+          tooltip: 'Chọn giọng đọc',
+          visualDensity: VisualDensity.compact,
+          icon: Icon(Icons.record_voice_over_rounded, size: 20, color: soft),
+          onPressed: () => _showTtsVoiceSheet(context, state, fg, bg),
         ),
         // bấm xoay vòng tốc độ — StatefulBuilder khỏi kéo cả reader rebuild
         StatefulBuilder(
