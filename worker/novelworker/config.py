@@ -41,7 +41,8 @@ class Settings(BaseSettings):
 
     # Worker
     worker_id: str = "worker-1"
-    translator_concurrency: int = 2
+    # Nhiều job bay đồng thời hơn số key; limiter trong provider giữ đúng RPM từng key.
+    translator_concurrency: int = 8
     # Cầu chì chi phí: tổng số chương dịch tối đa mỗi ngày (mọi user).
     # 2-5 user, model free → 1000 quá thoải mái để đọc; cầu chì chỉ chặn bug app spam.
     max_chapters_per_day: int = 1000

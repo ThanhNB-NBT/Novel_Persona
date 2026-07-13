@@ -167,6 +167,7 @@ def main() -> None:
     assert _key(0) == "keyA"
     assert _key(1) == "keyB"
     assert _key(2) == "keyA"
+    assert [_key(i) for i in range(8)] == ["keyA", "keyB"] * 4
 
     # Limiter dùng chung theo key: cùng key cách đều 60/RPM, key khác không phải đợi.
     providers._next_request_at.clear()
