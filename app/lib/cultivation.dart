@@ -22,6 +22,42 @@ const daoTitles = [
   'Độ Kiếp bán tiên',
 ]; // realm 1..9
 
+/// Cấp bậc Tiên hậu Phi Thăng (migration 064). tien_tier 0 = vừa phi thăng, tăng dần
+/// khi tiếp tục tích tu vi ở cõi tiên tới Đạo Tổ. Độ dài PHẢI = cult_tien_max()+1 ở SQL.
+const tienTierNames = [
+  'Tiên Nhân', 'Địa Tiên', 'Thiên Tiên', 'Kim Tiên',
+  'Thái Ất Kim Tiên', 'Đại La Kim Tiên', 'Đạo Tổ',
+]; // tien_tier 0..6
+
+/// Đạo hiệu cõi tiên theo bậc — thay daoTitles khi đã phi thăng.
+const tienDaoTitles = [
+  'sơ đăng tiên tịch', 'Địa Tiên tản nhân', 'Thiên Tiên chân quân',
+  'Kim Tiên đạo tôn', 'Thái Ất thượng tiên', 'Đại La thiên tôn', 'Hồng Mông Đạo Tổ',
+]; // tien_tier 0..6
+
+int get tienTierMax => tienTierNames.length - 1;
+
+/// Trận pháp hào quang hậu Phi Thăng (migration 068): cosmetic đội thẳng lên nhân vật,
+/// rơi khi đọc như cơ duyên. code → (tên hiển thị, màu chủ đạo). Ảnh:
+/// assets/cult_halo/{code}.webp. Thứ tự khớp allowlist `cult_halo_codes()` ở SQL.
+const tienHalos = <String, (String, int)>{
+  'thai_duong': ('Thái Dương Thần Trận', 0xFFFFA51F),
+  'luc_du': ('Lục Diệu Tiên Trận', 0xFF8BE6A8),
+  'huyen_tuyet': ('Huyền Tuyết Băng Trận', 0xFFDCE8FF),
+  'bach_ngan': ('Bạch Ngân Vương Miện', 0xFFCED4DA),
+  'hoang_kim': ('Hoàng Kim Vương Miện', 0xFFFFD25A),
+  'huyet_long': ('Huyết Long Vương Miện', 0xFFFF5A4D),
+};
+String haloName(String code) => tienHalos[code]?.$1 ?? code;
+
+/// Đội / cởi (code=null) trận pháp. Chỉ Tiên Nhân. Trả cult_state mới.
+Future<Rec> cultWearHalo(String? code) async => Map<String, dynamic>.from(
+    await sb.rpc('cult_wear_halo', params: {'p_code': code}) as Map);
+
+/// DEV/admin: nhận trọn bộ trận để test. Trả cult_state mới.
+Future<Rec> cultAdminGrantHalos() async =>
+    Map<String, dynamic>.from(await sb.rpc('cult_admin_grant_halos') as Map);
+
 /// Ngũ hành — thuộc tính linh căn (trời định lúc khởi tạo, Chuyển Linh Đan đổi được).
 /// Công pháp hợp hệ (trùng thuộc tính hoặc hệ 'all') → tốc độ ×1.3 (migration 043).
 const elementNames = {
@@ -29,17 +65,53 @@ const elementNames = {
   'all': 'Vạn Pháp',
 };
 
-/// Tên phẩm linh căn theo giá trị — càng "thuần" tu càng nhanh (lore ngũ hành:
-/// tạp căn 5 hệ kém nhất, đơn linh căn/thiên linh căn hiếm nhất). Chỉ hiển thị.
-String linhCanTier(int lc) => switch (lc) {
-      < 5 => 'Ngũ Hành Tạp Căn',
-      < 10 => 'Tứ Linh Căn',
-      < 20 => 'Tam Linh Căn',
-      < 40 => 'Song Linh Căn',
-      < 80 => 'Đơn Linh Căn',
-      < 160 => 'Biến Dị Linh Căn',
-      _ => 'Thiên Linh Căn',
-    };
+/// Linh căn (migration 067): BỘ HỆ ngũ hành cố định trời định. Ít hệ = thuần = tu nhanh
+/// (Đơn 1 hệ nhanh nhất trong linh căn thường). Dị/thiên căn có tên riêng qua `variant`.
+const linhCanVariants = {
+  'thien': 'Thiên Linh Căn', 'hon': 'Hỗn Độn Linh Căn', 'kiem': 'Kiếm Linh Căn',
+  'loi': 'Lôi Linh Căn', 'bang': 'Băng Linh Căn', 'phong': 'Phong Linh Căn',
+  'am': 'Huyễn Linh Căn',
+};
+
+/// Hệ số tốc độ theo linh căn — MIRROR `cult_linhcan_mult` (067). Chỉ để HIỂN THỊ
+/// phân tích tốc độ; số thật do server tính.
+double linhCanMult(List<String> elements, String? variant) {
+  switch (variant) {
+    case 'hon':
+      return 14;
+    case 'thien':
+      return 10;
+    case 'kiem':
+    case 'loi':
+      return 8;
+    case 'bang':
+    case 'phong':
+    case 'am':
+      return 7.5;
+    case null:
+      return switch (elements.length) {
+        1 => 5.0,
+        2 => 3.4,
+        3 => 2.4,
+        4 => 1.6,
+        _ => 1.0,
+      };
+    default:
+      return 7; // dị căn khác
+  }
+}
+
+/// Tên bậc linh căn theo số hệ (hoặc tên dị căn). Chỉ hiển thị.
+String rootName(int count, String? variant) {
+  if (variant != null) return linhCanVariants[variant] ?? 'Dị Linh Căn';
+  return switch (count) {
+    <= 1 => 'Đơn Linh Căn',
+    2 => 'Song Linh Căn',
+    3 => 'Tam Linh Căn',
+    4 => 'Tứ Linh Căn',
+    _ => 'Ngũ Hành Tạp Căn',
+  };
+}
 
 const cultTypeNames = {
   'congphap': 'Công pháp', 'danduoc': 'Đan dược', 'linhthach': 'Linh thạch',
@@ -210,6 +282,11 @@ Future<Rec> cultAdvance() async =>
 /// Phi Thăng (Độ Kiếp tầng 9 đầy tu vi + thắng Tâm Ma cuối). Trả {ascended, tamma}.
 Future<Rec> cultAscend() async =>
     Map<String, dynamic>.from(await sb.rpc('cult_ascend') as Map);
+
+/// Thăng một bậc Tiên (hậu Phi Thăng): tích đầy tiên nguyên → độ thiên kiếp lên bậc kế,
+/// không Tâm Ma không phạt. Trả {tier} bậc mới.
+Future<Rec> cultAscendTier() async =>
+    Map<String, dynamic>.from(await sb.rpc('cult_ascend_tier') as Map);
 
 /// CÔNG CỤ TEST (admin, chỉ dùng ở debug UI): đặt nhanh realm/stage + đầy tu vi.
 Future<Rec> cultDebugSet(int realm, int stage, {bool fill = true}) async =>

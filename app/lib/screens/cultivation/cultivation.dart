@@ -135,6 +135,35 @@ class _CultivationScreenState extends ConsumerState<CultivationScreen> {
     }
   }
 
+  /// Độ Thiên Kiếp hậu Phi Thăng: thăng một bậc tiên (không Tâm Ma, không phạt).
+  Future<void> _ascendTier() async {
+    if (_advancing) return;
+    setState(() => _advancing = true);
+    try {
+      final r = await cultAscendTier();
+      if (!mounted) return;
+      ref.invalidate(cultStateProvider);
+      final win = r['win'] == true;
+      final tier = (r['tier'] as num?)?.toInt() ?? 0;
+      final chance = (r['chance'] as num?)?.toInt() ?? 0;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(win
+              ? 'Vượt Tâm Ma ($chance%), độ thiên kiếp thành công — đăng bậc ${tienTierNames[tier]}!'
+              : 'Tâm ma quấy nhiễu ($chance%), độ kiếp thất bại — hao 20% tiên nguyên. Thử lại.'),
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$e')));
+      }
+    } finally {
+      if (mounted) setState(() => _advancing = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(cultStateProvider);
@@ -216,6 +245,7 @@ class _CultivationScreenState extends ConsumerState<CultivationScreen> {
                                 ascended: st['ascended_at'] != null,
                                 onAdvance: () => _advance(st),
                                 onAscend: () => _ascend(st),
+                                onAscendTier: () => _ascendTier(),
                               ),
                               const SizedBox(height: 14),
                               const _SectionLabel(
@@ -343,10 +373,11 @@ Widget _infoChip(
   IconData icon,
   String text, {
   bool on = false,
+  VoidCallback? onTap,
 }) {
   final cs = Theme.of(context).colorScheme;
   final c = on ? cs.primary : cs.onSurfaceVariant;
-  return Container(
+  final chip = Container(
     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
     decoration: BoxDecoration(
       color: c.withValues(alpha: 0.10),
@@ -371,8 +402,126 @@ Widget _infoChip(
             ),
           ),
         ),
+        if (onTap != null) ...[
+          const SizedBox(width: 2),
+          Icon(Icons.info_outline_rounded, size: 11, color: c),
+        ],
       ],
     ),
+  );
+  if (onTap == null) return chip;
+  return InkWell(
+    onTap: onTap,
+    borderRadius: BorderRadius.circular(9),
+    child: chip,
+  );
+}
+
+/// Popup phân tích các yếu tố ảnh hưởng TỐC ĐỘ TU LUYỆN (mirror cult_base_rate 067).
+/// Số tổng là 'rate' server trả; các dòng chỉ để người chơi hiểu vì sao nhanh/chậm.
+void _showSpeedBreakdown(BuildContext context, Rec st) {
+  final elements = (st['elements'] as List?)?.cast<String>() ?? const <String>[];
+  final variant = st['variant'] as String?;
+  final refine = ((st['linh_can'] as num?)?.toInt() ?? 1) - 1;
+  final tienTier = (st['tien_tier'] as num?)?.toInt() ?? 0;
+  final ascended = st['ascended_at'] != null;
+  final eq = (st['equipped'] as Rec?) ?? const {};
+  final cpGrade = (eq['congphap'] as Rec?)?['grade'] as int?;
+  final cpElem = (eq['congphap'] as Rec?)?['effect']?['element'];
+  final match = cpElem != null &&
+      (cpElem == 'all' || variant == 'hon' || elements.contains(cpElem));
+  final isMa = st['race'] == 'ma';
+  final now = DateTime.now();
+  final buffUntil = DateTime.tryParse(st['buff_until'] as String? ?? '');
+  final stoneUntil = DateTime.tryParse(st['stone_until'] as String? ?? '');
+  final buffPct = (st['buff_pct'] as num?)?.toInt() ?? 0;
+  final stonePct = (st['stone_pct'] as num?)?.toInt() ?? 0;
+  double ratePct = 0;
+  for (final k in const ['vukhi', 'phapbao']) {
+    final v = (eq[k] as Rec?)?['effect']?['rate_pct'];
+    if (v is num) ratePct += v;
+  }
+  final rate = (st['rate'] as num).toDouble();
+
+  final rows = <(String, String, bool)>[
+    if (cpGrade != null)
+      ('Công pháp (phẩm ${gradeNames[cpGrade - 1]})',
+          '×${const {1: 1.5, 2: 3, 3: 6, 4: 12, 5: 24}[cpGrade]}', true)
+    else
+      ('Chưa học công pháp', '×1', false),
+    (
+      'Hợp linh căn${match ? '' : ' (không hợp)'}',
+      match ? '×1.3' : '×1',
+      match
+    ),
+    (
+      'Linh căn (${rootName(elements.length, variant)})',
+      '×${linhCanMult(elements, variant).toStringAsFixed(1)}',
+      variant != null,
+    ),
+    if (refine > 0)
+      ('Luyện căn (Tẩy Tủy Đan Lv.$refine)',
+          '×${(1 + 0.1 * refine).toStringAsFixed(1)}', true),
+    if (isMa) ('Tà tốc Ma tộc', '×1.10', true),
+    if (ascended && tienTier > 0)
+      ('Tiên uy (${tienTierNames[tienTier]})',
+          '×${(1 + 0.2 * tienTier).toStringAsFixed(1)}', true),
+    if (ratePct > 0)
+      ('Pháp khí (vũ khí·pháp bảo)', '+${ratePct.toStringAsFixed(0)}%', true),
+    if (buffUntil != null && buffUntil.isAfter(now) && buffPct > 0)
+      ('Đan tăng tốc', '+$buffPct%', true),
+    if (stoneUntil != null && stoneUntil.isAfter(now) && stonePct > 0)
+      ('Linh thạch', '+$stonePct%', true),
+  ];
+
+  showDialog(
+    context: context,
+    builder: (ctx) {
+      final cs = Theme.of(ctx).colorScheme;
+      return AlertDialog(
+        title: const Text('Tốc độ tu luyện'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (final (label, value, on) in rows)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 3),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(label,
+                          style: Theme.of(ctx).textTheme.bodyMedium),
+                    ),
+                    Text(value,
+                        style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(
+                              fontWeight: FontWeight.w700,
+                              color: on ? cs.primary : cs.onSurfaceVariant,
+                            )),
+                  ],
+                ),
+              ),
+            const Divider(height: 18),
+            Row(
+              children: [
+                Expanded(
+                  child: Text('Tốc độ tu luyện',
+                      style: Theme.of(ctx).textTheme.titleSmall),
+                ),
+                Text('${rate.toStringAsFixed(1)}/giây',
+                    style: Theme.of(ctx).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w800,
+                          color: cs.primary,
+                        )),
+              ],
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Đóng')),
+        ],
+      );
+    },
   );
 }
 
@@ -504,6 +653,9 @@ class _HeroStage extends ConsumerWidget {
     final realm = st['realm'] as int;
     final rc = gradeColor((realm + 1) ~/ 2);
     final isAdmin = ref.watch(isAdminProvider).value ?? false;
+    // hậu Phi Thăng: hiện cấp bậc tiên thay cảnh giới + đạo hiệu cõi tiên + hào quang vàng
+    final ascended = st['ascended_at'] != null;
+    final tienTier = (st['tien_tier'] as num?)?.toInt() ?? 0;
 
     return SizedBox(
       height: 372 + topPad,
@@ -527,9 +679,12 @@ class _HeroStage extends ConsumerWidget {
                     cpCode: eq['congphap']?['code'] as String?,
                     cpElem: eq['congphap']?['effect']?['element'] as String?,
                     element: st['element'] as String?,
+                    elements: (st['elements'] as List?)?.cast<String>() ?? const [],
                     halo: eq['phapbao']?['effect']?['halo'] as String?,
                     weaponSprite: eq['vukhi']?['pixel'] as String?,
                     phapbaoSprite: eq['phapbao']?['pixel'] as String?,
+                    tienTier: ascended ? tienTier : -1,
+                    haloWorn: st['halo_worn'] as String?,
                   );
                 },
               ),
@@ -549,7 +704,7 @@ class _HeroStage extends ConsumerWidget {
                   children: [
                     Flexible(
                       child: Text(
-                        realmNames[realm - 1],
+                        ascended ? tienTierNames[tienTier] : realmNames[realm - 1],
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         // Agbalumo: display bo tròn đậm, có dấu tiếng Việt (Đ)
@@ -571,17 +726,20 @@ class _HeroStage extends ConsumerWidget {
                         ),
                       ),
                     ),
-                    const SizedBox(width: 10),
-                    // nhấc pill lên chút cho khớp chân chữ (line-box cao hơn baseline)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 5),
-                      child: _tangPill(context, st['stage'] as int, rc),
-                    ),
+                    // hậu phi thăng vượt khỏi "tầng" → ẩn pill, tên bậc tiên đã đủ
+                    if (!ascended) ...[
+                      const SizedBox(width: 10),
+                      // nhấc pill lên chút cho khớp chân chữ (line-box cao hơn baseline)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 5),
+                        child: _tangPill(context, st['stage'] as int, rc),
+                      ),
+                    ],
                   ],
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '「${daoTitles[realm - 1]}」',
+                  '「${ascended ? tienDaoTitles[tienTier] : daoTitles[realm - 1]}」',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   // serif nghiêng + viền kính surface (2 lớp bóng chồng) để nổi
@@ -616,7 +774,168 @@ class _HeroStage extends ConsumerWidget {
                 onPressed: () => _avatarSheet(context, ref),
               ),
             ),
+          // trận pháp hào quang — góc trái trên; Tiên Nhân (hoặc admin ở bản dev) mới hiện
+          if (ascended || (isAdmin && kDebugMode))
+            Positioned(
+              top: topPad + 4,
+              left: 8,
+              child: IconButton(
+                icon: Icon(
+                  Icons.blur_circular_rounded,
+                  size: 20,
+                  color: cs.onSurfaceVariant,
+                ),
+                tooltip: 'Trận pháp hào quang',
+                onPressed: () => showModalBottomSheet(
+                  context: context,
+                  showDragHandle: true,
+                  isScrollControlled: true, // lưới trận cao → cho cuộn, khỏi tràn
+                  builder: (_) => _HaloSheet(isAdmin: isAdmin),
+                ),
+              ),
+            ),
         ],
+      ),
+    );
+  }
+}
+
+/// Chọn trận pháp hào quang (hậu Phi Thăng). User thường chỉ thấy/đội trận ĐÃ sở hữu;
+/// admin (bản dev) thấy trọn bộ + nút nhận hết. Cởi = ô "Không đội".
+class _HaloSheet extends ConsumerWidget {
+  final bool isAdmin;
+  const _HaloSheet({required this.isAdmin});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final cs = Theme.of(context).colorScheme;
+    final st = ref.watch(cultStateProvider).value ?? const {};
+    final owned = ((st['halos'] as List?)?.cast<String>() ?? const <String>[]).toSet();
+    final worn = st['halo_worn'] as String?;
+    // admin dev thấy cả bộ để test; user thường chỉ trận đã sở hữu
+    final codes = (isAdmin ? tienHalos.keys : tienHalos.keys.where(owned.contains))
+        .toList();
+
+    Future<void> wear(String? code) async {
+      try {
+        await cultWearHalo(code);
+        ref.invalidate(cultStateProvider);
+        if (context.mounted) Navigator.pop(context);
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+        }
+      }
+    }
+
+    return SafeArea(
+      child: SingleChildScrollView(
+        child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text('Trận pháp hào quang',
+                      style: Theme.of(context).textTheme.titleMedium),
+                ),
+                if (isAdmin)
+                  TextButton.icon(
+                    icon: const Icon(Icons.card_giftcard_rounded, size: 18),
+                    label: const Text('Nhận hết'),
+                    onPressed: () async {
+                      try {
+                        await cultAdminGrantHalos();
+                        ref.invalidate(cultStateProvider);
+                      } catch (e) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context)
+                              .showSnackBar(SnackBar(content: Text('$e')));
+                        }
+                      }
+                    },
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            if (codes.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 24),
+                child: Text(
+                  'Chưa có trận pháp nào. Tiếp tục đọc truyện để nhận cơ duyên.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: cs.onSurfaceVariant),
+                ),
+              ),
+            GridView.count(
+              crossAxisCount: 3,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              mainAxisSpacing: 10,
+              crossAxisSpacing: 10,
+              childAspectRatio: 0.82,
+              children: [
+                // ô "Không đội"
+                _haloTile(context, null, worn == null, 'Không đội', cs.onSurface,
+                    () => wear(null)),
+                for (final code in codes)
+                  _haloTile(
+                    context,
+                    code,
+                    worn == code,
+                    haloName(code),
+                    Color(tienHalos[code]!.$2),
+                    () => wear(code),
+                  ),
+              ],
+            ),
+          ],
+        ),
+        ),
+      ),
+    );
+  }
+
+  Widget _haloTile(BuildContext context, String? code, bool active, String name,
+      Color color, VoidCallback onTap) {
+    final cs = Theme.of(context).colorScheme;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: active ? color : cs.outlineVariant,
+            width: active ? 2 : 1,
+          ),
+          color: active ? color.withValues(alpha: 0.10) : null,
+        ),
+        padding: const EdgeInsets.all(6),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Expanded(
+              child: code == null
+                  ? Icon(Icons.block_rounded, color: cs.onSurfaceVariant, size: 34)
+                  : Image.asset('assets/cult_halo/$code.webp', fit: BoxFit.contain),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              name,
+              maxLines: 2,
+              textAlign: TextAlign.center,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: active ? color : cs.onSurfaceVariant,
+                    fontWeight: active ? FontWeight.w700 : null,
+                  ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -737,6 +1056,7 @@ class _RealmCard extends StatelessWidget {
   final ValueNotifier<double> exp;
   final VoidCallback onAdvance;
   final VoidCallback onAscend;
+  final VoidCallback onAscendTier;
   final bool busy;
   final bool ascended;
   const _RealmCard({
@@ -744,6 +1064,7 @@ class _RealmCard extends StatelessWidget {
     required this.exp,
     required this.onAdvance,
     required this.onAscend,
+    required this.onAscendTier,
     required this.busy,
     required this.ascended,
   });
@@ -758,14 +1079,20 @@ class _RealmCard extends StatelessWidget {
     final rc = gradeColor((realm + 1) ~/ 2); // màu phẩm/cảnh giới
     final major = stage >= 9 && realm < 9;
     final peak = stage >= 9 && realm >= 9;
+    final tienTier = (st['tien_tier'] as num?)?.toInt() ?? 0;
+    final canTier = ascended && tienTier < tienTierMax; // còn bậc tiên để độ kiếp
     // tỷ lệ đột phá hiển thị = công thức server (đan hộ thân + pháp chú + tộc đã cộng)
     final chance = cultBreakthroughChance(st);
     final now = DateTime.now();
     final buffUntil = DateTime.tryParse(st['buff_until'] as String? ?? '');
     final stoneUntil = DateTime.tryParse(st['stone_until'] as String? ?? '');
     final cpElem = (st['equipped'] as Rec?)?['congphap']?['effect']?['element'];
-    final match =
-        cpElem != null && (cpElem == st['element'] || cpElem == 'all');
+    // linh căn nay là BỘ HỆ cố định (067); hợp hệ nếu công pháp trùng 1 hệ, hoặc 'all',
+    // hoặc chủ nhân là Hỗn Độn linh căn (hợp mọi công pháp)
+    final elements = (st['elements'] as List?)?.cast<String>() ?? const <String>[];
+    final variant = st['variant'] as String?;
+    final match = cpElem != null &&
+        (cpElem == 'all' || variant == 'hon' || elements.contains(cpElem));
     final hasBuff =
         (buffUntil != null && buffUntil.isAfter(now)) ||
         (stoneUntil != null && stoneUntil.isAfter(now));
@@ -796,20 +1123,30 @@ class _RealmCard extends StatelessWidget {
                   _infoChip(
                     context,
                     Icons.spa_rounded,
-                    linhCanTier((st['linh_can'] as num).toInt()),
+                    rootName(elements.length, variant),
+                    on: variant != null, // dị/thiên căn nổi bật
                   ),
-                  if (st['element'] != null)
+                  if (elements.isNotEmpty)
                     _infoChip(
                       context,
                       Icons.auto_awesome_rounded,
-                      'hệ ${elementNames[st['element']]}${match ? ' ×1.3' : ''}',
+                      'hệ ${elements.map((e) => elementNames[e]).join('·')}${match ? ' ×1.3' : ''}',
                       on: match,
                     ),
+                  if (ascended && tienTier > 0)
+                    _infoChip(
+                      context,
+                      Icons.auto_awesome_mosaic_rounded,
+                      'tiên uy +${tienTier * 20}% tốc',
+                      on: true,
+                    ),
+                  // bấm để xem chi tiết các yếu tố ảnh hưởng tốc độ tu luyện
                   _infoChip(
                     context,
                     Icons.speed_rounded,
                     '${rate.toStringAsFixed(1)}/giây',
                     on: true,
+                    onTap: () => _showSpeedBreakdown(context, st),
                   ),
                   if (_cpMult(st) != null)
                     _infoChip(
@@ -899,7 +1236,9 @@ class _RealmCard extends StatelessWidget {
                               full
                                   ? (peak
                                         ? (ascended
-                                              ? 'Đã phi thăng · Tiên Nhân'
+                                              ? (canTier
+                                                    ? 'Viên mãn — có thể độ thiên kiếp'
+                                                    : 'Đạo Tổ · tiên đạo viên mãn')
                                               : 'Viên mãn — có thể phi thăng')
                                         : 'Bình cảnh · ${major ? 'sẵn sàng đột phá' : 'sẵn sàng lên tầng'}')
                                   : '${e.floor()} / ${req.floor()}',
@@ -921,7 +1260,9 @@ class _RealmCard extends StatelessWidget {
                         onPressed: busy || !full
                             ? null
                             : peak
-                            ? (ascended ? null : onAscend)
+                            ? (ascended
+                                  ? (canTier ? onAscendTier : null)
+                                  : onAscend)
                             : onAdvance,
                         icon: busy
                             ? const SizedBox(
@@ -944,7 +1285,9 @@ class _RealmCard extends StatelessWidget {
                         label: Text(
                           peak
                               ? (ascended
-                                    ? 'Tiên Nhân · Đã Phi Thăng'
+                                    ? (canTier
+                                          ? 'Độ Thiên Kiếp · ${tienTierNames[tienTier + 1]}'
+                                          : 'Đạo Tổ · Tiên đạo viên mãn')
                                     : 'Phi Thăng')
                               : major
                               ? 'Đột phá ${realmNames[realm]} ($chance%)'
@@ -1776,6 +2119,9 @@ class CultivatorPreview extends StatelessWidget {
   final String? halo; // kiểu vòng sáng (pháp bảo vòng đang đeo)
   final String? weaponSprite; // key icon vũ khí đang đeo (assets/cult_items)
   final String? phapbaoSprite; // key icon pháp bảo đang đeo — bay đối xứng
+  final int tienTier; // bậc tiên hậu phi thăng (0..6); -1 = chưa phi thăng
+  final List<String> elements; // bộ hệ linh căn → sương ngũ sắc
+  final String? haloWorn; // mã trận pháp đang đội
   const CultivatorPreview({
     super.key,
     required this.realm,
@@ -1787,6 +2133,9 @@ class CultivatorPreview extends StatelessWidget {
     this.halo,
     this.weaponSprite,
     this.phapbaoSprite,
+    this.tienTier = -1,
+    this.elements = const [],
+    this.haloWorn,
   });
   @override
   Widget build(BuildContext context) => _AnimatedCultivator(
@@ -1799,6 +2148,9 @@ class CultivatorPreview extends StatelessWidget {
     halo: halo,
     weaponSprite: weaponSprite,
     phapbaoSprite: phapbaoSprite,
+    tienTier: tienTier,
+    elements: elements,
+    haloWorn: haloWorn,
   );
 }
 
@@ -1875,6 +2227,9 @@ class _AnimatedCultivator extends StatefulWidget {
   final String? halo; // kiểu vòng sáng sau đầu (từ pháp bảo vòng)
   final String? weaponSprite; // vũ khí đang đeo bay quanh (null = không)
   final String? phapbaoSprite; // pháp bảo đang đeo bay quanh, lệch pha nửa vòng
+  final int tienTier; // bậc tiên hậu phi thăng (0..6); -1 = chưa phi thăng, không hào quang
+  final List<String> elements; // bộ hệ linh căn cố định → sương linh khí ngũ sắc quanh người
+  final String? haloWorn; // mã trận pháp đang đội (hậu phi thăng) → vòng lớn xoay sau lưng
   const _AnimatedCultivator({
     required this.realm,
     this.cpCode,
@@ -1885,6 +2240,9 @@ class _AnimatedCultivator extends StatefulWidget {
     this.halo,
     this.weaponSprite,
     this.phapbaoSprite,
+    this.tienTier = -1,
+    this.elements = const [],
+    this.haloWorn,
   });
   @override
   State<_AnimatedCultivator> createState() => _AnimatedCultivatorState();
@@ -1899,6 +2257,7 @@ class _AnimatedCultivatorState extends State<_AnimatedCultivator>
   ui.Image? _weaponImg; // icon webp của vũ khí đang đeo, decode 1 lần
   ui.Image? _phapbaoImg; // icon pháp bảo đang đeo — bay lệch pha nửa vòng
   ui.Image? _swordWheelImg; // kiếm luân minh họa, xoay sau đầu
+  ui.Image? _haloImg; // trận pháp đang đội — vòng lớn xoay sau lưng
   // Frame idle phụ (tóc/áo lay, chớp mắt) nếu có trong bundle: đặt cạnh ảnh
   // gốc với hậu tố _f2.._f4 (vd human_male_f2.webp) là TỰ NHẬN, không cần
   // sửa code. Chưa có frame phụ → danh sách 1 phần tử, hành vi như ảnh tĩnh.
@@ -1915,7 +2274,8 @@ class _AnimatedCultivatorState extends State<_AnimatedCultivator>
   void didUpdateWidget(covariant _AnimatedCultivator old) {
     super.didUpdateWidget(old);
     if (old.weaponSprite != widget.weaponSprite ||
-        old.phapbaoSprite != widget.phapbaoSprite) {
+        old.phapbaoSprite != widget.phapbaoSprite ||
+        old.haloWorn != widget.haloWorn) {
       _loadIcons();
     }
     if (old.race != widget.race || old.gender != widget.gender) _loadFrames();
@@ -1943,12 +2303,16 @@ class _AnimatedCultivatorState extends State<_AnimatedCultivator>
       _decodeItem(widget.weaponSprite),
       _decodeItem(widget.phapbaoSprite),
       _decodeAsset('assets/cult_fx/sword_wheel.webp'),
+      widget.haloWorn == null
+          ? Future.value(null)
+          : _decodeAsset('assets/cult_halo/${widget.haloWorn}.webp'),
     ]);
     if (!mounted) return;
     setState(() {
       _weaponImg = imgs[0];
       _phapbaoImg = imgs[1];
       _swordWheelImg = imgs[2];
+      _haloImg = imgs[3];
     });
   }
 
@@ -2014,6 +2378,9 @@ class _AnimatedCultivatorState extends State<_AnimatedCultivator>
             weaponImg: _weaponImg,
             phapbaoImg: _phapbaoImg,
             swordWheelImg: _swordWheelImg,
+            tienTier: widget.tienTier,
+            elements: widget.elements,
+            haloImg: _haloImg,
           ),
           // trước: hiệu ứng công pháp + nửa vòng TRƯỚC của vũ khí/pháp bảo
           foregroundPainter: _AuraPainter(
@@ -2109,6 +2476,9 @@ class _SkyPainter extends CustomPainter {
   final ui.Image? weaponImg; // vũ khí đang đeo — nửa vòng SAU vẽ ở lớp nền này
   final ui.Image? phapbaoImg; // pháp bảo đang đeo — như trên, lệch pha nửa vòng
   final ui.Image? swordWheelImg; // kiếm luân minh họa sau đầu
+  final int tienTier; // bậc tiên (0..6) → hào quang vàng sau đầu; -1 = không vẽ
+  final List<String> elements; // bộ hệ linh căn → sương linh khí ngũ sắc bay quanh
+  final ui.Image? haloImg; // trận pháp đang đội — vòng lớn xoay sau lưng (nền)
   _SkyPainter(
     this.t,
     this.moon,
@@ -2118,11 +2488,33 @@ class _SkyPainter extends CustomPainter {
     this.weaponImg,
     this.phapbaoImg,
     this.swordWheelImg,
+    this.tienTier = -1,
+    this.elements = const [],
+    this.haloImg,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
     final c = size.center(Offset.zero);
+    // trận pháp hào quang đội sau lưng — lớp SÂU nhất, vòng to gần kín khung, xoay chậm
+    // + thở nhẹ; nằm sau cả nhân vật nên chỉ ló vành quanh người.
+    if (haloImg != null) {
+      final side = size.width * (0.98 + 0.03 * math.sin(t * 2 * math.pi));
+      final hc = Offset(c.dx, c.dy + 2);
+      canvas.save();
+      canvas.translate(hc.dx, hc.dy);
+      canvas.rotate(t * 2 * math.pi * 0.08); // xoay rất chậm
+      canvas.drawImageRect(
+        haloImg!,
+        Rect.fromLTWH(0, 0, haloImg!.width.toDouble(), haloImg!.height.toDouble()),
+        Rect.fromCenter(center: Offset.zero, width: side, height: side),
+        Paint()
+          ..filterQuality = FilterQuality.medium
+          ..color = Colors.white.withValues(
+              alpha: 0.85 + 0.15 * math.sin(t * 2 * math.pi)),
+      );
+      canvas.restore();
+    }
     // sao trời từ Hóa Thần (realm 5+): vị trí tất định, nhấp nháy lệch pha
     if (realm >= 5) {
       final star = Paint();
@@ -2145,6 +2537,10 @@ class _SkyPainter extends CustomPainter {
       c.dy - 29 + chBob * 4,
     );
     _drawSwordWheel(canvas, hc, 30.0 + realm * 0.65);
+    // hào quang cõi tiên hậu Phi Thăng — nằm ở lớp nền nên SAU nhân vật
+    if (tienTier >= 0) _drawTienCorona(canvas, hc, tienTier);
+    // sương linh khí NGŨ SẮC theo bộ hệ linh căn — mỗi hệ một đốm màu bay quanh người
+    _drawElementWisps(canvas, Offset(c.dx, c.dy + 6));
 
     // Bỏ trận pháp: chỉ còn bóng chân để nhân vật neo vào nền tranh.
     final fc = Offset(c.dx, size.height - 13);
@@ -2252,6 +2648,78 @@ class _SkyPainter extends CustomPainter {
     canvas.restore();
   }
 
+  /// Sương linh khí ngũ sắc theo BỘ HỆ linh căn: mỗi hệ một đốm màu bay vòng quanh
+  /// người (lệch pha đều), có vệt đuôi mờ. Nhiều hệ (tạp) = nhiều màu quấn quýt; đơn
+  /// hệ chỉ 1 dải thuần. Vẽ lớp nền nên chìm sau thân người ở nửa vòng sau.
+  void _drawElementWisps(Canvas canvas, Offset c) {
+    if (elements.isEmpty) return;
+    final n = elements.length;
+    for (var i = 0; i < n; i++) {
+      final col = _elemAura[elements[i]]?.$2 ?? aura;
+      final a = t * 2 * math.pi + i / n * 2 * math.pi;
+      final rx = 42.0, ry = 20.0; // quỹ đạo ellipse dẹt quanh eo
+      final p = Offset(c.dx + math.cos(a) * rx, c.dy + math.sin(a) * ry - 4);
+      final depth = 0.55 + 0.45 * math.sin(a); // xa/gần → to/nhỏ + đậm/nhạt
+      // vệt đuôi ngắn
+      for (var k = 1; k <= 3; k++) {
+        final a2 = a - k * 0.28;
+        final pk = Offset(c.dx + math.cos(a2) * rx, c.dy + math.sin(a2) * ry - 4);
+        canvas.drawCircle(
+          pk,
+          (1.6 + depth * 1.6) * (1 - k * 0.25),
+          Paint()..color = col.withValues(alpha: 0.10 * depth * (1 - k * 0.28)),
+        );
+      }
+      canvas.drawCircle(
+        p,
+        2.0 + depth * 2.2,
+        Paint()
+          ..color = col.withValues(alpha: 0.35 + 0.35 * depth)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1.2),
+      );
+    }
+  }
+
+  /// Hào quang cõi tiên: đĩa vàng ấm + tia sáng xoay quanh đầu, càng lên bậc (tier)
+  /// càng nhiều tia + rực hơn. Vẽ ở lớp nền → nằm SAU nhân vật.
+  void _drawTienCorona(Canvas canvas, Offset hc, int tier) {
+    const gold = Color(0xFFFFD25A);
+    final pulse = 0.5 + 0.5 * math.sin(t * 2 * math.pi);
+    final r = 22.0 + tier * 1.5;
+    canvas.drawCircle(
+      hc,
+      r,
+      Paint()
+        ..shader =
+            RadialGradient(
+              colors: [
+                gold.withValues(alpha: 0.22 + 0.05 * tier),
+                gold.withValues(alpha: 0),
+              ],
+            ).createShader(Rect.fromCircle(center: hc, radius: r)),
+    );
+    final rays = 8 + tier * 2;
+    final len = 20.0 + tier * 3 + pulse * 4;
+    final ray = Paint()
+      ..color = gold.withValues(alpha: 0.30 + 0.04 * tier)
+      ..strokeWidth = 1.4
+      ..strokeCap = StrokeCap.round;
+    canvas.save();
+    canvas.translate(hc.dx, hc.dy);
+    canvas.rotate(t * 2 * math.pi * 0.15); // xoay chậm
+    for (var i = 0; i < rays; i++) {
+      final a = i / rays * 2 * math.pi;
+      final r0 = r + 2;
+      final r1 = r + len * (0.7 + 0.3 * math.sin(a * 3 + t * 6));
+      canvas.drawLine(
+        Offset(math.cos(a) * r0, math.sin(a) * r0),
+        Offset(math.cos(a) * r1, math.sin(a) * r1),
+        ray,
+      );
+    }
+    canvas.restore();
+  }
+
   @override
   bool shouldRepaint(_SkyPainter old) =>
       old.t != t ||
@@ -2261,7 +2729,10 @@ class _SkyPainter extends CustomPainter {
       old.halo != halo ||
       old.weaponImg != weaponImg ||
       old.phapbaoImg != phapbaoImg ||
-      old.swordWheelImg != swordWheelImg;
+      old.swordWheelImg != swordWheelImg ||
+      old.tienTier != tienTier ||
+      old.haloImg != haloImg ||
+      old.elements.join() != elements.join();
 }
 
 /// Quỹ đạo VŨ KHÍ: vòng ngang quanh eo, góc quét đều nhưng bán kính + cao độ
@@ -2363,8 +2834,7 @@ class _AuraPainter extends CustomPainter {
       case _Aura.sword:
         _blades(canvas, c);
       case _Aura.gold:
-        _rings(canvas, c);
-        _dots(canvas, c);
+        _dots(canvas, c); // bỏ _rings (vòng ellip lan từng đợt) theo yêu cầu
       case _Aura.star:
         _stars(canvas, c);
       case _Aura.fire:
@@ -2511,24 +2981,6 @@ class _AuraPainter extends CustomPainter {
       canvas.drawLine(p - dir * 8, p + dir * 8, paint);
       // ánh lóe đầu kiếm
       canvas.drawCircle(p + dir * 8, 1.6, _glow(front ? 0.9 : 0.4));
-    }
-  }
-
-  /// vòng kim quang lan từ người ra
-  void _rings(Canvas canvas, Offset c) {
-    for (final off in [0.0, 0.5]) {
-      final v = (t + off) % 1;
-      canvas.drawOval(
-        Rect.fromCenter(
-          center: c + const Offset(0, 26),
-          width: 40 + v * 70,
-          height: (40 + v * 70) * 0.38,
-        ),
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = (1 - v) * 2.5 + 0.5
-          ..color = color.withValues(alpha: (1 - v) * 0.55),
-      );
     }
   }
 
