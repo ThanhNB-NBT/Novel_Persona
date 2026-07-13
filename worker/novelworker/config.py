@@ -1,3 +1,4 @@
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -15,6 +16,8 @@ class Settings(BaseSettings):
     nvidia_api_key: str = ""
     nvidia_api_keys: str = ""
     nvidia_model: str = "mistralai/mistral-small-4-119b-2603"
+    # Pacing theo từng API key, thấp hơn trần NVIDIA 40 RPM để chừa biên đồng hồ/retry.
+    nvidia_rpm_limit: int = Field(default=30, ge=1, le=39)
 
     @property
     def nvidia_keys(self) -> list[str]:

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import threading
+import time
 from dataclasses import dataclass, replace
 from typing import Callable
 
@@ -15,6 +16,19 @@ from ..config import settings
 # ponytail: đếm call logic thành công; tenacity/fuse-retry ẩn bên trong không tính riêng —
 # tỷ lệ retry đã có ở record_model_call, số này chỉ để soi chi phí analyze/repair mỗi chương.
 _stats = threading.local()
+_rate_lock = threading.Lock()
+_next_request_at: dict[str, float] = {}
+
+
+def _wait_for_rate_slot(api_key: str) -> None:
+    """Giãn đều request theo từng key; mọi lane/retry trong process dùng chung lịch."""
+    interval = 60.0 / settings.nvidia_rpm_limit
+    with _rate_lock:
+        now = time.monotonic()
+        ready = max(now, _next_request_at.get(api_key, now))
+        _next_request_at[api_key] = ready + interval
+    if ready > now:
+        time.sleep(ready - now)
 
 
 def reset_call_stats() -> None:
@@ -59,6 +73,7 @@ class TranslationProvider:
         self, system: str, user: str, temperature: float = 0.3, max_tokens: int = 8192,
         validate: Callable[[LLMResult], None] | None = None,
     ) -> LLMResult:
+        _wait_for_rate_slot(self.api_key)
         resp = self.client.chat.completions.create(
             model=self.model,
             messages=[

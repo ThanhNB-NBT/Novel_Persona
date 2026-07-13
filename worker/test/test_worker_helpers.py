@@ -168,6 +168,23 @@ def main() -> None:
     assert _key(1) == "keyB"
     assert _key(2) == "keyA"
 
+    # Limiter dùng chung theo key: cùng key cách đều 60/RPM, key khác không phải đợi.
+    providers._next_request_at.clear()
+    clock = [100.0]
+    sleeps = []
+    old_monotonic, old_sleep = providers.time.monotonic, providers.time.sleep
+    try:
+        providers.time.monotonic = lambda: clock[0]
+        providers.time.sleep = lambda seconds: sleeps.append(seconds)
+        providers._wait_for_rate_slot("keyA")
+        providers._wait_for_rate_slot("keyA")
+        providers._wait_for_rate_slot("keyB")
+    finally:
+        providers.time.monotonic, providers.time.sleep = old_monotonic, old_sleep
+        providers._next_request_at.clear()
+    assert len(sleeps) == 1
+    assert abs(sleeps[0] - 60 / providers.settings.nvidia_rpm_limit) < 0.001
+
 
 if __name__ == "__main__":
     main()
