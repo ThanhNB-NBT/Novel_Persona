@@ -8,6 +8,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:novel_reader/cultivation.dart';
 import 'package:novel_reader/screens/cultivation/cultivation.dart';
 
 void main() {
@@ -16,6 +17,13 @@ void main() {
         'assets/bg/cultivation_bg.webp');
     expect(cultivationBackgroundAsset(Brightness.dark),
         'assets/bg/cultivation_bg_night.webp');
+  });
+
+  // Mirror SQL↔Dart: cult_tien_max()=6 → 7 tên bậc + 7 đạo hiệu, tránh index-out-of-range.
+  test('bảng bậc tiên khớp cult_tien_max (064)', () {
+    expect(tienTierNames.length, 7);
+    expect(tienDaoTitles.length, 7);
+    expect(tienTierMax, 6);
   });
 
   testWidgets('render cảnh tu luyện ra PNG', (tester) async {
@@ -31,20 +39,23 @@ void main() {
             crossAxisCount: 2,
             childAspectRatio: 320 / 170,
             children: const [
-              // realm thấp, chưa đeo gì — vòng trơn
-              CultivatorPreview(realm: 2, race: 'nhan', gender: 'nam'),
-              // yêu nữ + halo tinh + kiếm bay + gương pháp bảo bay + hỏa
+              // Ngũ Hành Tạp Căn: 5 hệ → 5 dải sương ngũ sắc quấn quýt
+              CultivatorPreview(
+                  realm: 2, race: 'nhan', gender: 'nam',
+                  elements: ['kim', 'moc', 'thuy', 'hoa', 'tho']),
+              // yêu nữ Song Linh Căn (thủy·hỏa) + halo tinh + kiếm bay + gương + hỏa hợp hệ
               CultivatorPreview(
                   realm: 5, race: 'yeu', gender: 'nu', cpCode: 'cp_liet_hoa',
+                  elements: ['thuy', 'hoa'],
                   halo: 'tinh', weaponSprite: 'sword', phapbaoSprite: 'mirror'),
-              // ma nam + halo kim + đao bay + công pháp mộc (lá cuốn)
+              // ma nam Đơn Linh Căn (mộc) + halo kim + đao bay + công pháp mộc
               CultivatorPreview(
                   realm: 8, race: 'ma', gender: 'nam', cpCode: 'cp_thanh_moc',
-                  halo: 'kim', weaponSprite: 'saber'),
-              // linh nữ + halo nguyệt + thương bay
+                  elements: ['moc'], halo: 'kim', weaponSprite: 'saber'),
+              // hậu Phi Thăng: Đại La Kim Tiên (tier 5) đội Hoàng Kim Vương Miện, đơn hệ kim
               CultivatorPreview(
-                  realm: 4, race: 'linh', gender: 'nu', cpCode: 'cp_huyen_bang',
-                  halo: 'nguyet', weaponSprite: 'spear'),
+                  realm: 9, race: 'nhan', gender: 'nam', tienTier: 5,
+                  elements: ['kim'], haloWorn: 'hoang_kim'),
             ],
           ),
         ),

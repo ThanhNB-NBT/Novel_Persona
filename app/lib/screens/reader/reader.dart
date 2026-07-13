@@ -1292,6 +1292,8 @@ class _GiftButtonState extends ConsumerState<_GiftButton> {
       ref.invalidate(cultClaimedProvider(widget.novelId));
       ref.invalidate(cultInventoryProvider);
       ref.invalidate(cultCollectionProvider);
+      final halo = it['halo'] as String?; // trận pháp hào quang (hậu phi thăng)
+      if (halo != null) ref.invalidate(cultStateProvider); // đội tự động → cảnh đổi
       final grade = it['grade'] as int;
       // lời dẫn tất định theo chương — mỗi cơ duyên một tình huống khác nhau
       final flavor = giftFlavors[giftHash(sb.auth.currentUser!.id,
@@ -1324,6 +1326,24 @@ class _GiftButtonState extends ConsumerState<_GiftButton> {
             Text(it['descr'] as String? ?? '',
                 textAlign: TextAlign.center,
                 style: Theme.of(ctx).textTheme.bodySmall),
+            if (halo != null) ...[
+              const SizedBox(height: 12),
+              const Divider(height: 1),
+              const SizedBox(height: 10),
+              Text('Thiên cơ hiển lộ — đắc Tiên trận!',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(ctx).textTheme.labelMedium?.copyWith(
+                      color: Color(tienHalos[halo]!.$2),
+                      fontWeight: FontWeight.w700)),
+              const SizedBox(height: 8),
+              Image.asset('assets/cult_halo/$halo.webp', width: 96, height: 96),
+              Text(haloName(halo),
+                  style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w600)),
+              Text('Đã đội lên nếu chưa có trận nào',
+                  style: Theme.of(ctx).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(ctx).colorScheme.onSurfaceVariant)),
+            ],
           ]),
           actions: [
             FilledButton(
