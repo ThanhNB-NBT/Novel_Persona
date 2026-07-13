@@ -782,6 +782,17 @@ def handle_chapter(job: dict, llm) -> None:
              st["failures"], st["prompt_tokens"], st["completion_tokens"], time.time() - t_start)
 
 
+def _set_patch_result(job_id: int, note: str) -> None:
+    """Ghi kết quả vá lên job để màn Thuật ngữ hiện 'đã vá N/M chương' (RPC
+    latest_patch_status đọc). finish_job(ok) sau đó không đụng cột result.
+    Best-effort: migration 069 chưa chạy (thiếu cột result) thì patch vẫn coi như
+    xong, chỉ chưa hiện kết quả — không được để việc vá fail vì cột trang trí."""
+    try:
+        db.sb().table("translation_jobs").update({"result": note}).eq("id", job_id).execute()
+    except Exception:
+        log.debug("Không ghi được result cho job #%s (migration 069 chưa chạy?)", job_id)
+
+
 def handle_patch(job: dict, llm=None) -> None:
     """Vá chương đã dịch bằng string-replace các term có wrong_vi (không tốn LLM)."""
     terms, _ = db.get_glossary(job["novel_id"])
@@ -792,6 +803,7 @@ def handle_patch(job: dict, llm=None) -> None:
               if t.get("term_zh") and t.get("correct_vi")]
     repls.sort(key=lambda p: -len(p[0]))  # cụm dài thay trước, không đè cụm con
     if not repls:
+        _set_patch_result(job["id"], "không có thuật ngữ cần vá")
         return
     # page qua trần 1000 dòng PostgREST — truyện 4000 chương phải vá ĐỦ, không chỉ 1000 đầu
     chapters: list[dict] = []
@@ -818,6 +830,7 @@ def handle_patch(job: dict, llm=None) -> None:
                 "title_vi": new_title or None, "content_vi": new_content,
             }).eq("id", ch["id"]).execute()
             patched += 1
+    _set_patch_result(job["id"], f"{patched}/{len(chapters)} chương")
     log.info("Patch novel %s: vá %d/%d chương, %d term", job["novel_id"], patched, len(chapters), len(repls))
 
 

@@ -823,6 +823,15 @@ Future<void> addTerm(int novelId, String zh, String vi, {String? wrongVi}) =>
 Future<void> requestPatch(int novelId) =>
     sb.rpc('request_patch', params: {'p_novel_id': novelId});
 
+/// Trạng thái job vá gần nhất của truyện (pending/running/done/failed + result
+/// "N/M chương" + done_at) — để màn Thuật ngữ hiện tiến trình. null = chưa vá lần nào.
+final latestPatchProvider =
+    FutureProvider.autoDispose.family<Rec?, int>((ref, novelId) async {
+  final rows = List<Rec>.from(
+      await sb.rpc('latest_patch_status', params: {'p_novel_id': novelId}));
+  return rows.isEmpty ? null : rows.first;
+});
+
 // ---------- Quản trị (chỉ admin — RLS chặn user thường) ----------
 
 /// User hiện tại có phải admin (cờ profiles.is_admin, chỉ đổi được qua SQL/service_role).
