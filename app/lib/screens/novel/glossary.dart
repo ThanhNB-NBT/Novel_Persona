@@ -48,9 +48,11 @@ class _GlossaryScreenState extends ConsumerState<GlossaryScreen> {
                   icon: const Icon(Icons.healing_outlined),
                   onPressed: () async {
                     await requestPatch(novelId);
+                    ref.invalidate(latestPatchProvider(novelId));
+                    _pollPatch();
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                          content: Text('Đã xếp hàng vá chương — worker sẽ xử lý sớm')));
+                          content: Text('Đã xếp hàng vá — theo dõi tiến trình ở thanh trên')));
                     }
                   },
                 ),
@@ -71,7 +73,9 @@ class _GlossaryScreenState extends ConsumerState<GlossaryScreen> {
               onPressed: () => _showTermDialog(context, onDone: refresh),
               child: const Icon(Icons.add),
             ),
-      body: terms.when(
+      body: Column(children: [
+        _PatchBanner(novelId),
+        Expanded(child: terms.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => AppError(e, onRetry: () => ref.invalidate(glossaryProvider(novelId))),
         data: (list) {
@@ -140,8 +144,22 @@ class _GlossaryScreenState extends ConsumerState<GlossaryScreen> {
             ],
           );
         },
-      ),
+      )),
+      ]),
     );
+  }
+
+  /// Poll trạng thái job vá vài lần sau khi bấm để thanh trên tự cập nhật
+  /// pending → running → done (job vá chạy <2s nhưng có thể chờ hàng đợi chút).
+  Future<void> _pollPatch() async {
+    for (var i = 0; i < 12; i++) {
+      await Future.delayed(const Duration(milliseconds: 1500));
+      if (!mounted) return;
+      ref.invalidate(latestPatchProvider(novelId));
+      final rec = await ref.read(latestPatchProvider(novelId).future);
+      final st = rec?['status'];
+      if (st == 'done' || st == 'failed') return;
+    }
   }
 
   /// Tiêu đề mục bấm được để thu gọn/mở (danh sách dài cả trăm dòng).
@@ -442,6 +460,49 @@ class _PendingTile extends StatelessWidget {
           ]),
         ),
       ),
+    );
+  }
+}
+
+/// Thanh trạng thái vá trên đầu màn Thuật ngữ: hiện job vá gần nhất (đang vá /
+/// đã vá N/M chương / lỗi). Ẩn khi truyện chưa vá lần nào.
+class _PatchBanner extends ConsumerWidget {
+  final int novelId;
+  const _PatchBanner(this.novelId);
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = ref.watch(latestPatchProvider(novelId)).value;
+    if (s == null) return const SizedBox.shrink();
+    final cs = Theme.of(context).colorScheme;
+    final status = s['status'];
+    final running = status == 'pending' || status == 'running';
+    final (IconData icon, Color color, String text) = switch (status) {
+      'pending' || 'running' => (Icons.healing_outlined, cs.primary, 'Đang vá chương…'),
+      'failed' => (Icons.error_outline, cs.error, 'Vá lỗi — thử lại'),
+      _ => (
+          Icons.check_circle_outline,
+          cs.primary,
+          'Đã vá ${s['result'] ?? 'xong'} · ${timeAgo(s['done_at'])}'
+        ),
+    };
+    return Container(
+      width: double.infinity,
+      color: color.withValues(alpha: 0.10),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(children: [
+        Icon(icon, size: 16, color: color),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(text,
+              style: Theme.of(context).textTheme.labelMedium?.copyWith(color: color)),
+        ),
+        if (running)
+          SizedBox(
+              width: 12,
+              height: 12,
+              child: CircularProgressIndicator(strokeWidth: 2, color: color)),
+      ]),
     );
   }
 }
