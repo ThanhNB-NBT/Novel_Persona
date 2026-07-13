@@ -6,6 +6,55 @@ import 'package:flutter_tts/flutter_tts.dart';
 
 import 'data.dart';
 
+class TtsVoice {
+  final String name;
+  final String locale;
+  final String identifier;
+  final int quality;
+  final bool networkRequired;
+
+  const TtsVoice({
+    required this.name,
+    required this.locale,
+    this.identifier = '',
+    this.quality = 0,
+    this.networkRequired = false,
+  });
+
+  String get key => identifier.isNotEmpty ? identifier : '$locale|$name';
+
+  String get qualityLabel {
+    if (quality >= 500) return 'Rất cao';
+    if (quality >= 400) return 'Cao';
+    if (quality >= 300) return 'Tiêu chuẩn';
+    if (quality >= 3) return 'Premium';
+    if (quality >= 2) return 'Nâng cao';
+    return 'Tiêu chuẩn';
+  }
+
+  Map<String, String> get selector => identifier.isNotEmpty
+      ? {'identifier': identifier}
+      : {'name': name, 'locale': locale};
+}
+
+bool isVietnameseTtsLocale(String locale) {
+  final normalized = locale.toLowerCase().replaceAll('_', '-');
+  return normalized == 'vi' || normalized.startsWith('vi-');
+}
+
+List<TtsVoice> sortTtsVoices(Iterable<TtsVoice> voices) {
+  int score(TtsVoice voice) => voice.quality >= 100 ? voice.quality : voice.quality * 100;
+  return voices.toList()
+    ..sort((a, b) {
+      final quality = score(b).compareTo(score(a));
+      if (quality != 0) return quality;
+      final offline = a.networkRequired ? 1 : 0;
+      final otherOffline = b.networkRequired ? 1 : 0;
+      if (offline != otherOffline) return offline.compareTo(otherOffline);
+      return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+    });
+}
+
 /// Trạng thái máy đọc — bất biến, đổi qua TtsPlayer.
 class TtsState {
   final int? novelId;
@@ -29,16 +78,68 @@ class TtsPlayer {
   final ValueNotifier<TtsState> state = ValueNotifier(const TtsState());
 
   List<String> _paras = [];
+  List<TtsVoice> _voices = [];
+  TtsVoice? _selectedVoice;
   int _at = 0; // đoạn đang/ sắp đọc
   int _gen = 0; // đổi mỗi start/stop → vòng phát cũ tự thoát
   bool _inited = false;
 
   /// Tốc độ đọc (0.5 = chuẩn của flutter_tts). Lưu prefs.
   double get rate => prefs.getDouble('tts_rate') ?? 0.5;
+  String? get selectedVoiceKey => _selectedVoice?.key;
 
   Future<void> setRate(double r) async {
     await prefs.setDouble('tts_rate', r);
     await _tts.setSpeechRate(r);
+  }
+
+  Future<List<TtsVoice>> availableVoices() async {
+    await _init();
+    _voices = await _readVietnameseVoices();
+    final selected = _chooseVoice(_voices);
+    if (selected != null) {
+      _selectedVoice = selected;
+      await _tts.setVoice(selected.selector);
+    }
+    return List.unmodifiable(_voices);
+  }
+
+  Future<void> selectVoice(TtsVoice voice) async {
+    await _tts.setVoice(voice.selector);
+    await prefs.setString('tts_voice_key', voice.key);
+    _selectedVoice = voice;
+  }
+
+  Future<void> previewVoice(TtsVoice voice) async {
+    await _tts.stop();
+    await selectVoice(voice);
+    await _tts.setSpeechRate(rate);
+    await _tts.speak('Bạn đang nghe thử giọng đọc tiếng Việt của Gác Truyện.');
+  }
+
+  TtsVoice? _chooseVoice(List<TtsVoice> voices) {
+    if (voices.isEmpty) return null;
+    final saved = prefs.getString('tts_voice_key');
+    return voices.where((voice) => voice.key == saved).firstOrNull ?? voices.first;
+  }
+
+  Future<List<TtsVoice>> _readVietnameseVoices() async {
+    try {
+      final raw = List.from(await _tts.getVoices as List? ?? const []);
+      return sortTtsVoices(raw.whereType<Map>().map((voice) {
+        final quality = int.tryParse('${voice['quality'] ?? 0}') ?? 0;
+        final network = voice['network_required'];
+        return TtsVoice(
+          name: '${voice['name'] ?? 'Giọng tiếng Việt'}',
+          locale: '${voice['locale'] ?? ''}',
+          identifier: '${voice['identifier'] ?? ''}',
+          quality: quality,
+          networkRequired: network == true || '$network'.toLowerCase() == 'true',
+        );
+      }).where((voice) => isVietnameseTtsLocale(voice.locale)));
+    } catch (_) {
+      return const [];
+    }
   }
 
   /// null = ổn; chuỗi = cảnh báo cho user (thiếu giọng Việt, engine hỏng...).
@@ -78,6 +179,19 @@ class TtsPlayer {
     try {
       await _tts.setLanguage('vi-VN');
     } catch (_) {}
+    _voices = await _readVietnameseVoices();
+    _selectedVoice = _chooseVoice(_voices);
+    if (_selectedVoice != null) {
+      try {
+        await _tts.setVoice(_selectedVoice!.selector);
+      } catch (_) {}
+    } else {
+      warn ??= !kIsWeb && Platform.isIOS
+          ? 'Máy chưa có giọng tiếng Việt. Vào Cài đặt > Trợ năng > Nội dung được đọc '
+              '> Giọng nói để tải giọng Tiếng Việt.'
+          : 'Máy chưa có giọng đọc tiếng Việt. Hãy tải dữ liệu giọng Tiếng Việt '
+              'trong phần Chuyển văn bản thành giọng nói của hệ thống.';
+    }
     try {
       await _tts.setSpeechRate(rate);
       await _tts.setVolume(1.0);
