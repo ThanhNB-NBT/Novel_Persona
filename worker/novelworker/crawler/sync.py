@@ -293,6 +293,12 @@ def discover_latest(adapter: SourceAdapter, max_new: int = 50) -> None:
         scanned += 1
         try:
             meta = adapter.fetch_novel_meta(cand.source_novel_id)
+        except ValueError as e:
+            # trang bị xoá / chống bot HTTP 200 thiếu metadata — bỏ qua mềm, đừng bơm
+            # traceback làm log rối; chu kỳ sau nếu là chống bot tạm thì thử lại.
+            skipped += 1
+            log.info("Discovery: bỏ qua %s (%s) — %s", cand.source_novel_id, adapter.name, e)
+            continue
         except Exception:
             errors += 1
             log.exception("Discovery: lỗi lấy metadata %s (%s)", cand.source_novel_id, adapter.name)
@@ -372,6 +378,10 @@ def discover_ranking(adapter: SourceAdapter, max_new: int = 30) -> None:
         scanned += 1
         try:
             meta = adapter.fetch_novel_meta(source_novel_id)
+        except ValueError as e:
+            skipped += 1
+            log.info("Ranking: bỏ qua %s (%s) — %s", source_novel_id, adapter.name, e)
+            continue
         except Exception:
             errors += 1
             log.exception("Ranking: lỗi metadata %s (%s)", source_novel_id, adapter.name)

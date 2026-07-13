@@ -215,12 +215,13 @@ def run_crawler() -> None:
                     sync.ensure_chapters_fetched(adapter, nv["id"])
                 # 2) discovery + sync truyện được theo dõi — theo chu kỳ dài
                 if due:
-                    # "Ít mà chất": nguồn có bảng xếp hạng → CHỈ lấy từ ranking (lượt đọc
-                    # = bộ lọc chất lượng); trang "mới cập nhật" toàn truyện mỏng chưa ai
-                    # đọc, chỉ dùng cho nguồn không có ranking (ddxs).
+                    # Cào MỌI mục để truyện dày dần, không chỉ vét lại top cũ:
+                    # - ranking (nếu có) → lưu source_rank cho "Đề cử"; chart /allvisit/
+                    #   gần như bất động nên riêng nó cào đi cào lại vẫn mấy truyện đó.
+                    # - "mới cập nhật" → thêm truyện mới ra (đủ >200 chương + qua lọc mới giữ,
+                    #   nên không sợ truyện mỏng). Nguồn không có latest → fetch_latest trả [].
                     sync.discover_ranking(adapter, max_new=max_new)
-                    if not getattr(adapter, "fetch_ranking", None):
-                        sync.discover_latest(adapter, max_new=max_new)
+                    sync.discover_latest(adapter, max_new=max_new)
                     # chen giữa các bước dài: yêu cầu truyện không phải đợi hết cả
                     # chu kỳ discovery (10-15 phút) mới được xử
                     sync.process_novel_requests(list(adapters.values()))

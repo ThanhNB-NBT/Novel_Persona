@@ -65,8 +65,43 @@ class BiqugeAdapter(SourceAdapter):
     # ---------- SourceAdapter ----------
 
     def fetch_latest(self, limit: int = 30) -> list[NovelMeta]:
-        # Discovery của biquge đi qua fetch_ranking (bảng xếp hạng), không phải fetch_latest.
-        return []
+        """Trang 'mới cập nhật' (/lastupdate/{p}.html) — cùng khuôn <span class="s2">
+        <a href="/{id}/">tựa</a> như ranking. Bổ sung cho ranking (gần như bất động) để
+        truyện mới ra vẫn được thêm vào, không chỉ vét lại top cũ. Trả metadata NHẸ
+        (id+tựa); discovery gọi fetch_novel_meta lấy đủ. Site khác đổi qua
+        config['latest_path']/['latest_pages']."""
+        base = self.config.get("latest_path", "/lastupdate/")
+        pages = int(self.config.get("latest_pages", 20))
+        pat = re.compile(r'<span class="s2[^"]*"><a href="/(\d+)/"[^>]*>(.*?)</a>', re.S)
+        out: list[NovelMeta] = []
+        seen: set[str] = set()
+        for p in range(1, pages + 1):
+            path = base if p == 1 else f"{base}{p}.html"
+            try:
+                html = self._get(path)
+            except Exception:
+                if p == 1:
+                    raise
+                break
+            fresh = 0
+            for sid, raw in pat.findall(html):
+                if sid in seen:
+                    continue
+                title = unescape(re.sub(r"<[^>]+>", "", raw)).strip()
+                if not title:
+                    continue
+                seen.add(sid)
+                fresh += 1
+                out.append(NovelMeta(
+                    source_novel_id=sid,
+                    source_url=f"{self.base_url}{self._novel_url(sid)}",
+                    title_zh=title,
+                ))
+                if len(out) >= limit:
+                    return out
+            if not fresh:
+                break
+        return out
 
     def fetch_ranking(self, limit: int = 100) -> list[tuple[str, int]]:
         """TOÀN BỘ bảng xếp hạng tổng lượt đọc → [(source_novel_id, rank)] (rank nhỏ

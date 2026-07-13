@@ -26,8 +26,12 @@ class FalooAdapter(SourceAdapter):
 
     def fetch_latest(self, limit: int = 30) -> list[NovelMeta]:
         base_path = self.config.get("latest_path", "/category_2_1.html")
+        # CHỈ bắt link tiêu đề trong khối truyện (show_title2) — trang category còn vô số
+        # href /{id}.html footer/nav (id ngắn) không phải truyện, trước đây bị vơ nhầm
+        # thành ứng viên → 185/200 lỗi "thiếu metadata".
         pattern = re.compile(
-            r'<a[^>]+href=["\'](?:(?:https?:)?//wap\.faloo\.com)?/(?:new_)?(\d+)\.html["\'][^>]*>(.*?)</a>',
+            r'class=["\']show_title2["\'][^>]*>\s*<a[^>]+href=["\']'
+            r'(?:(?:https?:)?//wap\.faloo\.com)?/(?:new_)?(\d+)\.html["\'][^>]*>(.*?)</a>',
             re.I | re.S,
         )
         out: list[NovelMeta] = []
