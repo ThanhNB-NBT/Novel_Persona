@@ -11,10 +11,8 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 
 from ..config import settings
 
-# Đếm LLM call + token cho MỘT chương (per-thread: mỗi luồng dịch một chương).
-# Sống sót qua pin() vì mọi call đều đi qua FallbackChain.complete, không phụ thuộc instance.
-# ponytail: đếm call logic thành công; tenacity/fuse-retry ẩn bên trong không tính riêng —
-# tỷ lệ retry đã có ở record_model_call, số này chỉ để soi chi phí analyze/repair mỗi chương.
+# Đếm REQUEST thật + token cho MỘT chương (per-thread: mỗi luồng dịch một chương).
+# Đặt trong TranslationProvider.complete nên mỗi lượt tenacity retry đều được tính.
 _stats = threading.local()
 _rate_lock = threading.Lock()
 _next_request_at: dict[str, float] = {}
@@ -32,11 +30,13 @@ def _wait_for_rate_slot(api_key: str) -> None:
 
 
 def reset_call_stats() -> None:
-    _stats.calls = _stats.prompt_tokens = _stats.completion_tokens = 0
+    _stats.calls = _stats.failures = 0
+    _stats.prompt_tokens = _stats.completion_tokens = 0
 
 
 def get_call_stats() -> dict:
     return {"calls": getattr(_stats, "calls", 0),
+            "failures": getattr(_stats, "failures", 0),
             "prompt_tokens": getattr(_stats, "prompt_tokens", 0),
             "completion_tokens": getattr(_stats, "completion_tokens", 0)}
 
@@ -73,31 +73,47 @@ class TranslationProvider:
         self, system: str, user: str, temperature: float = 0.3, max_tokens: int = 8192,
         validate: Callable[[LLMResult], None] | None = None,
     ) -> LLMResult:
+        from .. import db
+
+        t0 = time.time()
+        _stats.calls = getattr(_stats, "calls", 0) + 1
         _wait_for_rate_slot(self.api_key)
-        resp = self.client.chat.completions.create(
-            model=self.model,
-            messages=[
-                {"role": "system", "content": system},
-                {"role": "user", "content": user},
-            ],
-            temperature=temperature,
-            max_tokens=max_tokens,
-        )
-        usage = resp.usage
-        # bị cắt vì chạm trần max_tokens → output cụt NGẦM (thiếu câu cuối + mất
-        # SUMMARY/GLOSSARY) mà các check độ dài có thể lọt → coi là lỗi, để chain retry
-        if resp.choices[0].finish_reason == "length":
-            raise RuntimeError(f"Output bị cắt vì chạm max_tokens (model {self.model})")
-        result = LLMResult(
-            text=resp.choices[0].message.content or "",
-            model=self.model,
-            prompt_tokens=usage.prompt_tokens if usage else 0,
-            completion_tokens=usage.completion_tokens if usage else 0,
-            provider=self.provider,
-        )
-        if validate:
-            validate(result)
-        return result
+        try:
+            resp = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user},
+                ],
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
+            usage = resp.usage
+            prompt_tokens = usage.prompt_tokens if usage else 0
+            completion_tokens = usage.completion_tokens if usage else 0
+            # Tính cả token của output bị fuse/length loại vì request đó vẫn tiêu quota.
+            _stats.prompt_tokens = getattr(_stats, "prompt_tokens", 0) + prompt_tokens
+            _stats.completion_tokens = getattr(_stats, "completion_tokens", 0) + completion_tokens
+            # bị cắt vì chạm trần max_tokens → output cụt NGẦM (thiếu câu cuối + mất
+            # SUMMARY/GLOSSARY) mà các check độ dài có thể lọt → coi là lỗi, để chain retry
+            if resp.choices[0].finish_reason == "length":
+                raise RuntimeError(f"Output bị cắt vì chạm max_tokens (model {self.model})")
+            result = LLMResult(
+                text=resp.choices[0].message.content or "",
+                model=self.model,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                provider=self.provider,
+            )
+            if validate:
+                validate(result)
+            db.record_model_call(self.model, (time.time() - t0) * 1000, ok=True)
+            return result
+        except Exception as exc:
+            _stats.failures = getattr(_stats, "failures", 0) + 1
+            db.record_model_call(
+                self.model, (time.time() - t0) * 1000, ok=False, error=str(exc))
+            raise
 
 
 class FallbackChain:
@@ -118,24 +134,16 @@ class FallbackChain:
         (trả nguyên văn tiếng Trung / quá ngắn) → coi như provider lỗi, chuyển provider
         kế NGAY trong cùng lần dịch thay vì fail job (fuse chất lượng nằm TRONG chain)."""
         import logging
-        import time
-        from .. import db
         log = logging.getLogger(__name__)
         last_exc: Exception | None = None
         for name, p in self.providers:
-            t0 = time.time()
             try:
                 # validate truyền VÀO provider: fuse chất lượng fail → tenacity retry
                 # cùng model trước (quan trọng khi chỉ còn 1 provider), rồi mới coi là lỗi
                 res = p.complete(system, user, temperature=temperature,
                                  max_tokens=max_tokens, validate=validate)
-                db.record_model_call(res.model, (time.time() - t0) * 1000, ok=True)
-                _stats.calls = getattr(_stats, "calls", 0) + 1
-                _stats.prompt_tokens = getattr(_stats, "prompt_tokens", 0) + (res.prompt_tokens or 0)
-                _stats.completion_tokens = getattr(_stats, "completion_tokens", 0) + (res.completion_tokens or 0)
                 return replace(res, provider=name)
             except Exception as e:
-                db.record_model_call(p.model, (time.time() - t0) * 1000, ok=False, error=str(e))
                 last_exc = e
                 log.warning("Provider '%s' lỗi (%s) — chuyển provider kế tiếp", name, e)
         raise last_exc if last_exc else RuntimeError("Không có provider nào khả dụng")

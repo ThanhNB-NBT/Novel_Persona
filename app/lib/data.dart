@@ -291,10 +291,16 @@ final genresProvider = FutureProvider.autoDispose<List<String>>((ref) async {
 // ---------- Hàng đợi dịch ----------
 
 class QueueState {
-  final List<Rec> active; // chương translating / queued / downloading (kèm tên truyện)
+  final List<Rec> active; // translating / queued / downloading / source_unavailable
   final List<Rec> recentDone; // chương vừa dịch xong (để không "mất tích")
   final int doneLastHour; // thông lượng ~1h gần đây
   QueueState(this.active, this.recentDone, this.doneLastHour);
+}
+
+bool _jobSourceUnavailable(Rec job) {
+  final novel = job['novels'] as Map?;
+  final source = novel?['sources'] as Map?;
+  return source?['enabled'] == false;
 }
 
 /// Chương đang dịch/chờ + tốc độ (số chương xong trong ~1h). Đồng bộ chung mọi user.
@@ -310,7 +316,8 @@ final translateQueueProvider = FutureProvider.autoDispose<QueueState>((
         .select(
           'priority, status, novel_id, chapter_id, '
           'chapters(chapter_index, title_vi, title_zh), '
-          'novels(title_vi, title_zh, cover_url, chapter_count_translated, chapter_count_source)',
+          'novels(title_vi, title_zh, cover_url, chapter_count_translated, '
+          'chapter_count_source, sources(name, enabled))',
         )
         .eq('type', 'chapter')
         .inFilter('status', ['pending', 'running'])
@@ -333,7 +340,7 @@ final translateQueueProvider = FutureProvider.autoDispose<QueueState>((
         .isFilter('content_zh', null));
     downloading.addAll(rows.map((r) => r['id'] as int));
   }
-  // Chuẩn hoá về shape UI hàng đợi dùng (running→translating; pending→queued/downloading).
+  // Thiếu content chỉ là "đang tải" khi nguồn còn bật; nguồn tắt là blocked.
   final active = <Rec>[
     for (final j in jobs)
       if (j['chapters'] != null)
@@ -344,7 +351,9 @@ final translateQueueProvider = FutureProvider.autoDispose<QueueState>((
           'title_zh': (j['chapters'] as Map)['title_zh'],
           'translation_status': j['status'] == 'running'
               ? 'translating'
-              : (downloading.contains(j['chapter_id']) ? 'downloading' : 'queued'),
+              : downloading.contains(j['chapter_id'])
+                  ? (_jobSourceUnavailable(j) ? 'source_unavailable' : 'downloading')
+                  : 'queued',
           'novels': j['novels'],
         },
   ];
@@ -884,7 +893,8 @@ final adminJobsProvider = FutureProvider.autoDispose<List<Rec>>((ref) async {
         .from('translation_jobs')
         .select(
           'id, type, status, priority, attempts, error, created_at, started_at, '
-          'novel_id, chapter_id, novels(title_vi, title_zh), chapters(chapter_index)',
+          'novel_id, chapter_id, novels(title_vi, title_zh, sources(name, enabled)), '
+          'chapters(chapter_index)',
         )
         .inFilter('status', ['running', 'failed', 'pending'])
         .neq('type', 'audit') // audit là job toàn cục (novel_id null) → không gộp theo truyện
@@ -907,6 +917,8 @@ final adminJobsProvider = FutureProvider.autoDispose<List<Rec>>((ref) async {
     final downloading = {for (final r in rows) r['id'] as int};
     for (final j in jobs) {
       j['downloading'] = downloading.contains(j['chapter_id']);
+      j['source_unavailable'] =
+          j['downloading'] == true && _jobSourceUnavailable(j);
     }
   }
   return jobs;

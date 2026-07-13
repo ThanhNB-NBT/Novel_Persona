@@ -4,9 +4,11 @@ from __future__ import annotations
 from .base import SourceAdapter
 from .biquge import BiqugeAdapter, XinBiqugeAdapter
 from .dingdian import DingdianAdapter
+from .faloo import FalooAdapter
 
 TEMPLATE_REGISTRY: dict[str, type[SourceAdapter]] = {
     "biquge": BiqugeAdapter,
     "dingdian": DingdianAdapter,
+    "faloo": FalooAdapter,
     "xinbiquge": XinBiqugeAdapter,
 }

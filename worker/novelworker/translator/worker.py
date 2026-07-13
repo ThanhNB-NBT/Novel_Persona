@@ -259,6 +259,14 @@ NEW_NAME_LOW = 2        # chương ra ≤ ngần này tên mới coi là "ít"
 LOW_STREAK_LIMIT = 3    # đủ ngần này chương "ít" liên tiếp → tắt 2-pass cho truyện
 
 
+def _valid_suggested_zh(value) -> bool:
+    """Chặn rác kiểu `h -> H`; vẫn nhận mã pha Hán như `t2重型...` và mã `t3`."""
+    if not isinstance(value, str):
+        return False
+    value = value.strip()
+    return bool(value) and (bool(HAN_CHARS.search(value)) or len(value) >= 2)
+
+
 def _merge_names(terms: list[dict], existing_zh: set[str], names: list[dict]) -> list[dict]:
     """Thêm tên mới (chưa có term_zh) vào `terms` để chunk/chương sau dùng ngay.
     Trả về danh sách tên THẬT SỰ mới (đếm cho logic tắt 2-pass + lưu DB làm gợi ý)."""
@@ -267,8 +275,12 @@ def _merge_names(terms: list[dict], existing_zh: set[str], names: list[dict]) ->
         if not isinstance(nm, dict):
             continue
         zh, vi = nm.get("zh"), nm.get("vi")
-        if not zh or not vi or zh in existing_zh:
+        if not _valid_suggested_zh(zh) or not isinstance(vi, str) or not vi.strip():
             continue
+        zh, vi = zh.strip(), vi.strip()
+        if zh in existing_zh:
+            continue
+        nm["zh"], nm["vi"] = zh, vi
         # LLM nhỏ hay phiên âm bừa kiểu pinyin (罗森→"Lao Sen") → đối chiếu bảng tra
         # Hán-Việt, sai thì thay ("La Sâm") TRƯỚC khi vào prompt/DB
         vi = nm["vi"] = hanviet.reconcile(zh, vi, nm.get("type")) or vi
@@ -423,7 +435,11 @@ def _fresh_blood_vi(text: str, start: int, end: int) -> str:
 
 
 def _replace_glossary_han(vi: str, terms: list[dict]) -> tuple[str, int]:
-    """Thay cụm Hán đã có glossary, ưu tiên cụm dài để không đè cụm con."""
+    """Chỉ thay term còn chữ Hán, ưu tiên cụm dài để không đè cụm con.
+
+    Glossary còn phục vụ prompt nên có thể chứa term Latin/mã vật phẩm; tuyệt đối không
+    string-replace các term đó trên bản tiếng Việt (đã từng có `h -> H` thay 477 lần).
+    """
     replaced = 0
     for term in sorted(_term_dicts(terms), key=lambda t: -len(t.get("term_zh") or "")):
         zh, correct = term.get("term_zh"), term.get("correct_vi")
@@ -437,7 +453,7 @@ def _replace_glossary_han(vi: str, terms: list[dict]) -> tuple[str, int]:
                 replaced += 1
             out.append(vi[last:])
             vi = "".join(out)
-        elif zh and correct and zh in vi:
+        elif zh and correct and HAN_CHARS.search(zh) and zh in vi:
             replaced += vi.count(zh)
             vi = vi.replace(zh, correct)
     return vi, replaced
@@ -494,7 +510,7 @@ def _fix_han_residue(chapter_llm, vi: str, terms: list[dict] | None = None) -> s
     return vi
 
 
-_STYLE_KEYS = ("pov", "setting", "han_viet", "tone", "rules")
+_STYLE_KEYS = ("pov", "setting", "han_viet", "tone")
 
 
 def _clean_style(style) -> dict | None:
@@ -504,12 +520,7 @@ def _clean_style(style) -> dict | None:
     out = {}
     for k in _STYLE_KEYS:
         v = style.get(k)
-        if k == "rules":
-            rules = [r.strip()[:120] for r in v if isinstance(r, str) and r.strip()] \
-                if isinstance(v, list) else []
-            if rules:
-                out[k] = rules[:5]
-        elif isinstance(v, str) and v.strip():
+        if isinstance(v, str) and v.strip():
             out[k] = v.strip()[:80]
     return out or None
 
@@ -585,7 +596,7 @@ def handle_chapter(job: dict, llm) -> None:
 
     db.sb().table("chapters").update({"translation_status": "translating"}).eq("id", ch["id"]).execute()
 
-    providers.reset_call_stats()  # đếm LLM call/token cả chương (analyze + dịch + repair)
+    providers.reset_call_stats()  # đếm request/retry/token thật cả chương (analyze + dịch + repair)
     t_start = time.time()
     terms, glossary_version = db.get_glossary(ch["novel_id"])
 
@@ -692,13 +703,6 @@ def handle_chapter(job: dict, llm) -> None:
             log.info("Chương %s: chunk %d/%d xong", ch["id"], i + 1, len(chunks))
 
     text = "\n\n".join(parts)
-    # Lưới an toàn: tên/thuật ngữ trong glossary còn SÓT dạng chữ Hán trong bản dịch
-    # (lọt fuse vì dưới ngưỡng 5%) → thay thẳng bằng bản dịch chuẩn. Dài trước để
-    # không đè cụm con (幻妖王 phải thay trước 幻妖).
-    for t in sorted(terms, key=lambda t: -len(t.get("term_zh") or "")):
-        zh = t.get("term_zh")
-        if zh and t.get("correct_vi") and zh in text:
-            text = text.replace(zh, t["correct_vi"])
 
     title_vi = None
     if ch.get("title_zh"):
@@ -711,33 +715,37 @@ def handle_chapter(job: dict, llm) -> None:
                 "", ch["title_zh"]).strip()
             title_vi = hanviet.han_viet(zh_clean) or title_vi
 
-    db.save_chapter_translation(
-        ch["id"], title_vi, text, model, prompt_tokens, completion_tokens,
-        glossary_version, summary_vi,
+    # Lưu chapter + đóng đúng job đang giữ lease trong MỘT transaction. Không xóa
+    # content_zh để các lần dịch lại sau không phải chờ crawler và tốn thêm I/O.
+    db.finalize_chapter_job(
+        job["id"], job.get("locked_by") or "", ch["id"], title_vi, text, model,
+        prompt_tokens, completion_tokens, glossary_version, summary_vi,
     )
-    db.bump_translated_count(ch["novel_id"])
 
     # lưu tên riêng phát hiện được làm term "gợi ý" (approved=false, scope=novel)
     # — get_glossary lấy cả gợi ý nên chương sau dùng lại ngay, giữ phiên âm nhất quán
     inserted_zh: set[str] = set()
+    suggestion_rows: list[dict] = []
     for t in detected:
         zh = t.get("zh")
-        if zh and t.get("vi") and zh not in preexisting_zh and zh not in inserted_zh:
+        vi = t.get("vi")
+        if not _valid_suggested_zh(zh) or not isinstance(vi, str) or not vi.strip():
+            continue
+        zh = zh.strip()
+        if zh not in preexisting_zh and zh not in inserted_zh:
             inserted_zh.add(zh)
-            try:
-                db.sb().table("glossary_terms").insert({
-                    "novel_id": ch["novel_id"], "term_zh": t["zh"], "correct_vi": t["vi"],
-                    "term_type": t.get("type", "other") if t.get("type") in
-                        ("person", "place", "sect", "item", "skill") else "other",
-                    "note": t.get("note") or None,  # giới tính/vai vế → xưng hô đúng ở chương sau
-                    "scope": "novel", "approved": False,
-                }).execute()
-            except Exception as exc:
-                if _is_unique_violation(exc):
-                    log.debug("Glossary term trùng, bỏ qua: %s", zh)
-                else:
-                    # Bản dịch đã lưu ở trên: ghi rõ lỗi nhưng không dịch lại cả chương.
-                    log.exception("Không lưu được glossary term %s (chương %s)", zh, ch["id"])
+            suggestion_rows.append({
+                "novel_id": ch["novel_id"], "term_zh": zh.strip(), "correct_vi": vi.strip(),
+                "term_type": t.get("type", "other") if t.get("type") in
+                    ("person", "place", "sect", "item", "skill") else "other",
+                "note": t.get("note") or None,  # giới tính/vai vế → xưng hô đúng ở chương sau
+                "scope": "novel", "approved": False,
+            })
+    try:
+        db.insert_glossary_suggestions(suggestion_rows)
+    except Exception:
+        # Bản dịch và job đã commit; glossary phụ trợ lỗi không được khiến dịch lại cả chương.
+        log.exception("Không lưu được %d glossary term (chương %s)", len(suggestion_rows), ch["id"])
 
     # Cập nhật 2-pass thích ứng: đủ số chương "ít tên mới" liên tiếp thì tắt cho truyện này.
     # ponytail: nhiều luồng có thể đua state — chỉ là heuristic, đua lệch chút không sao.
@@ -747,16 +755,20 @@ def handle_chapter(job: dict, llm) -> None:
         else:
             streak = 0
         still_active = streak < LOW_STREAK_LIMIT
-        db.sb().table("novels").update(
-            {"twopass_active": still_active, "twopass_low_streak": streak}
-        ).eq("id", ch["novel_id"]).execute()
-        if not still_active:
-            log.info("Novel %s: tắt 2-pass (arc mở đầu xong, hết tên mới)", ch["novel_id"])
+        try:
+            db.sb().table("novels").update(
+                {"twopass_active": still_active, "twopass_low_streak": streak}
+            ).eq("id", ch["novel_id"]).execute()
+            if not still_active:
+                log.info("Novel %s: tắt 2-pass (arc mở đầu xong, hết tên mới)", ch["novel_id"])
+        except Exception:
+            log.exception("Novel %s: không cập nhật được trạng thái 2-pass", ch["novel_id"])
 
     st = providers.get_call_stats()
-    log.info("Đã dịch chương %s/%s (novel %s) — %d chunk, %d LLM call, %d+%d tok, %.1fs",
+    log.info("Đã dịch chương %s/%s (novel %s) — %d chunk, %d LLM request (%d lỗi/retry), "
+             "%d+%d tok, %.1fs",
              ch["chapter_index"], ch["novel_id"], model, len(chunks), st["calls"],
-             st["prompt_tokens"], st["completion_tokens"], time.time() - t_start)
+             st["failures"], st["prompt_tokens"], st["completion_tokens"], time.time() - t_start)
 
 
 def handle_patch(job: dict, llm=None) -> None:
@@ -855,14 +867,22 @@ def _consume_loop(worker_id: str, slot: int, paused: threading.Event, poll_secon
             lease_thread.start()
             try:
                 HANDLERS[job["type"]](job, llm)
-                db.finish_job(job["id"], ok=True)
+                # Chapter tự commit nội dung + job nguyên tử trong finalize_chapter_job.
+                if job["type"] != "chapter":
+                    db.finish_job(job["id"], ok=True)
             except MissingContentError as e:
                 log.info("Job #%s chờ crawler: %s", job["id"], e)
-                db.defer_job(job["id"], str(e))
+                db.defer_job(job["id"], worker_id, str(e), restore_attempt=True)
                 time.sleep(poll_seconds)
             except Exception as e:
-                log.exception("Job #%s lỗi", job["id"])
-                db.finish_job(job["id"], ok=False, error=str(e))
+                if db.is_transient_error(e):
+                    log.warning("Job #%s gặp lỗi mạng/DB tạm thời — trả queue, không trừ lượt: %s",
+                                job["id"], e)
+                    db.defer_job(job["id"], worker_id, str(e), restore_attempt=True)
+                    time.sleep(max(poll_seconds, 5.0))
+                else:
+                    log.exception("Job #%s lỗi", job["id"])
+                    db.finish_job(job["id"], ok=False, error=str(e))
             finally:
                 lease_stop.set()
                 lease_thread.join(timeout=1)

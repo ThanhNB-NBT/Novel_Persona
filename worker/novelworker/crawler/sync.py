@@ -233,6 +233,18 @@ def _skip_by_genre(sid: int, meta) -> bool:
     return False
 
 
+def _skip_by_source_policy(adapter: SourceAdapter, meta) -> bool:
+    """Lọc điều kiện riêng của nguồn trước khi tạo novel trong DB."""
+    if adapter.name != "faloo":
+        return False
+    threshold = settings.faloo_free_chapter_threshold
+    if meta.chapter_count > threshold:
+        return False
+    log.info("Discovery: bỏ qua %s — Faloo chỉ có %d chương free (cần > %d)",
+             meta.title_zh, meta.chapter_count, threshold)
+    return True
+
+
 def _queue_canonical_work(adapter: SourceAdapter, novel: dict, meta, prio_meta: int) -> None:
     """Sau upsert truyện mới: LỌC CHẤT LƯỢNG rồi mới đốt token.
     Sync mục lục trước → truyện đang-ra dưới `discover_min_chapters` chương = truyện mỏng
@@ -281,6 +293,8 @@ def discover_latest(adapter: SourceAdapter, max_new: int = 50) -> None:
             meta = adapter.fetch_novel_meta(cand.source_novel_id)
         except Exception:
             log.exception("Discovery: lỗi lấy metadata %s (%s)", cand.source_novel_id, adapter.name)
+            continue
+        if _skip_by_source_policy(adapter, meta):
             continue
         if _skip_by_genre(sid, meta):
             continue
@@ -348,6 +362,8 @@ def discover_ranking(adapter: SourceAdapter, max_new: int = 30) -> None:
             meta = adapter.fetch_novel_meta(source_novel_id)
         except Exception:
             log.exception("Ranking: lỗi metadata %s (%s)", source_novel_id, adapter.name)
+            continue
+        if _skip_by_source_policy(adapter, meta):
             continue
         if _skip_by_genre(sid, meta):
             continue
@@ -479,6 +495,10 @@ def add_novel(adapter: SourceAdapter, source_novel_id: str) -> dict:
     """Thêm 1 truyện theo book_id (luồng chính: nguồn không có discovery tự động).
     Thêm TAY là chủ đích → gỡ khỏi crawl_blacklist nếu từng bị xoá vĩnh viễn."""
     meta = adapter.fetch_novel_meta(source_novel_id)
+    if _skip_by_source_policy(adapter, meta):
+        raise ValueError(
+            f"Faloo chỉ crawl truyện có hơn {settings.faloo_free_chapter_threshold} "
+            f"chương free; truyện này có {meta.chapter_count}")
     key = dedup_key(meta.title_zh, meta.author_zh)
     db.sb().table("crawl_blacklist").delete().eq(
         "source_id", _source_id(adapter)).eq("source_novel_id", source_novel_id).execute()

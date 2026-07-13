@@ -25,10 +25,10 @@ def test_quality_fuse_does_not_block_omission():
 
 
 def test_clean_style_drops_junk():
-    """Style bible JSON rác không được sống xuyên truyện (P2-8)."""
+    """Style bible chỉ giữ mô tả ổn định; rules tự sinh không được sống xuyên truyện."""
     from novelworker.translator.worker import _clean_style
     st = _clean_style({"pov": "ngôi ba", "junk": "x" * 999, "rules": ["a", 5, "b" * 200]})
-    assert st == {"pov": "ngôi ba", "rules": ["a", "b" * 120]}
+    assert st == {"pov": "ngôi ba"}
     assert _clean_style("không phải dict") is None
     assert _clean_style({"junk": 1}) is None
 
@@ -47,26 +47,44 @@ def test_benchmark_timeout_override_does_not_change_provider_default(monkeypatch
     assert p.with_model("other").timeout_sec == 45
 
 
-def test_call_stats_accumulate_across_pin(monkeypatch):
-    """Counter per-chương phải cộng dồn qua pin() (pin tạo FallbackChain mới)."""
+def test_call_stats_count_real_retry_and_rejected_tokens(monkeypatch):
+    """Mỗi HTTP retry và token của output bị fuse loại đều phải hiện trong log."""
     from novelworker import db
     from novelworker.translator import providers as P
-    from novelworker.translator.providers import FallbackChain, LLMResult
+    health = []
+    monkeypatch.setattr(db, "record_model_call", lambda model, ms, ok, error=None: health.append(ok))
+    monkeypatch.setattr(P, "_wait_for_rate_slot", lambda _key: None)
+    monkeypatch.setattr(P.TranslationProvider.complete.retry, "wait", lambda _state: 0)
 
-    monkeypatch.setattr(db, "record_model_call", lambda *a, **k: None)
+    class Completions:
+        calls = 0
+        def create(self, **_kwargs):
+            self.calls += 1
+            text = "bị fuse" if self.calls == 1 else "đạt"
+            return type("Resp", (), {
+                "usage": type("Usage", (), {"prompt_tokens": 10, "completion_tokens": 5})(),
+                "choices": [type("Choice", (), {
+                    "finish_reason": "stop",
+                    "message": type("Message", (), {"content": text})(),
+                })()],
+            })()
 
-    class FakeP:
-        model = "m"
-        def complete(self, *a, **k):
-            return LLMResult(text="x", model="m", prompt_tokens=10, completion_tokens=5)
-        def with_model(self, m):
-            return self
+    provider = object.__new__(P.TranslationProvider)
+    provider.model, provider.provider, provider.api_key = "m", "nvidia", "key"
+    provider.client = type("Client", (), {
+        "chat": type("Chat", (), {"completions": Completions()})()
+    })()
 
-    chain = FallbackChain([("nvidia", FakeP())])
+    def validate(result):
+        if result.text == "bị fuse":
+            raise RuntimeError("output kém")
+
     P.reset_call_stats()
-    chain.complete("s", "u")
-    chain.pin("nvidia", "m2").complete("s", "u")
-    assert P.get_call_stats() == {"calls": 2, "prompt_tokens": 20, "completion_tokens": 10}
+    assert provider.complete("s", "u", validate=validate).text == "đạt"
+    assert P.get_call_stats() == {
+        "calls": 2, "failures": 1, "prompt_tokens": 20, "completion_tokens": 10,
+    }
+    assert health == [False, True]
 
 
 def test_audit_reason_only_blocks_structural_errors():
@@ -209,7 +227,7 @@ def test_style_line_and_narrator_term():
     line = prompts.build_style_line({
         "pov": "ngôi ba", "setting": "tu tiên cổ đại", "han_viet": "đậm",
         "tone": "gọn, lạnh", "rules": ["hệ thống nói giọng tưng tửng"]})
-    assert "ngôi ba" in line and "tu tiên cổ đại" in line and "tưng tửng" in line
+    assert "ngôi ba" in line and "tu tiên cổ đại" in line and "tưng tửng" not in line
     assert prompts.build_style_line(None) is None
     assert prompts.build_style_line({}) is None
     system = prompts.build_chapter_system(
@@ -236,7 +254,10 @@ def test_analyze_names_shapes():
 
 
 def test_fix_han_residue_by_line():
-    from novelworker.translator.worker import _fix_han_residue, _hanviet_fallback
+    from novelworker.translator.worker import (
+        _fix_han_residue, _hanviet_fallback, _replace_glossary_han,
+        _valid_suggested_zh,
+    )
 
     class FakeLLM:
         def complete(self, *a, **k):
@@ -274,3 +295,15 @@ def test_fix_han_residue_by_line():
     # Glossary rác từ model không được làm hỏng lượt sửa.
     assert _fix_han_residue(NoFixLLM(), "Trên áo còn chữ 囚.", ["bad"]) == (
         "Trên áo còn chữ Tù.")
+
+    # Regression thực tế: glossary rác `h -> H` từng viết hoa hàng trăm chữ h
+    # trong bản tiếng Việt. Postprocess chỉ được thay term có ít nhất một chữ Hán.
+    original = "hắn hạ kiếm, hơi thở hỗn loạn."
+    fixed, replaced = _replace_glossary_han(original, [
+        {"term_zh": "h", "correct_vi": "H"},
+        {"term_zh": "t3", "correct_vi": "T3"},
+    ])
+    assert fixed == original and replaced == 0
+    assert not _valid_suggested_zh("h")
+    assert _valid_suggested_zh("t3")
+    assert _valid_suggested_zh("t2重型装甲")

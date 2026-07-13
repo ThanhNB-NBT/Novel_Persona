@@ -2,8 +2,8 @@
 from __future__ import annotations
 
 import logging
+import threading
 from datetime import datetime, timedelta, timezone
-from functools import lru_cache
 from typing import Any
 
 from supabase import Client, create_client
@@ -17,9 +17,20 @@ def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-@lru_cache(maxsize=1)
+_thread_clients = threading.local()
+
+
 def sb() -> Client:
-    return create_client(settings.supabase_url, settings.supabase_service_role_key)
+    """Mỗi worker thread giữ một HTTP client riêng.
+
+    supabase-py/httpx không bảo đảm một HTTP/2 connection dùng chung an toàn giữa
+    nhiều thread; chia client ngăn một connection reset làm chết dây chuyền các lane.
+    """
+    client = getattr(_thread_clients, "client", None)
+    if client is None:
+        client = create_client(settings.supabase_url, settings.supabase_service_role_key)
+        _thread_clients.client = client
+    return client
 
 
 # ---------- novels / chapters ----------
@@ -46,36 +57,28 @@ def save_chapter_raw(chapter_id: int, content_zh: str) -> None:
     sb().table("chapters").update({"content_zh": content_zh}).eq("id", chapter_id).execute()
 
 
-def save_chapter_translation(
-    chapter_id: int, title_vi: str | None, content_vi: str,
-    model: str, prompt_tokens: int, completion_tokens: int, glossary_version: int,
+def finalize_chapter_job(
+    job_id: int, worker_id: str, chapter_id: int,
+    title_vi: str | None, content_vi: str, model: str,
+    prompt_tokens: int, completion_tokens: int, glossary_version: int,
     summary_vi: str | None = None,
 ) -> None:
-    sb().table("chapters").update(
-        {
-            "title_vi": title_vi,
-            "summary_vi": summary_vi,
-            "content_vi": content_vi,
-            # Xoá bản gốc khi dịch xong — tiết kiệm ~2/3 dung lượng DB. Dịch lại
-            # vẫn chạy: chương queued thiếu content_zh → translator defer job,
-            # crawler backfill tự tải lại từ nguồn (sync.py).
-            "content_zh": None,
-            "translation_status": "done",
-            "translated_at": utc_now(),
-            "model_used": model,
-            "prompt_tokens": prompt_tokens,
-            "completion_tokens": completion_tokens,
-            "glossary_version": glossary_version,
-        }
-    ).eq("id", chapter_id).execute()
+    """Lưu chương + đóng job trong một transaction phía PostgreSQL.
 
-
-def bump_translated_count(novel_id: int) -> None:
-    done = (
-        sb().table("chapters").select("id", count="exact")
-        .eq("novel_id", novel_id).eq("translation_status", "done").execute()
-    )
-    sb().table("novels").update({"chapter_count_translated": done.count or 0}).eq("id", novel_id).execute()
+    RPC cố ý giữ `content_zh`: dịch lại không còn phải chờ crawler tải lại bản gốc.
+    """
+    sb().rpc("finalize_chapter_job", {
+        "p_job_id": job_id,
+        "p_worker_id": worker_id,
+        "p_chapter_id": chapter_id,
+        "p_title_vi": title_vi,
+        "p_summary_vi": summary_vi,
+        "p_content_vi": content_vi,
+        "p_model": model,
+        "p_prompt_tokens": prompt_tokens,
+        "p_completion_tokens": completion_tokens,
+        "p_glossary_version": glossary_version,
+    }).execute()
 
 
 # ---------- jobs ----------
@@ -110,10 +113,52 @@ def finish_job(job_id: int, ok: bool, error: str | None = None) -> None:
         ).eq("id", job["chapter_id"]).execute()
 
 
-def defer_job(job_id: int, error: str | None = None) -> None:
-    sb().table("translation_jobs").update(
-        {"status": "pending", "error": (error or "")[:2000], "locked_by": None, "locked_at": None}
-    ).eq("id", job_id).execute()
+def defer_job(job_id: int, worker_id: str, error: str | None = None,
+              restore_attempt: bool = True) -> None:
+    """Trả job tạm lỗi về queue mà không tiêu retry (RPC đồng bộ cả chapter)."""
+    sb().rpc("defer_translation_job", {
+        "p_job_id": job_id,
+        "p_worker_id": worker_id,
+        "p_error": (error or "")[:2000],
+        "p_restore_attempt": restore_attempt,
+    }).execute()
+
+
+def is_transient_error(exc: Exception) -> bool:
+    """Nhận diện lỗi mạng/DB tạm thời để không tính thành lỗi chất lượng bản dịch."""
+    current: BaseException | None = exc
+    seen: set[int] = set()
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        name = type(current).__name__.lower()
+        module = type(current).__module__.lower()
+        message = str(current).lower()
+        code = str(getattr(current, "code", "")).upper()
+        response = getattr(current, "response", None)
+        status = getattr(response, "status_code", None)
+        if (
+            module.startswith(("httpx", "httpcore"))
+            or any(k in name for k in ("timeout", "connection", "protocol", "network"))
+            or status in (408, 425, 429)
+            or isinstance(status, int) and status >= 500
+            or code.startswith("08") or code in {"PGRST000", "PGRST001", "PGRST002"}
+            or any(k in message for k in (
+                "server disconnected", "connection terminated", "connection reset",
+                "remoteprotocolerror", "read timeout", "connect timeout",
+                "temporarily unavailable", "bad gateway", "gateway timeout",
+                "cloudflare"))
+        ):
+            return True
+        current = current.__cause__ or current.__context__
+    return False
+
+
+def insert_glossary_suggestions(rows: list[dict]) -> None:
+    """Ghi cả batch; unique (novel_id, term_zh) giữ cách dịch xuất hiện đầu tiên."""
+    if rows:
+        sb().table("glossary_terms").upsert(
+            rows, on_conflict="novel_id,term_zh", ignore_duplicates=True
+        ).execute()
 
 
 def enqueue(type_: str, novel_id: int, chapter_id: int | None = None, priority: int = 100) -> None:

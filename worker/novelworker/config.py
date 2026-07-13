@@ -33,6 +33,9 @@ class Settings(BaseSettings):
     # Lọc truyện mỏng: đang-ra dưới ngần này chương thì ẩn, không dịch metadata/chương mẫu
     # (truyện hoàn thành không bị lọc — ngắn mà trọn bộ vẫn đáng đọc).
     discover_min_chapters: int = 200
+    # Faloo chỉ dùng phần đọc miễn phí. Chỉ nhận truyện có số chương free LỚN HƠN
+    # ngưỡng này (500 nghĩa là từ 501 chương free trở lên).
+    faloo_free_chapter_threshold: int = 500
     # Refresh: số truyện canonical soi mục lục (bắt chương mới) mỗi nguồn mỗi chu kỳ,
     # xoay vòng theo last_checked_at. Trần để không nặng nhất thời khi kho truyện lớn.
     refresh_per_cycle: int = 60

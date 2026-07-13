@@ -49,37 +49,89 @@ def build_adapters() -> dict[str, SourceAdapter]:
     return out
 
 
-def _novels_needing_fetch() -> list[dict]:
-    """Novel có chương queued chưa tải content_zh — trả kèm source_id/source_novel_id
-    trong 1 query gộp (trước đây 2 query/truyện mỗi vòng 10s)."""
-    rows = (
-        db.sb().table("chapters").select("novel_id")
-        .eq("translation_status", "queued").is_("content_zh", "null")
-        .limit(200).execute()
+def _ordered_novel_ids(jobs: list[dict], missing_chapter_ids: set[int]) -> list[int]:
+    """Giữ thứ tự priority/created_at của job, nhưng mỗi novel chỉ xuất hiện một lần."""
+    out: list[int] = []
+    seen: set[int] = set()
+    for job in jobs:
+        novel_id = job.get("novel_id")
+        if job.get("chapter_id") in missing_chapter_ids and novel_id not in seen:
+            seen.add(novel_id)
+            out.append(novel_id)
+    return out
+
+
+def _reconcile_adapters(adapters: dict[str, SourceAdapter]) -> None:
+    """Ăn trạng thái bật/tắt nguồn từ DB mà không cần restart crawler.
+
+    Adapter đang chạy được giữ nguyên để không mất bộ đếm health; nguồn vừa bật mới
+    được dựng thêm, nguồn vừa tắt bị gỡ ngay khỏi vòng crawl kế tiếp.
+    """
+    rows = db.sb().table("sources").select("*").eq("enabled", True).execute().data or []
+    enabled = {s["name"]: s for s in rows}
+    for name in set(adapters) - set(enabled):
+        adapters.pop(name, None)
+        log.info("Nguồn '%s' đã tắt — gỡ khỏi crawler đang chạy", name)
+    for name, source in enabled.items():
+        if name in adapters:
+            continue
+        cls = TEMPLATE_REGISTRY.get(source.get("template") or "")
+        if not cls:
+            log.warning("Chưa hỗ trợ template '%s' (nguồn %s) — bỏ qua",
+                        source.get("template"), name)
+            continue
+        adapters[name] = cls(base_url=source["base_url"], config=source.get("config") or {},
+                             source_row=source)
+        log.info("Nguồn '%s' vừa bật — thêm vào crawler đang chạy", name)
+
+
+def _novels_needing_fetch(enabled_source_ids: set[int]) -> list[dict]:
+    """Novel cần tải bản gốc, đúng thứ tự ưu tiên của hàng dịch và chỉ từ nguồn đang bật."""
+    if not enabled_source_ids:
+        return []
+    jobs = (
+        db.sb().table("translation_jobs")
+        .select("novel_id,chapter_id,priority,created_at")
+        .eq("type", "chapter").eq("status", "pending")
+        .not_.is_("chapter_id", "null")
+        .order("priority").order("created_at").limit(200).execute()
     ).data or []
-    ids = list({r["novel_id"] for r in rows})
+    chapter_ids = [j["chapter_id"] for j in jobs]
+    if not chapter_ids:
+        return []
+    missing = (
+        db.sb().table("chapters").select("id")
+        .in_("id", chapter_ids).eq("translation_status", "queued")
+        .is_("content_zh", "null").execute()
+    ).data or []
+    ids = _ordered_novel_ids(jobs, {r["id"] for r in missing})
     if not ids:
         return []
-    return (
+    rows = (
         db.sb().table("novels").select("id, source_id, source_novel_id")
-        .in_("id", ids).execute()
+        .in_("id", ids).in_("source_id", list(enabled_source_ids)).execute()
     ).data or []
+    by_id = {r["id"]: r for r in rows}
+    return [by_id[novel_id] for novel_id in ids if novel_id in by_id]
 
 
-def _eval_source_health(adapter: SourceAdapter) -> None:
-    """Cuối chu kỳ: có fetch OK → nguồn sống (reset fail); toàn fail → fail++ (tự tắt khi
-    vượt ngưỡng). Không fetch gì → bỏ qua. Rồi reset counter cho chu kỳ sau."""
+def _eval_source_health(adapter: SourceAdapter) -> bool:
+    """Cuối mỗi tick: có fetch OK → nguồn sống; toàn fail → fail++ và có thể tự tắt.
+    Không fetch gì thì bỏ qua. Sau đó reset counter cho tick kế tiếp."""
     sid = adapter.source_row.get("id")
     if sid is None:
-        return
+        return False
+    disabled = False
     if adapter.fetch_ok > 0:
         db.mark_source_ok(sid)
     elif adapter.fetch_err > 0:
-        if db.mark_source_fail(sid, settings.source_fail_limit):
-            log.error("Đã TỰ TẮT nguồn '%s' (toàn fetch fail ≥%d chu kỳ). Restart worker "
-                      "sau khi nguồn hồi phục + bật lại trong bảng sources.",
+        disabled = db.mark_source_fail(sid, settings.source_fail_limit)
+        if disabled:
+            log.error("Đã TỰ TẮT nguồn '%s' (toàn fetch fail ≥%d tick). Khi nguồn hồi phục, "
+                      "chỉ cần bật lại trong bảng sources; crawler sẽ tự nạp lại.",
                       adapter.name, settings.source_fail_limit)
     adapter.reset_health_counters()
+    return disabled
 
 
 def run_crawler() -> None:
@@ -94,6 +146,11 @@ def run_crawler() -> None:
     while True:
         now = time.time()
         db.heartbeat("crawler")  # điểm danh mỗi vòng 10s — app hiện sống/chết thật
+        try:
+            _reconcile_adapters(adapters)
+        except Exception:
+            # DB chập chờn không được làm rơi crawler; giữ adapter hiện tại và thử lại tick sau.
+            log.exception("Không đồng bộ được trạng thái nguồn — tạm giữ cấu hình hiện tại")
         due = now - last_discovery > interval_min * 60
         if due:
             # config chỉnh từ app (worker_settings) — đọc lại mỗi chu kỳ, đổi là ăn ngay
@@ -106,14 +163,19 @@ def run_crawler() -> None:
             interval_min = _num("crawl_interval_min", interval_min)
             max_new = _num("discover_new_per_cycle", max_new)
             refresh_n = _num("refresh_per_cycle", refresh_n)
-        pending_fetch = _novels_needing_fetch()  # 1 query/tick dùng chung mọi adapter
+            settings.faloo_free_chapter_threshold = _num(
+                "faloo_free_chapter_threshold", settings.faloo_free_chapter_threshold)
+        enabled_source_ids = {
+            a.source_row["id"] for a in adapters.values() if a.source_row.get("id") is not None
+        }
+        pending_fetch = _novels_needing_fetch(enabled_source_ids)
         # 0) yêu cầu truyện từ app: tìm tên trên các nguồn có search → crawl + vào tủ sách.
         # Chạy mỗi tick (user đang ngóng), 1 query khi không có yêu cầu nào.
         try:
             sync.process_novel_requests(list(adapters.values()))
         except Exception:
             log.exception("Lỗi xử lý yêu cầu truyện")
-        for adapter in adapters.values():
+        for adapter in list(adapters.values()):
             try:
                 # 1) tải nội dung chương đang chờ dịch — NGƯỜI ĐỌC TRƯỚC, chạy mỗi tick.
                 # Discovery/refresh (bước 2, có thể cả tiếng) cũng tự nhường giữa chừng
@@ -166,9 +228,15 @@ def run_crawler() -> None:
                     # truyện đã có ra chương mới → nổi "Mới cập nhật" (không chỉ truyện mới)
                     sync.refresh_canonical_updates(adapter, limit=refresh_n)
                     sync.process_novel_requests(list(adapters.values()))
-                    _eval_source_health(adapter)
             except Exception:
                 log.exception("Lỗi vòng crawl (%s)", adapter.name)
+            finally:
+                try:
+                    if _eval_source_health(adapter):
+                        # Nguồn vừa tự tắt: bỏ adapter ngay, không hammer tiếp tới vòng kế.
+                        adapters.pop(adapter.name, None)
+                except Exception:
+                    log.exception("Không ghi được health nguồn %s", adapter.name)
         if due:
             last_discovery = now
         time.sleep(10)

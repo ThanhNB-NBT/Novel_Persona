@@ -72,9 +72,9 @@ MAX_TERMS_IN_PROMPT = 80
 
 SYSTEM_STYLE = """Bạn là biên tập viên truyện dịch. Đọc metadata và đoạn mở đầu truyện Trung, lập HỒ SƠ VĂN PHONG ngắn để mọi chương sau dịch cùng một giọng. TUYỆT ĐỐI KHÔNG dịch nội dung.
 Trả về DUY NHẤT một JSON object:
-{"pov": "ngôi ba" | "ngôi nhất", "setting": "tu tiên cổ đại" | "đô thị hiện đại" | "huyền huyễn" | "lịch sử" | "võng du/hệ thống" | "xuyên không cổ đại" | ..., "han_viet": "đậm" | "vừa" | "nhạt", "tone": "vài từ tả nhịp văn (gọn/hài/lạnh/trang trọng/khẩu ngữ)", "rules": ["tối đa 5 luật NGẮN đặc thù truyện này, vd 'hệ thống nói giọng tưng tửng', 'nhân vật chính tự xưng ta'"]}
+{"pov": "ngôi ba" | "ngôi nhất", "setting": "tu tiên cổ đại" | "đô thị hiện đại" | "huyền huyễn" | "lịch sử" | "võng du/hệ thống" | "xuyên không cổ đại" | ..., "han_viet": "đậm" | "vừa" | "nhạt", "tone": "vài từ tả nhịp văn (gọn/hài/lạnh/trang trọng/khẩu ngữ)"}
 - "han_viet" đậm khi tu tiên/cổ trang thuần; nhạt khi đô thị hiện đại.
-- Không bịa luật chung chung đã có trong prompt dịch (đủ/sạch/thuần Việt). Không markdown."""
+- Không thêm key khác, không tự đặt luật dịch, tên riêng, xưng hô hoặc thuật ngữ. Không markdown."""
 
 SYSTEM_REVISE = """Bạn là biên tập viên bản dịch truyện Trung → Việt. Nhận danh sách CÂU LỖI trích từ bản dịch kèm lỗi bị đánh dấu. Sửa TỐI THIỂU từng câu: giữ nguyên nghĩa, giọng văn và mọi từ đúng; chỉ chữa đúng lỗi nêu ra, KHÔNG thêm ý, KHÔNG viết lại hoa mỹ hơn.
 Cách sửa các lỗi thường gặp:
@@ -123,9 +123,6 @@ def build_style_line(style: dict | None) -> str | None:
         bits.append(f"mức Hán-Việt {style['han_viet']}")
     if style.get("tone"):
         bits.append(f"nhịp văn {style['tone']}")
-    rules = [r for r in (style.get("rules") or []) if isinstance(r, str) and r.strip()][:5]
-    if rules:
-        bits.append("luật riêng: " + "; ".join(rules))
     return f"[Văn phong truyện — giữ xuyên suốt: {'; '.join(bits)}]" if bits else None
 
 

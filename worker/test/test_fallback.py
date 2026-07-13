@@ -22,10 +22,16 @@ class Fake:
 
     def complete(self, system, user, temperature=0.3, max_tokens=8192, validate=None):
         if self.text is None:
+            calls.append((self.model, False))
             raise RuntimeError(f"{self.model} lỗi")
         res = LLMResult(text=self.text, model=self.model, prompt_tokens=1, completion_tokens=1)
-        if validate:
-            validate(res)
+        try:
+            if validate:
+                validate(res)
+        except Exception:
+            calls.append((self.model, False))
+            raise
+        calls.append((self.model, True))
         return res
 
 
