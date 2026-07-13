@@ -144,9 +144,12 @@ class _JobsTab extends ConsumerWidget {
       builder: (jobs) {
         final running = jobs.where((j) => j['status'] == 'running').length;
         final crawling = jobs
-            .where((j) => j['status'] == 'pending' && j['downloading'] == true)
+            .where((j) => j['status'] == 'pending' && j['downloading'] == true &&
+                j['source_unavailable'] != true)
             .length;
-        final pending = jobs.where((j) => j['status'] == 'pending').length - crawling;
+        final blocked = jobs.where((j) => j['source_unavailable'] == true).length;
+        final pending =
+            jobs.where((j) => j['status'] == 'pending').length - crawling - blocked;
         final failed = jobs.where((j) => j['status'] == 'failed').length;
         // Gộp theo truyện: 1 dòng/truyện, bấm vào mới xem list chương (job) bên trong.
         final groups = <int, List<Rec>>{};
@@ -166,7 +169,7 @@ class _JobsTab extends ConsumerWidget {
               i == 0 ? const SizedBox.shrink() : const Divider(height: 1),
           itemBuilder: (_, i) => i == 0
               ? _JobStats(running: running, crawling: crawling,
-                  pending: pending, failed: failed)
+                  blocked: blocked, pending: pending, failed: failed)
               : _NovelJobsRow(entries[i - 1].key, entries[i - 1].value, ref),
         );
       },
@@ -177,10 +180,10 @@ class _JobsTab extends ConsumerWidget {
 /// Thống kê nhanh hàng đợi worker + NHỊP TIM (crawler/translator điểm danh định kỳ
 /// vào worker_heartbeat — biết chắc sống hay treo, không phải đoán qua job).
 class _JobStats extends ConsumerWidget {
-  final int running, crawling, pending, failed;
+  final int running, crawling, blocked, pending, failed;
   const _JobStats(
       {required this.running, required this.crawling,
-       required this.pending, required this.failed});
+       required this.blocked, required this.pending, required this.failed});
 
   /// crawler beat mỗi ~10s (mịn hơn khi đang tải chương), translator mỗi 60s.
   /// Quá 3 phút không điểm danh = coi như treo/tắt.
@@ -242,6 +245,11 @@ class _JobStats extends ConsumerWidget {
             cell('$pending', 'chờ dịch', null),
             cell('$failed', 'lỗi', failed > 0 ? cs.error : null),
           ]),
+          if (blocked > 0) ...[
+            const SizedBox(height: 10),
+            Text('$blocked job thiếu bản gốc, nguồn đang tắt',
+                style: t.labelSmall?.copyWith(color: cs.error)),
+          ],
           const SizedBox(height: 14),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -272,9 +280,12 @@ class _NovelJobsRow extends StatelessWidget {
     final title = novel['title_vi'] ?? novel['title_zh'] ?? 'Truyện #$novelId';
     final running = jobs.where((j) => j['status'] == 'running').length;
     final crawling = jobs
-        .where((j) => j['status'] == 'pending' && j['downloading'] == true)
+        .where((j) => j['status'] == 'pending' && j['downloading'] == true &&
+            j['source_unavailable'] != true)
         .length;
-    final pending = jobs.where((j) => j['status'] == 'pending').length - crawling;
+    final blocked = jobs.where((j) => j['source_unavailable'] == true).length;
+    final pending =
+        jobs.where((j) => j['status'] == 'pending').length - crawling - blocked;
     final failed = jobs.where((j) => j['status'] == 'failed').length;
     // Tiến độ tải nguồn: chương có content_zh (running + pending thường) / tổng.
     final haveSrc = running + pending;
@@ -283,9 +294,10 @@ class _NovelJobsRow extends StatelessWidget {
       if (running > 0) '$running đang dịch',
       if (crawling > 0) 'nguồn $haveSrc/$totalSrc',
       if (pending > 0) '$pending chờ dịch',
+      if (blocked > 0) '$blocked nguồn không khả dụng',
       if (failed > 0) '$failed lỗi',
     ];
-    final (icon, color) = failed > 0
+    final (icon, color) = failed > 0 || blocked > 0
         ? (Icons.error_outline, cs.error)
         : running > 0
             ? (Icons.sync_rounded, cs.primary)
@@ -409,13 +421,16 @@ class _JobRow extends StatelessWidget {
     final title = novel['title_vi'] ?? novel['title_zh'] ?? 'Truyện #${j['novel_id']}';
     final sub = [
       j['type'],
-      if (status == 'pending' && j['downloading'] == true) 'đang crawl nguồn',
+      if (j['source_unavailable'] == true)
+        'nguồn không khả dụng'
+      else if (status == 'pending' && j['downloading'] == true)
+        'đang crawl nguồn',
       _priorityLabel(j['priority'] as int),
       if ((j['attempts'] ?? 0) > 0) '${j['attempts']} lần thử',
       // Đang chạy → khoe thời gian đã chạy (token chỉ có khi dịch xong, ghi 1 lần ở cuối).
       if (status == 'running' && j['started_at'] != null) 'chạy ${_elapsed(j['started_at'])}',
     ].join(' · ');
-    final color = switch (status) {
+    final color = j['source_unavailable'] == true ? cs.error : switch (status) {
       'failed' => cs.error,
       'running' => cs.primary,
       _ => cs.onSurfaceVariant,
@@ -423,7 +438,7 @@ class _JobRow extends StatelessWidget {
 
     return ListTile(
       leading: Icon(
-          switch (status) {
+          j['source_unavailable'] == true ? Icons.cloud_off_rounded : switch (status) {
             'failed' => Icons.error_outline,
             'running' => Icons.sync_rounded,
             _ => Icons.schedule_rounded,

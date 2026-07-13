@@ -65,7 +65,8 @@ void _showChapters(BuildContext context, _NovelGroup g) {
     int rank(Rec c) => switch (c['translation_status']) {
           'translating' => 0,
           'downloading' => 1,
-          _ => 2,
+          'queued' => 2,
+          _ => 3,
         };
   final items = [...g.chapters]..sort((a, b) => rank(a) != rank(b)
       ? rank(a) - rank(b)
@@ -96,6 +97,7 @@ void _showChapters(BuildContext context, _NovelGroup g) {
                   final (label, color) = switch (st) {
                     'translating' => ('Đang dịch', cs.primary),
                     'downloading' => ('Đang tải về', cs.tertiary),
+                    'source_unavailable' => ('Nguồn không khả dụng', cs.error),
                     _ => ('Chờ dịch', cs.onSurfaceVariant),
                   };
                   return ListTile(
@@ -107,6 +109,8 @@ void _showChapters(BuildContext context, _NovelGroup g) {
                         : Icon(
                             st == 'downloading'
                                 ? Icons.cloud_download_rounded
+                                : st == 'source_unavailable'
+                                    ? Icons.cloud_off_rounded
                                 : Icons.schedule_rounded,
                             size: 18, color: color),
                     title: Text('Chương ${c['chapter_index']}', style: t.bodyMedium),
@@ -136,7 +140,7 @@ List<_NovelGroup> _groupByNovel(List<Rec> active) {
     (map[id] ??= _NovelGroup(id, (c['novels'] as Map?) ?? const {})).add(c);
   }
   int rank(_NovelGroup g) =>
-      g.translating.isNotEmpty ? 0 : (g.downloading > 0 ? 1 : 2);
+      g.translating.isNotEmpty ? 0 : (g.downloading > 0 ? 1 : (g.queued > 0 ? 2 : 3));
   return map.values.toList()..sort((a, b) => rank(a) - rank(b));
 }
 
@@ -147,10 +151,12 @@ class _NovelGroup {
   final List<int> translating = []; // chương đang dịch
   final List<int> downloadingIdx = []; // chương đang tải nguồn về (chưa có content_zh)
   final List<int> queuedIdx = []; // chương đã tải, đang chờ tới lượt dịch
+  final List<int> unavailableIdx = []; // thiếu bản gốc và nguồn đã tắt
   _NovelGroup(this.novelId, this.novel);
 
   int get queued => queuedIdx.length;
   int get downloading => downloadingIdx.length;
+  int get unavailable => unavailableIdx.length;
 
   void add(Rec c) {
     chapters.add(c);
@@ -160,6 +166,8 @@ class _NovelGroup {
         translating.add(idx);
       case 'downloading':
         downloadingIdx.add(idx);
+      case 'source_unavailable':
+        unavailableIdx.add(idx);
       default:
         queuedIdx.add(idx);
     }
@@ -167,6 +175,7 @@ class _NovelGroup {
 
   String get queuedText => _rangeText(queuedIdx, 'chờ dịch');
   String get downloadingText => _rangeText(downloadingIdx, 'đang tải về');
+  String get unavailableText => _rangeText(unavailableIdx, 'nguồn không khả dụng');
 
   /// "chờ dịch chương 5" / "chờ dịch 4 chương (5–8)".
   static String _rangeText(List<int> idx, String verb) {
@@ -230,6 +239,7 @@ class _NovelQueueCard extends StatelessWidget {
     final total = (g.novel['chapter_count_source'] ?? 0) as int;
     final busy = g.translating.isNotEmpty;
     final loading = g.downloading > 0;
+    final unavailable = g.unavailable > 0;
 
     // Dòng trạng thái: đang dịch / đang tải nguồn về / còn bao nhiêu chờ.
     final parts = <String>[
@@ -237,10 +247,13 @@ class _NovelQueueCard extends StatelessWidget {
       else if (g.translating.length > 1) 'Đang dịch ${g.translating.length} chương',
       if (loading) g.downloadingText,
       if (g.queued > 0) g.queuedText,
+      if (unavailable) g.unavailableText,
     ];
     final status = parts.isEmpty ? 'Trong hàng đợi' : parts.join(' · ');
     // màu/icon theo trạng thái ưu thế: đang dịch > đang tải > chờ
-    final accent = busy ? cs.primary : (loading ? cs.tertiary : cs.onSurfaceVariant);
+    final accent = busy
+        ? cs.primary
+        : (loading ? cs.tertiary : (unavailable ? cs.error : cs.onSurfaceVariant));
 
     // dòng phẳng đồng kiểu "Vừa dịch xong": bìa nhỏ + tên + trạng thái, không đóng khung
     return InkWell(
@@ -266,7 +279,9 @@ class _NovelQueueCard extends StatelessWidget {
                 width: 14, height: 14,
                 child: CircularProgressIndicator(strokeWidth: 2, color: cs.primary))
           else
-            Icon(loading ? Icons.cloud_download_rounded : Icons.schedule_rounded,
+            Icon(loading
+                ? Icons.cloud_download_rounded
+                : (unavailable ? Icons.cloud_off_rounded : Icons.schedule_rounded),
                 size: 16, color: accent),
           if (total > 0) ...[
             const SizedBox(width: 8),
