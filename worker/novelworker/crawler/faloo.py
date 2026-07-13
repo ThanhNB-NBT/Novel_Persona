@@ -25,25 +25,42 @@ class FalooAdapter(SourceAdapter):
         return f"/{book_id}_{chapter_id}.html"
 
     def fetch_latest(self, limit: int = 30) -> list[NovelMeta]:
-        html = self._get(self.config.get("latest_path", "/category_2_1.html"))
+        base_path = self.config.get("latest_path", "/category_2_1.html")
         pattern = re.compile(
             r'<a[^>]+href=["\'](?:(?:https?:)?//wap\.faloo\.com)?/(?:new_)?(\d+)\.html["\'][^>]*>(.*?)</a>',
             re.I | re.S,
         )
         out: list[NovelMeta] = []
         seen: set[str] = set()
-        for match in pattern.finditer(html):
-            book_id = match.group(1)
-            title = _text(match.group(2))
-            if book_id in seen or not title:
-                continue
-            seen.add(book_id)
-            out.append(NovelMeta(
-                source_novel_id=book_id,
-                source_url=f"{self.base_url}{self._novel_path(book_id)}",
-                title_zh=title,
-            ))
+        for page in range(1, 51):
+            path = base_path if page == 1 else re.sub(
+                r"\d+(?=\.html$)", str(page), base_path)
+            if page > 1 and path == base_path:
+                break
+            try:
+                html = self._get(path)
+            except Exception:
+                if page == 1:
+                    raise
+                break
+            fresh = 0
+            for match in pattern.finditer(html):
+                book_id = match.group(1)
+                title = _text(match.group(2))
+                if book_id in seen or not title:
+                    continue
+                seen.add(book_id)
+                fresh += 1
+                out.append(NovelMeta(
+                    source_novel_id=book_id,
+                    source_url=f"{self.base_url}{self._novel_path(book_id)}",
+                    title_zh=title,
+                ))
+                if len(out) >= limit:
+                    break
             if len(out) >= limit:
+                break
+            if not fresh:
                 break
         return out
 
@@ -51,7 +68,18 @@ class FalooAdapter(SourceAdapter):
         html = self._get(self._novel_path(source_novel_id))
         title_match = re.search(r"<h1[^>]*>(.*?)</h1>", html, re.I | re.S)
         if not title_match:
-            raise ValueError(f"Không parse được truyện Faloo {source_novel_id}")
+            # WAP đôi lúc trả trang chống bot HTTP 200 cho IP VPS. Domain desktop
+            # vẫn công khai cùng dữ liệu nên chỉ dùng làm fallback khi thiếu h1.
+            html = self._get(f"https://b.faloo.com/{source_novel_id}.html")
+            title_match = re.search(r"<h1[^>]*>(.*?)</h1>", html, re.I | re.S)
+        if not title_match:
+            raise ValueError(f"Faloo WAP và desktop đều thiếu metadata {source_novel_id}")
+
+        def meta_value(name: str) -> str | None:
+            match = re.search(
+                rf'<meta[^>]+(?:name|property)=["\']{re.escape(name)}["\'][^>]+'
+                r'content=["\'](.*?)["\']', html, re.I | re.S)
+            return unescape(match.group(1)).strip() if match else None
 
         def labeled(label: str) -> str | None:
             match = re.search(
@@ -64,27 +92,30 @@ class FalooAdapter(SourceAdapter):
         if desc_match:
             description = _text(desc_match.group(1)) or None
         if not description:
-            desc_match = re.search(r'<meta[^>]+name=["\']description["\'][^>]+content=["\'](.*?)["\']',
-                                   html, re.I | re.S)
-            description = unescape(desc_match.group(1)).strip() if desc_match else None
+            description = meta_value("description")
 
         cover_match = re.search(
             r'class=["\'][^"\']*book_info[^"\']*["\'].*?<img[^>]+src=["\']([^"\']+)',
             html, re.I | re.S)
         cover = cover_match.group(1) if cover_match else None
+        cover = cover or meta_value("og:image")
         if cover and cover.startswith("//"):
             cover = f"https:{cover}"
+        elif cover and cover.startswith("http://"):
+            cover = f"https://{cover.removeprefix('http://')}"
 
         # Faloo có cả chương VIP nên con số "đã viết" trên trang truyện không phải
         # số chương project có thể đọc. chapter_count của adapter này luôn là số
         # chương free thật lấy từ catalog; discovery dùng nó để lọc trước khi upsert.
         free_count = len(self.fetch_chapter_list(source_novel_id))
         genres = [value for value in (labeled("大类"), labeled("小类")) if value]
+        if not genres and (category := meta_value("og:novel:category")):
+            genres = [category]
         return NovelMeta(
             source_novel_id=source_novel_id,
             source_url=f"{self.base_url}{self._novel_path(source_novel_id)}",
             title_zh=_text(title_match.group(1)),
-            author_zh=labeled("作者"),
+            author_zh=labeled("作者") or meta_value("og:novel:author"),
             cover_url=cover,
             description_zh=description,
             genres_zh=genres,

@@ -24,6 +24,18 @@ def main() -> None:
     latest = adapter.fetch_latest()
     assert [(item.source_novel_id, item.title_zh) for item in latest] == [("123", "Kiếm Tiên")]
 
+    pages = {
+        "/category_2_1.html": (
+            '<a href="/new_101.html">Truyện 101</a>'
+            '<a href="/new_102.html">Truyện 102</a>'),
+        "/category_2_2.html": (
+            '<a href="/new_102.html">Truyện 102 trùng</a>'
+            '<a href="/new_103.html">Truyện 103</a>'),
+    }
+    adapter._get = lambda path: pages.get(path, "")
+    latest = adapter.fetch_latest(limit=3)
+    assert [item.source_novel_id for item in latest] == ["101", "102", "103"]
+
     meta_html = (
         '<div class="book_info"><img src="//img.test/cover.jpg"></div>'
         '<h1>Kiếm Tiên</h1><h2>作者</h2>：<a>Tác Giả</a>'
@@ -40,6 +52,26 @@ def main() -> None:
     assert (meta.title_zh, meta.author_zh, meta.status, meta.chapter_count) == (
         "Kiếm Tiên", "Tác Giả", "completed", 2)
     assert meta.cover_url == "https://img.test/cover.jpg" and meta.genres_zh == ["玄幻", "东方"]
+
+    # Faloo có lúc soft-block riêng WAP trên IP VPS: HTTP 200 nhưng không có h1.
+    fallback_html = (
+        '<h1>Kiếm Tiên dự phòng</h1>'
+        '<meta name="description" content="Mô tả desktop">'
+        '<meta property="og:image" content="http://img.test/desktop.jpg">'
+        '<meta name="og:novel:author" content="Tác Giả desktop">'
+        '<meta name="og:novel:category" content="仙侠小说">'
+    )
+    paths = []
+    adapter._get = lambda path: (
+        catalog_html if "booklist" in path else
+        fallback_html if path.startswith("https://b.faloo.com/") else
+        paths.append(path) or '<title>系统提示</title>'
+    )
+    fallback = adapter.fetch_novel_meta("123")
+    assert fallback.title_zh == "Kiếm Tiên dự phòng"
+    assert fallback.author_zh == "Tác Giả desktop" and fallback.genres_zh == ["仙侠小说"]
+    assert fallback.cover_url == "https://img.test/desktop.jpg"
+    assert paths == ["/new_123.html"]
 
     old_threshold = settings.faloo_free_chapter_threshold
     settings.faloo_free_chapter_threshold = 2

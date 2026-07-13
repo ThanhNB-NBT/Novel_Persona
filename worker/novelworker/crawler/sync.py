@@ -245,13 +245,13 @@ def _skip_by_source_policy(adapter: SourceAdapter, meta) -> bool:
     return True
 
 
-def _queue_canonical_work(adapter: SourceAdapter, novel: dict, meta, prio_meta: int) -> None:
+def _queue_canonical_work(adapter: SourceAdapter, novel: dict, meta, prio_meta: int) -> bool:
     """Sau upsert truyện mới: LỌC CHẤT LƯỢNG rồi mới đốt token.
     Sync mục lục trước → truyện đang-ra dưới `discover_min_chapters` chương = truyện mỏng
     chưa kiểm chứng → ẩn luôn, không dịch metadata/chương mẫu (hoàn thành thì không lọc).
     Truyện đạt → dịch metadata + `sample_chapters` chương đọc thử ưu tiên thấp."""
     if not (novel.get("is_canonical") and not novel.get("meta_translated")):
-        return
+        return False
     try:
         # mục lục lười: truyện mới chỉ giữ stub cho chương mẫu; user mở truyện thì
         # request_toc mới tải đủ (đỡ ~1.7k dòng stub/truyện không ai đọc)
@@ -261,11 +261,13 @@ def _queue_canonical_work(adapter: SourceAdapter, novel: dict, meta, prio_meta: 
             db.sb().table("novels").update({"hidden": True}).eq("id", novel["id"]).execute()
             log.info("Bỏ qua truyện mỏng %s (%s): %d chương < %d",
                      novel["id"], meta.title_zh, total, settings.discover_min_chapters)
-            return
+            return False
         db.enqueue("metadata", novel["id"], priority=prio_meta)
         queue_sample_chapters(novel["id"], settings.sample_chapters, settings.prio_idle)
+        return True
     except Exception:
         log.exception("Discovery: lỗi xếp việc cho novel %s", novel["id"])
+        return False
 
 
 def discover_latest(adapter: SourceAdapter, max_new: int = 50) -> None:
@@ -276,30 +278,34 @@ def discover_latest(adapter: SourceAdapter, max_new: int = 50) -> None:
     KHÔNG tải mục lục/chương (doc §3.5) — vẫn lazy khi user bấm Đọc.
     Trần max_new = cầu chì chống tràn Khám phá + đốt token dịch metadata (doc §6.4)."""
     sid = _source_id(adapter)
-    added = 0
-    cands = adapter.fetch_latest(limit=max_new * 4)  # quét dư vì nhiều truyện đã có
+    added = skipped = errors = scanned = 0
+    # ponytail: trần 20× để tìm đủ truyện đạt lọc mà không quét vô hạn nguồn xấu.
+    cands = adapter.fetch_latest(limit=max_new * 20)
     known = _existing_novels(sid, [c.source_novel_id for c in cands])  # check theo lô
     bl_ids, bl_keys = _blacklist(sid)
     for cand in cands:
         if added >= max_new:
             break
-        if reader_fetch_waiting():
-            log.info("Discovery %s: nhường chỗ tải chương người đọc (đã thêm %d)", adapter.name, added)
-            break
         if (cand.source_novel_id in known or cand.source_novel_id in bl_ids
                 or (sid, cand.source_novel_id) in _genre_skipped):
+            skipped += 1
             continue
+        scanned += 1
         try:
             meta = adapter.fetch_novel_meta(cand.source_novel_id)
         except Exception:
+            errors += 1
             log.exception("Discovery: lỗi lấy metadata %s (%s)", cand.source_novel_id, adapter.name)
             continue
         if _skip_by_source_policy(adapter, meta):
+            skipped += 1
             continue
         if _skip_by_genre(sid, meta):
+            skipped += 1
             continue
         key = dedup_key(meta.title_zh, meta.author_zh)
         if key in bl_keys:
+            skipped += 1
             continue  # bản clone của truyện admin đã xoá vĩnh viễn
         novel = db.upsert_novel({
             "source_id": sid,
@@ -318,11 +324,17 @@ def discover_latest(adapter: SourceAdapter, max_new: int = 50) -> None:
         recompute_canonical(key)
         _cache_cover_and_update(adapter, novel["id"], meta.cover_url)
         # chỉ bản canonical + qua lọc chất lượng mới tốn token (metadata + chương mẫu)
-        _queue_canonical_work(adapter, novel, meta, prio_meta=10)
+        if not _queue_canonical_work(adapter, novel, meta, prio_meta=10):
+            skipped += 1
+            continue
         added += 1
+        log.info("Discovery %s: nhận %d/%d — %s (source=%s, novel=%s)",
+                 adapter.name, added, max_new, meta.title_zh,
+                 meta.source_novel_id, novel["id"])
         time.sleep(1.0)  # lịch sự với nguồn
-    if added:
-        log.info("Discovery %s: thêm %d truyện mới", adapter.name, added)
+    log.info("Discovery %s: xong %d/%d truyện đạt — ứng viên=%d, đã thử=%d, "
+             "bỏ qua=%d, lỗi=%d%s", adapter.name, added, max_new, len(cands),
+             scanned, skipped, errors, " (hết pool ứng viên)" if added < max_new else "")
 
 
 def discover_ranking(adapter: SourceAdapter, max_new: int = 30) -> None:
@@ -333,7 +345,7 @@ def discover_ranking(adapter: SourceAdapter, max_new: int = 30) -> None:
     if not fetch:
         return
     sid = _source_id(adapter)
-    added = 0
+    added = skipped = errors = scanned = 0
     # Quét HẾT bảng xếp hạng mỗi chu kỳ: rank mọi truyện đã có được cập nhật (top
     # không cố định), truyện chưa có thì thêm dần max_new/chu kỳ tới khi vét cạn top.
     ranked = list(fetch(limit=1000))
@@ -350,25 +362,29 @@ def discover_ranking(adapter: SourceAdapter, max_new: int = 30) -> None:
             if known[source_novel_id].get("source_rank") != rank:
                 db.sb().table("novels").update({"source_rank": rank}).eq(
                     "id", known[source_novel_id]["id"]).execute()
+            skipped += 1
             continue
         if source_novel_id in bl_ids or (sid, source_novel_id) in _genre_skipped:
+            skipped += 1
             continue  # admin đã xoá vĩnh viễn / thể loại hạn chế — không crawl lại dù trong top
         if added >= max_new:
             continue  # hết quota thêm mới nhưng vẫn quét nốt để cập nhật rank truyện đã có
-        if reader_fetch_waiting():
-            log.info("Ranking %s: nhường chỗ tải chương người đọc (đã thêm %d)", adapter.name, added)
-            break
+        scanned += 1
         try:
             meta = adapter.fetch_novel_meta(source_novel_id)
         except Exception:
+            errors += 1
             log.exception("Ranking: lỗi metadata %s (%s)", source_novel_id, adapter.name)
             continue
         if _skip_by_source_policy(adapter, meta):
+            skipped += 1
             continue
         if _skip_by_genre(sid, meta):
+            skipped += 1
             continue
         key = dedup_key(meta.title_zh, meta.author_zh)
         if key in bl_keys:
+            skipped += 1
             continue  # bản clone của truyện admin đã xoá vĩnh viễn
         novel = db.upsert_novel({
             "source_id": sid,
@@ -388,12 +404,19 @@ def discover_ranking(adapter: SourceAdapter, max_new: int = 30) -> None:
         recompute_canonical(key)
         _cache_cover_and_update(adapter, novel["id"], meta.cover_url)
         # truyện hoàn thành ưu tiên hơn (metadata prio nhỏ hơn) — user muốn ưu tiên hoàn thành
-        _queue_canonical_work(adapter, novel, meta,
-                              prio_meta=8 if meta.status == "completed" else 10)
+        if not _queue_canonical_work(
+                adapter, novel, meta,
+                prio_meta=8 if meta.status == "completed" else 10):
+            skipped += 1
+            continue
         added += 1
+        log.info("Ranking %s: nhận %d/%d — #%d %s (source=%s, novel=%s)",
+                 adapter.name, added, max_new, rank + 1, meta.title_zh,
+                 meta.source_novel_id, novel["id"])
         time.sleep(1.0)
-    if added:
-        log.info("Ranking %s: thêm %d truyện hot", adapter.name, added)
+    log.info("Ranking %s: xong %d/%d truyện đạt — ứng viên=%d, đã thử=%d, "
+             "bỏ qua=%d, lỗi=%d%s", adapter.name, added, max_new, len(ranked),
+             scanned, skipped, errors, " (hết pool ứng viên)" if added < max_new else "")
 
 
 _CJK = re.compile(r"[㐀-䶿一-鿿]")

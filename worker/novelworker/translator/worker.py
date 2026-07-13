@@ -101,9 +101,11 @@ def check_translation(content_zh: str, content_vi: str) -> str | None:
     """
     if not (content_vi or "").strip():
         return "nội dung dịch rỗng"
-    han = HAN_CHARS.search(content_vi)
-    if han:
-        return f"còn ký tự Hán '{han.group(0)}'"
+    han_chars = HAN_CHARS.findall(content_vi)
+    if han_chars:
+        sample = "".join(dict.fromkeys(han_chars))[:12]
+        return (f"còn {len(han_chars)} ký tự Hán, "
+                f"{len(set(han_chars))} chữ khác nhau (mẫu '{sample}')")
     # Chỉ chặn bản cụt rõ ràng; tỷ lệ zh→vi dao động mạnh theo thể loại/câu thoại.
     if content_zh:
         ratio_min = 0.6 if len(content_zh) > 300 else 0.3
@@ -139,6 +141,15 @@ def _audit_reason(content_zh: str, content_vi: str) -> str | None:
     return check_translation(content_zh, content_vi)
 
 
+def _repairable_han_residue(content_vi: str) -> bool:
+    """Phần Hán tự đủ thưa để hậu xử lý từng dòng + TSV, không phải raw Chinese."""
+    chars = HAN_CHARS.findall(content_vi)
+    if not chars:
+        return True
+    return (len(set(chars)) <= 8
+            or (len(chars) <= 20 and len(chars) / max(len(content_vi), 1) <= 0.02))
+
+
 def _quality_fuse(chunk: str):
     """Validator chạy TRONG FallbackChain — raise khi output kém để tự đổi provider.
     Đo trên phần THÂN bản dịch (đã bỏ GLOSSARY_JSON/SUMMARY) — đo text thô sẽ lệch:
@@ -150,7 +161,7 @@ def _quality_fuse(chunk: str):
         # một biệt danh sót lặp 12 lần (二娃子, n1043 kẹt 6/6 lượt) vẫn chỉ là 3 chữ,
         # _fix_han_residue sửa được hết. Bản trả nguyên văn Hán vẫn bị fuse chặn.
         checked_vi = (HAN_CHARS.sub("x", content_vi)
-                      if len(set(HAN_CHARS.findall(content_vi))) <= 8 else content_vi)
+                      if _repairable_han_residue(content_vi) else content_vi)
         problem = check_translation(chunk, checked_vi)
         if problem:
             raise RuntimeError(f"Bản dịch {problem} (model {res.model})")

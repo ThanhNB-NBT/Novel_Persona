@@ -211,7 +211,24 @@ def test_han_residue_single_char():
 
 def test_quality_fuse_blocks_any_han_residue():
     from novelworker.translator.worker import check_translation
-    assert "ký tự Hán" in check_translation("衣服写着囚字。", 'Áo viết chữ "囚".')
+    problem = check_translation("衣服写着囚字。", 'Áo viết chữ "囚".')
+    assert "1 ký tự Hán" in problem and "mẫu '囚'" in problem
+
+
+def test_quality_fuse_allows_sparse_han_for_postprocess_but_blocks_raw_chinese():
+    from novelworker.translator.worker import _quality_fuse
+
+    sparse = "Đoạn dịch tiếng Việt " * 80 + "垂天地玄黄宇宙洪荒"
+    res = type("R", (), {"text": sparse, "model": "test"})()
+    _quality_fuse("原文" * 400)(res)  # 9 chữ khác nhau nhưng đủ thưa để TSV sửa.
+
+    raw = type("R", (), {"text": "天地玄黄宇宙洪荒日月盈昃辰宿列张" * 20,
+                          "model": "test"})()
+    try:
+        _quality_fuse("原文" * 100)(raw)
+        raise AssertionError("Raw Chinese phải bị quality fuse chặn")
+    except RuntimeError as error:
+        assert "ký tự Hán" in str(error)
 
 
 def test_register_line_uses_source_pov():
@@ -278,6 +295,8 @@ def test_fix_han_residue_by_line():
     # LLM không sửa được → bảng Hán-Việt là fallback cuối, không làm fail cả chương.
     fixed, n = _hanviet_fallback("Trên áo còn chữ 囚.")
     assert fixed == "Trên áo còn chữ Tù." and n == 1
+    fixed, n = _hanviet_fallback("Cành liễu rủ 垂 xuống.")
+    assert fixed == "Cành liễu rủ Thuỳ xuống." and n == 1
     fixed, _ = _hanviet_fallback("Vết thương phun 鲜血 tung tóe.")
     assert fixed == "Vết thương phun máu tươi tung tóe."
     fixed, _ = _hanviet_fallback("Nhận được vật phẩm 鲜血 trong kho đồ.")
