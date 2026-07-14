@@ -88,7 +88,7 @@ def fetch_sample(chars: int, novel_id: int | None = None, chapter_index: int = 1
 def bench_model(model: str, zh: str, runs: int, timeout_sec: int) -> dict:
     key = settings.nvidia_keys[0]
     p = TranslationProvider(NVIDIA_BASE_URL, key, model, "nvidia", timeout_sec=timeout_sec)
-    system = prompts.build_chapter_system([], zh)
+    system = prompts.build_main_chapter_system([], zh)
     user = prompts.build_chapter_user("测试章节", zh, None, register_line=REGISTER_LINE)
     out = {"model": model, "ok": 0, "fail": 0, "lat": [], "tps": [], "han": [],
            "ratio": [], "problem_runs": 0, "problems": [], "narrator_terms": {}, "err": ""}

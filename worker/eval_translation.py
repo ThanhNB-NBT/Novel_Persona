@@ -8,7 +8,7 @@ Hai chế độ:
     PYTHONIOENCODING=utf-8 PYTHONPATH=. ../.venv/Scripts/python.exe eval_translation.py --existing 12
     ... eval_translation.py --fresh 3 --out /tmp/eval
 
-Lint bắt các lỗi convert đo được bằng máy (danh sách lỗi lấy từ prompt SYSTEM_CHAPTER —
+Lint bắt các lỗi convert đo được bằng máy (danh sách lỗi lấy từ prompt production —
 prompt cấm gì thì lint bắt cái đó). Điểm 0 = sạch. Lỗi văn phong tinh tế hơn
 (thành ngữ dịch word-by-word, giọng kể lệch...) máy không bắt được → đọc file xuất ra.
 """
@@ -254,7 +254,7 @@ def _translate_one(r: dict, llm) -> dict:
     """Dry-run 1 chương qua pipeline production (không ghi DB)."""
     from novelworker.translator import prompts
     from novelworker.translator.worker import (
-        GLOSSARY_LINE, _analyze_names, _clean_output,
+        GLOSSARY_LINE, _analyze_names, _clean_output, _drop_context_echo,
         _extract_json, _fix_han_residue,
         _merge_names, _pop_summary,
         _quality_fuse, _register_line, _split_chunks, _tail,
@@ -318,7 +318,8 @@ def _translate_one(r: dict, llm) -> dict:
             text = text[:m.start()].rstrip()
         text, summary = _pop_summary(text)
         prev_summary = summary or prev_summary
-        parts.append(_fix_han_residue(chapter_llm, _clean_output(text), terms))
+        text = _drop_context_echo(_clean_output(text), prev_tail)
+        parts.append(_fix_han_residue(chapter_llm, text, terms))
         prev_tail = _tail(parts[-1])
     text = "\n\n".join(parts)
     return {**r, "content_vi": text, "model_used": "(fresh-full)"}

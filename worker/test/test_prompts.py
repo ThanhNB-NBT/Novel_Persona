@@ -7,8 +7,7 @@ os.environ.setdefault("SUPABASE_URL", "https://example.supabase.co")
 os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "test")
 
 from novelworker.translator.prompts import (
-    MAX_TERMS_IN_PROMPT, build_chapter_system, build_main_chapter_system,
-    build_reference_chapter_system,
+    MAX_TERMS_IN_PROMPT, build_main_chapter_system,
     build_chapter_user, build_metadata_user,
 )
 
@@ -22,7 +21,7 @@ def main() -> None:
     ]
 
     # chỉ chèn term THẬT SỰ xuất hiện trong chunk; kèm note + cảnh báo wrong_vi
-    sys_p = build_chapter_system(terms, "林松看着苏雨。")
+    sys_p = build_main_chapter_system(terms, "林松看着苏雨。")
     assert "林松 → Lâm Tùng" in sys_p and "[nam, sư huynh]" in sys_p
     assert "KHÔNG dịch thành 'Tô Vu'" in sys_p
     assert "不出现" not in sys_p
@@ -30,18 +29,18 @@ def main() -> None:
     assert "BẢNG NHÂN VẬT — tra bảng này" in sys_p
     assert sys_p.index("林松") < sys_p.index("Bảng thuật ngữ") < sys_p.index("苏雨")
     # chunk chỉ có term thường → không chèn khối nhân vật rỗng
-    assert "BẢNG NHÂN VẬT — tra bảng này" not in build_chapter_system(terms, "苏雨来了。")
+    assert "BẢNG NHÂN VẬT — tra bảng này" not in build_main_chapter_system(terms, "苏雨来了。")
 
     # không có content đối chiếu → chèn mọi term có term_zh
-    assert "不出现" in build_chapter_system(terms, "")
+    assert "不出现" in build_main_chapter_system(terms, "")
 
     # chunk không khớp term nào → không có khối glossary
-    assert "Bảng thuật ngữ" not in build_chapter_system(terms, "无关内容")
+    assert "Bảng thuật ngữ" not in build_main_chapter_system(terms, "无关内容")
 
     # trần số term trong prompt
     many = [{"term_zh": f"名{i}", "correct_vi": f"Danh {i}"} for i in range(200)]
     chunk = "".join(t["term_zh"] for t in many)
-    injected = build_chapter_system(many, chunk)
+    injected = build_main_chapter_system(many, chunk)
     assert injected.count("→ Danh") == MAX_TERMS_IN_PROMPT
 
     # build_chapter_user: đủ 4 phần đúng thứ tự; phần thiếu thì không chèn nhãn thừa
@@ -58,9 +57,6 @@ def main() -> None:
     meta = build_metadata_user(novel, terms)
     assert "林松 → Lâm Tùng" in meta and "苏雨" not in meta
     assert "Bảng thuật ngữ" not in build_metadata_user(novel)
-    reference = build_reference_chapter_system(terms, "林松看着苏雨。")
-    assert "CHIẾN LƯỢC DỊCH CHÍNH" in reference
-    assert "SUMMARY và GLOSSARY_JSON" in reference
     main = build_main_chapter_system(terms, "林松看着苏雨。")
     assert "KẾT HỢP REFERENCE + V2" in main
     assert "Xác định người nói" in main

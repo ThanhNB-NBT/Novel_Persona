@@ -3,6 +3,18 @@ from eval_translation import (
 )
 
 
+def test_patch_replacements_include_old_vietnamese_and_han_residue():
+    from novelworker.translator.worker import _patch_replacements
+
+    repls = _patch_replacements([
+        {'wrong_vi': 'Lâm', 'correct_vi': 'Lâm Tùng'},
+        {'term_zh': '林同', 'correct_vi': 'Lâm Tùng'},
+    ])
+
+    assert ('Lâm', 'Lâm Tùng') in repls
+    assert ('林同', 'Lâm Tùng') in repls
+
+
 def test_self_reference_omission():
     assert _self_reference_omissions("老夫不答应。", "Ta không đồng ý.")
     assert not _self_reference_omissions("老夫不答应。", "Lão phu không đồng ý.")
@@ -247,7 +259,7 @@ def test_style_line_and_narrator_term():
     assert "ngôi ba" in line and "tu tiên cổ đại" in line and "tưng tửng" not in line
     assert prompts.build_style_line(None) is None
     assert prompts.build_style_line({}) is None
-    system = prompts.build_chapter_system(
+    system = prompts.build_main_chapter_system(
         [{"term_zh": "洛离", "correct_vi": "Lạc Ly", "term_type": "person",
           "note": "nam, thiếu niên", "narrator_term": "y"}], "洛离睁开双目")
     assert "[người kể gọi: y]" in system
@@ -282,7 +294,7 @@ def test_fix_han_residue_by_line():
                 "text": '[{"line": 2, "new": "Trên áo viết chữ tù."}]'})()
 
     assert _fix_han_residue(FakeLLM(), "Hắn cúi đầu.\nTrên áo viết chữ 囚.") == (
-        "Hắn cúi đầu.\nTrên áo viết chữ tù.")
+        "Hắn cúi đầu.\nTrên áo viết chữ Tù.")
 
     class NoFixLLM:
         def complete(self, *a, **k):
@@ -326,3 +338,11 @@ def test_fix_han_residue_by_line():
     assert not _valid_suggested_zh("h")
     assert _valid_suggested_zh("t3")
     assert _valid_suggested_zh("t2重型装甲")
+
+
+def test_context_echo_is_removed_only_from_leading_lines():
+    from novelworker.translator.worker import _drop_context_echo
+    previous = "Lâm Tùng khép cửa lại.\nĐêm nay hắn không ngủ."
+    assert _drop_context_echo(previous + "\nSáng hôm sau, hắn lên đường.", previous) == (
+        "Sáng hôm sau, hắn lên đường.")
+    assert _drop_context_echo("Sáng hôm sau, hắn lên đường.", previous) == "Sáng hôm sau, hắn lên đường."

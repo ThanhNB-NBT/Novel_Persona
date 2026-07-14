@@ -493,12 +493,14 @@ def _hanviet_fallback(vi: str) -> tuple[str, int]:
 
 
 def _fix_han_residue(chapter_llm, vi: str, terms: list[dict] | None = None) -> str:
-    """Glossary → LLM dịch theo nghĩa → Hán-Việt fallback; không dịch lại cả chunk."""
+    """Glossary → bảng tra → LLM khi cần → bảng tra; tránh request sửa nếu data đã đủ."""
     vi, glossary_n = _replace_glossary_han(vi, terms or [])
+    vi, hanviet_before = _hanviet_fallback(vi)
     bad = [(i, line) for i, line in enumerate(vi.splitlines(), 1) if HAN_CHARS.search(line)]
     if not bad:
-        if glossary_n:
-            log.info("Fix Hán tự sót bằng glossary: %d lượt thay", glossary_n)
+        if glossary_n or hanviet_before:
+            log.info("Fix Hán tự sót bằng data: glossary=%d, Hán-Việt=%d ký tự",
+                     glossary_n, hanviet_before)
         return vi
     user = ("Các dòng sau còn ký tự Hán. Chỉ dịch phần chữ Hán sang tiếng Việt tự nhiên, "
             "giữ nguyên mọi nội dung khác. Trả JSON "
@@ -506,19 +508,37 @@ def _fix_han_residue(chapter_llm, vi: str, terms: list[dict] | None = None) -> s
             + "\n".join(f"{i}: {line}" for i, line in bad))
     try:
         fixes = _extract_json(chapter_llm.complete(
-            prompts.SYSTEM_REVISE, user, max_tokens=4096).text)
+            prompts.SYSTEM_REVISE, user, temperature=0.0, max_tokens=4096).text)
         vi, applied = _apply_line_fixes(vi, fixes)
         log.info("Fix Hán tự sót: %d dòng lỗi, %d dòng thay", len(bad), applied)
     except Exception as e:
         log.warning("Fix Hán tự sót lỗi: %s", e)
     vi, glossary_after = _replace_glossary_han(vi, terms or [])
     vi, hanviet_n = _hanviet_fallback(vi)
-    if glossary_n or glossary_after or hanviet_n:
+    if glossary_n or hanviet_before or glossary_after or hanviet_n:
         log.info("Fix Hán tự fallback: glossary=%d, Hán-Việt=%d ký tự",
-                 glossary_n + glossary_after, hanviet_n)
+                 glossary_n + glossary_after, hanviet_before + hanviet_n)
     if HAN_CHARS.search(vi):
         raise RuntimeError("không sửa hết ký tự Hán sót")
     return vi
+
+
+def _drop_context_echo(text: str, prev_tail: str | None) -> str:
+    """Model đôi khi chép lại đuôi chương trước từ context thay vì chỉ dùng để nối mạch."""
+    if not prev_tail or not text.strip():
+        return text
+    tail = " ".join(prev_tail.split())
+    lines = text.splitlines()
+    removed = 0
+    while lines:
+        lead = " ".join(lines[0].split())
+        if len(lead) < 20 or lead not in tail:
+            break
+        lines.pop(0)
+        removed += 1
+    if removed:
+        log.warning("Đã bỏ %d dòng model lặp từ chương/chunk trước", removed)
+    return "\n".join(lines).lstrip()
 
 
 _STYLE_KEYS = ("pov", "setting", "han_viet", "tone")
@@ -589,11 +609,22 @@ def handle_metadata(job: dict, llm) -> None:
     terms, _ = db.get_glossary(novel["id"])  # dịch lại metadata → tên khớp glossary đã tích lũy
     res = llm.complete(prompts.SYSTEM_METADATA, prompts.build_metadata_user(novel, terms), max_tokens=2048)
     data = _extract_json(res.text)
+    # Metadata trước đây ghi thẳng JSON model trả nên title/mô tả có chữ Hán lọt không qua
+    # repair như chương. Dùng cùng pipeline; bảng tra xử lý được thì không phát sinh request LLM.
+    def clean(value):
+        if isinstance(value, str):
+            return _fix_han_residue(llm, value, terms)
+        return value
+    genres = data.get("genres_vi")
+    if isinstance(genres, list):
+        genres = [clean(item) for item in genres if isinstance(item, str) and item.strip()]
+    # JSON parse được nhưng thiếu field → GIỮ giá trị cũ, không ghi đè None (meta_translated
+    # set True ngay dưới nên không tự dịch lại — ghi None là mất trắng tên đang có)
     db.sb().table("novels").update({
-        "title_vi": data.get("title_vi"),
-        "author_vi": data.get("author_vi"),
-        "description_vi": data.get("description_vi"),
-        "genres": data.get("genres_vi") or novel.get("genres"),
+        "title_vi": clean(data.get("title_vi")) or novel.get("title_vi"),
+        "author_vi": clean(data.get("author_vi")) or novel.get("author_vi"),
+        "description_vi": clean(data.get("description_vi")) or novel.get("description_vi"),
+        "genres": genres or novel.get("genres"),
         "meta_translated": True,
         "updated_at": db.utc_now(),
     }).eq("id", novel["id"]).execute()
@@ -703,7 +734,7 @@ def handle_chapter(job: dict, llm) -> None:
         prev_summary = summary_vi or prev_summary
         # Cầu chì chất lượng đã chạy TRONG llm.complete (validate=_quality_fuse) → tới đây
         # output chắc chắn đạt: đủ tiếng Việt, đủ độ dài, còn xuống dòng.
-        text = _clean_output(text)
+        text = _drop_context_echo(_clean_output(text), prev_tail)
         text = _fix_han_residue(chapter_llm, text, terms)
         parts.append(text)
         prev_tail = _tail(parts[-1])  # chunk sau nối giọng văn từ đuôi chunk này
@@ -793,15 +824,21 @@ def _set_patch_result(job_id: int, note: str) -> None:
         log.debug("Không ghi được result cho job #%s (migration 069 chưa chạy?)", job_id)
 
 
-def handle_patch(job: dict, llm=None) -> None:
-    """Vá chương đã dịch bằng string-replace các term có wrong_vi (không tốn LLM)."""
-    terms, _ = db.get_glossary(job["novel_id"])
+def _patch_replacements(terms: list[dict]) -> list[tuple[str, str]]:
+    """Chuỗi thay thế cho job vá, ưu tiên cụm dài để không đè thuật ngữ con."""
     repls = [(t["wrong_vi"], t["correct_vi"]) for t in terms
              if t.get("wrong_vi") and t.get("correct_vi")]
     # + tên còn SÓT dạng chữ Hán trong bản dịch cũ → thay bằng bản chuẩn luôn thể
     repls += [(t["term_zh"], t["correct_vi"]) for t in terms
               if t.get("term_zh") and t.get("correct_vi")]
     repls.sort(key=lambda p: -len(p[0]))  # cụm dài thay trước, không đè cụm con
+    return repls
+
+
+def handle_patch(job: dict, llm=None) -> None:
+    """Vá chương đã dịch bằng string-replace các term có wrong_vi (không tốn LLM)."""
+    terms, _ = db.get_glossary(job["novel_id"])
+    repls = _patch_replacements(terms)
     if not repls:
         _set_patch_result(job["id"], "không có thuật ngữ cần vá")
         return
