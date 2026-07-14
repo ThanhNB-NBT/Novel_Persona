@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
+import '../../chapter_paras.dart';
 import '../../cultivation.dart';
 import '../../data.dart';
 import '../../hanviet.dart';
@@ -16,62 +17,90 @@ import 'reader_settings.dart';
 /// Vùng chữ đang chọn để sửa: khối chứa + vị trí đầu/cuối trong khối.
 typedef Sel = ({String block, int start, int end});
 
-/// Mở rộng vùng chọn theo TỪ (ranh giới khoảng trắng), không theo từng ký tự.
-/// Nhận cả '\n' làm ranh giới — chế độ lật trang gộp nhiều đoạn trong 1 khối.
-bool isWs(String s, int i) => s[i] == ' ' || s[i] == '\n';
+/// Ranh giới từ để chạm-sửa: dấu ngoặc, nháy, phẩy, hai chấm… không thuộc từ.
+bool isWordChar(String s, int i) {
+  final c = s.codeUnitAt(i);
+  return (c >= 0x30 && c <= 0x39) || // 0-9
+      (c >= 0x41 && c <= 0x5a) || // A-Z
+      (c >= 0x61 && c <= 0x7a) || // a-z
+      (c >= 0x00c0 && c <= 0x024f) || // Latin có dấu
+      (c >= 0x1e00 && c <= 0x1eff) || // tiếng Việt có dấu
+      (c >= 0x3400 && c <= 0x9fff) || // chữ Hán còn sót
+      c == 0x5f; // _
+}
 
-int wordLeft(String s, int a) {
-  var i = a;
-  while (i > 0 && isWs(s, i - 1)) { i--; } // nuốt khoảng trắng liền trước
-  while (i > 0 && !isWs(s, i - 1)) { i--; } // lùi hết 1 từ
+int _wordIndex(String s, int offset) {
+  var i = offset.clamp(0, s.length).toInt();
+  if (i < s.length && isWordChar(s, i)) return i;
+  if (i > 0 && isWordChar(s, i - 1)) return i - 1;
+  while (i < s.length && !isWordChar(s, i)) { i++; }
+  return i == s.length ? -1 : i;
+}
+
+int wordLeft(String s, int offset) {
+  var i = _wordIndex(s, offset);
+  if (i < 0) return s.length;
+  while (i > 0 && isWordChar(s, i - 1)) { i--; }
   return i;
 }
 
-int wordRight(String s, int b) {
-  var i = b;
-  while (i < s.length && isWs(s, i)) { i++; }
-  while (i < s.length && !isWs(s, i)) { i++; }
+int wordRight(String s, int offset) {
+  var i = _wordIndex(s, offset);
+  if (i < 0) return s.length;
+  while (i < s.length && isWordChar(s, i)) { i++; }
   return i;
 }
 
-/// Ngắt sau dấu kết câu (. ! ? … và bản full-width) khi theo sau là khoảng trắng —
-/// không ngắt giữa "?"/"!" nằm trong dấu ngoặc kép (vì sau đó là " chứ không phải trắng).
-final _sentenceEnd = RegExp(r'(?<=[.!?…。！？])\s+');
+int previousWordStart(String s, int before) {
+  final clamped = before.clamp(0, s.length).toInt();
+  var i = clamped - 1;
+  while (i >= 0 && !isWordChar(s, i)) { i--; }
+  return i < 0 ? clamped : wordLeft(s, i);
+}
 
-/// Tách mỗi đoạn dài thành từng câu (1 câu/đoạn) cho dễ đọc; câu quá ngắn (<40 ký tự)
-/// gộp với câu sau tới khi đủ dài hoặc gom 3 câu — tránh đoạn quá dài lẫn vụn vặt.
-/// Chạy lúc render nên áp dụng mọi chương, không đụng nội dung đã lưu.
-List<String> splitBySentence(List<String> paras) {
-  const minLen = 40;
-  final out = <String>[];
-  for (final p in paras) {
-    final sentences =
-        p.split(_sentenceEnd).where((s) => s.trim().isNotEmpty).toList();
-    if (sentences.length <= 1) {
-      out.add(p.trim());
-      continue;
-    }
-    var buf = '';
-    var count = 0;
-    for (final s in sentences) {
-      buf = buf.isEmpty ? s.trim() : '$buf ${s.trim()}';
-      count++;
-      if (buf.length >= minLen || count >= 3) {
-        out.add(buf);
-        buf = '';
-        count = 0;
-      }
-    }
-    if (buf.isNotEmpty) {
-      // câu lẻ cuối quá ngắn → nối vào đoạn trước cho gọn, không để mẩu cụt
-      if (buf.length < minLen && out.isNotEmpty) {
-        out[out.length - 1] = '${out.last} $buf';
-      } else {
-        out.add(buf);
-      }
-    }
+bool _isGapSpace(String s, int i) {
+  final c = s.codeUnitAt(i);
+  return c == 0x20 || c == 0x09; // chỉ space/tab là "khoảng trắng nối từ"
+}
+
+/// Mở rộng vùng chọn sang PHẢI một từ — nhưng CHỈ khi cách bởi khoảng trắng, gặp dấu
+/// câu (", : ; . …) thì dừng, không nuốt dấu vào vùng sửa (sửa thường 1-2 từ sạch).
+int extendRightWord(String s, int end) {
+  var j = end;
+  while (j < s.length && _isGapSpace(s, j)) { j++; }
+  if (j >= s.length || !isWordChar(s, j)) return end; // sau khoảng trắng là dấu/hết → giữ nguyên
+  while (j < s.length && isWordChar(s, j)) { j++; }
+  return j;
+}
+
+/// Mở rộng sang TRÁI một từ, cùng luật: chỉ vượt khoảng trắng, không nuốt dấu câu.
+int extendLeftWord(String s, int start) {
+  var j = start;
+  while (j > 0 && _isGapSpace(s, j - 1)) { j--; }
+  if (j <= 0 || !isWordChar(s, j - 1)) return start;
+  while (j > 0 && isWordChar(s, j - 1)) { j--; }
+  return j;
+}
+
+int nextWordEnd(String s, int from) {
+  final clamped = from.clamp(0, s.length).toInt();
+  var i = clamped;
+  while (i < s.length && !isWordChar(s, i)) { i++; }
+  return i == s.length ? clamped : wordRight(s, i);
+}
+
+/// Bản dịch cũ có thể đã chép đuôi chương trước do model nhìn thấy context.
+/// Chỉ ẩn các đoạn đầu khớp nguyên văn đuôi trước; dữ liệu DB không bị sửa khi đọc.
+String withoutLeadingPreviousEcho(String current, String? previous) {
+  if (previous == null || previous.trim().isEmpty) return current;
+  final tail = previous.trim();
+  final lines = current.split('\n');
+  while (lines.isNotEmpty) {
+    final lead = lines.first.trim();
+    if (lead.length < 20 || !tail.contains(lead)) break;
+    lines.removeAt(0);
   }
-  return out;
+  return lines.join('\n').trimLeft();
 }
 
 class ReaderScreen extends ConsumerStatefulWidget {
@@ -96,6 +125,14 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   // Selection dùng ValueNotifier → chỉ overlay sửa rebuild, KHÔNG rebuild cả trang (đỡ giật khi chọn).
   final _sel = ValueNotifier<Sel?>(null);
   final _editing = ValueNotifier<bool>(false);
+
+  // TTS: đoạn nội dung máy đọc đang đọc TRÊN CHƯƠNG NÀY (-1 = không phải chương đang
+  // nghe / đang đọc tiêu đề). Reader nghe cái này để highlight + cuộn theo.
+  final _localTtsPara = ValueNotifier<int>(-1);
+  // Danh sách đoạn + tiêu đề đang render — để nút Nghe bắt đầu từ đoạn đang đọc, khớp
+  // phân đoạn với máy đọc.
+  List<String> _renderedParas = const [];
+  String _renderedTitle = '';
 
   bool _restored = false;
   int _restoreTries = 0;
@@ -124,6 +161,9 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     _persistChapter(); // tiến độ cấp chương (server, cho "đọc tiếp")
     _percent.value = chapterPercent(novelId, chapterIndex);
     _scroll.addListener(_onScroll);
+    // Bám máy đọc: highlight đoạn đang đọc + tự chuyển màn khi TTS sang chương mới.
+    TtsPlayer.i.state.addListener(_syncTts);
+    TtsPlayer.i.paraAt.addListener(_syncTts);
     // Giữ màn hình sáng khi đang đọc/nghe — không phải chạm liên tục cho khỏi tắt.
     // ponytail: gắn theo vòng đời reader; chuyển chương (pushReplacement) enable lại
     // ngay ở initState mới nên khoảng hở dưới giây, thừa dưới ngưỡng tắt màn ~30s.
@@ -141,6 +181,8 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
 
   @override
   void dispose() {
+    TtsPlayer.i.state.removeListener(_syncTts);
+    TtsPlayer.i.paraAt.removeListener(_syncTts);
     _scroll.dispose();
     _pageCtrl.dispose();
     _percent.dispose();
@@ -148,8 +190,26 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     _correctFocus.dispose();
     _sel.dispose();
     _editing.dispose();
+    _localTtsPara.dispose();
     WakelockPlus.disable();
     super.dispose();
+  }
+
+  /// Đồng bộ với máy đọc: (1) chương này đang được nghe → mirror đoạn đang đọc để
+  /// highlight; (2) TTS đã tự sang chương khác → chuyển màn theo cho khớp (không thì
+  /// tiếng đọc chương sau mà màn hình kẹt chương cũ).
+  void _syncTts() {
+    if (!mounted) return;
+    final st = TtsPlayer.i.state.value;
+    final here = st.active && st.novelId == novelId && st.chapterIndex == chapterIndex;
+    _localTtsPara.value = (here && !st.paused) ? TtsPlayer.i.paraAt.value : -1;
+    if (st.active &&
+        st.playing &&
+        st.novelId == novelId &&
+        st.chapterIndex != chapterIndex &&
+        !_navigating) {
+      _goChapter(st.chapterIndex);
+    }
   }
 
   void _onScroll() {
@@ -262,9 +322,74 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     }
   }
 
+  Future<void> _showTranslationReport(Sel sel, String selected) async {
+    if (sb.auth.currentUser == null) {
+      context.push('/login');
+      return;
+    }
+    final note = TextEditingController();
+    var type = 'Sai nghĩa';
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('Báo lỗi bản dịch'),
+          content: Column(mainAxisSize: MainAxisSize.min, children: [
+            Text('Đoạn chọn: “${selected.trim()}”', maxLines: 2,
+                overflow: TextOverflow.ellipsis),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              initialValue: type,
+              decoration: const InputDecoration(labelText: 'Loại lỗi'),
+              items: const [
+                DropdownMenuItem(value: 'Sai nghĩa', child: Text('Sai nghĩa')),
+                DropdownMenuItem(value: 'Xưng hô/giọng', child: Text('Xưng hô hoặc giọng văn')),
+                DropdownMenuItem(value: 'Chính tả', child: Text('Chính tả')),
+                DropdownMenuItem(value: 'Cảm thán/chữ đệm', child: Text('Cảm thán hoặc chữ đệm')),
+                DropdownMenuItem(value: 'Khác', child: Text('Khác')),
+              ],
+              onChanged: (value) => setState(() => type = value ?? type),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: note,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                labelText: 'Ghi chú (không bắt buộc)',
+                hintText: 'Không sửa nội dung chương',
+              ),
+            ),
+          ]),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Hủy')),
+            FilledButton(
+              onPressed: () async {
+                final contextText = sel.block.replaceAll(RegExp(r'\s+'), ' ').trim();
+                final excerpt = contextText.length <= 400
+                    ? contextText : '${contextText.substring(0, 400)}…';
+                await reportChapter(novelId, chapterIndex,
+                    '[$type] Chọn: “${selected.trim()}”. Ngữ cảnh: “$excerpt”. ${note.text.trim()}');
+                if (dialogContext.mounted) Navigator.pop(dialogContext);
+                if (mounted) {
+                  ScaffoldMessenger.of(this.context).showSnackBar(
+                      const SnackBar(content: Text('Đã gửi báo lỗi; chương không bị sửa')));
+                }
+              },
+              child: const Text('Gửi báo lỗi'),
+            ),
+          ],
+        ),
+      ),
+    );
+    note.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final chapter = ref.watch(chapterProvider(ChapterKey(novelId, chapterIndex)));
+    final previous = chapterIndex > 1
+        ? ref.watch(chapterProvider(ChapterKey(novelId, chapterIndex - 1))).value
+        : null;
     ref.watch(glossaryProvider(novelId)); // nạp sẵn glossary để gợi ý khi sửa từ
     final s = ref.watch(readerSettingsProvider);
     // "Hệ thống" của reader = theo chế độ sáng/tối của app (chứ không phải OS thô),
@@ -313,8 +438,16 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                   return;
                 }
                 final messenger = ScaffoldMessenger.of(context);
+                // bắt đầu từ ĐOẠN đang đọc (ước lượng theo % cuộn), không đọc lại từ đầu;
+                // truyền paras/title để máy đọc phân đoạn KHỚP với màn hình → highlight đúng
+                final n = _renderedParas.length;
+                final from =
+                    n == 0 ? 0 : (_percent.value * n).floor().clamp(0, n - 1);
                 // máy thiếu giọng tiếng Việt → nói thẳng lý do thay vì câm lặng
-                final warn = await TtsPlayer.i.start(novelId, chapterIndex);
+                final warn = await TtsPlayer.i.start(novelId, chapterIndex,
+                    fromContentPara: from,
+                    paras: _renderedParas,
+                    title: _renderedTitle);
                 if (warn != null) {
                   messenger.showSnackBar(SnackBar(
                       content: Text(warn), duration: const Duration(seconds: 6)));
@@ -365,10 +498,11 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
           final title = (rawTitle == null || rawTitle.isEmpty)
               ? 'Chương $chapterIndex'
               : rawTitle;
-          final paras = splitBySentence(((c['content_vi'] as String?) ?? '')
-              .split('\n')
-              .where((p) => p.trim().isNotEmpty)
-              .toList());
+          final content = withoutLeadingPreviousEcho(
+              (c['content_vi'] as String?) ?? '', previous?['content_vi'] as String?);
+          final paras = contentParagraphs(content);
+          _renderedParas = paras; // để nút Nghe bắt đầu từ ĐOẠN đang đọc, không từ đầu chương
+          _renderedTitle = title;
           if (paras.isEmpty) {
             // done nhưng nội dung rỗng (bản dịch cũ lỗi) → cho dịch lại thay vì hiện trắng
             return Center(
@@ -470,6 +604,9 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                 align: s.justify ? TextAlign.justify : TextAlign.left,
                 sel: _sel,
                 onTapWord: _onTapWord,
+                ttsPara: _localTtsPara,
+                paraIndex: i,
+                ttsHlColor: col.fg.withValues(alpha: 0.10),
               ),
             ),
             if (i == giftAfter)
@@ -733,7 +870,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
             // Vùng đang thay (ĐỎ) + mở rộng theo TỪ ⟨ ⟩ — luôn thấy rõ từ nào đang sửa.
             Row(children: [
               extend(Icons.chevron_left_rounded, 'Mở rộng 1 từ sang trái', () {
-                final na = wordLeft(block, a);
+                final na = extendLeftWord(block, a);
                 if (na != a) _sel.value = (block: block, start: na, end: b);
               }),
               const SizedBox(width: 8),
@@ -753,7 +890,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
               ),
               const SizedBox(width: 8),
               extend(Icons.chevron_right_rounded, 'Mở rộng 1 từ sang phải', () {
-                final nb = wordRight(block, b);
+                final nb = extendRightWord(block, b);
                 if (nb != b) _sel.value = (block: block, start: a, end: nb);
               }),
             ]),
@@ -820,6 +957,15 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                 child: const Text('Lưu'),
               ),
             ),
+            const SizedBox(height: 6),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () => _showTranslationReport(sel, wrong),
+                icon: const Icon(Icons.flag_outlined),
+                label: const Text('Báo lỗi, không sửa chương'),
+              ),
+            ),
           ]),
         ),
       )),
@@ -849,16 +995,54 @@ class _TapPara extends StatelessWidget {
   final TextAlign align;
   final ValueNotifier<Sel?> sel;
   final void Function(String block, int offset, Offset globalPos) onTapWord;
+  // TTS: nghe chỉ số đoạn đang đọc; khi trùng paraIndex → tô nền + tự cuộn vào tầm mắt.
+  final ValueNotifier<int>? ttsPara;
+  final int paraIndex;
+  final Color? ttsHlColor;
   const _TapPara({
     required this.para,
     required this.style,
     required this.align,
     required this.sel,
     required this.onTapWord,
+    this.ttsPara,
+    this.paraIndex = -1,
+    this.ttsHlColor,
   });
 
   @override
   Widget build(BuildContext context) {
+    final tp = ttsPara;
+    if (tp == null) return _base(context);
+    // Đoạn đang đọc → nền mờ + cuộn vào ~35% màn (bám theo giọng đọc). child dựng 1 lần.
+    return ValueListenableBuilder<int>(
+      valueListenable: tp,
+      builder: (context, active, child) {
+        final on = active == paraIndex;
+        if (on) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (context.mounted) {
+              Scrollable.ensureVisible(context,
+                  alignment: 0.35,
+                  duration: const Duration(milliseconds: 300),
+                  curve: Curves.easeOut);
+            }
+          });
+        }
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          decoration: BoxDecoration(
+            color: on ? (ttsHlColor ?? Colors.transparent) : Colors.transparent,
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: child,
+        );
+      },
+      child: _base(context),
+    );
+  }
+
+  Widget _base(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     return ValueListenableBuilder<Sel?>(
       valueListenable: sel,
@@ -1167,8 +1351,11 @@ class _TtsBar extends StatelessWidget {
   final Color fg, bg;
   const _TtsBar({required this.state, required this.fg, required this.bg});
 
-  // flutter_tts: 0.5 = tốc độ chuẩn → nhãn quy về 1×
-  static const _rates = [(0.4, '0.8×'), (0.5, '1×'), (0.65, '1.3×'), (0.8, '1.6×')];
+  // flutter_tts: 0.5 = tốc độ chuẩn → nhãn quy về 1× (nhân đôi rate). 1.0 = trần engine.
+  static const _rates = [
+    (0.4, '0.8×'), (0.5, '1×'), (0.65, '1.3×'), (0.8, '1.6×'),
+    (0.9, '1.8×'), (1.0, '2×'),
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -1208,7 +1395,7 @@ class _TtsBar extends StatelessWidget {
           builder: (_, setLocal) {
             final idx = _rates
                 .indexWhere((r) => (r.$1 - TtsPlayer.i.rate).abs() < 0.01)
-                .clamp(0, 3);
+                .clamp(0, _rates.length - 1);
             return TextButton(
               onPressed: () async {
                 await TtsPlayer.i.setRate(_rates[(idx + 1) % _rates.length].$1);
