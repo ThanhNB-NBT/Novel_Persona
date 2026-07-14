@@ -289,11 +289,12 @@ def discover_pool(adapter: SourceAdapter, method: str, label: str) -> None:
         return
     sid = _source_id(adapter)
     pool = method.removeprefix("fetch_")
-    state = (
+    state_rows = (
         db.sb().table("crawl_discovery_frontier")
         .select("next_page, cycle_count").eq("source_id", sid).eq("pool", pool)
-        .maybe_single().execute().data or {}
+        .limit(1).execute().data or []
     )
+    state = state_rows[0] if state_rows else {}
     cycle, page, hot_page = _frontier_step(
         state.get("cycle_count") or 0, state.get("next_page") or 1)
     candidates = fetch(limit=200, page=page)
