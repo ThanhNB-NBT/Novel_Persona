@@ -30,16 +30,20 @@ const readerColors = [
 
 /// Các font đã Việt hoá, dễ đọc (serif cho đỡ mỏi mắt + vài sans).
 const readerFonts = {
+  'bevietnam': 'Be Vietnam Pro',
+  'jakarta': 'Plus Jakarta Sans',
+  'nunitosans': 'Nunito Sans',
+  'sarabun': 'Sarabun',
+  'sourceserif': 'Source Serif 4',
+  'spectral': 'Spectral',
+  'ibmplexserif': 'IBM Plex Serif',
+  'lexend': 'Lexend',
   'lora': 'Lora',
   'notoserif': 'Noto Serif',
   'bitter': 'Bitter',
   'merriweather': 'Merriweather',
   'literata': 'Literata',
   'robotoslab': 'Roboto Slab',
-  'bevietnam': 'Be Vietnam Pro',
-  'jakarta': 'Plus Jakarta Sans',
-  'nunitosans': 'Nunito Sans',
-  'sarabun': 'Sarabun',
 };
 
 /// Độ sáng hiệu lực của app: theo Cài đặt app (0=hệ thống→OS, 1=sáng, 2=tối).
@@ -47,22 +51,34 @@ const readerFonts = {
 Brightness appBrightness(WidgetRef ref, BuildContext context) {
   final mode = ref.watch(appThemeModeProvider);
   final sysDark = MediaQuery.platformBrightnessOf(context) == Brightness.dark;
-  final dark = switch (mode) { 1 => false, 2 => true, _ => sysDark };
+  final dark = switch (mode) {
+    1 => false,
+    2 => true,
+    _ => sysDark,
+  };
   return dark ? Brightness.dark : Brightness.light;
 }
 
-TextStyle readerFontStyle(String key,
-    {required double fontSize, required double height, required Color color}) {
+TextStyle readerFontStyle(
+  String key, {
+  required double fontSize,
+  required double height,
+  required Color color,
+}) {
   final f = switch (key) {
+    'bevietnam' => GoogleFonts.beVietnamPro,
+    'jakarta' => GoogleFonts.plusJakartaSans,
+    'nunitosans' => GoogleFonts.nunitoSans,
+    'sarabun' => GoogleFonts.sarabun,
+    'sourceserif' => GoogleFonts.sourceSerif4,
+    'spectral' => GoogleFonts.spectral,
+    'ibmplexserif' => GoogleFonts.ibmPlexSerif,
+    'lexend' => GoogleFonts.lexend,
     'notoserif' => GoogleFonts.notoSerif,
     'bitter' => GoogleFonts.bitter,
     'merriweather' => GoogleFonts.merriweather,
     'literata' => GoogleFonts.literata,
     'robotoslab' => GoogleFonts.robotoSlab,
-    'bevietnam' => GoogleFonts.beVietnamPro,
-    'jakarta' => GoogleFonts.plusJakartaSans,
-    'nunitosans' => GoogleFonts.nunitoSans,
-    'sarabun' => GoogleFonts.sarabun,
     _ => GoogleFonts.lora,
   };
   return f(fontSize: fontSize, height: height, color: color);
@@ -101,18 +117,17 @@ class ReaderSettings {
     double? lineHeight,
     double? sideMargin,
     bool? pageMode,
-  }) =>
-      ReaderSettings(
-        fontSize: fontSize ?? this.fontSize,
-        fontKey: fontKey ?? this.fontKey,
-        lightColor: lightColor ?? this.lightColor,
-        darkColor: darkColor ?? this.darkColor,
-        colorMode: colorMode ?? this.colorMode,
-        justify: justify ?? this.justify,
-        lineHeight: lineHeight ?? this.lineHeight,
-        sideMargin: sideMargin ?? this.sideMargin,
-        pageMode: pageMode ?? this.pageMode,
-      );
+  }) => ReaderSettings(
+    fontSize: fontSize ?? this.fontSize,
+    fontKey: fontKey ?? this.fontKey,
+    lightColor: lightColor ?? this.lightColor,
+    darkColor: darkColor ?? this.darkColor,
+    colorMode: colorMode ?? this.colorMode,
+    justify: justify ?? this.justify,
+    lineHeight: lineHeight ?? this.lineHeight,
+    sideMargin: sideMargin ?? this.sideMargin,
+    pageMode: pageMode ?? this.pageMode,
+  );
 
   /// Màu nền/chữ đã giải quyết: chế độ quyết định lấy nền sáng hay tối,
   /// "hệ thống" theo độ sáng máy.
@@ -130,16 +145,16 @@ class ReaderSettings {
 class ReaderSettingsNotifier extends Notifier<ReaderSettings> {
   @override
   ReaderSettings build() => ReaderSettings(
-        fontSize: prefs.getDouble('rd_size') ?? 18,
-        fontKey: prefs.getString('rd_font') ?? 'lora',
-        lightColor: prefs.getInt('rd_light') ?? 0,
-        darkColor: prefs.getInt('rd_dark') ?? 5,
-        colorMode: prefs.getInt('rd_mode') ?? 0,
-        justify: prefs.getBool('rd_justify') ?? true,
-        lineHeight: prefs.getDouble('rd_lh') ?? 1.7,
-        sideMargin: prefs.getDouble('rd_margin') ?? 20,
-        pageMode: prefs.getBool('rd_page') ?? false,
-      );
+    fontSize: prefs.getDouble('rd_size') ?? 18,
+    fontKey: prefs.getString('rd_font') ?? 'lora',
+    lightColor: prefs.getInt('rd_light') ?? 0,
+    darkColor: prefs.getInt('rd_dark') ?? 5,
+    colorMode: prefs.getInt('rd_mode') ?? 0,
+    justify: prefs.getBool('rd_justify') ?? true,
+    lineHeight: prefs.getDouble('rd_lh') ?? 1.7,
+    sideMargin: prefs.getDouble('rd_margin') ?? 20,
+    pageMode: prefs.getBool('rd_page') ?? false,
+  );
 
   void _save() {
     prefs.setDouble('rd_size', state.fontSize);
@@ -160,189 +175,305 @@ class ReaderSettingsNotifier extends Notifier<ReaderSettings> {
 }
 
 final readerSettingsProvider =
-    NotifierProvider<ReaderSettingsNotifier, ReaderSettings>(ReaderSettingsNotifier.new);
+    NotifierProvider<ReaderSettingsNotifier, ReaderSettings>(
+      ReaderSettingsNotifier.new,
+    );
 
 /// Mở bảng cài đặt đọc (bottom sheet). Cao tối đa 60% màn hình, cuộn trong nếu tràn.
-void showReaderSettingsSheet(BuildContext context, WidgetRef ref,
-    {VoidCallback? onRetranslate}) {
+void showReaderSettingsSheet(
+  BuildContext context,
+  WidgetRef ref, {
+  VoidCallback? onRetranslate,
+}) {
   showModalBottomSheet(
     context: context,
     isScrollControlled: true,
     showDragHandle: true,
-    builder: (_) => Consumer(builder: (context, ref, _) {
-      final s = ref.watch(readerSettingsProvider);
-      final n = ref.read(readerSettingsProvider.notifier);
-      final cs = Theme.of(context).colorScheme;
-      final t = Theme.of(context).textTheme;
-      final maxH = MediaQuery.of(context).size.height * 0.6;
+    builder: (_) => Consumer(
+      builder: (context, ref, _) {
+        final s = ref.watch(readerSettingsProvider);
+        final n = ref.read(readerSettingsProvider.notifier);
+        final cs = Theme.of(context).colorScheme;
+        final t = Theme.of(context).textTheme;
+        final maxH = MediaQuery.of(context).size.height * 0.6;
 
-      Widget label(String x) => Padding(
-            padding: const EdgeInsets.fromLTRB(0, 12, 0, 6),
-            child: Text(x, style: t.labelSmall),
-          );
+        Widget label(String x) => Padding(
+          padding: const EdgeInsets.fromLTRB(0, 12, 0, 6),
+          child: Text(x, style: t.labelSmall),
+        );
 
-      // Một ô trong hàng ghép đôi: nhãn nhỏ + widget.
-      Widget field(String lbl, Widget child) => Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(padding: const EdgeInsets.only(bottom: 6), child: Text(lbl, style: t.labelSmall)),
-              child,
-            ],
-          );
+        // Một ô trong hàng ghép đôi: nhãn nhỏ + widget.
+        Widget field(String lbl, Widget child) => Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Text(lbl, style: t.labelSmall),
+            ),
+            child,
+          ],
+        );
 
-      final col = s.resolve(appBrightness(ref, context));
+        final col = s.resolve(appBrightness(ref, context));
 
-      return SafeArea(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(maxHeight: maxH),
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('Cài đặt đọc', style: t.headlineSmall),
+        return SafeArea(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: maxH),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Cài đặt đọc', style: t.headlineSmall),
 
-              label('Chế độ đọc'),
-              seg(context, ['Cuộn dọc', 'Lật trang'], s.pageMode ? 1 : 0,
-                  (i) => n.update(s.copyWith(pageMode: i == 1))),
+                  label('Chế độ đọc'),
+                  seg(
+                    context,
+                    ['Cuộn dọc', 'Lật trang'],
+                    s.pageMode ? 1 : 0,
+                    (i) => n.update(s.copyWith(pageMode: i == 1)),
+                  ),
 
-              // Màu nền → mở màn phụ (nền sáng/tối + chế độ). Ở đây chỉ 1 hàng gọn.
-              label('Màu nền & chế độ'),
-              _colorRow(context, col, () {
-                Navigator.of(context).push(MaterialPageRoute(
-                    builder: (_) => const ReaderColorScreen()));
-              }),
+                  // Màu nền → mở màn phụ (nền sáng/tối + chế độ). Ở đây chỉ 1 hàng gọn.
+                  label('Màu nền & chế độ'),
+                  _colorRow(context, col, () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const ReaderColorScreen(),
+                      ),
+                    );
+                  }),
 
-              // Cỡ chữ + Độ giãn dòng ghép 1 hàng.
-              const SizedBox(height: 12),
-              Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Expanded(
-                  child: field('Cỡ chữ (${s.fontSize.round()})',
-                      stepper(context, '${s.fontSize.round()}',
-                          () => n.update(s.copyWith(fontSize: (s.fontSize - 1).clamp(15, 28))),
-                          () => n.update(s.copyWith(fontSize: (s.fontSize + 1).clamp(15, 28))))),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: field('Giãn dòng (${s.lineHeight.toStringAsFixed(1)})',
-                      stepper(context, '${s.lineHeight.toStringAsFixed(1)}×',
-                          () => n.update(s.copyWith(lineHeight: (s.lineHeight - 0.1).clamp(1.3, 2.2))),
-                          () => n.update(s.copyWith(lineHeight: (s.lineHeight + 0.1).clamp(1.3, 2.2))))),
-                ),
-              ]),
-
-              label('Font chữ'),
-              SizedBox(
-                height: 36,
-                child: ListView(scrollDirection: Axis.horizontal, children: [
-                  for (final e in readerFonts.entries)
-                    Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: GestureDetector(
-                        onTap: () => n.update(s.copyWith(fontKey: e.key)),
-                        child: Container(
-                          alignment: Alignment.center,
-                          padding: const EdgeInsets.symmetric(horizontal: 14),
-                          decoration: BoxDecoration(
-                            color: s.fontKey == e.key ? cs.primary : cs.surface,
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(
-                                color: s.fontKey == e.key ? cs.primary : cs.outlineVariant),
+                  // Cỡ chữ + Độ giãn dòng ghép 1 hàng.
+                  const SizedBox(height: 12),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: field(
+                          'Cỡ chữ (${s.fontSize.round()})',
+                          stepper(
+                            context,
+                            '${s.fontSize.round()}',
+                            () => n.update(
+                              s.copyWith(
+                                fontSize: (s.fontSize - 1).clamp(15, 28),
+                              ),
+                            ),
+                            () => n.update(
+                              s.copyWith(
+                                fontSize: (s.fontSize + 1).clamp(15, 28),
+                              ),
+                            ),
                           ),
-                          child: Text(e.value,
-                              style: readerFontStyle(e.key,
-                                  fontSize: 14,
-                                  height: 1,
-                                  color: s.fontKey == e.key ? cs.onPrimary : cs.onSurface)),
                         ),
                       ),
-                    ),
-                ]),
-              ),
-
-              // Căn lề + Viền 2 bên ghép 1 hàng.
-              const SizedBox(height: 12),
-              Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Expanded(
-                  child: field('Căn lề',
-                      seg(context, ['Trái', 'Đều'], s.justify ? 1 : 0,
-                          (i) => n.update(s.copyWith(justify: i == 1)))),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: field('Viền 2 bên (${s.sideMargin.round()})',
-                      stepper(context, '${s.sideMargin.round()}',
-                          () => n.update(s.copyWith(sideMargin: (s.sideMargin - 4).clamp(8, 48))),
-                          () => n.update(s.copyWith(sideMargin: (s.sideMargin + 4).clamp(8, 48))))),
-                ),
-              ]),
-
-              if (onRetranslate != null) ...[
-                const SizedBox(height: 16),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    icon: const Icon(Icons.refresh_rounded, size: 18),
-                    label: const Text('Dịch lại chương này'),
-                    onPressed: () {
-                      Navigator.pop(context);
-                      onRetranslate();
-                    },
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: field(
+                          'Giãn dòng (${s.lineHeight.toStringAsFixed(1)})',
+                          stepper(
+                            context,
+                            '${s.lineHeight.toStringAsFixed(1)}×',
+                            () => n.update(
+                              s.copyWith(
+                                lineHeight: (s.lineHeight - 0.1).clamp(
+                                  1.3,
+                                  2.2,
+                                ),
+                              ),
+                            ),
+                            () => n.update(
+                              s.copyWith(
+                                lineHeight: (s.lineHeight + 0.1).clamp(
+                                  1.3,
+                                  2.2,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-              ],
-            ]),
+
+                  label('Font chữ'),
+                  SizedBox(
+                    height: 36,
+                    child: ListView(
+                      scrollDirection: Axis.horizontal,
+                      children: [
+                        for (final e in readerFonts.entries)
+                          Padding(
+                            padding: const EdgeInsets.only(right: 8),
+                            child: GestureDetector(
+                              onTap: () => n.update(s.copyWith(fontKey: e.key)),
+                              child: Container(
+                                alignment: Alignment.center,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: s.fontKey == e.key
+                                      ? cs.primary
+                                      : cs.surface,
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                    color: s.fontKey == e.key
+                                        ? cs.primary
+                                        : cs.outlineVariant,
+                                  ),
+                                ),
+                                child: Text(
+                                  e.value,
+                                  style: readerFontStyle(
+                                    e.key,
+                                    fontSize: 14,
+                                    height: 1,
+                                    color: s.fontKey == e.key
+                                        ? cs.onPrimary
+                                        : cs.onSurface,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+
+                  // Căn lề + Viền 2 bên ghép 1 hàng.
+                  const SizedBox(height: 12),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: field(
+                          'Căn lề',
+                          seg(
+                            context,
+                            ['Trái', 'Đều'],
+                            s.justify ? 1 : 0,
+                            (i) => n.update(s.copyWith(justify: i == 1)),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: field(
+                          'Viền 2 bên (${s.sideMargin.round()})',
+                          stepper(
+                            context,
+                            '${s.sideMargin.round()}',
+                            () => n.update(
+                              s.copyWith(
+                                sideMargin: (s.sideMargin - 4).clamp(8, 48),
+                              ),
+                            ),
+                            () => n.update(
+                              s.copyWith(
+                                sideMargin: (s.sideMargin + 4).clamp(8, 48),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  if (onRetranslate != null) ...[
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        icon: const Icon(Icons.refresh_rounded, size: 18),
+                        label: const Text('Dịch lại chương này'),
+                        onPressed: () {
+                          Navigator.pop(context);
+                          onRetranslate();
+                        },
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
           ),
-        ),
-      );
-    }),
+        );
+      },
+    ),
   );
 }
 
 /// Segmented control dùng lại ở cả sheet và màn phụ.
-Widget seg(BuildContext context, List<String> labels, int value, ValueChanged<int> onCh) {
+Widget seg(
+  BuildContext context,
+  List<String> labels,
+  int value,
+  ValueChanged<int> onCh,
+) {
   final cs = Theme.of(context).colorScheme;
   final t = Theme.of(context).textTheme;
   return Container(
     padding: const EdgeInsets.all(4),
     decoration: BoxDecoration(
-        color: cs.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: cs.outlineVariant)),
-    child: Row(children: [
-      for (var i = 0; i < labels.length; i++)
-        Expanded(
-          child: GestureDetector(
-            onTap: () => onCh(i),
-            child: Container(
-              padding: const EdgeInsets.symmetric(vertical: 9),
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: i == value ? cs.primary : Colors.transparent,
-                borderRadius: BorderRadius.circular(9),
-              ),
-              child: Text(labels[i],
+      color: cs.surface,
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: cs.outlineVariant),
+    ),
+    child: Row(
+      children: [
+        for (var i = 0; i < labels.length; i++)
+          Expanded(
+            child: GestureDetector(
+              onTap: () => onCh(i),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 9),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: i == value ? cs.primary : Colors.transparent,
+                  borderRadius: BorderRadius.circular(9),
+                ),
+                child: Text(
+                  labels[i],
                   style: t.labelMedium?.copyWith(
-                      color: i == value ? cs.onPrimary : cs.onSurfaceVariant,
-                      fontWeight: FontWeight.w600)),
+                    color: i == value ? cs.onPrimary : cs.onSurfaceVariant,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
             ),
           ),
-        ),
-    ]),
+      ],
+    ),
   );
 }
 
-Widget stepper(BuildContext context, String unit, VoidCallback dec, VoidCallback inc) {
+Widget stepper(
+  BuildContext context,
+  String unit,
+  VoidCallback dec,
+  VoidCallback inc,
+) {
   final t = Theme.of(context).textTheme;
-  return Row(children: [
-    IconButton.outlined(
+  return Row(
+    children: [
+      IconButton.outlined(
         visualDensity: VisualDensity.compact,
         onPressed: dec,
-        icon: const Icon(Icons.remove, size: 16)),
-    Expanded(child: Center(child: Text(unit, style: t.titleMedium))),
-    IconButton.outlined(
+        icon: const Icon(Icons.remove, size: 16),
+      ),
+      Expanded(
+        child: Center(child: Text(unit, style: t.titleMedium)),
+      ),
+      IconButton.outlined(
         visualDensity: VisualDensity.compact,
         onPressed: inc,
-        icon: const Icon(Icons.add, size: 16)),
-  ]);
+        icon: const Icon(Icons.add, size: 16),
+      ),
+    ],
+  );
 }
 
 /// Hàng "Màu nền & chế độ": xem trước nền/chữ hiện tại + chevron mở màn phụ.
@@ -361,21 +492,36 @@ Widget _colorRow(BuildContext context, ReaderColor col, VoidCallback onTap) {
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: cs.outlineVariant),
         ),
-        child: Row(children: [
-          Container(
-            width: 30, height: 30,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: col.bg,
-              shape: BoxShape.circle,
-              border: Border.all(color: cs.outlineVariant),
+        child: Row(
+          children: [
+            Container(
+              width: 30,
+              height: 30,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: col.bg,
+                shape: BoxShape.circle,
+                border: Border.all(color: cs.outlineVariant),
+              ),
+              child: Text(
+                'A',
+                style: TextStyle(
+                  color: col.fg,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 15,
+                ),
+              ),
             ),
-            child: Text('A', style: TextStyle(color: col.fg, fontWeight: FontWeight.w700, fontSize: 15)),
-          ),
-          const SizedBox(width: 12),
-          Expanded(child: Text('Nền sáng, nền tối, chế độ mặc định', style: t.bodyMedium)),
-          Icon(Icons.chevron_right_rounded, color: cs.onSurfaceVariant),
-        ]),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Nền sáng, nền tối, chế độ mặc định',
+                style: t.bodyMedium,
+              ),
+            ),
+            Icon(Icons.chevron_right_rounded, color: cs.onSurfaceVariant),
+          ],
+        ),
       ),
     ),
   );
@@ -398,16 +544,28 @@ class ReaderColorScreen extends ConsumerWidget {
         children: [
           Text('Chế độ mặc định', style: t.labelSmall),
           const SizedBox(height: 8),
-          seg(context, ['Hệ thống', 'Sáng', 'Tối'], s.colorMode,
-              (i) => n.update(s.copyWith(colorMode: i))),
+          seg(
+            context,
+            ['Hệ thống', 'Sáng', 'Tối'],
+            s.colorMode,
+            (i) => n.update(s.copyWith(colorMode: i)),
+          ),
           const SizedBox(height: 24),
           Text('Nền màn sáng', style: t.labelSmall),
           const SizedBox(height: 10),
-          _swatches(context, s.lightColor, (i) => n.update(s.copyWith(lightColor: i))),
+          _swatches(
+            context,
+            s.lightColor,
+            (i) => n.update(s.copyWith(lightColor: i)),
+          ),
           const SizedBox(height: 24),
           Text('Nền màn tối', style: t.labelSmall),
           const SizedBox(height: 10),
-          _swatches(context, s.darkColor, (i) => n.update(s.copyWith(darkColor: i))),
+          _swatches(
+            context,
+            s.darkColor,
+            (i) => n.update(s.copyWith(darkColor: i)),
+          ),
         ],
       ),
     );
@@ -418,24 +576,32 @@ class ReaderColorScreen extends ConsumerWidget {
 Widget _swatches(BuildContext context, int selected, ValueChanged<int> onPick) {
   final cs = Theme.of(context).colorScheme;
   return Wrap(
-    spacing: 14, runSpacing: 14,
+    spacing: 14,
+    runSpacing: 14,
     children: [
       for (var i = 0; i < readerColors.length; i++)
         GestureDetector(
           onTap: () => onPick(i),
           child: Container(
-            width: 46, height: 46,
+            width: 46,
+            height: 46,
             alignment: Alignment.center,
             decoration: BoxDecoration(
               color: readerColors[i].bg,
               shape: BoxShape.circle,
               border: Border.all(
-                  color: i == selected ? cs.primary : cs.outlineVariant,
-                  width: i == selected ? 2.6 : 1),
+                color: i == selected ? cs.primary : cs.outlineVariant,
+                width: i == selected ? 2.6 : 1,
+              ),
             ),
-            child: Text('A',
-                style: TextStyle(
-                    color: readerColors[i].fg, fontSize: 18, fontWeight: FontWeight.w700)),
+            child: Text(
+              'A',
+              style: TextStyle(
+                color: readerColors[i].fg,
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
           ),
         ),
     ],

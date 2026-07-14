@@ -4,6 +4,7 @@ import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 
+import 'chapter_paras.dart';
 import 'data.dart';
 
 class TtsVoice {
@@ -77,10 +78,15 @@ class TtsPlayer {
   final FlutterTts _tts = FlutterTts();
   final ValueNotifier<TtsState> state = ValueNotifier(const TtsState());
 
-  List<String> _paras = [];
+  /// Đoạn NỘI DUNG đang đọc (khớp chỉ số đoạn màn hình reader hiển thị; -1 = đang đọc
+  /// tiêu đề hoặc chưa đọc). Reader nghe cái này để highlight + cuộn theo.
+  final ValueNotifier<int> paraAt = ValueNotifier(-1);
+
+  List<String> _paras = []; // gồm tiêu đề ở đầu (nếu có) rồi tới các đoạn nội dung
+  int _lead = 0; // 1 nếu _paras[0] là tiêu đề → paraAt = _at - _lead
   List<TtsVoice> _voices = [];
   TtsVoice? _selectedVoice;
-  int _at = 0; // đoạn đang/ sắp đọc
+  int _at = 0; // đoạn đang/ sắp đọc (chỉ số trong _paras)
   int _gen = 0; // đổi mỗi start/stop → vòng phát cũ tự thoát
   bool _inited = false;
 
@@ -207,14 +213,17 @@ class TtsPlayer {
     return warn;
   }
 
-  /// Bắt đầu đọc; trả về cảnh báo (nếu có) để UI hiện — vẫn thử phát bằng
-  /// giọng mặc định chứ không chặn.
-  Future<String?> start(int novelId, int chapterIndex) async {
+  /// Bắt đầu đọc từ ĐOẠN NỘI DUNG `fromContentPara` (mặc định đầu chương). `paras` là
+  /// danh sách đoạn màn reader đang hiển thị — truyền vào để highlight khớp tuyệt đối
+  /// chương đang mở; chương tự-sang sau đó TTS tự phân đoạn lại. Trả cảnh báo (nếu có).
+  Future<String?> start(int novelId, int chapterIndex,
+      {int fromContentPara = 0, List<String>? paras, String? title}) async {
     final warn = await _init();
     await stop();
     final gen = ++_gen;
     state.value = TtsState(novelId: novelId, chapterIndex: chapterIndex, playing: true);
-    unawaited(_playLoop(gen, novelId, chapterIndex, fromPara: 0));
+    unawaited(_playLoop(gen, novelId, chapterIndex,
+        fromContentPara: fromContentPara, seedParas: paras, seedTitle: title));
     return warn;
   }
 
@@ -235,47 +244,63 @@ class TtsPlayer {
     if (!s.active || !s.paused) return;
     final gen = ++_gen;
     state.value = TtsState(novelId: s.novelId, chapterIndex: s.chapterIndex, playing: true);
-    await _playLoop(gen, s.novelId!, s.chapterIndex, fromPara: _at, reuseParas: true);
+    // resume: _paras/_lead còn nguyên, tiếp từ _at (chỉ số trong _paras)
+    await _playLoop(gen, s.novelId!, s.chapterIndex, resumeAt: _at);
   }
 
   Future<void> stop() async {
     _gen++;
     await _tts.stop();
+    paraAt.value = -1;
     state.value = const TtsState();
   }
 
+  /// Vòng phát. `resumeAt` (chỉ số _paras) != null = tiếp bản đang có, không tải lại;
+  /// ngược lại tải chương + phân đoạn, bắt đầu từ đoạn nội dung `fromContentPara`.
+  /// `seedParas`/`seedTitle` (nếu có) = danh sách reader truyền cho chương ĐẦU để khớp.
   Future<void> _playLoop(int gen, int novelId, int chapterIndex,
-      {required int fromPara, bool reuseParas = false}) async {
+      {int fromContentPara = 0,
+      int? resumeAt,
+      List<String>? seedParas,
+      String? seedTitle}) async {
     var index = chapterIndex;
-    var from = fromPara;
-    var reuse = reuseParas;
+    var contentFrom = fromContentPara;
+    var seedP = seedParas;
+    var seedT = seedTitle;
+    var startAt = resumeAt; // != null ở lần lặp đầu khi resume
     while (gen == _gen) {
-      if (!reuse) {
-        final c = await sb
-            .from('chapters')
-            .select('title_vi, content_vi, translation_status')
-            .eq('novel_id', novelId)
-            .eq('chapter_index', index)
-            .maybeSingle();
-        if (gen != _gen) return;
-        if (c == null || c['translation_status'] != 'done') {
-          // hết đường (chương kế chưa dịch/không có) → dừng gọn
-          await stop();
-          return;
+      if (startAt == null) {
+        List<String> content;
+        String? title;
+        if (seedP != null) {
+          content = seedP; // reader đã phân đoạn sẵn cho chương đang mở → khớp tuyệt đối
+          title = seedT;
+          seedP = null;
+          seedT = null;
+        } else {
+          final c = await sb
+              .from('chapters')
+              .select('title_vi, content_vi, translation_status')
+              .eq('novel_id', novelId)
+              .eq('chapter_index', index)
+              .maybeSingle();
+          if (gen != _gen) return;
+          if (c == null || c['translation_status'] != 'done') {
+            await stop(); // hết đường (chương kế chưa dịch) → dừng gọn
+            return;
+          }
+          title = (c['title_vi'] as String?)?.trim();
+          content = contentParagraphs(c['content_vi'] as String? ?? '');
         }
-        _paras = [
-          if ((c['title_vi'] as String?)?.isNotEmpty == true) c['title_vi'] as String,
-          ...((c['content_vi'] as String? ?? '')
-              .split('\n')
-              .map((e) => e.trim())
-              .where((e) => e.isNotEmpty)),
-        ];
-        from = 0;
+        _lead = (title != null && title.isNotEmpty) ? 1 : 0;
+        _paras = [if (_lead == 1) title!, ...content];
+        startAt = contentFrom.clamp(0, content.length) + _lead;
+        contentFrom = 0; // chỉ chương đầu tôn trọng vị trí bắt đầu
       }
-      reuse = false;
       state.value = TtsState(novelId: novelId, chapterIndex: index, playing: true);
-      for (_at = from; _at < _paras.length; _at++) {
+      for (_at = startAt; _at < _paras.length; _at++) {
         if (gen != _gen) return;
+        paraAt.value = _at - _lead; // đọc tiêu đề → -1; đoạn nội dung → khớp reader
         try {
           // flutter_tts: 1 = ok, 0 = engine từ chối (thiếu giọng/engine chết)
           final r = await _tts.speak(_paras[_at]);
@@ -286,6 +311,8 @@ class TtsPlayer {
         }
       }
       if (gen != _gen) return;
+      paraAt.value = -1;
+      startAt = null; // chương sau: tải lại + phân đoạn
       index += 1; // hết chương → đọc tiếp chương sau
     }
   }
