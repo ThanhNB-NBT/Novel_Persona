@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../data.dart';
 import '../../hanviet.dart';
+import '../../offline.dart';
 import '../../widgets.dart';
 
 const _typeLabels = {
@@ -44,17 +45,9 @@ class _GlossaryScreenState extends ConsumerState<GlossaryScreen> {
               title: const Text('Thuật ngữ'),
               actions: [
                 IconButton(
-                  tooltip: 'Vá các chương đã dịch bằng thuật ngữ mới',
+                  tooltip: 'Vá chương cũ bằng cặp "bản dịch sai → đúng"',
                   icon: const Icon(Icons.healing_outlined),
-                  onPressed: () async {
-                    await requestPatch(novelId);
-                    ref.invalidate(latestPatchProvider(novelId));
-                    _pollPatch();
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                          content: Text('Đã xếp hàng vá — theo dõi tiến trình ở thanh trên')));
-                    }
-                  },
+                  onPressed: () => _confirmAndPatch(terms.value ?? const []),
                 ),
                 IconButton(
                   tooltip: 'Chọn để xoá hàng loạt',
@@ -149,6 +142,58 @@ class _GlossaryScreenState extends ConsumerState<GlossaryScreen> {
     );
   }
 
+  /// Xác nhận trước khi vá: hiện luôn "X/Y term đã duyệt có bản sai" — vì vá chỉ
+  /// thay được từ CÓ bản dịch sai; term chỉ được duyệt (không bản sai) phải dịch lại
+  /// chương mới đổi. Nêu rõ để khỏi tưởng duyệt term là chương cũ tự sửa.
+  Future<void> _confirmAndPatch(List<Rec> terms) async {
+    final approved = terms.where((t) => t['approved'] == true).length;
+    final withWrong = terms
+        .where((t) =>
+            t['approved'] == true &&
+            (t['wrong_vi'] as String?)?.trim().isNotEmpty == true)
+        .length;
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Vá chương đã dịch'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('$withWrong/$approved thuật ngữ đã duyệt có "bản dịch sai".',
+                style: tt.bodyLarge),
+            const SizedBox(height: 10),
+            Text(
+              withWrong == 0
+                  ? 'Vá chỉ thay từ CÓ bản dịch sai nên sẽ không đổi gì. Muốn chương cũ '
+                      'theo thuật ngữ đã duyệt, hãy "Dịch lại" chương trong lúc đọc.'
+                  : 'Chỉ $withWrong từ này được thay trong chương cũ. Term chỉ được duyệt '
+                      '(không có bản sai) phải "Dịch lại" chương mới đổi theo.',
+              style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false), child: const Text('Hủy')),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(withWrong == 0 ? 'Vẫn vá' : 'Vá $withWrong từ'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    await requestPatch(novelId);
+    if (!mounted) return;
+    ref.invalidate(latestPatchProvider(novelId));
+    _pollPatch();
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Đã xếp hàng vá — theo dõi tiến trình ở thanh trên')));
+  }
+
   /// Poll trạng thái job vá vài lần sau khi bấm để thanh trên tự cập nhật
   /// pending → running → done (job vá chạy <2s nhưng có thể chờ hàng đợi chút).
   Future<void> _pollPatch() async {
@@ -158,7 +203,33 @@ class _GlossaryScreenState extends ConsumerState<GlossaryScreen> {
       ref.invalidate(latestPatchProvider(novelId));
       final rec = await ref.read(latestPatchProvider(novelId).future);
       final st = rec?['status'];
-      if (st == 'done' || st == 'failed') return;
+      if (st == 'failed') return;
+      if (st == 'done') {
+        await _syncOfflineAfterPatch();
+        return;
+      }
+    }
+  }
+
+  /// Vá chạy trên SERVER, nhưng bản đã tải OFFLINE đọc từ máy (chapterProvider
+  /// offline-first) nên vẫn là chữ cũ. Truyện có bản offline → tải lại để khớp bản
+  /// vừa vá; chương online tự tươi khi mở lại nên không cần đụng.
+  Future<void> _syncOfflineAfterPatch() async {
+    if (!mounted || !await offlineStore.hasNovel(novelId)) return;
+    if (!mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(
+        const SnackBar(content: Text('Đang cập nhật bản offline theo thuật ngữ mới…')));
+    try {
+      final novel = await ref.read(novelProvider(novelId).future);
+      await offlineStore.downloadNovel(novel);
+      if (!mounted) return;
+      ref.invalidate(chapterProvider); // reader (nếu đang mở) đọc lại bản local mới
+      messenger.showSnackBar(
+          const SnackBar(content: Text('Đã cập nhật bản offline')));
+    } catch (_) {
+      messenger.showSnackBar(const SnackBar(
+          content: Text('Vá xong nhưng chưa cập nhật được bản offline — thử tải lại ở mục Offline')));
     }
   }
 
@@ -379,10 +450,20 @@ class _GlossaryScreenState extends ConsumerState<GlossaryScreen> {
           FilledButton(
             onPressed: () async {
               if (vi.text.trim().isEmpty) return;
+              // Khi chỉ sửa "Bản đúng", giữ lại bản cũ làm vế trái để job Vá
+              // truyện biết chính xác phải thay chuỗi nào. Trước đây để trống ô
+              // này khiến vá không làm gì với lỗi Việt cũ.
+              final newCorrect = vi.text.trim();
+              final oldCorrect = term == null ? '' : '${term['correct_vi'] ?? ''}'.trim();
+              final typedWrong = wrong.text.trim();
               final fields = {
                 'term_zh': zh.text.trim().isEmpty ? null : zh.text.trim(),
-                'correct_vi': vi.text.trim(),
-                'wrong_vi': wrong.text.trim().isEmpty ? null : wrong.text.trim(),
+                'correct_vi': newCorrect,
+                'wrong_vi': typedWrong.isNotEmpty
+                    ? typedWrong
+                    : oldCorrect.isNotEmpty && oldCorrect != newCorrect
+                        ? oldCorrect
+                        : null,
                 'term_type': type,
                 // đổi loại khỏi person thì xoá luôn cách gọi cũ
                 'narrator_term': type == 'person' && narr.text.trim().isNotEmpty

@@ -4,8 +4,12 @@ import 'package:go_router/go_router.dart';
 
 import '../../cultivation.dart';
 import '../../data.dart';
+import '../../theme.dart';
 import '../../widgets.dart';
 import '../cultivation/pixel.dart';
+
+// Xanh "sống": nhịp tim worker + trạng thái nguồn crawl (không có trong ColorScheme M3).
+const _kLive = Color(0xFF34C77B);
 
 /// Màn Quản trị (chỉ admin vào được — RLS + isAdminProvider chặn ở cả 2 đầu).
 /// 4 tab: Worker (hàng đợi/lỗi), Truyện (ẩn/sửa), Token (chi phí LLM), Báo cáo.
@@ -200,7 +204,7 @@ class _JobStats extends ConsumerWidget {
       final age = DateTime.now().toUtc()
           .difference(DateTime.parse(row['at'] as String).toUtc());
       final alive = age.inSeconds < 180;
-      dot = alive ? const Color(0xFF34C77B) : cs.error;
+      dot = alive ? _kLive : cs.error;
       final ago = age.inSeconds < 60 ? '${age.inSeconds}s' : _elapsed(row['at'] as String);
       final note = alive ? (row['note'] as String?) : null;
       text = alive
@@ -517,11 +521,19 @@ void _showError(BuildContext context, Object? chIdx, String error) {
 }
 
 // ---------------- Crawl: config + nguồn + truyện mới 24h ----------------
-class _CrawlTab extends ConsumerWidget {
+class _CrawlTab extends ConsumerStatefulWidget {
   const _CrawlTab();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_CrawlTab> createState() => _CrawlTabState();
+}
+
+class _CrawlTabState extends ConsumerState<_CrawlTab> {
+  // Thu gọn từng mục — tab dài, admin thường chỉ soi 1 mục mỗi lần.
+  bool _openCfg = true, _openSrc = true, _openFresh = true;
+
+  @override
+  Widget build(BuildContext context) {
     final t = Theme.of(context).textTheme;
     final cs = Theme.of(context).colorScheme;
     final settings = ref.watch(crawlSettingsProvider).value ?? const <Rec>[];
@@ -548,72 +560,99 @@ class _CrawlTab extends ConsumerWidget {
           ),
         );
 
-    Widget sectionLabel(String s, {String? hint}) => Padding(
-          padding: const EdgeInsets.fromLTRB(20, 18, 20, 8),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(s,
-                style: t.labelSmall?.copyWith(letterSpacing: 1.5, color: cs.primary)),
-            if (hint != null) ...[
-              const SizedBox(height: 3),
-              Text(hint, style: t.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
-            ],
-          ]),
-        );
-
-    // 1 hàng cấu hình: tên + key mờ, giá trị trong pill bấm được
-    Widget settingRow(Rec s) => InkWell(
-          onTap: () => _editSetting(context, ref, s),
-          borderRadius: BorderRadius.circular(12),
+    // Nhãn mục = header bấm để thu gọn/mở: icon dẫn + tên nhấn + đếm/tóm tắt + chevron.
+    Widget sectionLabel(IconData icon, String s,
+            {String? hint, String? trailing, required bool open, required VoidCallback onToggle}) =>
+        InkWell(
+          onTap: onToggle,
           child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 10),
-            child: Row(children: [
-              Expanded(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(s['note'] ?? s['key'], style: t.bodyMedium),
-                  const SizedBox(height: 2),
-                  Text('${s['key']}',
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                Icon(icon, size: 15, color: cs.primary),
+                const SizedBox(width: 7),
+                Text(s,
+                    style: t.labelSmall?.copyWith(letterSpacing: 1.5, color: cs.primary)),
+                const Spacer(),
+                if (trailing != null)
+                  Text(trailing,
                       style: t.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
-                ]),
-              ),
-              const SizedBox(width: 10),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                decoration: BoxDecoration(
-                  color: cs.primaryContainer.withValues(alpha: 0.5),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text('${s['value']}',
-                    style: t.titleSmall?.copyWith(color: cs.primary)),
-              ),
-              const SizedBox(width: 6),
-              Icon(Icons.edit_rounded, size: 15, color: cs.onSurfaceVariant),
+                const SizedBox(width: 8),
+                Icon(open ? Icons.expand_less_rounded : Icons.expand_more_rounded,
+                    size: 18, color: cs.onSurfaceVariant),
+              ]),
+              // ẩn hint khi thu gọn — gọn hẳn
+              if (hint != null && open) ...[
+                const SizedBox(height: 4),
+                Text(hint, style: t.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
+              ],
             ]),
           ),
         );
 
-    // 1 hàng nguồn: chấm sống/chết + tên + host gọn, switch bật/tắt
+    // 1 hàng cấu hình: tên thân thiện + key kỹ thuật (mono, mờ) + pill giá trị kèm bút
+    // sửa — cả pill là affordance "bấm để sửa" rõ ràng.
+    Widget settingRow(Rec s) => InkWell(
+          onTap: () => _editSetting(context, ref, s),
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 11),
+            child: Row(children: [
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(s['note'] ?? s['key'], style: t.bodyMedium),
+                  const SizedBox(height: 3),
+                  Text('${s['key']}',
+                      style: monoStyle(context, size: 10.5, color: cs.onSurfaceVariant)),
+                ]),
+              ),
+              const SizedBox(width: 10),
+              Container(
+                padding: const EdgeInsets.fromLTRB(13, 6, 9, 6),
+                decoration: BoxDecoration(
+                  color: cs.primaryContainer.withValues(alpha: 0.5),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Text('${s['value']}',
+                      style: t.titleSmall?.copyWith(color: cs.primary)),
+                  const SizedBox(width: 6),
+                  Icon(Icons.edit_rounded, size: 13,
+                      color: cs.primary.withValues(alpha: 0.7)),
+                ]),
+              ),
+            ]),
+          ),
+        );
+
+    // 1 hàng nguồn: tên + chip trạng thái màu (SỐNG/LỖI/TẮT) + host/nhịp gọn, switch bật/tắt
     Widget sourceRow(Rec s) {
       final enabled = s['enabled'] == true;
       final failing = (s['fail_count'] ?? 0) > 0;
       final host = Uri.tryParse('${s['base_url']}')?.host.replaceFirst('www.', '') ??
           '${s['base_url']}';
-      final dot = !enabled
-          ? cs.outlineVariant
+      final (chip, chipColor) = !enabled
+          ? ('TẮT', cs.onSurfaceVariant)
           : failing
-              ? cs.error
-              : const Color(0xFF34C77B); // xanh "sống" — cùng màu nhịp tim tab Worker
+              ? ('LỖI', cs.error)
+              : ('SỐNG', _kLive);
       return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 2),
+        padding: const EdgeInsets.symmetric(vertical: 4),
         child: Row(children: [
-          Container(width: 8, height: 8,
-              decoration: BoxDecoration(color: dot, shape: BoxShape.circle)),
-          const SizedBox(width: 12),
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('${s['name']}',
-                  style: t.bodyMedium?.copyWith(
-                      color: enabled ? cs.onSurface : cs.onSurfaceVariant)),
-              const SizedBox(height: 2),
+              Row(children: [
+                Flexible(
+                  child: Text('${s['name']}',
+                      maxLines: 1, overflow: TextOverflow.ellipsis,
+                      style: t.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: enabled ? cs.onSurface : cs.onSurfaceVariant)),
+                ),
+                const SizedBox(width: 8),
+                TagChip(chip, color: chipColor),
+              ]),
+              const SizedBox(height: 3),
               Text(
                 [
                   host,
@@ -627,6 +666,7 @@ class _CrawlTab extends ConsumerWidget {
               ),
             ]),
           ),
+          const SizedBox(width: 8),
           Switch(
             value: enabled,
             onChanged: (v) async {
@@ -648,21 +688,31 @@ class _CrawlTab extends ConsumerWidget {
       child: ListView(
         padding: const EdgeInsets.only(bottom: 24),
         children: [
-          sectionLabel('CẤU HÌNH CRAWLER',
-              hint: 'Sửa xong worker tự nhận ở chu kỳ kế — không cần restart.'),
-          card(Column(children: [
-            for (final (i, s) in settings.indexed) ...[
-              if (i > 0) Divider(height: 1, color: cs.outlineVariant.withValues(alpha: 0.5)),
-              settingRow(s),
-            ],
-          ])),
-          sectionLabel('NGUỒN CRAWL'),
-          card(Column(children: [
-            for (final (i, s) in sources.indexed) ...[
-              if (i > 0) Divider(height: 1, color: cs.outlineVariant.withValues(alpha: 0.5)),
-              sourceRow(s),
-            ],
-          ])),
+          sectionLabel(Icons.tune_rounded, 'CẤU HÌNH CRAWLER',
+              hint: 'Sửa xong worker tự nhận ở chu kỳ kế — không cần restart.',
+              open: _openCfg,
+              onToggle: () => setState(() => _openCfg = !_openCfg)),
+          if (_openCfg)
+            card(Column(children: [
+              for (final (i, s) in settings.indexed) ...[
+                if (i > 0) Divider(height: 1, color: cs.outlineVariant.withValues(alpha: 0.5)),
+                settingRow(s),
+              ],
+            ])),
+          sectionLabel(Icons.dns_rounded, 'NGUỒN CRAWL',
+              trailing: sources.isEmpty
+                  ? null
+                  : '${sources.where((s) => s['enabled'] == true && (s['fail_count'] ?? 0) == 0).length}'
+                      '/${sources.length} sống',
+              open: _openSrc,
+              onToggle: () => setState(() => _openSrc = !_openSrc)),
+          if (_openSrc)
+            card(Column(children: [
+              for (final (i, s) in sources.indexed) ...[
+                if (i > 0) Divider(height: 1, color: cs.outlineVariant.withValues(alpha: 0.5)),
+                sourceRow(s),
+              ],
+            ])),
           fresh.when(
             loading: () => const Padding(
                 padding: EdgeInsets.all(24),
@@ -672,20 +722,23 @@ class _CrawlTab extends ConsumerWidget {
             data: (list) => Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                sectionLabel('TRUYỆN MỚI VỀ · 24 GIỜ',
+                sectionLabel(Icons.auto_awesome_rounded, 'TRUYỆN MỚI VỀ · 24 GIỜ',
                     hint: list.isEmpty
                         ? null
                         : '${list.length} truyện — Top #N = hạng trên bảng '
-                            'tổng lượt đọc của nguồn (nguồn không công bố con số).'),
-                if (list.isEmpty)
-                  const Padding(
-                      padding: EdgeInsets.fromLTRB(20, 12, 20, 0),
-                      child: Text('Chưa có truyện mới trong 24 giờ.'))
-                else
-                  for (final (i, n) in list.indexed) ...[
-                    if (i > 0) const Divider(height: 1, indent: 66),
-                    _FreshNovelRow(n),
-                  ],
+                            'tổng lượt đọc của nguồn (nguồn không công bố con số).',
+                    open: _openFresh,
+                    onToggle: () => setState(() => _openFresh = !_openFresh)),
+                if (_openFresh)
+                  if (list.isEmpty)
+                    const Padding(
+                        padding: EdgeInsets.fromLTRB(20, 12, 20, 0),
+                        child: Text('Chưa có truyện mới trong 24 giờ.'))
+                  else
+                    for (final (i, n) in list.indexed) ...[
+                      if (i > 0) const Divider(height: 1, indent: 66),
+                      _FreshNovelRow(n),
+                    ],
               ],
             ),
           ),
