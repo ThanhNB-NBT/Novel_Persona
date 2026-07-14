@@ -239,10 +239,20 @@ def reprioritize_chapters_by_reading(active_hours: int, prio_read: int, prio_idl
         r["novel_id"] for r in
         (sb().table("reading_progress").select("novel_id").gte("updated_at", cutoff).execute().data or [])
     }
-    jobs = (
-        sb().table("translation_jobs").select("id, novel_id, priority")
-        .eq("type", "chapter").eq("status", "pending").execute()
-    ).data or []
+    # page qua trần 1000 dòng PostgREST — backlog > 1000 job chương (1 truyện dài là
+    # vượt) thì kéo 1 lần sẽ bỏ sót job của truyện đang đọc → không nâng prio_read được
+    jobs: list[dict] = []
+    frm = 0
+    while True:
+        b = (
+            sb().table("translation_jobs").select("id, novel_id, priority")
+            .eq("type", "chapter").eq("status", "pending")
+            .order("id").range(frm, frm + 999).execute()
+        ).data or []
+        jobs += b
+        if len(b) < 1000:
+            break
+        frm += 1000
     # gom 2 update theo lô thay vì 1 update/job (housekeeping chạy mỗi 60s)
     to_read = [j["id"] for j in jobs if j["novel_id"] in active and j["priority"] != prio_read]
     to_idle = [j["id"] for j in jobs if j["novel_id"] not in active and j["priority"] != prio_idle]
@@ -276,6 +286,20 @@ def record_model_call(model: str, latency_ms: int, ok: bool, error: str | None =
         }).execute()
     except Exception:
         log.debug("record_model_call lỗi (bỏ qua) model=%s", model)
+
+
+def record_crawl_latency(source: str, n: int, ok: int, p50: float, p95: float,
+                         mx: float, timeouts: int, http429: int) -> None:
+    """P2b-0: ghi 1 cửa sổ đo latency crawl vào bảng crawl_latency (đọc từ Supabase).
+    Best-effort — KHÔNG được làm hỏng đường crawl nếu ghi lỗi."""
+    try:
+        sb().table("crawl_latency").insert({
+            "source": source, "n": n, "ok": ok,
+            "p50_s": round(p50, 2), "p95_s": round(p95, 2), "max_s": round(mx, 2),
+            "timeouts": timeouts, "http_429": http429,
+        }).execute()
+    except Exception:
+        log.debug("record_crawl_latency lỗi (bỏ qua) source=%s", source)
 
 
 def heartbeat(name: str, note: str | None = None) -> None:

@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import argparse
 import logging
-import random
+import threading
 import time
 
 from . import db
@@ -134,116 +134,163 @@ def _eval_source_health(adapter: SourceAdapter) -> bool:
     return disabled
 
 
+def _cfg_int(rs: dict, key: str, cur: int) -> int:
+    try:
+        return max(1, int(rs.get(key, cur)))
+    except (TypeError, ValueError):
+        return cur
+
+
+def _refresh_cfg(cfg: dict) -> None:
+    """Config chỉnh từ app (worker_settings) → cập nhật dict dùng chung; luồng nguồn đọc
+    mỗi tick nên đổi là ăn trong ~10s. Lỗi/thiếu → giữ giá trị hiện tại."""
+    rs = db.runtime_settings()
+    cfg["interval_min"] = _cfg_int(rs, "crawl_interval_min", cfg["interval_min"])
+    cfg["max_new"] = _cfg_int(rs, "discover_new_per_cycle", cfg["max_new"])
+    cfg["refresh_n"] = _cfg_int(rs, "refresh_per_cycle", cfg["refresh_n"])
+    settings.faloo_free_chapter_threshold = _cfg_int(
+        rs, "faloo_free_chapter_threshold", settings.faloo_free_chapter_threshold)
+
+
+def _source_tick(adapter: SourceAdapter, pending_fetch: list[dict], due: bool,
+                 max_new: int, refresh_n: int) -> None:
+    """Một vòng crawl của MỘT nguồn: tải chương người đọc chờ trước, rồi discovery/refresh
+    theo chu kỳ. Tách khỏi run_crawler để mỗi nguồn chạy luồng riêng — nguồn chậm/chết
+    không chặn nguồn khác. process_novel_requests KHÔNG ở đây (luồng riêng lo, khỏi mỗi
+    nguồn tìm lại cùng một yêu cầu)."""
+    sid = adapter.source_row.get("id")
+    # 0) mục lục lười: app xin tải mục lục đầy đủ (request_toc) — ưu tiên, tối đa 3 truyện/tick
+    toc_reqs = (
+        db.sb().table("novels").select("id, source_id, source_novel_id")
+        .eq("source_id", sid).is_("toc_synced_at", "null")
+        .not_.is_("toc_requested_at", "null")
+        .order("toc_requested_at").limit(3).execute()
+    ).data or []
+    for nv in toc_reqs:
+        try:
+            total, n = sync.sync_chapter_list(adapter, nv["id"], nv["source_novel_id"])
+            log.info("TOC lười: novel %s đủ mục lục (%d chương, +%d stub)", nv["id"], total, n)
+        except Exception:
+            # gỡ cờ xin để không hammer mỗi tick; user mở lại truyện sẽ xin lại
+            db.sb().table("novels").update({"toc_requested_at": None}).eq("id", nv["id"]).execute()
+            log.exception("TOC lười: lỗi novel %s — gỡ cờ chờ xin lại", nv["id"])
+    # 1) tải nội dung chương đang chờ dịch — NGƯỜI ĐỌC TRƯỚC. Discovery (bước 2, có thể
+    # cả tiếng) tự nhường giữa chừng khi có chương ưu tiên cao chờ (sync.reader_fetch_waiting).
+    for nv in pending_fetch:
+        if nv["source_id"] != sid:
+            continue
+        # Mục lục chỉ cần sync khi có chương queued THIẾU stub nguồn (lần đầu user bấm Đọc,
+        # RPC tạo row trước khi TOC về).
+        missing_stub = (
+            db.sb().table("chapters").select("id", count="exact")
+            .eq("novel_id", nv["id"]).eq("translation_status", "queued")
+            .is_("source_chapter_id", "null").limit(1).execute()
+        ).count or 0
+        if missing_stub:
+            sync.sync_chapter_list(adapter, nv["id"], nv["source_novel_id"])
+        sync.ensure_chapters_fetched(adapter, nv["id"])
+    # 2) discovery + sync truyện theo dõi — theo chu kỳ dài. Cào MỌI mục để truyện dày dần.
+    if due:
+        sync.discover_ranking(adapter, max_new=max_new)
+        sync.discover_pool(adapter, "fetch_recommended", "Recommended")
+        sync.discover_pool(adapter, "fetch_top", "Top")
+        sync.discover_pool(adapter, "fetch_completed", "Completed")
+        sync.discover_pool(adapter, "fetch_latest", "Latest")
+        sync.process_discovery_candidates(adapter, max_new=max_new)
+        sync.sync_followed_novels(adapter)
+        # truyện đã có ra chương mới → nổi "Mới cập nhật" (không chỉ truyện mới)
+        sync.refresh_canonical_updates(adapter, limit=refresh_n)
+
+
+def _source_loop(adapter: SourceAdapter, stop: threading.Event, cfg: dict) -> None:
+    """Luồng crawl riêng một nguồn: tự cadence discovery, tự đo sức khoẻ. Tự tắt nguồn
+    (toàn fetch fail nhiều chu kỳ) → thoát luồng; coordinator reconcile sẽ gỡ khỏi vòng."""
+    sid = adapter.source_row.get("id")
+    last_discovery = 0.0
+    while not stop.is_set():
+        started = time.time()
+        db.heartbeat("crawler")  # nguồn nào còn sống cũng điểm danh — app thấy crawler sống
+        due = started - last_discovery > cfg["interval_min"] * 60
+        try:
+            pending = _novels_needing_fetch({sid}) if sid is not None else []
+            _source_tick(adapter, pending, due, cfg["max_new"], cfg["refresh_n"])
+        except Exception:
+            log.exception("Lỗi vòng crawl (%s)", adapter.name)
+        finally:
+            # Dời mốc discovery kể cả khi tick lỗi (như bản cũ) — khỏi lặp lại cả khối
+            # discovery nặng mỗi 10s; tải chương người đọc vẫn chạy mỗi tick.
+            if due:
+                last_discovery = started
+            try:
+                if _eval_source_health(adapter):
+                    log.warning("Nguồn '%s' tự tắt — dừng luồng crawl", adapter.name)
+                    return
+            except Exception:
+                log.exception("Không ghi được health nguồn %s", adapter.name)
+        stop.wait(10)
+
+
 def run_crawler() -> None:
+    """Coordinator: mỗi nguồn 1 luồng crawl riêng + 1 luồng xử lý yêu cầu truyện. Main
+    thread lo heartbeat, reconcile bật/tắt nguồn, refresh config, quản vòng đời luồng.
+
+    curl_cffi Session tạo curl handle theo từng luồng (use_thread_local_curl) → chia sẻ
+    adapter giữa các luồng an toàn."""
     adapters = build_adapters()
-    log.info("Crawler bắt đầu (%d nguồn: %s), chu kỳ discovery %d phút",
+    adapters_lock = threading.Lock()
+    log.info("Crawler bắt đầu (%d nguồn: %s), chu kỳ discovery %d phút — mỗi nguồn 1 luồng",
              len(adapters), ", ".join(adapters) or "—", settings.crawl_interval_min)
     sync.backfill_dedup_keys()  # gán dedup_key cho truyện cũ (1 lần, tự lành)
-    last_discovery = 0.0
-    interval_min = settings.crawl_interval_min
-    max_new = settings.discover_new_per_cycle
-    refresh_n = settings.refresh_per_cycle
-    while True:
-        now = time.time()
-        db.heartbeat("crawler")  # điểm danh mỗi vòng 10s — app hiện sống/chết thật
-        try:
-            _reconcile_adapters(adapters)
-        except Exception:
-            # DB chập chờn không được làm rơi crawler; giữ adapter hiện tại và thử lại tick sau.
-            log.exception("Không đồng bộ được trạng thái nguồn — tạm giữ cấu hình hiện tại")
-        due = now - last_discovery > interval_min * 60
-        if due:
-            # config chỉnh từ app (worker_settings) — đọc lại mỗi chu kỳ, đổi là ăn ngay
-            rs = db.runtime_settings()
-            def _num(key: str, cur: int) -> int:
-                try:
-                    return max(1, int(rs.get(key, cur)))
-                except (TypeError, ValueError):
-                    return cur
-            interval_min = _num("crawl_interval_min", interval_min)
-            max_new = _num("discover_new_per_cycle", max_new)
-            refresh_n = _num("refresh_per_cycle", refresh_n)
-            settings.faloo_free_chapter_threshold = _num(
-                "faloo_free_chapter_threshold", settings.faloo_free_chapter_threshold)
-        enabled_source_ids = {
-            a.source_row["id"] for a in adapters.values() if a.source_row.get("id") is not None
-        }
-        pending_fetch = _novels_needing_fetch(enabled_source_ids)
-        # 0) yêu cầu truyện từ app: tìm tên trên các nguồn có search → crawl + vào tủ sách.
-        # Chạy mỗi tick (user đang ngóng), 1 query khi không có yêu cầu nào.
-        try:
-            sync.process_novel_requests(list(adapters.values()))
-        except Exception:
-            log.exception("Lỗi xử lý yêu cầu truyện")
-        for adapter in list(adapters.values()):
+    cfg = {
+        "interval_min": settings.crawl_interval_min,
+        "max_new": settings.discover_new_per_cycle,
+        "refresh_n": settings.refresh_per_cycle,
+    }
+
+    # Yêu cầu truyện từ app tìm tên trên MỌI nguồn → luồng riêng, poll 10s, không phải
+    # đợi discovery của nguồn nào.
+    def _requests_loop() -> None:
+        while True:
             try:
-                # 1) tải nội dung chương đang chờ dịch — NGƯỜI ĐỌC TRƯỚC, chạy mỗi tick.
-                # Discovery/refresh (bước 2, có thể cả tiếng) cũng tự nhường giữa chừng
-                # khi có chương ưu tiên cao chờ tải (sync.reader_fetch_waiting).
-                sid = adapter.source_row.get("id")
-                # 0) mục lục lười: app xin tải mục lục đầy đủ (request_toc) — ưu tiên vì
-                # user đang đứng chờ ở màn danh sách chương; tối đa 3 truyện/tick
-                toc_reqs = (
-                    db.sb().table("novels").select("id, source_id, source_novel_id")
-                    .eq("source_id", sid).is_("toc_synced_at", "null")
-                    .not_.is_("toc_requested_at", "null")
-                    .order("toc_requested_at").limit(3).execute()
-                ).data or []
-                for nv in toc_reqs:
-                    try:
-                        total, n = sync.sync_chapter_list(adapter, nv["id"], nv["source_novel_id"])
-                        log.info("TOC lười: novel %s đủ mục lục (%d chương, +%d stub)",
-                                 nv["id"], total, n)
-                    except Exception:
-                        # gỡ cờ xin để không hammer mỗi tick; user mở lại truyện sẽ xin lại
-                        db.sb().table("novels").update(
-                            {"toc_requested_at": None}).eq("id", nv["id"]).execute()
-                        log.exception("TOC lười: lỗi novel %s — gỡ cờ chờ xin lại", nv["id"])
-                for nv in pending_fetch:
-                    if nv["source_id"] != sid:
-                        continue  # để adapter đúng nguồn xử lý ở vòng lặp của nó
-                    # Mục lục chỉ cần sync khi có chương queued THIẾU stub nguồn (lần
-                    # đầu user bấm Đọc, RPC tạo row trước khi TOC về). Trước đây fetch
-                    # cả trang mục lục nguồn MỖI vòng 10s cho mọi truyện đang chờ dịch.
-                    missing_stub = (
-                        db.sb().table("chapters").select("id", count="exact")
-                        .eq("novel_id", nv["id"]).eq("translation_status", "queued")
-                        .is_("source_chapter_id", "null").limit(1).execute()
-                    ).count or 0
-                    if missing_stub:
-                        sync.sync_chapter_list(adapter, nv["id"], nv["source_novel_id"])
-                    sync.ensure_chapters_fetched(adapter, nv["id"])
-                # 2) discovery + sync truyện được theo dõi — theo chu kỳ dài
-                if due:
-                    # Cào MỌI mục để truyện dày dần, không chỉ vét lại top cũ:
-                    # - ranking (nếu có) → lưu source_rank cho "Đề cử"; chart /allvisit/
-                    #   gần như bất động nên riêng nó cào đi cào lại vẫn mấy truyện đó.
-                    # - "mới cập nhật" → thêm truyện mới ra (đủ >200 chương + qua lọc mới giữ,
-                    #   nên không sợ truyện mỏng). Nguồn không có latest → fetch_latest trả [].
-                    sync.discover_ranking(adapter, max_new=max_new)
-                    sync.discover_pool(adapter, "fetch_recommended", "Recommended")
-                    sync.discover_pool(adapter, "fetch_top", "Top")
-                    sync.discover_pool(adapter, "fetch_completed", "Completed")
-                    sync.discover_pool(adapter, "fetch_latest", "Latest")
-                    sync.process_discovery_candidates(adapter, max_new=max_new)
-                    # chen giữa các bước dài: yêu cầu truyện không phải đợi hết cả
-                    # chu kỳ discovery (10-15 phút) mới được xử
-                    sync.process_novel_requests(list(adapters.values()))
-                    sync.sync_followed_novels(adapter)
-                    # truyện đã có ra chương mới → nổi "Mới cập nhật" (không chỉ truyện mới)
-                    sync.refresh_canonical_updates(adapter, limit=refresh_n)
-                    sync.process_novel_requests(list(adapters.values()))
+                with adapters_lock:
+                    ads = list(adapters.values())
+                if ads:
+                    sync.process_novel_requests(ads)
             except Exception:
-                log.exception("Lỗi vòng crawl (%s)", adapter.name)
-            finally:
-                try:
-                    if _eval_source_health(adapter):
-                        # Nguồn vừa tự tắt: bỏ adapter ngay, không hammer tiếp tới vòng kế.
-                        adapters.pop(adapter.name, None)
-                except Exception:
-                    log.exception("Không ghi được health nguồn %s", adapter.name)
-        if due:
-            last_discovery = now
+                log.exception("Lỗi xử lý yêu cầu truyện")
+            time.sleep(10)
+    threading.Thread(target=_requests_loop, daemon=True).start()
+
+    threads: dict[str, tuple[threading.Thread, threading.Event]] = {}
+    while True:
+        db.heartbeat("crawler")
+        try:
+            with adapters_lock:
+                _reconcile_adapters(adapters)  # bật/tắt nguồn từ DB, không cần restart
+        except Exception:
+            log.exception("Không đồng bộ được trạng thái nguồn — tạm giữ cấu hình hiện tại")
+        try:
+            _refresh_cfg(cfg)
+        except Exception:
+            log.exception("Không đọc được worker_settings — giữ cấu hình hiện tại")
+        # Vòng đời luồng nguồn. Reconcile chạy TRƯỚC nên nguồn vừa tự tắt (enabled=False)
+        # đã rời `adapters` → không bị khởi động lại.
+        # ponytail: luồng chết bất ngờ mà nguồn còn enabled thì khởi động lại (self-heal);
+        # nguồn vừa tự tắt lỡ bị restart 1 nhịp sẽ được reconcile gỡ ở tick kế (~10s, vô hại).
+        with adapters_lock:
+            names = set(adapters)
+            snap = dict(adapters)
+        for name in list(threads):
+            if name not in names or not threads[name][0].is_alive():
+                threads[name][1].set()
+                threads.pop(name)
+        for name in names:
+            if name not in threads:
+                ev = threading.Event()
+                t = threading.Thread(target=_source_loop, args=(snap[name], ev, cfg), daemon=True)
+                t.start()
+                threads[name] = (t, ev)
+                log.info("Khởi động luồng crawl nguồn '%s'", name)
         time.sleep(10)
 
 
@@ -430,112 +477,10 @@ def run_request(novel_id: int, up_to: int) -> None:
           " và `... translate` để dịch; theo dõi bảng chapters trong Supabase.")
 
 
-def run_ab(novel_id: int | None, up_to: int, out_dir: str, *, parallel: bool = True,
-           refetch: bool = False) -> None:
-    """Chay hai bo prompt tren cung chuong, chi ghi file test, khong ghi DB."""
-    from pathlib import Path
-
-    from .translator.ab import compare_chapter, dumps, render_html
-    from .translator.providers import build_chain
-
-    if refetch and novel_id is None:
-        candidates = (db.sb().table("chapters").select("novel_id")
-                      .limit(max(500, up_to * 20)).execute().data or [])
-        novel_ids = list({row["novel_id"] for row in candidates if row.get("novel_id")})
-        if not novel_ids:
-            raise RuntimeError("Khong tim thay truyen de refetch")
-        novel_id = random.choice(novel_ids)
-        print(f"AB refetch chon ngau nhien novel {novel_id}")
-    if refetch:
-        nv = (db.sb().table("novels").select("source_id,source_novel_id")
-              .eq("id", novel_id).single().execute().data)
-        source = (db.sb().table("sources").select("name")
-                  .eq("id", nv["source_id"]).single().execute().data)
-        adapter = build_adapters().get(source["name"])
-        if not adapter:
-            raise RuntimeError(f"Khong tim thay crawler dang bat cho source {source['name']}")
-        sync.sync_chapter_list(adapter, novel_id, nv["source_novel_id"])
-        missing = (db.sb().table("chapters").select("id,translation_status")
-                   .eq("novel_id", novel_id).is_("content_zh", "null")
-                   .order("chapter_index").limit(up_to).execute().data or [])
-        if missing:
-            ids = [row["id"] for row in missing]
-            db.sb().table("chapters").update({"translation_status": "queued"}).in_("id", ids).execute()
-            sync.ensure_chapters_fetched(adapter, novel_id)
-            for row in missing:
-                db.sb().table("chapters").update(
-                    {"translation_status": row["translation_status"]}).eq("id", row["id"]).execute()
-        print(f"AB refetch xong, da tai lai toi da {up_to} chuong cho novel {novel_id}")
-
-    def load_chapters(book_id: int) -> list[dict]:
-        return (db.sb().table("chapters")
-                .select("id,novel_id,chapter_index,title_zh,content_zh,summary_vi,content_vi")
-                .eq("novel_id", book_id)
-                .not_.is_("content_zh", "null").order("chapter_index")
-                .execute().data or [])
-
-    rows: list[dict] = []
-    if novel_id is None:
-        candidates = (db.sb().table("chapters").select("novel_id,chapter_index")
-                      .not_.is_("content_zh", "null")
-                      .limit(max(500, up_to * 20)).execute().data or [])
-        novel_ids = list({row["novel_id"] for row in candidates if row.get("novel_id")})
-        random.shuffle(novel_ids)
-        best_id: int | None = None
-        best_rows: list[dict] = []
-        for candidate in novel_ids:
-            possible = load_chapters(candidate)
-            if len(possible) > len(best_rows):
-                best_id, best_rows = candidate, possible
-            if len(possible) >= up_to:
-                novel_id, rows = candidate, possible[:up_to]
-                break
-        if novel_id is None and best_id is not None:
-            novel_id, rows = best_id, best_rows[:up_to]
-        if novel_id is None:
-            raise RuntimeError("Khong tim thay chuong nao co content_zh de chon ngau nhien")
-        print(f"AB chon ngau nhien novel {novel_id}, co {len(rows)} chuong co content_zh")
-
-    novel = db.sb().table("novels").select("id,title_vi,title_zh,genres").eq(
-        "id", novel_id).single().execute().data
-    if not rows:
-        rows = load_chapters(novel_id)[:up_to]
-    if not rows:
-        raise RuntimeError(f"Khong co chuong co content_zh cho novel {novel_id}")
-
-    terms, _ = db.get_glossary(novel_id)
-    chains = (build_chain(0), build_chain(1), build_chain(2))
-    out = Path(out_dir)
-    out.mkdir(parents=True, exist_ok=True)
-    novel_line = novel.get("title_vi") or novel.get("title_zh")
-    if novel_line and novel.get("genres"):
-        novel_line += " — thể loại: " + ", ".join(novel["genres"])
-
-    payloads = []
-    for row in rows:
-        previous = next((item for item in rows
-                         if item["chapter_index"] == row["chapter_index"] - 1), None)
-        payload = compare_chapter({
-            **row,
-            "novel_line": novel_line,
-            "prev_summary": (previous or {}).get("summary_vi"),
-            "prev_tail": (previous or {}).get("content_vi", "")[-1800:] or None,
-        }, terms, chains, parallel=parallel)
-        payloads.append(payload)
-        target = out / f"n{novel_id}_c{row['chapter_index']}.json"
-        target.write_text(dumps(payload), encoding="utf-8")
-        print(f"AB xong n{novel_id} c{row['chapter_index']} -> {target}")
-
-    (out / "index.html").write_text(
-        render_html(payloads, f"A/B translation — novel {novel_id}"), encoding="utf-8")
-    print(f"Da luu {len(rows)} cap ban dich vao {out.resolve()}")
-    print(f"Mo viewer: {(out / 'index.html').resolve()}")
-
-
 def main() -> None:
     parser = argparse.ArgumentParser(prog="novelworker")
     parser.add_argument("mode",
-                        choices=["crawl", "translate", "request", "add", "cost", "audit", "quality", "meta", "ab"])
+                        choices=["crawl", "translate", "request", "add", "cost", "audit", "quality", "meta"])
     parser.add_argument("--book-id", help="add: id truyện (số trong URL nguồn)")
     parser.add_argument("--source", default="shuhaige",
                         help="add: sources.name của nguồn crawl (mặc định shuhaige)")
@@ -543,10 +488,6 @@ def main() -> None:
     parser.add_argument("--up-to", type=int, default=10, help="request: dịch tới chương N")
     parser.add_argument("--fix", action="store_true",
                         help="audit: xếp lại hàng đợi các chương hỏng để dịch lại")
-    parser.add_argument("--out", default="ab_out", help="ab: thư mục lưu kết quả JSON")
-    parser.add_argument("--serial", action="store_true", help="ab: chạy tuần tự thay vì song song")
-    parser.add_argument("--refetch", action="store_true",
-                        help="ab: tải lại content_zh cho các chương thiếu nguyên văn")
     args = parser.parse_args()
     if args.mode == "cost":
         run_cost()
@@ -558,8 +499,6 @@ def main() -> None:
         if args.novel is None:
             parser.error("meta cần --novel <id>")
         run_meta(args.novel)
-    elif args.mode == "ab":
-        run_ab(args.novel, args.up_to, args.out, parallel=not args.serial, refetch=args.refetch)
     elif args.mode == "crawl":
         run_crawler()
     elif args.mode == "translate":
