@@ -19,6 +19,7 @@ import 'screens/library/notifications.dart';
 import 'screens/library/offline_library.dart';
 import 'screens/novel/novel_detail.dart';
 import 'screens/reader/reader.dart';
+import 'screens/reader/reader_settings.dart';
 import 'screens/explore/search.dart';
 import 'screens/shell.dart';
 
@@ -75,10 +76,27 @@ final _router = GoRouter(routes: [
   ),
   GoRoute(
     path: '/novel/:id/read/:index',
-    builder: (_, s) => ReaderScreen(
-      novelId: int.parse(s.pathParameters['id']!),
-      chapterIndex: int.parse(s.pathParameters['index']!),
-    ),
+    // Transition đổi chương theo chế độ đọc: lật trang giữ trượt NGANG (khớp thao tác
+    // vuốt ngang); cuộn dọc dùng fade trung tính (trượt ngang lệch cảm giác cuộn).
+    pageBuilder: (context, s) {
+      final pageMode =
+          ProviderScope.containerOf(context).read(readerSettingsProvider).pageMode;
+      return CustomTransitionPage(
+        key: s.pageKey,
+        transitionDuration: const Duration(milliseconds: 200),
+        reverseTransitionDuration: const Duration(milliseconds: 200),
+        transitionsBuilder: (_, anim, _, child) => pageMode
+            ? SlideTransition(
+                position: Tween(begin: const Offset(1, 0), end: Offset.zero)
+                    .animate(CurvedAnimation(parent: anim, curve: Curves.easeOut)),
+                child: child)
+            : FadeTransition(opacity: anim, child: child),
+        child: ReaderScreen(
+          novelId: int.parse(s.pathParameters['id']!),
+          chapterIndex: int.parse(s.pathParameters['index']!),
+        ),
+      );
+    },
   ),
 ]);
 

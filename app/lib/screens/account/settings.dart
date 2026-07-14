@@ -152,8 +152,9 @@ class _ProfileCard extends StatelessWidget {
   }
 }
 
-/// Bảng số liệu đọc — 1 khối viền hairline kiểu dashboard: 3 cột số mono
-/// (đang đọc / chương / streak) + dải 7 ô vuông tuần này ở dưới.
+/// Bảng số liệu đọc — streak là "nhân vật chính": dải hero nền vàng gradient (ngọn lửa
+/// + số ngày lớn) ở trên, hai số phụ (đang đọc / chương đã đọc) ở dưới.
+/// Bỏ dải 7 ô cũ: không có dữ liệu đọc theo NGÀY nên nó chỉ lặp lại con số streak.
 class _ReadingPanel extends StatelessWidget {
   final int novels, chapters, streak;
   const _ReadingPanel(
@@ -163,17 +164,17 @@ class _ReadingPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final t = Theme.of(context).textTheme;
-    Widget cell(String v, String label, {Color? c}) => Expanded(
+    final hot = streak > 0;
+    final gold = cs.secondary; // Pal.gold/dGold — màu dành riêng cho streak/thành tựu
+
+    Widget stat(String v, String label) => Expanded(
           child: Column(children: [
-            Text(v, style: monoStyle(context, size: 24, w: FontWeight.w600,
-                color: c ?? cs.onSurface)),
+            Text(v, style: monoStyle(context, size: 22, w: FontWeight.w600)),
             const SizedBox(height: 3),
             Text(label.toUpperCase(),
                 style: t.labelSmall?.copyWith(letterSpacing: 0.8, fontSize: 10.5)),
           ]),
         );
-    final vline = Container(width: 1, height: 34,
-        color: cs.outlineVariant.withValues(alpha: 0.7));
 
     return Container(
       decoration: BoxDecoration(
@@ -181,38 +182,43 @@ class _ReadingPanel extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: cs.outlineVariant),
       ),
-      padding: const EdgeInsets.fromLTRB(14, 16, 14, 12),
+      clipBehavior: Clip.antiAlias, // dải gradient bo theo góc thẻ
       child: Column(children: [
-        Row(children: [
-          cell('$novels', 'đang đọc'),
-          vline,
-          cell('$chapters', 'chương đã đọc'),
-          vline,
-          cell('$streak', 'ngày streak', c: streak > 0 ? cs.secondary : null),
-        ]),
-        const SizedBox(height: 14),
-        Divider(height: 1, color: cs.outlineVariant.withValues(alpha: 0.6)),
-        const SizedBox(height: 12),
-        // dải 7 ô vuông bo nhẹ (kiểu contribution graph): sáng = ngày có đọc
-        Row(children: [
-          Icon(Icons.local_fire_department_rounded,
-              size: 16, color: streak > 0 ? cs.secondary : cs.onSurfaceVariant),
-          const SizedBox(width: 8),
-          Text(streak > 0 ? 'Chuỗi $streak ngày đọc liên tiếp' : 'Chưa có chuỗi đọc',
-              style: t.labelMedium),
-          const Spacer(),
-          for (var i = 0; i < 7; i++)
-            Container(
-              margin: const EdgeInsets.only(left: 5),
-              width: 14, height: 14,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(4),
-                color: i < streak
-                    ? cs.secondary.withValues(alpha: 0.85)
-                    : cs.outlineVariant.withValues(alpha: 0.5),
-              ),
+        // Hero streak: nền vàng gradient nhạt khi còn chuỗi, phẳng lặng khi đã đứt.
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: hot
+                  ? [gold.withValues(alpha: 0.22), gold.withValues(alpha: 0.05)]
+                  : [Colors.transparent, Colors.transparent],
             ),
-        ]),
+          ),
+          child: Row(children: [
+            Icon(Icons.local_fire_department_rounded,
+                size: 42, color: hot ? gold : cs.onSurfaceVariant),
+            const SizedBox(width: 14),
+            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('$streak', style: monoStyle(context, size: 34, w: FontWeight.w700,
+                  color: hot ? gold : cs.onSurface)),
+              const SizedBox(height: 1),
+              Text(hot ? 'ngày đọc liên tiếp' : 'chưa có chuỗi — đọc hôm nay để bắt đầu',
+                  style: t.labelMedium?.copyWith(
+                      letterSpacing: 0.4, color: cs.onSurfaceVariant)),
+            ]),
+          ]),
+        ),
+        Divider(height: 1, color: cs.outlineVariant),
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          child: Row(children: [
+            stat('$novels', 'đang đọc'),
+            Container(width: 1, height: 30,
+                color: cs.outlineVariant.withValues(alpha: 0.7)),
+            stat('$chapters', 'chương đã đọc'),
+          ]),
+        ),
       ]),
     );
   }
