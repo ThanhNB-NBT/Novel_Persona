@@ -27,8 +27,7 @@ class Settings(BaseSettings):
     # Crawler
     crawl_interval_min: int = 45
     http_proxy_url: str = ""
-    # Discovery: số truyện MỚI tối đa thêm mỗi nguồn mỗi chu kỳ. Chiến lược "ít mà chất":
-    # nguồn có ranking chỉ lấy từ ranking (lượt đọc = bộ lọc chất lượng), trần nhỏ.
+    # Discovery: quota truyện MỚI cho ranking và cho hàng đợi gộp của mỗi nguồn/chu kỳ.
     discover_new_per_cycle: int = 10
     # Lọc truyện mỏng: đang-ra dưới ngần này chương thì ẩn, không dịch metadata/chương mẫu
     # (truyện hoàn thành không bị lọc — ngắn mà trọn bộ vẫn đáng đọc).

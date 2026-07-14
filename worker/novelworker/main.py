@@ -221,7 +221,11 @@ def run_crawler() -> None:
                     # - "mới cập nhật" → thêm truyện mới ra (đủ >200 chương + qua lọc mới giữ,
                     #   nên không sợ truyện mỏng). Nguồn không có latest → fetch_latest trả [].
                     sync.discover_ranking(adapter, max_new=max_new)
-                    sync.discover_latest(adapter, max_new=max_new)
+                    sync.discover_pool(adapter, "fetch_recommended", "Recommended")
+                    sync.discover_pool(adapter, "fetch_top", "Top")
+                    sync.discover_pool(adapter, "fetch_completed", "Completed")
+                    sync.discover_pool(adapter, "fetch_latest", "Latest")
+                    sync.process_discovery_candidates(adapter, max_new=max_new)
                     # chen giữa các bước dài: yêu cầu truyện không phải đợi hết cả
                     # chu kỳ discovery (10-15 phút) mới được xử
                     sync.process_novel_requests(list(adapters.values()))

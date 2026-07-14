@@ -115,8 +115,10 @@ class SourceAdapter(ABC):
         return []
 
     @abstractmethod
-    def fetch_latest(self, limit: int = 30) -> list[NovelMeta]:
-        """Danh sách truyện mới đăng / mới cập nhật (metadata tiếng Trung)."""
+    def fetch_latest(
+        self, limit: int = 30, page: int | None = None,
+    ) -> list[NovelMeta]:
+        """Danh sách mới; `page` dùng bởi frontier, None giữ chế độ quét tương thích cũ."""
 
     @abstractmethod
     def fetch_novel_meta(self, source_novel_id: str) -> NovelMeta:

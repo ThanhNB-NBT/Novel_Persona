@@ -21,6 +21,7 @@ import logging
 import re
 from datetime import datetime
 from html import unescape
+from itertools import zip_longest
 from urllib.parse import quote
 
 from .base import ChapterNotReady, ChapterRef, NovelMeta, SourceAdapter
@@ -30,6 +31,10 @@ log = logging.getLogger(__name__)
 # Rác điều hướng/quảng cáo hay gặp ở cuối chương mọi clone biquge.
 # Chỉ chuỗi đặc trưng footer — KHÔNG dùng ".com/www." (nuốt nhầm câu văn có nhắc URL).
 _DEFAULT_AD_MARKERS = ["请记住本站", "手机版", "笔趣阁"]
+_SHUHAIGE_COMPLETED_PATHS = tuple(
+    f"/quanben/{name}/"
+    for name in ("XuanHuan", "XianXia", "WuXia", "QiHuan", "XuanYi", "YouXi", "KeHuan")
+)
 
 
 class BiqugeAdapter(SourceAdapter):
@@ -64,18 +69,19 @@ class BiqugeAdapter(SourceAdapter):
 
     # ---------- SourceAdapter ----------
 
-    def fetch_latest(self, limit: int = 30) -> list[NovelMeta]:
-        """Trang 'mới cập nhật' (/lastupdate/{p}.html) — cùng khuôn <span class="s2">
-        <a href="/{id}/">tựa</a> như ranking. Bổ sung cho ranking (gần như bất động) để
-        truyện mới ra vẫn được thêm vào, không chỉ vét lại top cũ. Trả metadata NHẸ
-        (id+tựa); discovery gọi fetch_novel_meta lấy đủ. Site khác đổi qua
-        config['latest_path']/['latest_pages']."""
-        base = self.config.get("latest_path", "/lastupdate/")
-        pages = int(self.config.get("latest_pages", 20))
-        pat = re.compile(r'<span class="s2[^"]*"><a href="/(\d+)/"[^>]*>(.*?)</a>', re.S)
+    def _fetch_catalog(
+        self, base: str, pages: int, limit: int, *, broad: bool = False,
+        start_page: int = 1,
+    ) -> list[NovelMeta]:
+        """Parse danh sách id+tựa nhẹ; `broad` dành cho /top.html không có span.s2."""
+        pat = re.compile(
+            (r'<a[^>]+href="/(\d+)/"[^>]*>(.*?)</a>' if broad else
+             r'<span class="s2[^"]*"><a href="/(\d+)/"[^>]*>(.*?)</a>'),
+            re.S,
+        )
         out: list[NovelMeta] = []
         seen: set[str] = set()
-        for p in range(1, pages + 1):
+        for p in range(start_page, start_page + pages):
             path = base if p == 1 else f"{base}{p}.html"
             try:
                 html = self._get(path)
@@ -101,6 +107,81 @@ class BiqugeAdapter(SourceAdapter):
                     return out
             if not fresh:
                 break
+        return out
+
+    def fetch_latest(self, limit: int = 30, page: int | None = None) -> list[NovelMeta]:
+        """Trang mới cập nhật; trả metadata nhẹ để discovery enrich khi gặp truyện mới."""
+        return self._fetch_catalog(
+            self.config.get("latest_path", "/lastupdate/"),
+            1 if page else int(self.config.get("latest_pages", 20)), limit,
+            start_page=page or 1)
+
+    def fetch_recommended(self, limit: int = 30, page: int | None = None) -> list[NovelMeta]:
+        """Shuhaige /allvote/: bảng tổng đề cử, không ghi đè source_rank lượt đọc."""
+        base = self.config.get("recommended_path")
+        if not base and self.name != "shuhaige":
+            return []
+        return self._fetch_catalog(base or "/allvote/", 1 if page else 20, limit,
+                                   start_page=page or 1)
+
+    def fetch_top(self, limit: int = 30, page: int | None = None) -> list[NovelMeta]:
+        """Shuhaige /top.html: TOP tổng hợp gồm nhiều bảng con, dedupe theo id."""
+        base = self.config.get("top_path")
+        if not base and self.name != "shuhaige":
+            return []
+        if page and page > 1:
+            return []
+        return self._fetch_catalog(base or "/top.html", 1, limit, broad=True)
+
+    def fetch_completed(self, limit: int = 30, page: int | None = None) -> list[NovelMeta]:
+        """Truyện hoàn thành theo từng category được phép của Shuhaige.
+
+        Clone khác chỉ bật khi cấu hình `completed_paths`; không đoán route của site lạ.
+        Quét luân phiên từng trang/category để pool nhỏ vẫn đa thể loại.
+        """
+        paths = self.config.get("completed_paths") or (
+            _SHUHAIGE_COMPLETED_PATHS if self.name == "shuhaige" else ())
+        out: list[NovelMeta] = []
+        seen: set[str] = set()
+        active = set(paths)
+        pattern = re.compile(r'<a[^>]+href="/(\d+)/"[^>]*>(.*?)</a>', re.S)
+        start_page = page or 1
+        stop_page = start_page + 1 if page else 51
+        for current_page in range(start_page, stop_page):
+            if not active or len(out) >= limit:
+                break
+            batches: list[list[NovelMeta]] = []
+            for base_path in paths:
+                if base_path not in active:
+                    continue
+                path = (base_path if current_page == 1 else
+                        f"{base_path}{current_page}.html")
+                try:
+                    html = self._get(path)
+                except Exception:
+                    active.discard(base_path)
+                    continue
+                found = pattern.findall(html)
+                if not found:
+                    active.discard(base_path)
+                    continue
+                batch: list[NovelMeta] = []
+                for book_id, raw in found:
+                    title = unescape(re.sub(r"<[^>]+>", "", raw)).strip()
+                    if book_id in seen or not 2 <= len(title) <= 60:
+                        continue
+                    seen.add(book_id)
+                    batch.append(NovelMeta(
+                        source_novel_id=book_id,
+                        source_url=f"{self.base_url}{self._novel_url(book_id)}",
+                        title_zh=title,
+                        status="completed",
+                    ))
+                batches.append(batch)
+            for group in zip_longest(*batches):
+                out.extend(item for item in group if item is not None)
+                if len(out) >= limit:
+                    return out[:limit]
         return out
 
     def fetch_ranking(self, limit: int = 100) -> list[tuple[str, int]]:

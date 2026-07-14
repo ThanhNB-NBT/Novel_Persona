@@ -44,6 +44,12 @@ def main() -> None:
     assert [(r.index, r.source_chapter_id) for r in refs] == [(1, "niwen_2/9296"), (2, "niwen_2/9297")]
     assert refs[1].title_zh == "第二章 无情子"  # bản trong list đầy đủ (lần cuối) thắng
 
+    a._get = lambda p: (
+        '<a href="/n/niwen_2/1.html">第一章</a>'
+        '<a href="/n/niwen_2/2.html">完本感言</a>')
+    a.fetch_chapter_list("niwen_2")
+    assert a.last_toc_status == "completed"
+
     # chương: content div.articlebody, br→\n, lọc footer 顶点/host
     body = "夜色，很静。" + "字" * 60
     a._get = lambda p: (
@@ -70,12 +76,36 @@ def main() -> None:
             raise Exception("404")
         return pages[p]
 
-    d = DingdianAdapter(base_url="https://x.com", config={}, source_row={"name": "ddxs"})
+    d = DingdianAdapter(base_url="https://x.com",
+                        config={"discover_paths": ["/category/1.html"]},
+                        source_row={"name": "ddxs"})
     d._get = fake_get
     res = d.fetch_latest(limit=10)
     assert [m.source_novel_id for m in res] == ["aaa", "bbb", "ccc"], [m.source_novel_id for m in res]
     assert res[0].source_url == "https://x.com/n/aaa/"
     assert len(d.fetch_latest(limit=2)) == 2  # limit cắt đúng
+
+    # Mặc định phải chạm mọi category được phép, không còn khóa cứng category 1.
+    touched = []
+    d = DingdianAdapter(base_url="https://x.com", config={}, source_row={"name": "ddxs"})
+    d._get = lambda path: touched.append(path) or "<p>hết</p>"
+    assert d.fetch_latest(limit=10) == []
+    assert touched == [f"/category/{i}.html" for i in (1, 3, 4, 7, 8, 9, 10)]
+
+    # Pool nhỏ vẫn phải chia đều category, không để mục đầu nuốt hết quota.
+    d = DingdianAdapter(base_url="https://x.com",
+                        config={"discover_paths": ["/category/1.html", "/category/3.html"]},
+                        source_row={"name": "ddxs"})
+    d._get = lambda path: {
+        "/category/1.html": '<a href="/n/a1/">玄幻一</a><a href="/n/a2/">玄幻二</a>',
+        "/category/3.html": '<a href="/n/b1/">仙侠一</a><a href="/n/b2/">仙侠二</a>',
+    }.get(path, "")
+    assert [x.source_novel_id for x in d.fetch_latest(limit=2)] == ["a1", "b1"]
+    d._get = lambda path: {
+        "/category/1_2.html": '<a href="/n/a3/">玄幻深层</a>',
+        "/category/3_2.html": '<a href="/n/b3/">仙侠深层</a>',
+    }.get(path, "")
+    assert [x.source_novel_id for x in d.fetch_latest(limit=10, page=2)] == ["a3", "b3"]
 
 
 if __name__ == "__main__":

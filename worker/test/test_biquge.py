@@ -65,6 +65,30 @@ def main() -> None:
     c._get = lambda p: '<div id="chaptercontent">' + "内容" * 30 + "</div>"
     assert len(c.fetch_chapter("1/2")) >= 50
 
+    # Pool hoàn thành Shuhaige chia đều category thay vì để mục đầu chiếm quota.
+    done = _adapter({"completed_paths": ["/quanben/XuanHuan/", "/quanben/XianXia/"]})
+    done._get = lambda path: {
+        "/quanben/XuanHuan/": '<a href="/11/">玄幻一</a><a href="/12/">玄幻二</a>',
+        "/quanben/XianXia/": '<a href="/61/">仙侠一</a><a href="/62/">仙侠二</a>',
+    }.get(path, "")
+    completed = done.fetch_completed(limit=2)
+    assert [(x.source_novel_id, x.status) for x in completed] == [
+        ("11", "completed"), ("61", "completed")]
+
+    # Tổng đề cử dùng khuôn span.s2; TOP tổng hợp dùng link số trực tiếp và phải dedupe.
+    pools = _adapter()
+    pools._get = lambda path: {
+        "/allvote/": '<span class="s2"><a href="/21/">Đề cử một</a></span>',
+        "/allvote/2.html": '<span class="s2"><a href="/22/">Đề cử sâu</a></span>',
+        "/top.html": ('<li><a href="/31/">Top một</a></li>'
+                      '<li><a href="/31/">Top một trùng</a></li>'
+                      '<li><a href="/32/">Top hai</a></li>'),
+    }.get(path, "")
+    assert [x.source_novel_id for x in pools.fetch_recommended(10)] == ["21", "22"]
+    assert [x.source_novel_id for x in pools.fetch_recommended(10, page=2)] == ["22"]
+    assert [x.source_novel_id for x in pools.fetch_top(10)] == ["31", "32"]
+    assert pools.fetch_top(10, page=2) == []
+
     # chương bị site CHIA TRANG (123.html, 123_2.html…): tải nối hết các trang,
     # lọc dòng nhắc "点击下一页" — bug chương cụt đuôi "mất liền mạch" 2026-07
     d = _adapter()

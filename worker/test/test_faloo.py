@@ -14,11 +14,15 @@ from novelworker.config import settings
 
 def main() -> None:
     assert TEMPLATE_REGISTRY["faloo"] is FalooAdapter
-    adapter = FalooAdapter("https://wap.faloo.com", {"encoding": "gb18030"}, {"name": "faloo"})
+    adapter = FalooAdapter(
+        "https://wap.faloo.com",
+        {"encoding": "gb18030", "discover_paths": ["/category_2_1.html"]},
+        {"name": "faloo"},
+    )
 
     adapter._get = lambda _: (
-        '<a href="//wap.faloo.com/new_123.html"><b>Kiếm Tiên</b></a>'
-        '<a href="//wap.faloo.com/new_123.html">trùng</a>'
+        '<div class="show_title2"><a href="//wap.faloo.com/new_123.html"><b>Kiếm Tiên</b></a></div>'
+        '<div class="show_title2"><a href="//wap.faloo.com/new_123.html">trùng</a></div>'
         '<a href="//wap.faloo.com/new_123_1.html">chương, không phải truyện</a>'
     )
     latest = adapter.fetch_latest()
@@ -26,15 +30,49 @@ def main() -> None:
 
     pages = {
         "/category_2_1.html": (
-            '<a href="/new_101.html">Truyện 101</a>'
-            '<a href="/new_102.html">Truyện 102</a>'),
+            '<div class="show_title2"><a href="/new_101.html">Truyện 101</a></div>'
+            '<div class="show_title2"><a href="/new_102.html">Truyện 102</a></div>'),
         "/category_2_2.html": (
-            '<a href="/new_102.html">Truyện 102 trùng</a>'
-            '<a href="/new_103.html">Truyện 103</a>'),
+            '<div class="show_title2"><a href="/new_102.html">Truyện 102 trùng</a></div>'
+            '<div class="show_title2"><a href="/new_103.html">Truyện 103</a></div>'),
     }
     adapter._get = lambda path: pages.get(path, "")
     latest = adapter.fetch_latest(limit=3)
     assert [item.source_novel_id for item in latest] == ["101", "102", "103"]
+    assert [item.source_novel_id for item in adapter.fetch_latest(limit=3, page=2)] == [
+        "102", "103"]
+
+    # Config production cũ category 2 phải tự mở rộng sang mọi nhóm được phép.
+    touched = []
+    broad = FalooAdapter(
+        "https://wap.faloo.com",
+        {"encoding": "gb18030", "latest_path": "/category_2_1.html"},
+        {"name": "faloo"},
+    )
+    broad._get = lambda path: touched.append(path) or "<p>hết</p>"
+    assert broad.fetch_latest(limit=10) == []
+    assert touched == [f"/category_{i}_1.html" for i in (1, 6, 2, 5)]
+
+    broad = FalooAdapter(
+        "https://wap.faloo.com",
+        {"discover_paths": ["/category_1_1.html", "/category_6_1.html"]},
+        {"name": "faloo"},
+    )
+    broad._get = lambda path: {
+        "/category_1_1.html": (
+            '<div class="show_title2"><a href="/new_11.html">玄幻一</a></div>'
+            '<div class="show_title2"><a href="/new_12.html">玄幻二</a></div>'),
+        "/category_6_1.html": (
+            '<div class="show_title2"><a href="/new_61.html">仙侠一</a></div>'
+            '<div class="show_title2"><a href="/new_62.html">仙侠二</a></div>'),
+    }.get(path, "")
+    assert [x.source_novel_id for x in broad.fetch_latest(limit=2)] == ["11", "61"]
+
+    broad._get = lambda path: (
+        '<div class="show_title2"><a href="//wap.faloo.com/99.html">完本玄幻</a></div>'
+        if path == "/finish_0_0_0_1.html" else "")
+    completed = broad.fetch_completed(limit=1)
+    assert [(x.source_novel_id, x.status) for x in completed] == [("99", "completed")]
 
     meta_html = (
         '<div class="book_info"><img src="//img.test/cover.jpg"></div>'

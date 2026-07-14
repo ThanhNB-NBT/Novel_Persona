@@ -7,11 +7,16 @@ os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "test")
 
 from novelworker.crawler import sync
 from novelworker.crawler.base import NovelMeta
-from novelworker.crawler.sync import _chapter_sync_fields
+from novelworker.crawler.sync import _chapter_sync_fields, _frontier_step
 from novelworker.main import _ordered_novel_ids
 
 
 def main() -> None:
+    # Đào trang 1 → chen lại trang 1 ở vòng 2 → tiếp tục trang 2, không reset cursor sâu.
+    assert _frontier_step(0, 1) == (1, 1, False)
+    assert _frontier_step(1, 2) == (2, 1, True)
+    assert _frontier_step(2, 2) == (3, 2, False)
+
     # Crawler phải tải theo priority/created_at của job, không theo thứ tự row chapters.
     jobs = [
         {"novel_id": 20, "chapter_id": 2},
@@ -55,7 +60,13 @@ def main() -> None:
         assert sync._queue_canonical_work(
             object(), {"id": 2, "is_canonical": False, "meta_translated": False},
             meta, 10) is False
-        assert len(queued) == 2
+        # DDXS chỉ nhận ra hoàn thành sau khi đọc TOC: truyện ngắn vẫn phải được giữ.
+        adapter = type("Adapter", (), {"last_toc_status": "completed"})()
+        sync.settings.discover_min_chapters = 200
+        assert sync._queue_canonical_work(
+            adapter, {"id": 3, "is_canonical": True, "meta_translated": False},
+            meta, 10) is True
+        assert len(queued) == 4
     finally:
         sync.sync_chapter_list = original_sync
         sync.db.enqueue = original_enqueue

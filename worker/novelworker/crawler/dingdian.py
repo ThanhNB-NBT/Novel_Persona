@@ -16,12 +16,18 @@ import logging
 import re
 import time
 from html import unescape
+from itertools import zip_longest
 
 from .base import ChapterRef, NovelMeta, SourceAdapter
 
 log = logging.getLogger(__name__)
 
 _DEFAULT_AD_MARKERS = ["顶点小说", "dingdian", "请记住", "手机版"]
+
+# Các mục đúng thị hiếu chung của app: 玄幻, 仙侠, 武侠, 网游, 奇幻, 科幻, 悬疑.
+# Đô thị/ngôn tình/lịch sử không đưa vào pool; bộ lọc chung vẫn kiểm tra metadata lần cuối.
+_DEFAULT_DISCOVER_PATHS = tuple(f"/category/{i}.html" for i in (1, 3, 4, 7, 8, 9, 10))
+_COMPLETED_TITLE = re.compile(r"(?:正文|全文)?(?:完结|完本)|大结局|完结感言|完本感言|终章")
 
 
 class DingdianAdapter(SourceAdapter):
@@ -46,39 +52,54 @@ class DingdianAdapter(SourceAdapter):
 
     # ---------- SourceAdapter ----------
 
-    def fetch_latest(self, limit: int = 30) -> list[NovelMeta]:
+    def fetch_latest(self, limit: int = 30, page: int | None = None) -> list[NovelMeta]:
         """Quét trang liệt kê (category) → danh sách slug + tên (nhẹ). Metadata đầy đủ
         (tác giả/bìa/mô tả) do discover_latest gọi fetch_novel_meta cho truyện MỚI.
 
-        Trang category `/category/{c}.html` phân trang `_2/_3…`; gom tới `limit` slug.
-        config `discover_paths` đổi danh sách trang gốc (mặc định category 1)."""
-        paths = self.config.get("discover_paths") or ["/category/1.html"]
+        Trang category `/category/{c}.html` phân trang `_2/_3…`; quét luân phiên mọi
+        category được phép để một mục đông truyện không chiếm hết pool ứng viên.
+        config `discover_paths` có thể override danh sách mặc định."""
+        paths = self.config.get("discover_paths") or _DEFAULT_DISCOVER_PATHS
         out: list[NovelMeta] = []
         seen: set[str] = set()
-        for base_path in paths:
-            page = 1
-            while len(out) < limit:
-                path = base_path if page == 1 else re.sub(r"\.html$", f"_{page}.html", base_path)
+        active = set(paths)
+        current_page = page or 1
+        while active and len(out) < limit:
+            batches: list[list[NovelMeta]] = []
+            for base_path in paths:
+                if base_path not in active:
+                    continue
+                path = (base_path if current_page == 1 else
+                        re.sub(r"\.html$", f"_{current_page}.html", base_path))
                 try:
                     html = self._get(path)
                 except Exception:
-                    break  # hết trang / lỗi mạng → sang path kế
+                    active.discard(base_path)
+                    continue
                 found = re.findall(r'/n/([a-z0-9_]+)/"[^>]*>([^<]{2,40})<', html)
-                found = [(s, t) for s, t in found if s not in seen]
                 if not found:
-                    break  # trang không còn truyện mới → dừng phân trang
+                    active.discard(base_path)
+                    continue
+                batch: list[NovelMeta] = []
                 for slug, title in found:
+                    if slug in seen:
+                        continue
                     seen.add(slug)
-                    out.append(NovelMeta(
+                    batch.append(NovelMeta(
                         source_novel_id=slug,
                         source_url=f"{self.base_url}{self._novel_url(slug)}",
                         title_zh=unescape(title).strip(),
                     ))
-                    if len(out) >= limit:
-                        break
-                page += 1
+                batches.append(batch)
                 time.sleep(0.5)  # lịch sự với nguồn
-        return out
+            for group in zip_longest(*batches):
+                out.extend(item for item in group if item is not None)
+                if len(out) >= limit:
+                    return out[:limit]
+            if page:
+                break
+            current_page += 1
+        return out[:limit]
 
     def fetch_novel_meta(self, source_novel_id: str) -> NovelMeta:
         html = self._get(self._novel_url(source_novel_id))
@@ -110,6 +131,9 @@ class DingdianAdapter(SourceAdapter):
         )
 
     def fetch_chapter_list(self, source_novel_id: str) -> list[ChapterRef]:
+        # Trạng thái này thuộc riêng lần tải TOC hiện tại; không để một truyện
+        # hoàn thành làm "dính" trạng thái sang truyện kế tiếp của cùng adapter.
+        self.last_toc_status = None
         html = self._get(self._list_url(source_novel_id))
         pattern = re.compile(
             r'<a href="[^"]*?/' + re.escape(source_novel_id)
@@ -125,6 +149,10 @@ class DingdianAdapter(SourceAdapter):
         ]
         if not refs:
             raise ValueError(f"Không lấy được mục lục {self.name} cho {source_novel_id}")
+        # DDXS không có trang/trường trạng thái riêng; tiêu đề cuối là tín hiệu duy nhất.
+        self.last_toc_status = (
+            "completed" if any(_COMPLETED_TITLE.search(r.title_zh or "") for r in refs[-5:])
+            else None)
         return refs
 
     def fetch_chapter(self, source_chapter_id: str) -> str:

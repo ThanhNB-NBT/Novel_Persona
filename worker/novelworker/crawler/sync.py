@@ -5,7 +5,7 @@ import logging
 import re
 import time
 import unicodedata
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from .. import db
 from ..config import settings
@@ -257,7 +257,8 @@ def _queue_canonical_work(adapter: SourceAdapter, novel: dict, meta, prio_meta: 
         # request_toc mới tải đủ (đỡ ~1.7k dòng stub/truyện không ai đọc)
         total, _ = sync_chapter_list(adapter, novel["id"], meta.source_novel_id,
                                      limit_stubs=settings.sample_chapters)
-        if meta.status != "completed" and total < settings.discover_min_chapters:
+        source_status = getattr(adapter, "last_toc_status", None)
+        if (source_status or meta.status) != "completed" and total < settings.discover_min_chapters:
             db.sb().table("novels").update({"hidden": True}).eq("id", novel["id"]).execute()
             log.info("Bỏ qua truyện mỏng %s (%s): %d chương < %d",
                      novel["id"], meta.title_zh, total, settings.discover_min_chapters)
@@ -270,58 +271,138 @@ def _queue_canonical_work(adapter: SourceAdapter, novel: dict, meta, prio_meta: 
         return False
 
 
-def discover_latest(adapter: SourceAdapter, max_new: int = 50) -> None:
-    """Quét trang liệt kê nguồn → thêm tối đa `max_new` truyện MỚI mỗi chu kỳ.
+def _frontier_step(cycle_count: int, next_page: int) -> tuple[int, int, bool]:
+    """Cứ 2 chu kỳ chen trang 1; chu kỳ còn lại tiếp tục đúng cursor sâu."""
+    cycle_count += 1
+    hot_page = cycle_count % 2 == 0
+    return cycle_count, 1 if hot_page else max(1, next_page), hot_page
 
-    fetch_latest chỉ trả slug (nhẹ). Truyện MỚI → gọi fetch_novel_meta lấy đủ metadata
-    → upsert + dedup → enqueue dịch metadata (chỉ bản canonical). Truyện đã có: bỏ qua.
-    KHÔNG tải mục lục/chương (doc §3.5) — vẫn lazy khi user bấm Đọc.
-    Trần max_new = cầu chì chống tràn Khám phá + đốt token dịch metadata (doc §6.4)."""
+
+def _candidate_priority(pool: str) -> int:
+    return {"completed": 10, "recommended": 20, "top": 20, "latest": 30}.get(pool, 50)
+
+
+def discover_pool(adapter: SourceAdapter, method: str, label: str) -> None:
+    """Quét đúng một tầng của pool, lưu cursor + ứng viên; không enrich tại đây."""
+    fetch = getattr(adapter, method, None)
+    if not fetch:
+        return
     sid = _source_id(adapter)
-    added = skipped = errors = scanned = 0
-    # ponytail: trần 20× để tìm đủ truyện đạt lọc mà không quét vô hạn nguồn xấu.
-    cands = adapter.fetch_latest(limit=max_new * 20)
-    known = _existing_novels(sid, [c.source_novel_id for c in cands])  # check theo lô
+    pool = method.removeprefix("fetch_")
+    state = (
+        db.sb().table("crawl_discovery_frontier")
+        .select("next_page, cycle_count").eq("source_id", sid).eq("pool", pool)
+        .maybe_single().execute().data or {}
+    )
+    cycle, page, hot_page = _frontier_step(
+        state.get("cycle_count") or 0, state.get("next_page") or 1)
+    candidates = fetch(limit=200, page=page)
+    next_page = state.get("next_page") or 1
+    wrapped_at = None
+    if not hot_page:
+        next_page = page + 1 if candidates else 1
+        if not candidates and page > 1:
+            wrapped_at = db.utc_now()
+    frontier = {
+        "source_id": sid, "pool": pool, "next_page": next_page,
+        "cycle_count": cycle, "updated_at": db.utc_now(),
+    }
+    if wrapped_at:
+        frontier["wrapped_at"] = wrapped_at
+    db.sb().table("crawl_discovery_frontier").upsert(
+        frontier, on_conflict="source_id,pool").execute()
+
+    if candidates:
+        rows = [{
+            "source_id": sid,
+            "source_novel_id": item.source_novel_id,
+            "pool": pool,
+            "title_zh": item.title_zh,
+            "status_hint": item.status,
+            "discovered_page": page,
+            "priority": _candidate_priority(pool),
+        } for item in candidates]
+        db.sb().table("crawl_candidates").upsert(
+            rows, on_conflict="source_id,pool,source_novel_id",
+            ignore_duplicates=True).execute()
+    log.info("Frontier %s/%s: %s trang %d → %d ứng viên; cursor sâu=%d",
+             adapter.name, label, "quét nóng" if hot_page else "đào sâu",
+             page, len(candidates), next_page)
+
+
+def _candidate_batch(sid: int, limit: int) -> list[dict]:
+    table = db.sb().table("crawl_candidates")
+    rows = (
+        table.select("*").eq("source_id", sid).eq("status", "pending")
+        .order("priority").order("created_at").limit(limit).execute().data or []
+    )
+    if len(rows) < limit:
+        due = (
+            db.sb().table("crawl_candidates").select("*").eq("source_id", sid)
+            .in_("status", ["too_short", "failed"]).lte("retry_after", db.utc_now())
+            .order("priority").order("retry_after").limit(limit - len(rows))
+            .execute().data or []
+        )
+        rows.extend(due)
+    return rows
+
+
+def _mark_candidate(row_id: int, status: str, **fields) -> None:
+    fields.update({"status": status, "updated_at": db.utc_now()})
+    db.sb().table("crawl_candidates").update(fields).eq("id", row_id).execute()
+
+
+def process_discovery_candidates(adapter: SourceAdapter, max_new: int = 10) -> None:
+    """Rút hàng đợi bền vững; tối đa 2× quota lần kiểm tra để không hammer nguồn."""
+    sid = _source_id(adapter)
+    rows = _candidate_batch(sid, max_new * 2)
+    if not rows:
+        return
+    known = _existing_novels(sid, [r["source_novel_id"] for r in rows])
     bl_ids, bl_keys = _blacklist(sid)
+    added = checked = 0
     consec_fail = 0
-    for cand in cands:
+    for row in rows:
         if added >= max_new:
             break
-        if (cand.source_novel_id in known or cand.source_novel_id in bl_ids
-                or (sid, cand.source_novel_id) in _genre_skipped):
-            skipped += 1
+        source_novel_id = row["source_novel_id"]
+        if source_novel_id in known:
+            _mark_candidate(row["id"], "done")
             continue
-        scanned += 1
+        if source_novel_id in bl_ids or (sid, source_novel_id) in _genre_skipped:
+            _mark_candidate(row["id"], "rejected")
+            continue
+        checked += 1
         try:
-            meta = adapter.fetch_novel_meta(cand.source_novel_id)
-        except Exception as e:
-            # Đếm thất bại LIÊN TIẾP: nguồn (faloo) chặn IP datacenter theo tần suất —
-            # thất bại mà cứ quét tiếp = hammer, block càng cứng. 8 phát liền = coi như
-            # nguồn đang chặn/chết, dừng chu kỳ, thử lại lượt sau (IP thường tự thả).
+            meta = adapter.fetch_novel_meta(source_novel_id)
+        except Exception as exc:
             consec_fail += 1
-            if isinstance(e, ValueError):
-                skipped += 1  # trang xoá / chống bot 200 thiếu metadata — bỏ qua mềm
-                log.info("Discovery: bỏ qua %s (%s) — %s", cand.source_novel_id, adapter.name, e)
-            else:
-                errors += 1
-                log.exception("Discovery: lỗi lấy metadata %s (%s)", cand.source_novel_id, adapter.name)
+            retry = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
+            _mark_candidate(row["id"], "failed", attempts=(row.get("attempts") or 0) + 1,
+                            retry_after=retry, last_error=str(exc)[:500])
+            log.warning("Discovery queue %s: lỗi %s — %s", adapter.name, source_novel_id, exc)
             if consec_fail >= 8:
-                log.warning("Discovery %s: %d truyện liên tiếp thất bại — nguồn có vẻ bị "
-                            "chặn, dừng chu kỳ (thử lại lượt sau)", adapter.name, consec_fail)
+                log.warning("Discovery queue %s: 8 lỗi liên tiếp, dừng để tránh bị chặn",
+                            adapter.name)
                 break
-            time.sleep(0.5)  # fail cũng nghỉ, đừng hammer nguồn đang chập chờn
+            time.sleep(1.0)
             continue
-        consec_fail = 0  # lấy được metadata → nguồn còn sống, reset đếm
+        consec_fail = 0
+        if row.get("status_hint") == "completed":
+            meta.status = "completed"
         if _skip_by_source_policy(adapter, meta):
-            skipped += 1
+            retry = (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()
+            _mark_candidate(row["id"], "too_short", attempts=(row.get("attempts") or 0) + 1,
+                            free_chapter_count=meta.chapter_count, retry_after=retry,
+                            last_error=None)
             continue
         if _skip_by_genre(sid, meta):
-            skipped += 1
+            _mark_candidate(row["id"], "rejected")
             continue
         key = dedup_key(meta.title_zh, meta.author_zh)
         if key in bl_keys:
-            skipped += 1
-            continue  # bản clone của truyện admin đã xoá vĩnh viễn
+            _mark_candidate(row["id"], "rejected")
+            continue
         novel = db.upsert_novel({
             "source_id": sid,
             "source_novel_id": meta.source_novel_id,
@@ -330,26 +411,25 @@ def discover_latest(adapter: SourceAdapter, max_new: int = 50) -> None:
             "author_zh": meta.author_zh,
             "cover_url": meta.cover_url,
             "description_zh": meta.description_zh,
-            "genres": meta.genres_zh,      # tiếng Trung, job metadata sẽ dịch
+            "genres": meta.genres_zh,
             "status": meta.status,
             "dedup_key": key,
             "last_chapter_at": meta.last_chapter_at.isoformat() if meta.last_chapter_at else None,
             "updated_at": db.utc_now(),
         })
+        known[source_novel_id] = novel
         recompute_canonical(key)
         _cache_cover_and_update(adapter, novel["id"], meta.cover_url)
-        # chỉ bản canonical + qua lọc chất lượng mới tốn token (metadata + chương mẫu)
-        if not _queue_canonical_work(adapter, novel, meta, prio_meta=10):
-            skipped += 1
-            continue
-        added += 1
-        log.info("Discovery %s: nhận %d/%d — %s (source=%s, novel=%s)",
-                 adapter.name, added, max_new, meta.title_zh,
-                 meta.source_novel_id, novel["id"])
-        time.sleep(1.0)  # lịch sự với nguồn
-    log.info("Discovery %s: xong %d/%d truyện đạt — ứng viên=%d, đã thử=%d, "
-             "bỏ qua=%d, lỗi=%d%s", adapter.name, added, max_new, len(cands),
-             scanned, skipped, errors, " (hết pool ứng viên)" if added < max_new else "")
+        queued = _queue_canonical_work(
+            adapter, novel, meta, prio_meta=8 if meta.status == "completed" else 10)
+        _mark_candidate(row["id"], "done", attempts=(row.get("attempts") or 0) + 1,
+                        free_chapter_count=meta.chapter_count, retry_after=None,
+                        last_error=None)
+        if queued:
+            added += 1
+        time.sleep(1.0)
+    log.info("Discovery queue %s: kiểm tra %d/%d, nhận %d/%d",
+             adapter.name, checked, len(rows), added, max_new)
 
 
 def discover_ranking(adapter: SourceAdapter, max_new: int = 30) -> None:

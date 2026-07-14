@@ -3,8 +3,13 @@ from __future__ import annotations
 
 import re
 from html import unescape
+from itertools import zip_longest
 
 from .base import ChapterRef, NovelMeta, SourceAdapter
+
+
+# Nhóm lớn đúng bộ lọc chung: 玄幻奇幻, 武侠仙侠, 科幻网游, 恐怖灵异.
+_DEFAULT_DISCOVER_PATHS = tuple(f"/category_{i}_1.html" for i in (1, 6, 2, 5))
 
 
 def _text(fragment: str) -> str:
@@ -24,8 +29,10 @@ class FalooAdapter(SourceAdapter):
     def _chapter_path(self, book_id: str, chapter_id: str) -> str:
         return f"/{book_id}_{chapter_id}.html"
 
-    def fetch_latest(self, limit: int = 30) -> list[NovelMeta]:
-        base_path = self.config.get("latest_path", "/category_2_1.html")
+    def _fetch_listing(
+        self, paths: list[str] | tuple[str, ...], limit: int, status: str = "ongoing",
+        page: int | None = None,
+    ) -> list[NovelMeta]:
         # CHỈ bắt link tiêu đề trong khối truyện (show_title2) — trang category còn vô số
         # href /{id}.html footer/nav (id ngắn) không phải truyện, trước đây bị vơ nhầm
         # thành ứng viên → 185/200 lỗi "thiếu metadata".
@@ -36,37 +43,63 @@ class FalooAdapter(SourceAdapter):
         )
         out: list[NovelMeta] = []
         seen: set[str] = set()
-        for page in range(1, 51):
-            path = base_path if page == 1 else re.sub(
-                r"\d+(?=\.html$)", str(page), base_path)
-            if page > 1 and path == base_path:
+        active = set(paths)
+        start_page = page or 1
+        stop_page = start_page + 1 if page else 51
+        for current_page in range(start_page, stop_page):
+            if not active or len(out) >= limit:
                 break
-            try:
-                html = self._get(path)
-            except Exception:
-                if page == 1:
-                    raise
-                break
-            fresh = 0
-            for match in pattern.finditer(html):
-                book_id = match.group(1)
-                title = _text(match.group(2))
-                if book_id in seen or not title:
+            batches: list[list[NovelMeta]] = []
+            for base_path in paths:
+                if base_path not in active:
                     continue
-                seen.add(book_id)
-                fresh += 1
-                out.append(NovelMeta(
-                    source_novel_id=book_id,
-                    source_url=f"{self.base_url}{self._novel_path(book_id)}",
-                    title_zh=title,
-                ))
+                path = base_path if current_page == 1 else re.sub(
+                    r"\d+(?=\.html$)", str(current_page), base_path)
+                if current_page > 1 and path == base_path:
+                    active.discard(base_path)
+                    continue
+                try:
+                    html = self._get(path)
+                except Exception:
+                    active.discard(base_path)
+                    continue
+                matches = list(pattern.finditer(html))
+                if not matches:
+                    active.discard(base_path)
+                    continue
+                batch: list[NovelMeta] = []
+                for match in matches:
+                    book_id = match.group(1)
+                    title = _text(match.group(2))
+                    if book_id in seen or not title:
+                        continue
+                    seen.add(book_id)
+                    batch.append(NovelMeta(
+                        source_novel_id=book_id,
+                        source_url=f"{self.base_url}{self._novel_path(book_id)}",
+                        title_zh=title,
+                        status=status,
+                    ))
+                batches.append(batch)
+            for group in zip_longest(*batches):
+                out.extend(item for item in group if item is not None)
                 if len(out) >= limit:
-                    break
-            if len(out) >= limit:
-                break
-            if not fresh:
-                break
-        return out
+                    return out[:limit]
+        return out[:limit]
+
+    def fetch_latest(self, limit: int = 30, page: int | None = None) -> list[NovelMeta]:
+        paths = self.config.get("discover_paths")
+        if not paths:
+            # Config production cũ chỉ có path mặc định category 2; mở rộng nó sang
+            # toàn bộ nhóm được phép. Path custom khác vẫn giữ nguyên để tương thích clone.
+            legacy = self.config.get("latest_path")
+            paths = ([legacy] if legacy and legacy != "/category_2_1.html"
+                     else _DEFAULT_DISCOVER_PATHS)
+        return self._fetch_listing(paths, limit, page=page)
+
+    def fetch_completed(self, limit: int = 30, page: int | None = None) -> list[NovelMeta]:
+        paths = self.config.get("completed_paths") or ["/finish_0_0_0_1.html"]
+        return self._fetch_listing(paths, limit, status="completed", page=page)
 
     def fetch_novel_meta(self, source_novel_id: str) -> NovelMeta:
         html = self._get(self._novel_path(source_novel_id))
