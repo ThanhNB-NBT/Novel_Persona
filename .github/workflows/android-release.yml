@@ -53,6 +53,7 @@ jobs:
         run: |
           flutter pub get
           flutter build apk --release \
+            --target-platform android-arm64 \
             --dart-define=SUPABASE_URL="${{ secrets.SUPABASE_URL }}" \
             --dart-define=SUPABASE_ANON_KEY="${{ secrets.SUPABASE_ANON_KEY }}"
           mv build/app/outputs/flutter-apk/app-release.apk \
