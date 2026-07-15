@@ -780,10 +780,9 @@ def _refresh_one_style_bible() -> None:
     for nv in novels:
         if not _needs_style_refresh(nv.get("translation_style")):
             continue
-        first = (
-            db.sb().table("chapters").select("content_zh")
+        first = db.sb().table("chapters").select("content_zh") \
             .eq("novel_id", nv["id"]).eq("chapter_index", 1).maybe_single().execute()
-        ).data or {}
+        first = getattr(first, "data", None) or {}  # maybe_single trả None khi truyện chưa có chương 1
         if not first.get("content_zh"):
             continue
         llm = build_chain(settings.translator_concurrency)
