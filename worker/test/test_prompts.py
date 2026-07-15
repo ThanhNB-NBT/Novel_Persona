@@ -46,7 +46,8 @@ def main() -> None:
     approved = [{"term_zh": f"准{i}", "correct_vi": f"Chuẩn {i}", "approved": True} for i in range(5)]
     pending = [{"term_zh": f"候{i}", "correct_vi": f"Gợi ý {i}", "approved": False} for i in range(80)]
     injected = build_main_chapter_system(approved + pending, "".join(t["term_zh"] for t in approved + pending))
-    assert injected.count("→") == MAX_TERMS_IN_PROMPT
+    # đếm CỤ THỂ dòng glossary (template có sẵn nhiều "→" trong hướng dẫn tĩnh)
+    assert injected.count("→ Chuẩn") + injected.count("→ Gợi ý") == MAX_TERMS_IN_PROMPT
     assert all(t["term_zh"] in injected for t in approved)
 
     # build_chapter_user: đủ 4 phần đúng thứ tự; phần thiếu thì không chèn nhãn thừa

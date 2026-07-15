@@ -23,13 +23,13 @@ def main() -> None:
     a = BiqugeAdapter(base_url="https://x.com", config={}, source_row={"name": "x"})
     assert a.fetch_ok == 0 and a.fetch_err == 0
 
-    a._session.get = lambda url: _Resp(True)
+    a._session.get = lambda url, **kw: _Resp(True)
     a._get("/1/")
     a._get("/2/")
     assert a.fetch_ok == 2 and a.fetch_err == 0
 
     # fetch lỗi → err++ và vẫn ném ra (không nuốt)
-    a._session.get = lambda url: _Resp(False)
+    a._session.get = lambda url, **kw: _Resp(False)
     for _ in range(3):
         try:
             a._get("/dead/")

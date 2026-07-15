@@ -2388,13 +2388,30 @@ class _AnimatedCultivatorState extends State<_AnimatedCultivator>
           ? Future.value(null)
           : _decodeAsset('assets/cult_halo/${widget.haloWorn}.webp'),
     ]);
-    if (!mounted) return;
+    if (!mounted) {
+      for (final im in imgs) {
+        im?.dispose();
+      }
+      return;
+    }
+    _disposeImages(); // giải phóng bộ ảnh cũ trước khi thay bộ mới
     setState(() {
       _weaponImg = imgs[0];
       _phapbaoImg = imgs[1];
       _swordWheelImg = imgs[2];
       _haloImg = imgs[3];
     });
+  }
+
+  void _disposeImages() {
+    _weaponImg?.dispose();
+    _phapbaoImg?.dispose();
+    _swordWheelImg?.dispose();
+    _haloImg?.dispose();
+    _weaponImg = null;
+    _phapbaoImg = null;
+    _swordWheelImg = null;
+    _haloImg = null;
   }
 
   Future<ui.Image?> _decodeItem(String? key) async {
@@ -2421,6 +2438,7 @@ class _AnimatedCultivatorState extends State<_AnimatedCultivator>
   @override
   void dispose() {
     _ctrl.dispose();
+    _disposeImages();
     super.dispose();
   }
 

@@ -20,7 +20,7 @@ class Fake:
         self.model = name
         self.text = text
 
-    def complete(self, system, user, temperature=0.3, max_tokens=8192):
+    def complete(self, system, user, temperature=0.3, max_tokens=8192, validate=None):
         if self.text is None:
             calls.append((self.model, False))
             raise RuntimeError(f"{self.model} lỗi")

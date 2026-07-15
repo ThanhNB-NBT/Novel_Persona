@@ -172,8 +172,8 @@ _DIALOGUE_RE = re.compile(
 # chẳng lẽ, chẳng qua, chẳng hạn, chẳng những, chẳng mấy chốc, chẳng trách (=thảo nào),
 # chẳng thà (=thà), cực chẳng đã, chẳng chóng thì chầy, "ai mà chẳng" (tu từ).
 _CHANG_RE = re.compile(
-    r"(?<!cực )(?<!mà )\b[Cc]hẳng\b"
-    r"(?!\s+(?:lẽ|qua|hạn|những|mấy chốc|trách|thà|chóng)\b)")
+    r"(?<!cực )(?<!mà )\bchẳng\b"
+    r"(?!\s+(?:lẽ|qua|hạn|những|mấy chốc|trách|thà|chóng)\b)", re.I)
 # 不禁/不由得 dịch phẳng "không khỏi" — lược khi đứng trước động từ; giữ nghĩa thật
 # "chữa/trị/vẫn/còn/mãi ... không khỏi" và "không khỏi được/bệnh/hẳn/lo(?)".
 _KHONG_KHOI_RE = re.compile(
