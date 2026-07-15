@@ -54,6 +54,25 @@ def han_viet(zh: str) -> str | None:
     return " ".join(parts)
 
 
+def transliteration_suspect(zh: str | None, vi: str | None, term_type: str | None) -> bool:
+    """Tên riêng không phải phiên âm/ngoại danh hợp lệ thì đánh dấu để chờ duyệt."""
+    if not zh or not vi or term_type not in _HV_TYPES:
+        return False
+    chars = [ch for ch in zh if _HAN.search(ch)]
+    if len(chars) != len(zh) or (vi.isascii() and len(vi.split()) == 1):
+        return False
+    syls = vi.split()
+    if not syls or _HAN.search(vi):
+        return True
+    t = _load()
+    if len(syls) == len(chars) and all(t.get(ch) and s.lower() in t[ch]
+                                             for ch, s in zip(chars, syls)):
+        return False
+    # Cùng khuôn reconcile đang xét là cố phiên âm; reconcile sẽ tự sửa nếu bảng tra được.
+    return not (all(s[:1].isupper() for s in syls)
+                and (len(syls) == len(chars) or term_type == "person"))
+
+
 def reconcile(zh: str | None, vi: str | None, term_type: str | None) -> str | None:
     """Sửa phiên âm LLM theo bảng tra. Trả về vi (giữ nguyên hoặc đã sửa).
 

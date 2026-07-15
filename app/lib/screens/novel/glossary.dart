@@ -44,6 +44,13 @@ class _GlossaryScreenState extends ConsumerState<GlossaryScreen> {
           : AppBar(
               title: const Text('Thuật ngữ'),
               actions: [
+                // sửa novels cần policy admin_write_novels → chỉ hiện cho admin
+                if (ref.watch(isAdminProvider).value ?? false)
+                  IconButton(
+                    tooltip: 'Văn phong dịch (style bible)',
+                    icon: const Icon(Icons.brush_outlined),
+                    onPressed: _showStyleDialog,
+                  ),
                 IconButton(
                   tooltip: 'Vá chương cũ bằng cặp "bản dịch sai → đúng"',
                   icon: const Icon(Icons.healing_outlined),
@@ -352,6 +359,95 @@ class _GlossaryScreenState extends ConsumerState<GlossaryScreen> {
         ],
       ),
     );
+  }
+
+  /// Form sửa style bible (novels.translation_style) — giọng dịch của MỌI chương sau.
+  /// Worker sinh tự động từ chương đầu được dịch; user sửa ở đây khi nó đoán sai.
+  Future<void> _showStyleDialog() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final Rec novel;
+    try {
+      novel = await ref.read(novelProvider(novelId).future);
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Lỗi tải truyện: $e')));
+      return;
+    }
+    if (!mounted) return;
+    final raw = novel['translation_style'];
+    final style = raw is Map ? raw : const {};
+    String? pov = const ['ngôi ba', 'ngôi nhất'].contains(style['pov']) ? style['pov'] : null;
+    String? hanViet = const ['đậm', 'vừa', 'nhạt'].contains(style['han_viet']) ? style['han_viet'] : null;
+    final setting = TextEditingController(text: style['setting'] is String ? style['setting'] : '');
+    final tone = TextEditingController(text: style['tone'] is String ? style['tone'] : '');
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Văn phong dịch'),
+        content: StatefulBuilder(builder: (_, setState) {
+          return Column(mainAxisSize: MainAxisSize.min, children: [
+            DropdownButtonFormField<String>(
+              initialValue: pov,
+              decoration: const InputDecoration(labelText: 'Ngôi kể'),
+              items: const [
+                DropdownMenuItem(value: 'ngôi ba', child: Text('Ngôi ba')),
+                DropdownMenuItem(value: 'ngôi nhất', child: Text('Ngôi nhất')),
+              ],
+              onChanged: (v) => setState(() => pov = v),
+            ),
+            TextField(
+              controller: setting,
+              maxLength: 80, // contract worker _clean_style: mỗi giá trị ≤80 ký tự
+              decoration: const InputDecoration(
+                  labelText: 'Bối cảnh', counterText: '',
+                  hintText: 'tu tiên cổ đại / đô thị hiện đại / võng du...'),
+            ),
+            DropdownButtonFormField<String>(
+              initialValue: hanViet,
+              decoration: const InputDecoration(labelText: 'Mức Hán-Việt'),
+              items: const [
+                DropdownMenuItem(value: 'đậm', child: Text('Đậm — tu tiên/cổ trang')),
+                DropdownMenuItem(value: 'vừa', child: Text('Vừa')),
+                DropdownMenuItem(value: 'nhạt', child: Text('Nhạt — đô thị hiện đại')),
+              ],
+              onChanged: (v) => setState(() => hanViet = v),
+            ),
+            TextField(
+              controller: tone,
+              maxLength: 80,
+              decoration: const InputDecoration(
+                  labelText: 'Nhịp văn', counterText: '',
+                  hintText: 'gọn / hài / lạnh / trang trọng / khẩu ngữ...'),
+            ),
+            const SizedBox(height: 10),
+            Text('Để trống tất cả rồi Lưu → xoá hồ sơ, worker tự sinh lại từ chương 1.',
+                style: Theme.of(ctx).textTheme.labelSmall?.copyWith(
+                    color: Theme.of(ctx).colorScheme.onSurfaceVariant)),
+          ]);
+        }),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Huỷ')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Lưu')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    // lưu tay thì BỎ src_chapter — còn giữ là housekeeping tưởng bản máy sinh
+    // từ chương giữa và tái tạo đè mất (docs/ke-hoach-dich-chong-troi.md G4)
+    final next = <String, dynamic>{
+      'pov': ?pov,
+      if (setting.text.trim().isNotEmpty) 'setting': setting.text.trim(),
+      'han_viet': ?hanViet,
+      if (tone.text.trim().isNotEmpty) 'tone': tone.text.trim(),
+    };
+    try {
+      await updateNovelFields(novelId, {'translation_style': next.isEmpty ? null : next});
+      if (mounted) ref.invalidate(novelProvider(novelId));
+      messenger.showSnackBar(SnackBar(content: Text(next.isEmpty
+          ? 'Đã xoá hồ sơ văn phong — worker sẽ sinh lại từ chương 1'
+          : 'Đã lưu văn phong — áp dụng cho các chương dịch mới')));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Lỗi: $e')));
+    }
   }
 
   void _showTermDialog(BuildContext context, {Rec? term, required VoidCallback onDone}) {

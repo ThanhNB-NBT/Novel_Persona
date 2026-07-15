@@ -6,7 +6,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 os.environ.setdefault("SUPABASE_URL", "https://example.supabase.co")
 os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "test")
 
-from novelworker.translator.hanviet import han_viet, reconcile
+from novelworker.translator.hanviet import han_viet, reconcile, transliteration_suspect
 
 
 def main() -> None:
@@ -44,6 +44,9 @@ def main() -> None:
     assert reconcile("副官", "副官", "person") == "Phó Quan"
     # chữ đa âm 宁: ưu tiên "ninh" trong tên riêng (override _PREFERRED)
     assert reconcile("宁飞", "Nào Đó", "person") == "Ninh Phi"
+    assert not transliteration_suspect("安娜", "Anna", "person")
+    assert not transliteration_suspect("罗森", "La Sâm", "person")
+    assert transliteration_suspect("白衣少女", "cô gái áo trắng", "person")
 
 
 if __name__ == "__main__":

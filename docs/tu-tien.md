@@ -129,8 +129,10 @@ Hậu Phi Thăng, `_SkyPainter` nhận `tienTier` (0..6; -1 = chưa phi thăng) 
 cõi tiên** sau đầu (`_drawTienCorona`): đĩa vàng ấm + tia sáng xoay, càng lên bậc càng
 nhiều tia + rực. Hero đổi tên cảnh giới → tên bậc tiên, đạo hiệu → `tienDaoTitles`, ẩn pill
 tầng; nút đột phá đổi thành "Độ Thiên Kiếp · <bậc kế>", tới Đạo Tổ thì khoá.
-`_SkyPainter` cũng nhận `elements` (bộ hệ linh căn) → `_drawElementWisps`: mỗi hệ một đốm
-màu (`_elemAura`) bay vòng quanh eo — tạp 5 hệ = 5 dải ngũ sắc, đơn hệ = 1 dải thuần.
+`_SkyPainter` cũng nhận `elements` (bộ hệ linh căn) → `_drawElementWisps`: mỗi hệ là một
+dòng 6 hạt có lõi sáng, bay lệch pha quanh đan điền — tạp 5 hệ = 5 dòng ngũ sắc, đơn hệ =
+1 dòng thuần. Hạt dùng thời gian tích luỹ cùng các tần số vô tỉ (tỉ lệ vàng, √2, √3), nên
+chuyển động không quay lại một quỹ đạo đóng trong vòng idle 4 giây và cũng không bị giật lúc loop.
 **Trận pháp hào quang** (068): `_SkyPainter.haloImg` = `assets/cult_halo/{halo_worn}.webp`
 (decode trong `_AnimatedCultivator._loadIcons`) → vẽ vòng LỚN gần kín khung, xoay chậm +
 thở nhẹ, ở lớp SÂU NHẤT (sau cả nhân vật). Picker `_HaloSheet` (nút góc trái hero khi đã

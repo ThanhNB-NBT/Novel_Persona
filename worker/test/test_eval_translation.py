@@ -1,6 +1,28 @@
 from eval_translation import (
     _dialogue_self_minh, _self_reference_omissions, fidelity_issues, lint, narrator_terms,
+    translate_fresh,
 )
+
+
+def test_translate_fresh_rotates_provider_slots(monkeypatch):
+    import eval_translation
+    from novelworker.translator import providers
+
+    slots = []
+    monkeypatch.setattr(providers, "build_chain", lambda slot: slots.append(slot) or object())
+    monkeypatch.setattr(
+        eval_translation, "_translate_one",
+        lambda row, llm, carry: {**row, "content_vi": "bản mới"},
+    )
+    rows = [
+        {"novel_id": 1, "chapter_index": index, "content_zh": "原文", "content_vi": "bản cũ"}
+        for index in range(1, 4)
+    ]
+
+    translated = translate_fresh(rows)
+
+    assert slots == [0, 1, 2]
+    assert all(row["content_vi"] == "bản mới" for row in translated)
 
 
 def test_patch_replacements_include_old_vietnamese_and_han_residue():
@@ -29,11 +51,31 @@ def test_self_reference_no_false_block():
     assert _self_reference_omissions("在下告辞。", "Ta xin cáo từ.")  # tự xưng thật vẫn bắt
 
 
-def test_quality_fuse_does_not_block_omission():
-    """Omission chỉ dùng để đánh giá prompt; production không sửa lại bản dịch hậu kỳ."""
-    from novelworker.translator.worker import _quality_fuse
-    res = type("R", (), {"text": "Hắn không đồng ý. " * 30, "model": "test"})()
-    _quality_fuse("老夫不答应。" * 30)(res)  # không raise
+def test_parse_corpus_spec():
+    from build_translation_corpus import CorpusSpec, _parse_spec
+    assert _parse_spec("1380:50:20") == CorpusSpec(1380, 50, 20)
+
+
+def test_eval_html_contains_comparison_and_escapes_text(tmp_path):
+    from eval_translation import _write_html
+    # chương có trong file mẫu chuẩn (n1380 c52) → hiện cột "Bản mẫu chuẩn"; chương khác thì không
+    rows = [{"novel_id": 1380, "chapter_index": 52, "content_zh": "<原文>", "content_vi": "Bản chấm"},
+            {"novel_id": 7, "chapter_index": 1, "content_zh": "原文", "content_vi": "Bản thường"}]
+    report = [{"chapter": "novel 1380 ch.52", "problems": ["lỗi & thử"]},
+              {"chapter": "novel 7 ch.1", "problems": []}]
+    _write_html(tmp_path, rows, report)
+    page = (tmp_path / "index.html").read_text(encoding="utf-8")
+    assert "Bản dịch hiện tại" in page and "Bản validation mới" not in page
+    assert page.count("Bản mẫu chuẩn") == 1 and "Tiểu Nhuận Phát" in page
+    assert "&lt;原文&gt;" in page and "lỗi &amp; thử" in page
+
+
+def test_sample_files_sorts_chapters_numerically(tmp_path):
+    from eval_translation import sample_files
+    payload = "--- GỐC (zh) ---\n原文\n\n--- DỊCH (vi) ---\nBản dịch\n"
+    for chapter in (10, 2, 1):
+        (tmp_path / f"n7_c{chapter}.txt").write_text(payload, encoding="utf-8")
+    assert [row["chapter_index"] for row in sample_files(tmp_path, 3)] == [1, 2, 10]
 
 
 def test_clean_style_drops_junk():
@@ -57,46 +99,6 @@ def test_benchmark_timeout_override_does_not_change_provider_default(monkeypatch
     p = providers.TranslationProvider("https://example.test", "key", "model", timeout_sec=45)
     assert p.timeout_sec == 45 and seen[-1]["timeout"] == 45
     assert p.with_model("other").timeout_sec == 45
-
-
-def test_call_stats_count_real_retry_and_rejected_tokens(monkeypatch):
-    """Mỗi HTTP retry và token của output bị fuse loại đều phải hiện trong log."""
-    from novelworker import db
-    from novelworker.translator import providers as P
-    health = []
-    monkeypatch.setattr(db, "record_model_call", lambda model, ms, ok, error=None: health.append(ok))
-    monkeypatch.setattr(P, "_wait_for_rate_slot", lambda _key: None)
-    monkeypatch.setattr(P.TranslationProvider.complete.retry, "wait", lambda _state: 0)
-
-    class Completions:
-        calls = 0
-        def create(self, **_kwargs):
-            self.calls += 1
-            text = "bị fuse" if self.calls == 1 else "đạt"
-            return type("Resp", (), {
-                "usage": type("Usage", (), {"prompt_tokens": 10, "completion_tokens": 5})(),
-                "choices": [type("Choice", (), {
-                    "finish_reason": "stop",
-                    "message": type("Message", (), {"content": text})(),
-                })()],
-            })()
-
-    provider = object.__new__(P.TranslationProvider)
-    provider.model, provider.provider, provider.api_key = "m", "nvidia", "key"
-    provider.client = type("Client", (), {
-        "chat": type("Chat", (), {"completions": Completions()})()
-    })()
-
-    def validate(result):
-        if result.text == "bị fuse":
-            raise RuntimeError("output kém")
-
-    P.reset_call_stats()
-    assert provider.complete("s", "u", validate=validate).text == "đạt"
-    assert P.get_call_stats() == {
-        "calls": 2, "failures": 1, "prompt_tokens": 20, "completion_tokens": 10,
-    }
-    assert health == [False, True]
 
 
 def test_audit_reason_only_blocks_structural_errors():
@@ -221,26 +223,10 @@ def test_han_residue_single_char():
     assert any("Hán sót lẻ" in p for p in lint("门外传来。", "Bên ngoài cửa truyền来 tiếng ồn."))
 
 
-def test_quality_fuse_blocks_any_han_residue():
+def test_check_translation_reports_han_residue():
     from novelworker.translator.worker import check_translation
     problem = check_translation("衣服写着囚字。", 'Áo viết chữ "囚".')
     assert "1 ký tự Hán" in problem and "mẫu '囚'" in problem
-
-
-def test_quality_fuse_allows_sparse_han_for_postprocess_but_blocks_raw_chinese():
-    from novelworker.translator.worker import _quality_fuse
-
-    sparse = "Đoạn dịch tiếng Việt " * 80 + "垂天地玄黄宇宙洪荒"
-    res = type("R", (), {"text": sparse, "model": "test"})()
-    _quality_fuse("原文" * 400)(res)  # 9 chữ khác nhau nhưng đủ thưa để TSV sửa.
-
-    raw = type("R", (), {"text": "天地玄黄宇宙洪荒日月盈昃辰宿列张" * 20,
-                          "model": "test"})()
-    try:
-        _quality_fuse("原文" * 100)(raw)
-        raise AssertionError("Raw Chinese phải bị quality fuse chặn")
-    except RuntimeError as error:
-        assert "ký tự Hán" in str(error)
 
 
 def test_register_line_uses_source_pov():

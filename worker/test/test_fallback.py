@@ -20,17 +20,11 @@ class Fake:
         self.model = name
         self.text = text
 
-    def complete(self, system, user, temperature=0.3, max_tokens=8192, validate=None):
+    def complete(self, system, user, temperature=0.3, max_tokens=8192):
         if self.text is None:
             calls.append((self.model, False))
             raise RuntimeError(f"{self.model} lỗi")
         res = LLMResult(text=self.text, model=self.model, prompt_tokens=1, completion_tokens=1)
-        try:
-            if validate:
-                validate(res)
-        except Exception:
-            calls.append((self.model, False))
-            raise
         calls.append((self.model, True))
         return res
 
@@ -46,17 +40,6 @@ def main() -> None:
     calls.clear()
     chain = FallbackChain([("a", Fake("a", None)), ("b", Fake("b", "cứu"))])
     assert chain.complete("s", "u").model == "b"
-    assert calls == [("a", False), ("b", True)]
-
-    # validate chê output (HTTP 200 nhưng kém) → cũng chuyển provider kế
-    calls.clear()
-    chain = FallbackChain([("a", Fake("a", "哈哈哈哈")), ("b", Fake("b", "bản dịch sạch"))])
-
-    def fuse(res):
-        if "哈" in res.text:
-            raise RuntimeError("còn tiếng Trung")
-
-    assert chain.complete("s", "u", validate=fuse).model == "b"
     assert calls == [("a", False), ("b", True)]
 
     # cả chain fail → raise lỗi cuối cùng

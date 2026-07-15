@@ -5,6 +5,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 os.environ.setdefault("SUPABASE_URL", "https://example.supabase.co")
 os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "test")
 
+from novelworker import db
 from novelworker.db import heal_glossary_terms
 
 
@@ -35,6 +36,41 @@ def main() -> None:
     weird = {"id": 5, "novel_id": 9, "term_zh": None, "correct_vi": "Như Nhau", "wrong_vi": "Như Nhau"}
     other = {"id": 6, "novel_id": 9, "term_zh": "某", "correct_vi": "Như Nhau X", "wrong_vi": None}
     assert heal_glossary_terms([weird, other]) == []
+
+    # Chỉ patch conflict_vi của row cũ; correct_vi/approved không có trong payload update.
+    updates = []
+    filters = []
+
+    class Query:
+        def update(self, value):
+            updates.append(value)
+            return self
+
+        def eq(self, *args):
+            filters.append(("eq", *args))
+            return self
+
+        def is_(self, *args):
+            filters.append(("is_", *args))
+            return self
+
+        def neq(self, *args):
+            filters.append(("neq", *args))
+            return self
+
+        def execute(self):
+            return self
+
+    old_sb = db.sb
+    try:
+        db.sb = lambda: type("SB", (), {"table": lambda *_: Query()})()
+        db.record_glossary_conflicts(7, [{"term_zh": "林松", "candidate_vi": "Lâm Tồng",
+                                         "conflict_vi": "Lâm Tồng (c105)"}])
+    finally:
+        db.sb = old_sb
+    assert updates == [{"conflict_vi": "Lâm Tồng (c105)"}]
+    assert filters == [("eq", "novel_id", 7), ("eq", "term_zh", "林松"),
+                       ("is_", "conflict_vi", "null"), ("neq", "correct_vi", "Lâm Tồng")]
 
     print("test_glossary_heal OK")
 

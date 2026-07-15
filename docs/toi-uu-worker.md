@@ -1006,3 +1006,30 @@ Sau khi soi 2 lượt A/B, chốt lại với user: **cơ chế nhớ quan hệ 
 Giữ nguyên (không đụng): omission gate + `_fix_omissions`, register/soft-style/revise, prompt rules, style bible (Q1, per-novel — khác memory quan hệ), `prev_summary/prev_tail` nối mạch chương, quality fuse, name-learning pass, metric call logging (§14.11).
 
 Kiểm chứng: `py_compile` 3 file sạch; quét không còn tham chiếu chết; `37 passed` (`worker/test`). **Đụng đường dịch production** → cần user smoke test 1 chương thật (queue dịch hoặc `eval_translation.py --fresh 1`) rồi đọc output trước khi deploy VPS. Các mục §14.12.x là lịch sử điều tra, giữ lại làm ghi chép; kết luận cuối là mục này.
+
+## 14.14. Corpus đa truyện + constraint production có thể kiểm chứng (2026-07-15)
+
+Thay đổi lần này giữ thiết kế within-chunk ở §14.13, không khôi phục relationship memory hay thêm một pass LLM viết lại toàn chương:
+
+- `prompts.SELF_REFERENCE_RULES` là nguồn duy nhất cho bản đồ tự xưng trong prompt, evaluator và quality fuse. Các mẫu có loại trừ từ ghép (`下面`, `老夫老妻`) để tránh retry oan.
+- Mỗi đoạn không rỗng được gắn `[[Pxxx]]` trước khi gửi model. Output phải trả đủ ID đúng một lần và đúng thứ tự; worker kiểm tra rồi bóc ID trước khi lưu. Như vậy nuốt/gộp một đoạn không còn lọt qua ngưỡng cũ “mất trên 70% mới chặn”.
+- Lượt dịch chapter dùng `temperature=0.1`; style/name analyzer vẫn giữ cấu hình riêng. `SUMMARY:` và `GLOSSARY_JSON:` giữ nguyên contract.
+- `build_translation_corpus.py` dựng corpus local tái lập được từ DB và nguồn crawl, không update DB. Corpus mặc định có 65 chương: n1380 c50–69 (20), n293 c1–15, n1223 c1–15, n1281 c1–15. Thư mục corpus bị gitignore vì chứa toàn văn truyện.
+
+Baseline bản dịch đang lưu trên 65 chương: **65 cảnh báo máy**, trong đó có 4 lỗi mất dấu vết tự xưng (`晚辈` ×2, `老子` ×2); phần còn lại chủ yếu là văn convert, lặp đại từ, “chẳng” dày và dấu cảm thán. Baseline này dùng để so prompt/model sau thay đổi, không tự động sửa ngược các chương cũ.
+
+Lệnh tái tạo và lint local:
+
+```powershell
+cd E:\Novel_Project\worker
+python build_translation_corpus.py --fetch-missing
+python eval_translation.py --existing 65 --from-dir corpus_translation --out eval_out_corpus
+```
+
+## 14.15. Glossary rescan và báo cáo HTML (2026-07-15)
+
+- Live DB novel 1380: 270 term, đã dịch 122 chương nhưng `twopass_active=false`, `twopass_low_streak=3`; term tự động cuối dừng khoảng chương 45. Nguyên nhân là adaptive name analyzer tắt vĩnh viễn sau ba chương ít tên mới.
+- Worker nay phân tích tên/term trước khi dịch mọi chunk của mọi chương. `_merge_names` chỉ lưu term chưa tồn tại và prompt chỉ inject term xuất hiện trong chunk, nên cập nhật liên tục nhưng vẫn chọn lọc. Hai cột adaptive two-pass cũ được để nguyên trong DB nhưng không còn điều khiển hot path.
+- `eval_translation.py` sắp file theo chapter number, giữ style/glossary/summary/tail giữa các chương cùng truyện, và luôn sinh `index.html` tự chứa với bộ lọc sạch/lỗi, tìm kiếm, cùng cột nguồn/bản cũ/bản validation.
+- Rate limiter production/eval dùng `NVIDIA_RPM_LIMIT`; mặc định đã là 30 request/phút trên mỗi key.
+- Validation local 65 chương sinh `worker/eval_out_corpus_html/index.html`: 65 cảnh báo. Fresh 65 chưa chạy vì cần xác nhận riêng việc gửi toàn bộ corpus ra NVIDIA.

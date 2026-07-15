@@ -9,7 +9,7 @@ import time
 
 from .. import db
 from ..config import settings
-from . import hanviet, prompts
+from . import hanviet, lint, prompts
 from . import providers
 from .providers import build_chain
 
@@ -62,6 +62,33 @@ def _is_unique_violation(exc: Exception) -> bool:
     return getattr(exc, "code", None) == "23505" or "duplicate key" in str(exc).lower()
 
 
+def _glossary_conflicts(terms: list[dict], detected: list[dict], chapter_index: int) -> list[dict]:
+    """Lộ cách dịch khác của term đã biết để user duyệt; không đổi bản đang dùng.
+    So SAU hanviet.reconcile: phiên âm bừa mà bảng tra tự sửa được không phải conflict."""
+    known = {t["term_zh"]: t for t in terms if t.get("term_zh")}
+    conflicts: list[dict] = []
+    seen: set[str] = set()
+    for term in detected:
+        if not isinstance(term, dict):
+            continue
+        zh, vi = term.get("zh"), term.get("vi")
+        if not isinstance(zh, str) or not isinstance(vi, str):
+            continue
+        zh, vi = zh.strip(), vi.strip()
+        if zh in seen or not vi or not _valid_suggested_zh(zh):
+            continue
+        old = known.get(zh)
+        if not old or old.get("conflict_vi"):
+            continue
+        vi = hanviet.reconcile(zh, vi, term.get("type")) or vi
+        if vi == (old.get("correct_vi") or "").strip():
+            continue
+        seen.add(zh)
+        conflicts.append({"term_zh": zh, "candidate_vi": vi,
+                          "conflict_vi": f"{vi} (c{chapter_index})"})
+    return conflicts
+
+
 def _keep_job_lock(job_id: int, worker_id: str, stop: threading.Event, interval: float) -> None:
     while not stop.wait(interval):
         try:
@@ -72,6 +99,7 @@ def _keep_job_lock(job_id: int, worker_id: str, stop: threading.Event, interval:
 
 HAN_CHARS = re.compile(r"[一-鿿㐀-䶿]")
 HAN_RUNS = re.compile(r"[一-鿿㐀-䶿]+")
+CYRILLIC_CHARS = re.compile(r"[\u0400-\u04ff]")
 _ITEM_CONTEXT = re.compile(
     r"\b(?:vật phẩm|nguyên liệu|đạo cụ|đan dược|linh dược|bình|lọ|thu thập|"
     r"luyện chế|phẩm cấp|kho đồ|túi đồ|trang bị|nhận được|phần thưởng|"
@@ -106,6 +134,10 @@ def check_translation(content_zh: str, content_vi: str) -> str | None:
         sample = "".join(dict.fromkeys(han_chars))[:12]
         return (f"còn {len(han_chars)} ký tự Hán, "
                 f"{len(set(han_chars))} chữ khác nhau (mẫu '{sample}')")
+    cyrillic = CYRILLIC_CHARS.findall(content_vi)
+    if cyrillic:
+        sample = "".join(dict.fromkeys(cyrillic))[:12]
+        return f"còn ký tự Cyrillic/tiếng Nga (mẫu '{sample}')"
     # Chỉ chặn bản cụt rõ ràng; tỷ lệ zh→vi dao động mạnh theo thể loại/câu thoại.
     if content_zh:
         ratio_min = 0.6 if len(content_zh) > 300 else 0.3
@@ -126,6 +158,82 @@ def check_translation(content_zh: str, content_vi: str) -> str | None:
 
 
 _ZH_DIALOGUE_RE = re.compile(r'“[^”]*”|「[^」]*」|"[^"\n]*"')
+
+# --- Vá văn phong MÁY MÓC (khôi phục 2026-07-15 sau đợt gỡ validate cứng) --------
+# Chỉ giữ các phép thay AN TOÀN thuần string (0 LLM call, không retry, không chặn gì):
+# đây là hậu xử lý, không phải validator. LLM revise/fuse retry vẫn bỏ như user chốt.
+
+# Thoại nằm trong "..." hoặc “...” — vá đại từ CHỈ ngoài thoại.
+# Giới hạn độ dài + không ăn qua xuống dòng để câu kể thiếu ngoặc đóng không bị nuốt oan.
+_DIALOGUE_RE = re.compile(
+    r'"[^"\n]{1,500}"|“[^”\n]{1,500}”|^[ \t]*[—–-]\s+[^\n]{1,500}', re.M)
+
+# "chẳng" → "không", GIỮ các cụm mà thay là đổi nghĩa/gượng:
+# chẳng lẽ, chẳng qua, chẳng hạn, chẳng những, chẳng mấy chốc, chẳng trách (=thảo nào),
+# chẳng thà (=thà), cực chẳng đã, chẳng chóng thì chầy, "ai mà chẳng" (tu từ).
+_CHANG_RE = re.compile(
+    r"(?<!cực )(?<!mà )\b[Cc]hẳng\b"
+    r"(?!\s+(?:lẽ|qua|hạn|những|mấy chốc|trách|thà|chóng)\b)")
+# 不禁/不由得 dịch phẳng "không khỏi" — lược khi đứng trước động từ; giữ nghĩa thật
+# "chữa/trị/vẫn/còn/mãi ... không khỏi" và "không khỏi được/bệnh/hẳn/lo(?)".
+_KHONG_KHOI_RE = re.compile(
+    r"(?<!chữa )(?<!trị )(?<!mãi )(?<!vẫn )(?<!còn )(?<!chưa )"
+    r"\b([Kk])hông khỏi\s+(?!được\b|bệnh\b|hẳn\b)([a-zà-ỹ])")
+# 总感觉 dịch phẳng "tổng cảm thấy/giác" → "cứ cảm thấy/giác"
+_TONG_CAM_RE = re.compile(r"\b([Tt])ổng cảm (thấy|giác)\b")
+# 实际上 dịch phẳng "trên thực tế" → "thật ra" (giữ hoa/thường theo chữ đầu)
+_THUC_TE_RE = re.compile(r"\b([Tt])rên thực tế\b")
+# "V + 一下 → V một cái": các động từ mà bỏ 'một cái' là câu vẫn nguyên nghĩa thì lược;
+# "cười một cái" → "bật cười". Động từ khác (nhìn/liếc/đá...) không chắc → để lint nhắc.
+_MOT_CAI_DROP_RE = re.compile(r"\b(gật đầu|lắc đầu|thở dài|nhún vai)\s+một cái\b")
+_CUOI_MOT_CAI_RE = re.compile(r"\b([Cc])ười\s+một cái\b")
+
+
+def _fix_soft_style(vi: str) -> str:
+    """Các phép thay convertese an toàn tuyệt đối — vá máy, không phó mặc LLM."""
+    vi = _CHANG_RE.sub(lambda m: "Không" if m.group(0)[0] == "C" else "không", vi)
+    vi = _KHONG_KHOI_RE.sub(
+        lambda m: m.group(2).upper() if m.group(1) == "K" else m.group(2), vi)
+    vi = _TONG_CAM_RE.sub(
+        lambda m: ("Cứ" if m.group(1) == "T" else "cứ") + " cảm " + m.group(2), vi)
+    vi = _THUC_TE_RE.sub(lambda m: "Thật ra" if m.group(1) == "T" else "thật ra", vi)
+    vi = _MOT_CAI_DROP_RE.sub(r"\1", vi)
+    return _CUOI_MOT_CAI_RE.sub(
+        lambda m: "Bật cười" if m.group(1) == "C" else "bật cười", vi)
+
+
+# Đại từ kể sai có thể vá MÁY MÓC an toàn (ngôi ba rõ ràng, giới tính rõ ràng).
+# "tôi"/"cô" trần không vá được (không rõ thay bằng gì) → để lint nhắc, người xử.
+_REG_FIX = [
+    (re.compile(r"\b[Cc]ô (?:ta|ấy)\b"), "nàng"),
+    (re.compile(r"\b[Aa]nh (?!trai\b)(?:ta|ấy)\b"), "hắn"),
+    (re.compile(r"\b[Cc]ậu ta\b"), "hắn"),
+    (re.compile(r"\b[Ôô]ng (?:ta|ấy)\b"), "lão"),
+]
+# "Cô/Anh" TRẦN chỉ vá khi mở đầu câu kể + chữ thường theo sau (chắc chắn là đại từ);
+# giữa câu để yên — "cô" còn là danh từ (cô nương/cô gái), "anh" còn là anh hùng/tinh anh.
+_REG_FIX_HEAD = [
+    (re.compile(r"(^|[.!?…]\s+)Cô\s+(?=[a-zà-ỹ])(?!ta\b|ấy\b|nương|gái|em\b|đơn|độc|bé\b)", re.M), r"\1Nàng "),
+    (re.compile(r"(^|[.!?…]\s+)Anh\s+(?=[a-zà-ỹ])(?!ta\b|ấy\b|trai|em\b|hùng|tài|kiệt|linh|hào|dũng)", re.M), r"\1Hắn "),
+]
+
+
+def _fix_register(vi: str) -> str:
+    """Vá đại từ kể sai phổ biến NGOÀI ngoặc kép (model quen 'cô ấy/anh ta' với truyện
+    nữ chính/hiện đại — vá máy móc; thoại giữ nguyên vì xưng hô thoại là việc của prompt)."""
+    def fix_seg(seg: str) -> str:
+        for pat, rep in _REG_FIX:
+            seg = pat.sub(lambda m, r=rep: r.capitalize() if m.group(0)[0].isupper() else r, seg)
+        for pat, rep in _REG_FIX_HEAD:
+            seg = pat.sub(rep, seg)
+        return seg
+    out, last = [], 0
+    for m in _DIALOGUE_RE.finditer(vi):
+        out.append(fix_seg(vi[last:m.start()]))
+        out.append(m.group(0))
+        last = m.end()
+    out.append(fix_seg(vi[last:]))
+    return "".join(out)
 
 
 def _is_first_person(zh: str) -> bool:
@@ -148,24 +256,6 @@ def _repairable_han_residue(content_vi: str) -> bool:
         return True
     return (len(set(chars)) <= 8
             or (len(chars) <= 20 and len(chars) / max(len(content_vi), 1) <= 0.02))
-
-
-def _quality_fuse(chunk: str):
-    """Validator chạy TRONG FallbackChain — raise khi output kém để tự đổi provider.
-    Đo trên phần THÂN bản dịch (đã bỏ GLOSSARY_JSON/SUMMARY) — đo text thô sẽ lệch:
-    tên Trung trong GLOSSARY_JSON tính nhầm vào tỷ lệ Hán, JSON dài tính nhầm vào độ phình."""
-    def check(res) -> None:
-        content_vi = _strip_meta(res.text)
-        # Vài chữ Hán sót được sửa đúng dòng ngay sau complete; loại cả bản ở đây gây
-        # mất chương chỉ vì nhãn như 囚/死. Đếm chữ KHÁC NHAU chứ không đếm lượt:
-        # một biệt danh sót lặp 12 lần (二娃子, n1043 kẹt 6/6 lượt) vẫn chỉ là 3 chữ,
-        # _fix_han_residue sửa được hết. Bản trả nguyên văn Hán vẫn bị fuse chặn.
-        checked_vi = (HAN_CHARS.sub("x", content_vi)
-                      if _repairable_han_residue(content_vi) else content_vi)
-        problem = check_translation(chunk, checked_vi)
-        if problem:
-            raise RuntimeError(f"Bản dịch {problem} (model {res.model})")
-    return check
 
 
 def scan_bad_chapters(since: str | None = None) -> list[tuple[dict, str]]:
@@ -220,6 +310,17 @@ def _tail(text: str | None, limit: int = 350) -> str | None:
     return t.strip() or None
 
 
+TAIL_LINT_MAX = 2  # bẩn hơn → bỏ tail chỉ dùng summary, mất chút mượt còn hơn lệnh model bắt chước văn bẩn
+
+
+def _gated_tail(previous: dict) -> str | None:
+    score = previous.get("lint_score")
+    if score is None and previous.get("content_vi"):
+        # chương cũ chưa có score (hoặc update score từng lỗi) → đo tại chỗ, regex rẻ, 0 query
+        score = lint.lint_score(None, previous["content_vi"])
+    return _tail(previous.get("content_vi")) if score is not None and score <= TAIL_LINT_MAX else None
+
+
 # khớp dòng tiêu đề theo khuôn «TIÊU ĐỀ: ...» prompt yêu cầu; nhận cả nhãn cũ model hay tự chế,
 # kể cả khi model bọc trong «»/quotes (đã gặp thật: «TIÊU ĐỀ: Thế giới game bỗng hiện»)
 TITLE_LINE = re.compile(
@@ -261,13 +362,55 @@ def _pop_summary(text: str) -> tuple[str, str | None]:
     return text[:idx].rstrip(), summary or None
 
 
+def _valid_summary(summary: str | None) -> str | None:
+    """Giữ summary ngắn, thuần Việt để không khuếch đại lỗi sang chương sau."""
+    summary = (summary or "").strip()
+    if not summary or HAN_CHARS.search(summary):
+        return None
+    if len(summary) <= 400:
+        return summary
+    ends = [m.end() for m in re.finditer(r"[.!?…](?:[\"'”’)]*)", summary[:400])]
+    return summary[:ends[-1]].strip() if ends else summary[:400].strip()
+
+
+def _valid_synopsis(synopsis: str | None) -> str | None:
+    """Synopsis là context toàn truyện nên bỏ hẳn nếu model để sót Hán tự."""
+    synopsis = (synopsis or "").strip()
+    # model hay dán nhãn/markdown dù prompt cấm — bóc máy cho chắc
+    synopsis = re.sub(r"^(?:SYNOPSIS|Bối cảnh(?: truyện)?(?: đến nay)?)\s*[:：]\s*", "",
+                      synopsis, flags=re.I).replace("**", "").strip()
+    if not synopsis or HAN_CHARS.search(synopsis):
+        return None
+    return synopsis[:600].strip()
+
+
+def _synopsis_ready(rows: list[dict], chapter_index: int) -> bool:
+    """Chỉ nén khi đủ 10 summary LIỀN NHAU kết thúc tại chương hiện tại —
+    dải thủng (dịch nhảy cóc, summary bị loại vì sót Hán) thì chờ mốc %10 sau."""
+    return {r.get("chapter_index") for r in rows} == set(
+        range(chapter_index - 9, chapter_index + 1))
+
+
+def _build_synopsis_input(synopsis: str | None, summaries: list[str],
+                          persons: list[str] | None = None) -> str:
+    """Input thuần để nén lại nhiều summary, không nối đuôi một lỗi đơn lẻ."""
+    old = synopsis or "(chưa có)"
+    recent = "\n".join(f"- {summary}" for summary in reversed(summaries) if summary)
+    out = f"Bối cảnh cũ:\n{old}\n\n10 tóm tắt gần nhất:\n{recent}"
+    if persons:
+        # neo tên nhân vật theo glossary để bản nén không tự chế biến thể
+        out += "\n\nTên nhân vật chuẩn (giữ nguyên): " + ", ".join(persons)
+    return out
+
+
+def _should_keep_old_summary(has_newer_done: bool, old_summary: str | None) -> bool:
+    return has_newer_done and bool(old_summary)
+
+
 # Trần chunk theo TRẦN OUTPUT chứ không phải context: bản Việt ~3.4x số ký tự Hán.
 # 6k từng sát max_tokens 8192 (đã gặp "Output bị cắt" trên model fallback) → 5k cho có biên.
+# (3k + trần 12 đoạn là di sản thời marker [[Pxxx]] — đã gỡ cùng validate cứng 2026-07-15.)
 CHUNK_LIMIT = 5_000
-
-# 2-pass thích ứng: chốt tên riêng trước khi dịch ở arc mở đầu, tự tắt khi hết tên mới.
-NEW_NAME_LOW = 2        # chương ra ≤ ngần này tên mới coi là "ít"
-LOW_STREAK_LIMIT = 3    # đủ ngần này chương "ít" liên tiếp → tắt 2-pass cho truyện
 
 
 def _valid_suggested_zh(value) -> bool:
@@ -278,6 +421,29 @@ def _valid_suggested_zh(value) -> bool:
     return bool(value) and (bool(HAN_CHARS.search(value)) or len(value) >= 2)
 
 
+_COMMON_SINGLE_HAN = set("你我他她它们的了是在有和就都不要这那与之其此一")
+
+
+def _prepare_suggested_term(term: dict) -> bool:
+    """Lọc rác glossary và chuẩn hoá tên trước khi dùng trong RAM/ghi DB."""
+    zh, vi = term.get("zh"), term.get("vi")
+    if not _valid_suggested_zh(zh) or not isinstance(vi, str) or not vi.strip():
+        return False
+    zh, vi = zh.strip(), vi.strip()
+    term_type = term.get("type") if term.get("type") in ("person", "place", "sect", "item", "skill") else "other"
+    if len(zh) == 1 and zh in _COMMON_SINGLE_HAN and term_type != "person":
+        return False
+    hv = hanviet.han_viet(zh)
+    if (term_type == "other" and not any(w[:1].isupper() for w in vi.split()) and hv
+            and not set(hv.lower().split()).intersection(vi.lower().split())):
+        return False
+    vi = hanviet.reconcile(zh, vi, term_type) or vi
+    term["zh"], term["vi"], term["type"] = zh, vi, term_type
+    if hanviet.transliteration_suspect(zh, vi, term_type):
+        term["note"] = "nghi sai"
+    return True
+
+
 def _merge_names(terms: list[dict], existing_zh: set[str], names: list[dict]) -> list[dict]:
     """Thêm tên mới (chưa có term_zh) vào `terms` để chunk/chương sau dùng ngay.
     Trả về danh sách tên THẬT SỰ mới (đếm cho logic tắt 2-pass + lưu DB làm gợi ý)."""
@@ -285,20 +451,15 @@ def _merge_names(terms: list[dict], existing_zh: set[str], names: list[dict]) ->
     for nm in names or []:
         if not isinstance(nm, dict):
             continue
-        zh, vi = nm.get("zh"), nm.get("vi")
-        if not _valid_suggested_zh(zh) or not isinstance(vi, str) or not vi.strip():
+        if not _prepare_suggested_term(nm):
             continue
-        zh, vi = zh.strip(), vi.strip()
+        zh, vi = nm["zh"], nm["vi"]
         if zh in existing_zh:
             continue
-        nm["zh"], nm["vi"] = zh, vi
-        # LLM nhỏ hay phiên âm bừa kiểu pinyin (罗森→"Lao Sen") → đối chiếu bảng tra
-        # Hán-Việt, sai thì thay ("La Sâm") TRƯỚC khi vào prompt/DB
-        vi = nm["vi"] = hanviet.reconcile(zh, vi, nm.get("type")) or vi
         existing_zh.add(zh)
         terms.append({
             "term_zh": zh, "correct_vi": vi,
-            "term_type": nm.get("type"), "note": nm.get("note"),
+            "term_type": nm["type"], "note": nm.get("note"), "approved": False,
         })
         added.append(nm)
     return added
@@ -327,18 +488,16 @@ def _analyze_names(llm, chunk: str) -> list[dict]:
 
 def _split_chunks(text: str, limit: int = CHUNK_LIMIT) -> list[str]:
     """Cắt chương dài theo ranh giới đoạn văn, mỗi chunk <= limit ký tự."""
-    if len(text) <= limit:
-        return [text]
     chunks: list[str] = []
-    cur = ""
+    cur: list[str] = []
     for para in text.split("\n"):
-        if cur and len(cur) + 1 + len(para) > limit:
-            chunks.append(cur)
-            cur = para
+        if cur and len("\n".join([*cur, para])) > limit:
+            chunks.append("\n".join(cur))
+            cur = [para]
         else:
-            cur = f"{cur}\n{para}" if cur else para
+            cur.append(para)
     if cur:
-        chunks.append(cur)
+        chunks.append("\n".join(cur))
     return chunks
 
 
@@ -583,14 +742,55 @@ def _init_style_bible(chapter_llm, nv: dict, novel_id: int, content_zh: str,
         return None
 
 
-# Xưng hô: MỘT luật cho mọi truyện (2026-07-10, đã bỏ nhánh đô thị tôi–anh):
-# lời KỂ cứng hắn/nàng; THOẠI linh hoạt theo bối cảnh (fuse cũng chỉ soi lời kể).
+# Xưng hô: MỘT luật cho mọi truyện (siết 2026-07-15 theo file mẫu user duyệt —
+# test/fixtures/translation_style_samples.txt): lời KỂ cứng hắn/nàng; THOẠI cố định
+# ta–ngươi cho MỌI thể loại (kể cả hiện đại/game/tận thế), bỏ hẳn nhánh tôi/anh/em;
+# chỉ chừa biến thể tự xưng đắt (ông đây/anh đây/bổn tọa...) đúng chỗ.
 REGISTER_LINE = (
     "[Xưng hô — LỜI KỂ ngôi ba: nam 'hắn', nữ 'nàng'; TUYỆT ĐỐI KHÔNG "
     "'anh/anh ta/ông ta/cậu ta/tôi/cô/cô ấy' làm đại từ trong lời kể. Ngôi nhất/độc thoại "
-    "bối cảnh kỳ ảo: xưng 'ta', KHÔNG 'tôi/mình'. THOẠI: tu tiên/cổ trang ta–ngươi, "
-    "ca/huynh/tỷ/muội, KHÔNG anh/chị/em/mày; nhân vật hiện đại với nhau được anh/em hoặc "
-    "'ca'; nhắc người thứ ba trong thoại: hắn ta/anh ta đều được.]")
+    "nội tâm: xưng 'ta', KHÔNG 'tôi/mình'. THOẠI mọi thể loại (kể cả hiện đại/game/tận thế): "
+    "cố định cặp ta–ngươi, kèm ca/huynh/tỷ/muội/cô nương/lão ca theo vai vế; KHÔNG "
+    "tôi/anh/chị/em/mày–tao. Vẫn giữ biến thể tự xưng đắt đúng chỗ: nhân vật vênh váo/cợt nhả "
+    "được xưng 'ông đây/anh đây', và 老子/本座/在下... giữ theo bản đồ tự xưng. "
+    "Nhắc người thứ ba trong thoại: hắn/hắn ta/gã/cô ta.]")
+
+
+def _needs_style_refresh(style: object) -> bool:
+    """Chỉ tạo lại style do worker sinh từ chương giữa; user sửa tay không có key này."""
+    return (isinstance(style, dict)
+            and isinstance(style.get("src_chapter"), (int, float))
+            and not isinstance(style.get("src_chapter"), bool)
+            and style["src_chapter"] > 1)
+
+
+def _refresh_one_style_bible() -> None:
+    """Housekeeping tạo lại tối đa một style bible từ chương 1.
+
+    ponytail: style user sửa tay mà còn giữ src_chapter>1 vẫn bị đè MỘT lần ở đây —
+    fix thật nằm ở form app (lưu tay phải bỏ src_chapter); worker không phân biệt được.
+    """
+    # không limit: truyện kẹt (chương 1 mất content_zh — bình thường từ 2026-07-08)
+    # không được chặn truyện phía sau; tập match nhỏ, return dưới giữ trần 1 LLM/chu kỳ
+    novels = (
+        db.sb().table("novels")
+        .select("id,title_vi,title_zh,genres,translation_provider,translation_model,translation_style")
+        .gt("translation_style->src_chapter", 1).execute()
+    ).data or []
+    for nv in novels:
+        if not _needs_style_refresh(nv.get("translation_style")):
+            continue
+        first = (
+            db.sb().table("chapters").select("content_zh")
+            .eq("novel_id", nv["id"]).eq("chapter_index", 1).maybe_single().execute()
+        ).data or {}
+        if not first.get("content_zh"):
+            continue
+        llm = build_chain(settings.translator_concurrency)
+        if nv.get("translation_provider") and nv.get("translation_model"):
+            llm = llm.pin(nv["translation_provider"], nv["translation_model"])
+        _init_style_bible(llm, nv, nv["id"], first["content_zh"], chapter_index=1)
+        return
 
 
 def _register_line(zh: str) -> str:
@@ -647,19 +847,19 @@ def handle_chapter(job: dict, llm) -> None:
     prev_tail = None
     if ch["chapter_index"] > 1:
         prev = (
-            db.sb().table("chapters").select("summary_vi, content_vi")
+            db.sb().table("chapters").select("summary_vi, content_vi, lint_score")
             .eq("novel_id", ch["novel_id"])
             .eq("chapter_index", ch["chapter_index"] - 1)
             .maybe_single().execute()
         )
         pd = getattr(prev, "data", None) or {}
         prev_summary = pd.get("summary_vi")
-        prev_tail = _tail(pd.get("content_vi"))
+        prev_tail = _gated_tail(pd)
 
-    # 2-pass thích ứng + bối cảnh truyện (thể loại → register xưng hô).
+    # Bối cảnh truyện (thể loại → register xưng hô).
     nv = (
         db.sb().table("novels")
-        .select("twopass_active,twopass_low_streak,title_vi,title_zh,genres,translation_provider,translation_model,translation_style")
+        .select("title_vi,title_zh,genres,translation_provider,translation_model,translation_style,synopsis_vi")
         .eq("id", ch["novel_id"]).single().execute()
     ).data or {}
     novel_line = None
@@ -673,16 +873,13 @@ def handle_chapter(job: dict, llm) -> None:
     chapter_llm = llm
     if nv.get("translation_provider") and nv.get("translation_model"):
         chapter_llm = llm.pin(nv["translation_provider"], nv["translation_model"])
-    twopass = nv.get("twopass_active", True)
     # style bible (Q1): có sẵn thì dùng, chưa có thì sinh 1 lần từ chương đang dịch
     style = nv.get("translation_style") or _init_style_bible(
         chapter_llm, nv, ch["novel_id"], ch["content_zh"], ch["chapter_index"])
     style_line = prompts.build_style_line(style)
     existing_zh = {t["term_zh"] for t in terms if t.get("term_zh")}
     # snapshot TRƯỚC khi merge tên mới: chỉ insert gợi ý chưa có trong DB, tránh nhân bản
-    # (bảng không có unique constraint — try/except dưới chỉ là phòng hờ)
     preexisting_zh = set(existing_zh)
-    new_names_this_chapter = 0
 
     chunks = _split_chunks(ch["content_zh"])
     parts: list[str] = []
@@ -691,13 +888,11 @@ def handle_chapter(job: dict, llm) -> None:
     prompt_tokens = completion_tokens = 0
     model = ""
     for i, chunk in enumerate(chunks):
-        # Pass 1 (chỉ khi 2-pass còn bật): chốt phiên âm tên riêng vào glossary TRƯỚC khi dịch,
-        # để mọi lần tên xuất hiện trong chunk này đều dùng đúng một cách phiên âm.
-        if twopass:
-            names = _analyze_names(chapter_llm, chunk)
-            added = _merge_names(terms, existing_zh, names)
-            new_names_this_chapter += len(added)
-            detected += added  # tên pass-1 cũng phải vào DB — trước đây chỉ nằm RAM, chương sau mất
+        # Chốt tên/thuật ngữ trước khi dịch MỌI chunk. _merge_names chỉ giữ term chưa có,
+        # còn prompt chỉ inject term thật sự xuất hiện nên glossary vẫn được chọn lọc.
+        names = _analyze_names(chapter_llm, chunk)
+        detected += names
+        _merge_names(terms, existing_zh, names)
 
         res = chapter_llm.complete(
             # chỉ chèn term xuất hiện trong chunk này → prompt gọn, model bám sát hơn
@@ -706,9 +901,8 @@ def handle_chapter(job: dict, llm) -> None:
             prompts.build_chapter_user(
                 ch.get("title_zh") if i == 0 else None, chunk, prev_summary,
                 prev_tail=prev_tail, novel_line=novel_line, register_line=register_line,
-                style_line=style_line),
-            # fuse chất lượng NẰM TRONG chain: output kém → tự đổi provider kế, không fail oan
-            validate=_quality_fuse(chunk),
+                style_line=style_line, synopsis=nv.get("synopsis_vi")),
+            temperature=prompts.CHAPTER_TEMPERATURE,
         )
         if not nv.get("translation_model"):
             db.sb().table("novels").update({
@@ -730,10 +924,12 @@ def handle_chapter(job: dict, llm) -> None:
             except json.JSONDecodeError:
                 pass
 
-        text, summary_vi = _pop_summary(text)
-        prev_summary = summary_vi or prev_summary
-        # Cầu chì chất lượng đã chạy TRONG llm.complete (validate=_quality_fuse) → tới đây
-        # output chắc chắn đạt: đủ tiếng Việt, đủ độ dài, còn xuống dòng.
+        text, new_summary = _pop_summary(text)
+        new_summary = _valid_summary(new_summary)
+        if new_summary:
+            summary_vi = new_summary
+            prev_summary = new_summary
+        # Không retry theo validator phong cách; hậu xử lý chỉ dọn metadata/marker và Hán tự sót.
         text = _drop_context_echo(_clean_output(text), prev_tail)
         text = _fix_han_residue(chapter_llm, text, terms)
         parts.append(text)
@@ -745,6 +941,8 @@ def handle_chapter(job: dict, llm) -> None:
             log.info("Chương %s: chunk %d/%d xong", ch["id"], i + 1, len(chunks))
 
     text = "\n\n".join(parts)
+    # vá văn phong/đại từ kể máy móc — hậu xử lý an toàn, không phải validator
+    text = _fix_register(_fix_soft_style(text))
 
     title_vi = None
     if ch.get("title_zh"):
@@ -757,54 +955,98 @@ def handle_chapter(job: dict, llm) -> None:
                 "", ch["title_zh"]).strip()
             title_vi = hanviet.han_viet(zh_clean) or title_vi
 
+    newer_done = (
+        db.sb().table("chapters").select("chapter_index")
+        .eq("novel_id", ch["novel_id"]).gt("chapter_index", ch["chapter_index"])
+        .eq("translation_status", "done").limit(1).execute().data or []
+    )
+    old_summary = None
+    if newer_done:
+        old = db.sb().table("chapters").select("summary_vi").eq("id", ch["id"]).maybe_single().execute()
+        old_summary = (getattr(old, "data", None) or {}).get("summary_vi")
+    if _should_keep_old_summary(bool(newer_done), old_summary):
+        # Summary bản dịch lại không được đè lệch chuỗi đã dùng cho các chương sau.
+        summary_vi = old_summary
+
     # Lưu chapter + đóng đúng job đang giữ lease trong MỘT transaction. Không xóa
     # content_zh để các lần dịch lại sau không phải chờ crawler và tốn thêm I/O.
     db.finalize_chapter_job(
         job["id"], job.get("locked_by") or "", ch["id"], title_vi, text, model,
         prompt_tokens, completion_tokens, glossary_version, summary_vi,
     )
+    try:
+        db.sb().table("chapters").update({
+            "lint_score": lint.lint_score(ch.get("content_zh"), text),
+        }).eq("id", ch["id"]).execute()
+    except Exception:
+        log.exception("Không lưu được lint_score chương %s", ch["id"])
+
+    if ch["chapter_index"] % 10 == 0 and not newer_done:
+        try:
+            rows = (
+                db.sb().table("chapters").select("chapter_index,summary_vi")
+                .eq("novel_id", ch["novel_id"]).lte("chapter_index", ch["chapter_index"])
+                .not_.is_("summary_vi", "null").order("chapter_index", desc=True).limit(10).execute().data or []
+            )
+            # dịch nhảy cóc (lazy TOC) để thủng dải → khoan nén, kẻo synopsis "đến nay" thiếu khúc
+            if _synopsis_ready(rows, ch["chapter_index"]):
+                persons = [t["correct_vi"] for t in terms
+                           if t.get("term_type") == "person" and t.get("correct_vi")][:20]
+                synopsis = _valid_synopsis(chapter_llm.complete(
+                    prompts.SYSTEM_SYNOPSIS,
+                    _build_synopsis_input(nv.get("synopsis_vi"),
+                                          [r["summary_vi"] for r in rows], persons),
+                    temperature=0.2, max_tokens=512,
+                ).text)
+                # recheck watermark ngay trước khi ghi: chương này kẹt lâu, chương sau đã nén
+                # xa hơn thì không được đè lùi. ponytail: vẫn còn cửa sổ race cỡ ms — đủ tốt,
+                # CAS/khóa theo truyện chỉ đáng làm nếu thấy synopsis tụt lùi thật.
+                still_newest = not (
+                    db.sb().table("chapters").select("chapter_index")
+                    .eq("novel_id", ch["novel_id"]).gt("chapter_index", ch["chapter_index"])
+                    .eq("translation_status", "done").limit(1).execute().data or []
+                )
+                if synopsis and still_newest:
+                    # Nén lại nhiều summary + bối cảnh cũ để lỗi lẻ bị pha loãng, không khuếch đại.
+                    db.sb().table("novels").update({"synopsis_vi": synopsis}).eq("id", ch["novel_id"]).execute()
+        except Exception:
+            log.exception("Không nén được synopsis truyện %s", ch["novel_id"])
 
     # lưu tên riêng phát hiện được làm term "gợi ý" (approved=false, scope=novel)
     # — get_glossary lấy cả gợi ý nên chương sau dùng lại ngay, giữ phiên âm nhất quán
     inserted_zh: set[str] = set()
     suggestion_rows: list[dict] = []
     for t in detected:
-        zh = t.get("zh")
-        vi = t.get("vi")
-        if not _valid_suggested_zh(zh) or not isinstance(vi, str) or not vi.strip():
+        if not isinstance(t, dict) or not _prepare_suggested_term(t):
             continue
-        zh = zh.strip()
+        zh, vi = t["zh"], t["vi"]
         if zh not in preexisting_zh and zh not in inserted_zh:
             inserted_zh.add(zh)
             suggestion_rows.append({
                 "novel_id": ch["novel_id"], "term_zh": zh.strip(), "correct_vi": vi.strip(),
-                "term_type": t.get("type", "other") if t.get("type") in
-                    ("person", "place", "sect", "item", "skill") else "other",
+                "term_type": t["type"],
                 "note": t.get("note") or None,  # giới tính/vai vế → xưng hô đúng ở chương sau
-                "scope": "novel", "approved": False,
+                "scope": "novel", "approved": False, "first_chapter": ch["chapter_index"],
             })
     try:
-        db.insert_glossary_suggestions(suggestion_rows)
+        inserted = db.insert_glossary_suggestions(suggestion_rows)
+        conflicts = _glossary_conflicts(terms, detected, ch["chapter_index"])
+        # row thua race ignore_duplicates: bản dịch của mình là ứng viên conflict với row thắng
+        have = {c["term_zh"] for c in conflicts}
+        conflicts += [
+            {"term_zh": r["term_zh"], "candidate_vi": r["correct_vi"],
+             "conflict_vi": f"{r['correct_vi']} (c{ch['chapter_index']})"}
+            for r in suggestion_rows
+            if r["term_zh"] not in inserted and r["term_zh"] not in have
+        ]
+        db.record_glossary_conflicts(ch["novel_id"], conflicts)
+        db.increment_glossary_hits(ch["novel_id"], [
+            t["term_zh"] for t in terms
+            if t.get("term_zh") and t["term_zh"] in ch["content_zh"]
+        ])
     except Exception:
         # Bản dịch và job đã commit; glossary phụ trợ lỗi không được khiến dịch lại cả chương.
         log.exception("Không lưu được %d glossary term (chương %s)", len(suggestion_rows), ch["id"])
-
-    # Cập nhật 2-pass thích ứng: đủ số chương "ít tên mới" liên tiếp thì tắt cho truyện này.
-    # ponytail: nhiều luồng có thể đua state — chỉ là heuristic, đua lệch chút không sao.
-    if twopass:
-        if new_names_this_chapter <= NEW_NAME_LOW:
-            streak = (nv.get("twopass_low_streak") or 0) + 1
-        else:
-            streak = 0
-        still_active = streak < LOW_STREAK_LIMIT
-        try:
-            db.sb().table("novels").update(
-                {"twopass_active": still_active, "twopass_low_streak": streak}
-            ).eq("id", ch["novel_id"]).execute()
-            if not still_active:
-                log.info("Novel %s: tắt 2-pass (arc mở đầu xong, hết tên mới)", ch["novel_id"])
-        except Exception:
-            log.exception("Novel %s: không cập nhật được trạng thái 2-pass", ch["novel_id"])
 
     st = providers.get_call_stats()
     log.info("Đã dịch chương %s/%s (novel %s) — %d chunk, %d LLM request (%d lỗi/retry), "
@@ -983,6 +1225,10 @@ def run_forever(poll_seconds: float = 3.0) -> None:
             db.heartbeat("translator")  # điểm danh mỗi 60s
             db.requeue_stale_jobs(settings.stale_job_minutes)
             db.reset_orphan_chapters()  # dọn chương queued/translating không còn job (ghost Hàng đợi)
+            try:
+                _refresh_one_style_bible()
+            except Exception as e:
+                log.warning("Tái tạo style bible lỗi (thử lại chu kỳ sau): %s", e)
             # Audit định kỳ: tự quét chương done hỏng (Trung/cụt/mất đoạn lọt qua) → xếp lại dịch,
             # không phải đợi vào đọc mới biết. Fuse đã chặn chương mới nên đây chủ yếu dọn nợ cũ.
             if time.time() - last_audit > settings.audit_interval_min * 60:
@@ -992,6 +1238,12 @@ def run_forever(poll_seconds: float = 3.0) -> None:
                 if bad:
                     log.warning("Audit định kỳ: %d chương hỏng → xếp lại dịch", len(bad))
                     requeue_bad(bad)
+                try:
+                    for row in db.lint_drift_novels():
+                        log.warning("Truyện %s đang trượt lint: bucket đầu %.1f → bucket mới %.1f",
+                                    row["novel_id"], float(row["first_avg"]), float(row["last_avg"]))
+                except Exception as e:
+                    log.warning("Quét trượt lint lỗi (bỏ qua): %s", e)
                 last_audit = time.time()
             # bám người đang đọc: nâng chương truyện đang đọc, hạ truyện không ai đọc
             db.reprioritize_chapters_by_reading(

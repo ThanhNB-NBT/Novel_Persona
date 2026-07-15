@@ -42,21 +42,33 @@ def main() -> None:
     chunk = "".join(t["term_zh"] for t in many)
     injected = build_main_chapter_system(many, chunk)
     assert injected.count("→ Danh") == MAX_TERMS_IN_PROMPT
+    # 5 approved luôn đứng đầu nên trần 80 chỉ loại suggestion ít ưu tiên phía sau.
+    approved = [{"term_zh": f"准{i}", "correct_vi": f"Chuẩn {i}", "approved": True} for i in range(5)]
+    pending = [{"term_zh": f"候{i}", "correct_vi": f"Gợi ý {i}", "approved": False} for i in range(80)]
+    injected = build_main_chapter_system(approved + pending, "".join(t["term_zh"] for t in approved + pending))
+    assert injected.count("→") == MAX_TERMS_IN_PROMPT
+    assert all(t["term_zh"] in injected for t in approved)
 
     # build_chapter_user: đủ 4 phần đúng thứ tự; phần thiếu thì không chèn nhãn thừa
-    u = build_chapter_user("第一章", "内容", prev_summary="tóm tắt",
+    u = build_chapter_user("第一章", "内容", prev_summary="tóm tắt", synopsis="bối cảnh",
                            prev_tail="…đuôi dịch trước", novel_line="Truyện A — thể loại: Tiên hiệp")
-    for i in range(len(order := ["[Truyện:", "[Ngữ cảnh chương trước:",
+    for i in range(len(order := ["[Truyện:", "[Bối cảnh truyện đến nay:", "[Ngữ cảnh chương trước:",
                                  "[Đoạn dịch LIỀN TRƯỚC", "Tiêu đề chương:", "Nội dung chương:"]) - 1):
         assert u.index(order[i]) < u.index(order[i + 1]), order[i]
     bare = build_chapter_user(None, "内容")
     assert bare == "Nội dung chương:\n内容"
+    assert "[Bối cảnh truyện đến nay:" not in build_chapter_user(None, "内容", prev_summary="tóm tắt")
 
     # build_metadata_user: chỉ chèn term xuất hiện trong title/description; không glossary → JSON trần
     novel = {"title_zh": "林松传", "description_zh": "讲述林松的故事", "author_zh": "作者", "genres": []}
     meta = build_metadata_user(novel, terms)
     assert "林松 → Lâm Tùng" in meta and "苏雨" not in meta
     assert "Bảng thuật ngữ" not in build_metadata_user(novel)
+    # term nghi sai chưa duyệt không được lọt vào prompt metadata (cùng predicate với chapter)
+    ngo = {"term_zh": "林松", "correct_vi": "người họ Lâm", "note": "nghi sai", "approved": False}
+    assert "người họ Lâm" not in build_metadata_user(novel, [ngo])
+    ngo["approved"] = True
+    assert "người họ Lâm" in build_metadata_user(novel, [ngo])
     main = build_main_chapter_system(terms, "林松看着苏雨。")
     assert "KẾT HỢP REFERENCE + V2" in main
     assert "Xác định người nói" in main

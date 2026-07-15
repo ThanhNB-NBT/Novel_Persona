@@ -153,12 +153,23 @@ def is_transient_error(exc: Exception) -> bool:
     return False
 
 
-def insert_glossary_suggestions(rows: list[dict]) -> None:
-    """Ghi cả batch; unique (novel_id, term_zh) giữ cách dịch xuất hiện đầu tiên."""
-    if rows:
-        sb().table("glossary_terms").upsert(
-            rows, on_conflict="novel_id,term_zh", ignore_duplicates=True
-        ).execute()
+def insert_glossary_suggestions(rows: list[dict]) -> set[str]:
+    """Ghi cả batch; unique (novel_id, term_zh) giữ cách dịch xuất hiện đầu tiên.
+    Trả set term_zh thật sự được chèn — row thua race bị bỏ qua để caller lộ conflict."""
+    if not rows:
+        return set()
+    res = sb().table("glossary_terms").upsert(
+        rows, on_conflict="novel_id,term_zh", ignore_duplicates=True
+    ).execute()
+    return {r.get("term_zh") for r in (res.data or [])}
+
+
+def record_glossary_conflicts(novel_id: int, rows: list[dict]) -> None:
+    """Ghi cách dịch mâu thuẫn đầu tiên lên row local, không đụng correct_vi/approved."""
+    for row in rows:
+        sb().table("glossary_terms").update({"conflict_vi": row["conflict_vi"]}) \
+            .eq("novel_id", novel_id).eq("term_zh", row["term_zh"]) \
+            .is_("conflict_vi", "null").neq("correct_vi", row["candidate_vi"]).execute()
 
 
 def enqueue(type_: str, novel_id: int, chapter_id: int | None = None, priority: int = 100) -> None:
@@ -274,6 +285,10 @@ def count_chapters_translated_today() -> int:
         .execute()
     )
     return res.count or 0
+
+
+def lint_drift_novels() -> list[dict]:
+    return sb().rpc("lint_drift_novels").execute().data or []
 
 
 def record_model_call(model: str, latency_ms: int, ok: bool, error: str | None = None) -> None:
@@ -392,7 +407,7 @@ def get_glossary(novel_id: int) -> tuple[list[dict], int]:
     gợi ý CŨ nhất thắng (giữ cách phiên âm xuất hiện đầu tiên)."""
     terms = (
         sb().table("glossary_terms")
-        .select("id,novel_id,term_zh,wrong_vi,correct_vi,term_type,note,narrator_term")
+        .select("id,novel_id,term_zh,wrong_vi,correct_vi,term_type,note,narrator_term,approved,first_chapter,hit_count,conflict_vi")
         .eq("approved", True)
         .or_(f"novel_id.eq.{novel_id},novel_id.is.null")
         .execute()
@@ -400,9 +415,9 @@ def get_glossary(novel_id: int) -> tuple[list[dict], int]:
     seen = {t["term_zh"] for t in terms if t.get("term_zh")}
     pending = (
         sb().table("glossary_terms")
-        .select("id,novel_id,term_zh,wrong_vi,correct_vi,term_type,note,narrator_term")
+        .select("id,novel_id,term_zh,wrong_vi,correct_vi,term_type,note,narrator_term,approved,first_chapter,hit_count,conflict_vi")
         .eq("approved", False).eq("novel_id", novel_id)
-        .order("created_at")
+        .order("hit_count", desc=True).order("created_at")
         .execute()
     ).data or []
     for t in pending:
@@ -425,3 +440,8 @@ def get_glossary(novel_id: int) -> tuple[list[dict], int]:
     ).data
     version = ver_rows[0]["version"] if ver_rows else 0
     return terms, version
+
+
+def increment_glossary_hits(novel_id: int, terms: list[str]) -> None:
+    if terms:
+        sb().rpc("increment_glossary_hits", {"p_novel_id": novel_id, "p_terms": terms}).execute()

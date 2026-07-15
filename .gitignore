@@ -66,3 +66,4 @@ worker/vps.ps1
 # ket qua eval dich (noi dung chuong) va benchmark model — ket luan ghi vao docs, khong commit artifact
 worker/eval_out*/
 worker/benchmark_out/
+worker/corpus_translation/

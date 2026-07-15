@@ -1,0 +1,701 @@
+# Mẫu bản dịch CHUẨN đã duyệt — Trung → Việt (bản 2026-07-15, thay bản cũ)
+# Nguồn: n1380 c50–59, Claude dịch tay, user duyệt. Dùng làm mốc đối chiếu văn phong
+# cho người đọc/eval — KHÔNG nhét cả file vào prompt (prompt chỉ nhúng trích đoạn ngắn
+# trong MAIN_CHAPTER_DIRECTIVE, mục "VÍ DỤ CHUẨN GIỌNG").
+#
+# Quy ước đã chốt (đồng bộ với REGISTER_LINE + QUY TẮC XƯNG HÔ trong prompts):
+# - Lời kể ngôi ba: "hắn/nàng/gã/nó"; độc thoại nội tâm xưng "ta".
+# - THOẠI mọi thể loại (kể cả hiện đại/game/tận thế): cố định ta–ngươi + ca/huynh/tỷ/muội/
+#   cô nương/lão ca; biến thể tự xưng đắt giữ đúng chỗ ("ông đây", "anh đây", 老子/本座...).
+# - 丧尸 → zombie; từ hiện đại quen mắt giữ dạng phổ biến (BOSS, BUG, CD, phó bản).
+# - Kỹ năng/vũ khí/cấp bậc: Hán-Việt trọn cụm (Thất Thần Cuồng Nộ, Trảm Thủ Ma Đao,
+#   cấp Thanh Đồng/Bạch Ngân, cuộn trục, thí luyện).
+# - Câu meta/tếu của tác giả dịch giữ chất giễu, không dịch phẳng.
+# - Ngắt đoạn bám nguồn: mỗi đoạn nguồn một đoạn dịch, không gộp đoạn ngắn thành đoạn dài.
+
+---
+
+## Chương 50
+
+Tục ngữ nói, kế hoạch không đuổi kịp biến hóa.
+
+Kế hoạch ban đầu của Lâm Tử Lạc là đợi bản thân lên cấp năm, cấp sáu mới đi tìm Lý Hạo Bác báo thù. Dĩ nhiên, báo thù ở đây chỉ là ám sát một mình Lý Hạo Bác mà thôi. Kết quả nhờ đủ loại kỳ ngộ, đến lúc đi báo thù thì hắn đã cấp tám — thực lực đủ mạnh để giết sạch cả trang viên họ Lý.
+
+Còn sau khi báo thù, Lâm Tử Lạc vốn tính đến một phó bản quen thuộc ở trung tâm Ma Đô để cày cấp thật nhanh. Giờ thì với cấp tám cùng một thân trang bị xa xỉ, lại thêm Đại Ngốc — trợ thủ đắc lực này, hoàn toàn có thể bỏ qua khâu cày cấp, tiến thẳng đến mục tiêu hắn đã định sẵn từ đầu: **nghề ẩn — Huyễn Ảnh**.
+
+Nghề ẩn: Huyễn Ảnh. Muốn chuyển sang nghề này, bắt buộc phải đến viện bảo tàng Ma Đô. Trong bảo tàng có trưng bày một cuộn trục cổ xưa — cuộn trục ấy chính là chìa khóa chuyển nghề. Ai kích hoạt cuộn trục sẽ bị truyền tống vào không gian chuyển nghề; hoàn thành ba thí luyện thì nhận được cuộn trục chuyển nghề Huyễn Ảnh. Không hoàn thành, hoặc quá thời hạn quy định, sẽ bị tính là chuyển nghề thất bại — người chơi lập tức bị xóa sổ.
+
+Đương nhiên, những điều này phải sau khi chuyển nghề xong Lâm Tử Lạc mới hiểu tường tận. Thực ra ở kiếp trước, hắn vào không gian chuyển nghề trong thế nửa bị ép buộc, nửa bị lừa gạt.
+
+Thuở ấy, cả Ma Đô đồn ầm lên rằng trong viện bảo tàng có bảo vật. Lâm Tử Lạc cùng ba gã bạn cùng phòng "bằng mặt không bằng lòng" nghe danh tìm đến. Cũng chính tại đó, hắn chạm mặt Lý Hạo Bác, Diêu Tịnh Hàm cùng đám vệ sĩ. (Kiếp trước Diêu Tịnh Hàm không chết, nên Lý Hạo Bác cũng chưa gọi đoàn đánh thuê Săn Giết đến ngay từ đầu.)
+
+Bọn họ đến sớm hơn nhóm Lâm Tử Lạc một ngày, và đã dò được tin: hễ ai kích hoạt cuộn trục đều "chết bất đắc kỳ tử".
+
+Lâm Tử Lạc vừa đến nơi, vì chuyện bị cắm sừng mà cãi vã một trận với đám Lý Hạo Bác, khiến gã kia mất mặt trước bàn dân thiên hạ. Người tụ ở bảo tàng khi đó quá đông, Lý Hạo Bác không tiện ra tay trực tiếp. Gã lén lút tìm ba người bạn cùng phòng của Lâm Tử Lạc, cho bọn chúng đủ lợi lộc để bán đứng hắn.
+
+Cách bán đứng cũng đơn giản: xúi Lâm Tử Lạc đi kích hoạt cuộn trục.
+
+Lâm Tử Lạc lúc ấy đâu biết chuyện kích hoạt cuộn trục là "chết bất đắc kỳ tử". Bị mấy người bạn "chí cốt" tâng bốc một hồi rằng kích hoạt sẽ tăng mạnh thực lực, cơn giận đốt mờ lý trí khiến hắn chẳng phân biệt nổi lời giả dối. Thêm đám tay chân Lý Hạo Bác đứng cạnh buông lời uy hiếp. Cuối cùng, hắn chọn kích hoạt cuộn trục.
+
+Chỉ có điều, ngoài dự liệu của tất cả — Lâm Tử Lạc lại vượt qua chuyển nghề thành công, nhận được cuộn trục chuyển nghề "Huyễn Ảnh". Dù trong quá trình đó, cả khuôn mặt hắn bị con BOSS xuất hiện ở thí luyện thứ ba cào đến hủy dung.
+
+Đó là đại khái đầu đuôi câu chuyện. Và chuyện ấy xảy ra vào ngày thứ tám của trò chơi tận thế.
+
+Giờ mới là ngày thứ tư, phía bảo tàng Ma Đô chắc chắn chưa có mấy ai. Lâm Tử Lạc định ra tay trước chiếm tiên cơ. Vật phẩm mục tiêu đã rõ ràng, quy trình thí luyện hắn cũng nhớ như in. Vậy còn gì phải chần chừ nữa?
+
+Xuất phát!
+
+Lâm Tử Lạc thu dọn qua loa, xuống căn phòng an toàn dưới tầng hầm thưởng thức thêm lần nữa đống thịt nát vốn là Lý Hạo Bác. Tiện thể hóa trang cho Đại Ngốc: lục từ tầng lầu đám vệ sĩ ở ra một bộ đồ vệ sĩ may đo vừa khít thân hình Đại Ngốc, đeo thêm cặp kính râm — che kín hoàn toàn cặp mắt đỏ và răng nanh mang đặc trưng zombie. Nhìn từ ngoài vào, đó là một gã vệ sĩ hung thần ác sát, đầy "cảm giác an toàn".
+
+Chưa hết, Lâm Tử Lạc còn mò được một phần vũ khí của đoàn đánh thuê Săn Giết. Hắn lấy mấy con dao găm, Đại Ngốc thì vác một thanh đại đao.
+
+Hai người bấy giờ mới sải bước rời khỏi sơn trang họ Lý.
+
+.........
+
+Đã là ngày tận thế thứ tư. Phần lớn người chơi ít nhiều thích nghi được với môi trường tận thế. Mà số vật tư một gia đình bình thường tích trữ, qua ba ngày cũng cạn sạch. Dưới sức ép của hai điều đó, người chơi ùn ùn bước ra khỏi nhà, chủ động săn giết zombie.
+
+Trong số ấy không thiếu kẻ may mắn nhặt được một hai món trang bị hay đạo cụ. Nhiều hơn cả là kiếm được thẻ vật tư. Lại thêm khoái cảm giết zombie nhận kinh nghiệm, thăng cấp, tăng thuộc tính — khiến một bộ phận người chơi lao vào săn zombie như điên.
+
+Đừng nói là đánh không lại. Đúng như lời thông báo khi trò chơi tận thế giáng lâm: bảy ngày đầu là thời gian bảo hộ tân thủ. Trí khôn, thuộc tính, năng lực, tốc độ thăng cấp của zombie đều bị kìm nén. Một người trưởng thành khỏe mạnh hoàn toàn có thể solo một con zombie.
+
+Mà nói thật lòng, thanh niên bây giờ phần lớn đều từng cày game online hoặc đọc tiểu thuyết tận thế. Đối mặt với trò chơi tận thế thành thật này, họ đem hết kinh nghiệm học lỏm từ truyện từ game ra dùng, phô diễn sức thích nghi đáng sợ của loài người. Rất nhanh đã xuất hiện tổ đội, hiệp trợ, đủ kiểu liên kết. Còn trong bối cảnh tận thế, "đoàn kết" ấy thật đến đâu thì lại là chuyện khác.
+
+Dĩ nhiên còn cả dụ zombie, gài bẫy, chia cắt bầy đàn... trăm phương ngàn kế giết zombie đua nhau ra đời.
+
+Thực lực dần lên, ở trung tâm Ma Đô, càng lúc càng nhiều người chơi để mắt tới một địa điểm: **viện bảo tàng Ma Đô**.
+
+Ngày thường, bảo tàng Ma Đô là thắng cảnh nườm nượp khách. Nhưng khi trò chơi tận thế giáng xuống, nơi này triệt để hóa thành địa ngục nhân gian. Vô số zombie chặn đứng những người không kịp thoát ra; trừ số ít bị ăn thịt, còn lại toàn bộ biến thành đồng loại của chúng. Thành thử trong lòng lẫn trước cổng bảo tàng, zombie nhiều không đếm xuể.
+
+Nhưng đây chẳng phải là một chỗ cày cấp, kiếm kinh nghiệm ngon lành hay sao!
+
+Người chơi bắt đầu vắt óc tính kế xoay quanh viện bảo tàng Ma Đô.
+
+---
+
+## Chương 51
+
+Kẻ cũng đang ôm đúng nỗi phiền não ấy, chính là Lâm Tử Lạc.
+
+Lúc này, Lâm Tử Lạc và Đại Ngốc đã đến trung tâm Ma Đô. Tuy chưa áp sát viện bảo tàng, nhưng cũng đủ nhìn thấy núi xác biển zombie trước cổng. Cả chặng đường, với tốc độ hành quân cấp tập của hai người, tổng cộng ngốn hơn ba tiếng — dọc đường còn chẳng kịp giết mấy con zombie. Dẫu vậy, Lâm Tử Lạc vẫn số đỏ nổ ra được một món đạo cụ hữu dụng:
+
+【**Cuộn trục Hỏa Cầu Thuật**】: đạo cụ dùng một lần cấp Thanh Đồng. Khi dùng, phóng ra một quả cầu lửa mang năng lượng cố định; người chơi có thể điều khiển cầu lửa tấn công đối phương, hoặc kích nổ gây sát thương phạm vi.
+
+Một cuộn trục kỹ năng dùng một lần. Nhìn thì có vẻ chẳng ra gì, nhưng Lâm Tử Lạc hiểu rõ: loại cuộn trục một lần này uy lực con nào con nấy đáng sợ.
+
+Trên đường, hắn còn làm một phép thử: Đại Ngốc — kẻ đã có bảng người chơi — rốt cuộc còn tính là zombie không?
+
+Đáp án khiến Lâm Tử Lạc mừng phát cuồng. **Còn!**
+
+Bởi khi Đại Ngốc chủ động lại gần zombie, chúng chẳng buồn để mắt. Trừ phi nó ra tay tấn công trước, con zombie đó cùng đồng bọn xung quanh mới đánh trả.
+
+Điều này nghĩa là gì hả! Một là Đại Ngốc có thể áp sát zombie mà đánh lén — lấy hữu tâm tính vô tâm, kể cả con nào thuộc tính cao hơn cũng chưa chắc chọi lại nó. Hai là... Đại Ngốc có thể đi mở **rương báu hoang dã**!
+
+Cứ nghĩ đến những cái rương nằm giữa biển zombie mà xem. Người chơi bình thường muốn chạm tới, phải giết cả đống zombie hoặc hạ BOSS mới xong. Đại Ngốc thì khỏi — nó chỉ việc ngoáy mông lách vào giữa bầy zombie, rồi thản nhiên dùng bảng người chơi mở rương. BUG cỡ nào chứ!
+
+Đương nhiên, bình thường Lâm Tử Lạc cũng không để nó làm vậy: Đại Ngốc mở rương thì chẳng nhận được kinh nghiệm, danh vọng hay không gian chứa đồ gì cả — thế chẳng phải phí của giời sao.
+
+Lâm Tử Lạc hạ ống nhòm trong tay xuống.
+
+"Hồi đó là ngày tận thế thứ tám, zombie quanh bảo tàng đã bị người chơi dọn gần sạch, nên mọi người mới tụ được trước cổng mà bàn chuyện cuộn trục."
+
+"Giờ cả đống zombie vây kín cổng thế kia, ta với Đại Ngốc hai đứa tự dọn thì đúng là hơi khoai." — Lâm Tử Lạc nhíu mày.
+
+Tiếc thật, cuộn trục ấy tương đương một điểm truyền tống cố định, không dời đi được. Chứ không thì cứ để Đại Ngốc vào bảo tàng lấy cuộn trục ra, ta núp xó kích hoạt, sướng biết bao nhiêu.
+
+Chỗ Lâm Tử Lạc đang đứng là nóc một tòa nhà xây dở. Vì chưa hoàn công, bên ngoài lại quây tường kín, nên zombie bên trong thưa thớt lạ thường — hai người lên nóc chẳng tốn chút sức nào. Từ nóc lầu này nhìn xuống, tình hình bên ngoài viện bảo tàng thu cả vào mắt.
+
+Lâm Tử Lạc ngồi lên tấm ván gỗ, bắt đầu tính đối sách.
+
+Xông thẳng vào? Chắc chắn không. Thây ma đông thế kia, giết đến rã tay cũng chẳng sạch nổi.
+
+Ẩn nấp lẻn vào? Càng không thể. Thân pháp ta có trâu đến mấy cũng chịu, trong cái bảo tàng hai bước một con zombie ấy lấy đâu ra đường mà đi.
+
+Hay là... dùng máy phóng ném 【thịt sống ngâm virus zombie】? Không được, tầm ném có hạn, gần quá thì dụ chẳng đi được bao xa.
+
+Vậy phái Đại Ngốc đi câu zombie? Cho nó cầm thịt sống kéo đại bộ phận zombie đi chỗ khác, ta xử số ít còn lại — thế là có cơ hội chạm tới cuộn trục.
+
+Lâm Tử Lạc nhìn sang Đại Ngốc. Đại Ngốc đang đứng ngẩn ra tại chỗ bỗng rùng mình một cái, ngơ ngác sờ sờ đầu mình. *Lạ thật, ta rõ ràng là zombie, sao lại nổi da gà nhỉ?*
+
+Lâm Tử Lạc kịp thời thu ánh mắt về. Khụ khụ, chuyện ta "kích hoạt" được zombie hay không tính sau — chứ ngần ấy zombie truy sát Đại Ngốc, nó toi mạng là chuyện đóng đinh rồi.
+
+Vậy phải làm sao đây?
+
+Lâm Tử Lạc liếc về phía bảo tàng mấy lượt, chợt phát hiện một địa điểm: một khu thương xá cách bảo tàng hai con phố. Sau lớp kính tầng thượng thương xá đó, có dấu vết cả đống người hoạt động.
+
+Hắn nâng ống nhòm, quan sát kỹ. Tầng thượng thương xá kia hình như tụ tập không ít người, phần lớn là thanh niên vạm vỡ. Nhìn khí chất và ánh mắt là biết — toàn những kẻ từng giết zombie cả.
+
+Trước ô cửa kính sát đất hướng về bảo tàng, thấy rõ bốn năm người đang cúi nhìn, quan sát viện bảo tàng Ma Đô. Vừa quan sát vừa bàn bạc không ngớt, tay còn khoa lên vẽ xuống, như đang sắp xếp kế hoạch gì đó.
+
+Vì cách quá xa, cộng thêm góc nhìn, Lâm Tử Lạc không đọc trọn được lời họ nói. Nhưng dăm ba từ lọt ra cũng đủ khiến hắn chú ý: "vây quét đám zombie này", "bên trong bảo tàng", "nhân thủ chúng ta không đủ"......
+
+Đám người ấy bàn hồi lâu mới rời khỏi ô cửa kính — xem chừng là quay vào bàn tiếp với đám người đang tụ tập.
+
+Lâm Tử Lạc hạ ống nhòm. Ghép nối lời thoại và hành động vừa rồi, hắn hiểu ra: đám zombie trong ngoài bảo tàng ở kiếp trước, tám phần chính là bọn họ dọn. Chỉ vì ai chạm cuộn trục xong cũng chết, chẳng vớt được lợi lộc gì, họ mới tung tin ấy ra ngoài.
+
+Đã vậy... sao không bắt tay với họ một phen? Gia nhập đội ngũ, cùng dọn zombie — vừa đỡ được khối việc, vừa khỏi phải "hy sinh" Đại Ngốc.
+
+Còn lo người khác chạm cuộn trục trước ta? Đùa à, nếu có kẻ hoàn thành nổi thí luyện, thì kiếp trước đã chẳng đến lượt Lâm Tử Lạc hai ngày sau mới đi kích hoạt.
+
+Chuyện tổ đội tạm thời, thật ra ở tận thế là chuyện thường như cơm bữa. Có điều, những đội ghép tạm kiểu này thường chẳng có kết cục tốt đẹp gì. Trước lợi ích, làm gì có ai giữ luật chơi — huống hồ là trong cái nền trò chơi tận thế thực lực là trên hết này.
+
+Lâm Tử Lạc thu Đường đao cùng ống nhòm, gọi Đại Ngốc một tiếng. Một người một zombie bắt đầu xuống lầu.
+
+Phải mau mau đến hội quân với đám người trên tầng thượng thương xá kia thôi. Tiện thể xem có đẩy được bọn họ phát động tấn công sớm hơn không.
+
+---
+
+## Chương 52
+
+Tầng thượng siêu thị Tiểu Nhuận Phát.
+
+Gần trăm người chơi đang tụ tập trong nhà kho.
+
+Kho chất đầy vật tư. Số vật tư này vốn dùng để châm hàng cho các gian hàng dưới siêu thị. Từ khi trò chơi tận thế giáng xuống, nơi đây thành điểm tụ tập lấy đồ của người chơi.
+
+Thường thì những chỗ đông người qua lại như siêu thị, zombie nhiều vô kể, hiếm ai dám bén mảng. Nhưng thang chở hàng ở cửa sau của Tiểu Nhuận Phát lại thông thẳng lên kho, khỏi phải chạm mặt đám zombie bên trong. Thế nên hễ là người chơi rành Tiểu Nhuận Phát đôi chút, đều chọn đi thang hàng lên tầng thượng lấy lương thực và các thứ cần dùng.
+
+Rồi một kẻ có "tầm nhìn xa" thấy cảnh ấy, quyết định dựng luôn một cứ điểm tại đây. Kẻ dám bước ra khỏi nhà, dám giết zombie để đến lấy đồ, đều là "nhân tài ưu tú" cả. Gom đám "nhân tài" này lại một chỗ, chẳng phải sẽ dựng được một tổ chức ra trò hay sao? Với cái ý tưởng "tốt đẹp" đó, cứ điểm nhanh chóng kéo được không ít người gia nhập.
+
+Thế là kẻ cầm đầu đặt tên cho cứ điểm: **Câu lạc bộ Tử Thần**. Trong mắt gã, đám người ở đây đều là tử thần danh xứng với thực — những tử thần mang cái chết đến cho zombie!
+
+Vỏn vẹn ba ngày, câu lạc bộ Tử Thần đã gom đủ trăm người. Trăm người chơi đồng lòng góp sức, đánh sập được mấy ổ zombie nhỏ. Nói trắng ra là mấy cái siêu thị mini, cửa tiệm nhỏ, chung cư thấp tầng. Vài trận càn quét thắng lợi, chiến lợi phẩm cùng khoái cảm thăng cấp làm đám người chơi của câu lạc bộ phổng mũi hẳn. Bọn họ nhao nhao đòi làm một vụ lớn.
+
+Lúc này, kẻ sáng lập câu lạc bộ Tử Thần cũng nhận ra sự tình bắt đầu chệch hướng. Thành viên càng đông, gã càng không quản nổi. Tuy trong lòng không muốn, gã vẫn đành xuôi theo ý đám thành viên mà bước tiếp. Đó chính là cái hại của việc thực lực bản thân không đủ, uy không đủ trấn người.
+
+Nên chĩa mũi giáo của câu lạc bộ Tử Thần vào đâu đây? Đám zombie dưới lầu thì tuyệt đối không rồi — vừa đông nghịt, vừa sát vách. Chọc vào mà lỡ đánh không lại, cả câu lạc bộ thất thủ, vật tư trong kho cũng đi tong.
+
+Kẻ sáng lập bàn bạc với mấy tay đầu lĩnh có uy tín trong hội, cuối cùng chốt mục tiêu: **viện bảo tàng Ma Đô**. Vị trí không gần không xa, khoảng đất trống trước cổng bảo tàng cũng hợp để dàn trận. Dĩ nhiên, bọn họ chưa ngông đến mức trăm người mà dám xông vào đó — chỉ chốt phương án tạm, đợi khi nào câu lạc bộ gom đủ hai trăm người mới ra tay.
+
+"Được rồi, cứ quyết vậy đi. Vũ khí thì anh em tự lo liệu chuẩn bị." — Cao Đống lên tiếng. Gã chính là người sáng lập câu lạc bộ Tử Thần.
+
+Đám thành viên đứng bật dậy, hò reo một tràng.
+
+"Theo ta thì khỏi đợi đủ hai trăm — đợi là coi thường thực lực anh em chúng ta, giờ cứ xông thẳng qua luôn!"
+
+"Chuẩn! Tốt nhất nổ thêm cái thẻ vật tư cừu nướng nguyên con nữa, con cừu hôm qua ăn ngon nhức nách!"
+
+"Mẹ kiếp, ta nôn nóng hết chịu nổi rồi. Không được, ta phải đi lấy thêm túi giăm bông nhai đã."
+
+.........
+
+Cao Đống há miệng, định nói lại thôi. Gã muốn khuyên đám thành viên tiết kiệm vật tư một chút, cũng muốn khuyên bọn họ nhẹ tay nhẹ chân kẻo động đến lũ zombie dưới lầu. Nhưng gã biết, có nói cũng chẳng ai nghe. Bởi giữa thời tận thế, ai mà chẳng thích được há mồm ăn thả cửa? Ai mà không mê cái câu lạc bộ ăn chơi không phép tắc, không trật tự này?
+
+Cao Đống cứ mãi cảm thấy mình đã đi lệch đường. Nhưng lại tiếc, không nỡ buông cái câu lạc bộ chính tay mình dựng nên. Nói trắng ra, gã vẫn hưởng thụ cái ghế sáng lập nhìn-như-có-quyền, được thành viên tâng bốc này. Vậy nên dưới sự nhân nhượng của gã, đám thành viên ngày càng lộng hành.
+
+"Mẹ nó, thằng Tóc Vàng kia, cái tay ngươi để cho sạch sẽ vào!"
+
+Một tràng cãi vã chợt vang lên. Người đàn bà cầm gậy sắt chỉ thẳng mặt gã đàn ông nhuộm đầu vàng khè. Sau lưng ả, một cô gái dáng người khá đẹp đang nép vào.
+
+Cao Đống khỏi cần nhìn cũng biết: thằng Tóc Vàng lại giở trò sờ soạng con bé kia.
+
+Tóc Vàng nhìn người đàn bà cầm gậy sắt, chẳng chút nao núng. "Ta nói này, Điền Ngưng Tĩnh, đừng tưởng vớ được cây gậy sắt cấp Thanh Đồng gì đó mà lên mặt diễu võ dương oai với ta." — gã nhổ toẹt bãi nước bọt xuống đất — "Ngươi thì hiểu cái gì? Để em xinh này sớm ngoan ngoãn theo ta, tốt cho cả đám. Mỗi mình ngươi đòi che cho cô ta, che được đến bao giờ?" Tóc Vàng nhìn Điền Ngưng Tĩnh đầy giễu cợt.
+
+Điền Ngưng Tĩnh giận run cả người, phẫn nộ quát: "Ngươi rắp tâm gì ta còn lạ à, còn 'ngoan ngoãn theo ngươi'? Ta phỉ nhổ! Ngươi cũng xứng?"
+
+Đám người vây xem cười ầm cả lên.
+
+Mặt Tóc Vàng sầm xuống. Gã thấy mình mất mặt trước bàn dân thiên hạ. "Con điếm thối, cứ từ từ. Giờ ông đây còn phong độ quý ông nên chưa thèm động tới ngươi. Đợi ông đây tóm được cơ hội, ông chơi cho ngươi đến mẹ ngươi cũng không nhận ra!" Tóc Vàng biết nhất thời chưa làm gì nổi Điền Ngưng Tĩnh đang có trang bị trong tay, chỉ đành buông lời hăm dọa.
+
+"Còn 'chơi' ta cơ à? Ngươi đái ra vũng nước mà soi lại cái tăm của ngươi đi, cười chết mất." Thấy Tóc Vàng chột dạ, Điền Ngưng Tĩnh được nước lấn tới.
+
+Đám đông lại nổ ra tràng cười ầm ĩ. Sắc mặt Tóc Vàng càng lúc càng khó coi. Gã bước sang bên, rút ra một cây gậy gỗ to.
+
+Cao Đống ngồi không yên nữa. Cứ để sự việc trượt tiếp, thể nào cũng bùng thành xung đột lớn.
+
+"Đủ rồi." — Cao Đống đứng dậy, lên tiếng. Chỉ tiếc giọng gã quá nhỏ, chìm nghỉm giữa tiếng cười của đám đông.
+
+Mắt thấy trò vui càng lúc càng lớn, người kéo đến xem càng lúc càng đông. Sợ chuyện không đủ to, bọn họ gào cổ vũ:
+
+"Chiến đi! Tóc Vàng đừng nhát, ai lại đi nhát cáy trước một con đàn bà?"
+
+"Điền cô nương, chiến đẹp vào, để anh đây xem cái dáng ngon thế kia lúc đánh nhau uốn éo ra làm sao."
+
+......
+
+Chẳng một ai để ý. Cái thang chở hàng thông thẳng lên tầng thượng ấy, cửa đang từ từ kéo mở.
+
+Một người đàn ông đeo mặt nạ bước vào. Sau lưng hắn còn có một vệ sĩ cao lớn dị thường, đeo kính râm.
+
+---
+
+## Chương 53
+
+Người đến dĩ nhiên là nhân vật chính của chúng ta — Lâm Tử Lạc, anh tuấn phong độ chẳng kém gì quý độc giả.
+
+Lúc này hắn đã thu hết cả thân trang bị, tiện tay khoác một bộ đồ nam bình thường. Vậy mà bộ đồ thường lên người hắn vẫn ra dáng, ra khí chất lạ thường.
+
+Lâm Tử Lạc xưa nay quen giữ mình kín tiếng. Dù sao kiếp trước hắn phải trốn đông nấp tây suốt, chỉ cần lộ liễu một chút là dễ dẫn người của họ Lý tìm tới. Vốn hắn còn định hóa trang, nhưng nghĩ lại — giờ ta còn phải rén cái nỗi gì? Sợ đống thịt nát vốn là Lý Hạo Bác bò dậy tìm ta gây phiền chắc?
+
+Thế là hắn đàng hoàng đường hoàng đi thang chở hàng lên thẳng tầng thượng siêu thị Tiểu Nhuận Phát. Cửa thang hàng vốn có người gác, nhưng vừa thấy có trò vui, đám gác cửa đã bỏ hết sang bên kia hóng chuyện. Vậy là Lâm Tử Lạc cùng Đại Ngốc quang minh chính đại bước vào "Câu lạc bộ Tử Thần", đồng thời trông thấy đám đông đang xúm lại xem náo nhiệt.
+
+Gã Cao Đống sốt ruột đứng ngoài vòng người lập tức lọt vào mắt Lâm Tử Lạc.
+
+"Tay này... hình như hôm ta kích hoạt cuộn trục có thấy qua." — Lâm Tử Lạc nhớ lại. Chuyện quá lâu rồi, bảo nhận ra hẳn thì khó, nhưng vẫn còn chút ấn tượng: hình như gã khá có sức hiệu triệu, là đại ca một tổ chức nào đó.
+
+Xem ra đúng là cái tổ chức này rồi!
+
+Cao Đống hút ánh nhìn của Lâm Tử Lạc, thì hai người bọn hắn cũng hút ánh nhìn của kẻ khác. Lâm Tử Lạc đeo mặt nạ vốn đã đủ bắt mắt, sau lưng còn lù lù một gã khổng lồ cao quá hai mét, lại mặc nguyên bộ đồ vệ sĩ. Cái tổ hợp ấy, ai nhìn mà chẳng chột dạ.
+
+Một kẻ trông thấy bọn Lâm Tử Lạc, lập tức từ trạng thái hò hét phấn khích chuyển sang im thin thít, chỉ sợ mình vung tay quá trớn, gây ồn quá to làm hắn phật ý. Một người im, kéo người bên cạnh tò mò ngoái nhìn theo — thấy Lâm Tử Lạc và Đại Ngốc xong cũng câm bặt tức thì. Cứ thế một đồn mười, mười đồn trăm, chẳng mấy chốc cả tầng thượng lặng phắc. Đến cả Điền Ngưng Tĩnh và Tóc Vàng đang cãi nhau đỏ mặt tía tai cũng ngậm miệng.
+
+Cả đám sợ sệt nhìn Lâm Tử Lạc. Bầu không khí hiện trường quỷ dị hết chỗ nói.
+
+Cao Đống hoàn hồn trước tiên. Gã lấy lại phong thái lãnh đạo, chủ động tiến lên đón: "Không biết vị huynh đệ này xưng hô thế nào, đến câu lạc bộ Tử Thần của bọn ta có việc gì chăng?" — Cao Đống lễ phép hỏi.
+
+"À, ta và huynh đệ nhà ta, thấy bên này đông người nên tới xem thử có gia nhập được không." — Lâm Tử Lạc đáp, giọng "thật thà chất phác".
+
+Hóa ra gã to con phía sau là anh em, không phải vệ sĩ! Cả đám lập tức thở phào. Đấy chính là sức ép đến từ thân phận: ban nãy ai cũng tưởng Đại Ngốc là vệ sĩ của Lâm Tử Lạc, thân phận hắn ắt không tầm thường; giờ nghe bảo là anh em, lập tức xem nhẹ đi mấy phần.
+
+Cao Đống thì mừng rơn. Là anh em à, thế thì tốt quá! Nếu kéo được hai người này về phe mình, tiếng nói của mình chẳng phải nặng ký thêm bao nhiêu?
+
+"Muốn gia nhập câu lạc bộ Tử Thần thì bọn ta hoan nghênh hết mực. Tự giới thiệu: ta là hội trưởng câu lạc bộ Tử Thần — Cao Đống." — gã bắt đầu phô thân phận.
+
+"Ồ, hóa ra là hội trưởng." — Lâm Tử Lạc "bừng tỉnh đại ngộ".
+
+"Đúng vậy. Chưa biết huynh đệ xưng hô ra sao?" — Cao Đống hỏi, lúc này mới sực nhớ xem thuộc tính của Lâm Tử Lạc. Kết quả nhìn vào: cả màn hình toàn dấu chấm hỏi.
+
+???
+
+Thao tác gì thế này?
+
+Cao Đống không tin tà, ngó tiếp bảng của gã to con sau lưng hắn:
+
+【Thông tin cơ bản】
+Biệt danh: Đại Ngốc
+Danh hiệu: chưa có
+Cấp: 4
+
+???
+
+Sao lại có người tự đặt tên mình là Đại Ngốc?!
+
+Cao Đống bị hai người này làm cho loạn não.
+
+"Ta hả, ta tên Lâm Lạc. Còn đây là huynh đệ của ta, tên Đại Ngốc — người hơi ngốc, lại câm, chuyên làm vệ sĩ cho nhà giàu." — Lâm Tử Lạc giới thiệu.
+
+Trong bụng Cao Đống càng khoái chí. Hơi ngốc, chẳng phải nghĩa là dễ lừa sao?
+
+"Tốt! Tốt! Tốt! Huynh đệ Lâm Lạc, ta thay mặt câu lạc bộ Tử Thần hoan nghênh hai người gia nhập." — Cao Đống chìa tay ra. Lâm Tử Lạc thân thiện bắt tay gã.
+
+Nhờ màn xuất hiện của Lâm Tử Lạc, bầu không khí kiếm tuốt cung giương ban nãy cũng loãng đi. Điền Ngưng Tĩnh và Tóc Vàng chửi qua chửi lại thêm hai câu chốt hạ rồi vãn cuộc. Đương nhiên, xung đột đã dứt hẳn chưa thì còn phải xem trong bụng hai người nghĩ gì.
+
+Tầng thượng Tiểu Nhuận Phát lại chìm vào biển hoan lạc. Còn Lâm Tử Lạc và Đại Ngốc bị Cao Đống kéo vào "văn phòng" của gã.
+
+"Huynh đệ Lâm Lạc, huynh đệ Đại Ngốc, ta với hai người đúng là vừa gặp đã thân! Hai người có sở thích gì cứ nói, chỗ huynh đệ, ta lo liệu hết." — Cao Đống chẳng giấu nổi vẻ quý mến với Đại Ngốc: miệng nói với Lâm Tử Lạc mà mắt cứ dán chặt vào Đại Ngốc, nhìn đến mức Lâm Tử Lạc đâm nghi ngờ cả xu hướng giới tính của gã.
+
+"Khụ, chuyện là thế này, Cao lão ca. Ta với huynh đệ nhà ta thuộc dạng ham đánh đấm, mục tiêu lớn nhất là mạnh lên; rảnh rỗi là thích ra ngoài giết zombie cày cấp. Đến đây chủ yếu cũng là nhận mặt làm quen trước." — Lâm Tử Lạc nói.
+
+Đây là đòn lót đường cho hành động về sau: đã khai là mê giết zombie, thì lúc bàn chuyện đánh bảo tàng, hắn có thể mượn cái tính "hiếu chiến" ấy thúc bọn họ quyết nhanh. Đồng thời, Lâm Tử Lạc cũng không đời nào chọn cả ngày dính lấy đám người này. Cẩn tắc vô ưu mãi mãi là châm ngôn của hắn — loại tự đại, mới có tí thực lực đã ngông, trong trò chơi tận thế thường ngoẻo sớm nhất.
+
+Hơn nữa, hết hạn mặt nạ ẩn thân là lộ ngay thân phận Nhai Xải. Cái danh hiệu khủng ấy trấn được đa số người, nhưng khó bảo đảm không có đứa óc ngắn nảy sinh ý đồ với mình. Chẳng phải Lâm Tử Lạc sợ gì bọn họ — kẻ nào dám động vào hắn, hắn tuyệt đối khiến kẻ đó hối hận vì đã sinh ra trên đời. Nhưng đám người này hiện là "trợ lực tốt" cho chuyến vào bảo tàng, sao có thể tiêu hao tùy tiện?
+
+"À, thích mạnh lên hả!" — Cao Đống thốt lên. Gã chẳng mảy may nghi ngờ: trong câu lạc bộ Tử Thần khối kẻ nghĩ y như vậy.
+
+Trên mặt Cao Đống thoáng hiện vẻ xót của, gã mở lời: "Muốn mạnh lên thì... chỗ ta đúng lúc thừa một quyển sách kỹ năng, đành cắn răng nhường lại cho huynh đệ vậy."
+
+---
+
+## Chương 54
+
+Sách kỹ năng?
+
+Lâm Tử Lạc nhất thời đứng hình. Úi mẹ ơi, còn có quà bất ngờ cơ à! Nếu không nhờ định lực đủ dày, e là hắn đã bật cười thành tiếng. Khoan đã, gã Cao Đống này không biết sách kỹ năng quý cỡ nào hay sao — vì lấy lòng bọn ta mà chịu bỏ cái giá lớn vậy?
+
+Bụng cười thầm một chặp, ngoài miệng Lâm Tử Lạc lại ngập ngừng: "Sách kỹ năng... thứ này chắc quý lắm nhỉ."
+
+Chính là cái thái độ này! Thái độ này dễ khiến người ta cắn câu nhất.
+
+Quả nhiên, Cao Đống lập tức hào sảng: "Ôi dào, anh em nhà cả, quý với chả hiếm gì. Đây, huynh đệ Lâm Lạc, cầm lấy."
+
+Dứt lời, gã móc từ không gian chứa đồ ra một quyển sách, dúi thẳng vào tay Lâm Tử Lạc.
+
+Ối chà, đúng là sách kỹ năng thật! Lâm Tử Lạc choáng luôn. Là cách mở của ta sai chỗ nào à? Người chơi trò chơi tận thế bây giờ hào phóng thế cơ à?
+
+Hắn lật sách ra:
+
+【**Thất Thần Cuồng Nộ**】: kỹ năng hệ chiến sĩ. Sau khi kích hoạt, bản thân rơi vào trạng thái mất khống chế, mất toàn bộ ý thức, hóa thành kẻ điên chỉ biết tấn công mọi sinh vật sống xung quanh. Toàn bộ thuộc tính tăng 20%–50% tùy mức độ phẫn nộ, kéo dài 2 phút. Hết 2 phút, bản thân rơi vào hỗn loạn theo mức đã tăng — tăng càng cao, hỗn loạn càng lâu. (Kỹ năng này tác dụng phụ CỰC LỚN, cẩn trọng khi dùng! Cẩn trọng khi dùng!)
+
+Biểu cảm của Lâm Tử Lạc trở nên khó tả.
+
+Cao Đống tuy không thấy được mặt hắn, nhưng nhìn cái dáng đứng đơ hồi lâu là biết trò khôn vặt của mình bị nhìn thấu. Gã lúng túng giải thích: "Kỹ năng này thì... tác dụng phụ đúng là hơi lớn, dùng xong lại mất ý thức, nhưng mà, nhưng mà... nó là cọng rơm cứu mạng khi lâm vào tuyệt cảnh đấy!"
+
+*Hầy, ngươi tưởng ta ngốc thật chắc, có sách kỹ năng mà không tự học.* Cái kỹ năng này là cho người dùng à? Hai phút mất sạch ý thức, khoan bàn chuyện có chém nhầm người mình hay không — ai cũng biết, dù thuộc tính có tăng, kẻ mất ý thức đánh đấm còn kém hơn cả lúc tỉnh táo. Cứ lấy zombie với người cùng thuộc tính mà so: người thường giết được zombie, chính vì zombie không có ý thức.
+
+Người chơi đâu phải lũ ngốc. Kẻ nổ ra quyển sách này liền đem nó đổi ngay với Cao Đống lấy một món trang bị cấp Thanh Đồng — và Cao Đống cũng hồ đồ đổi thật. Mỗi lần nhớ tới vụ ấy, gã lại hối hận không thôi.
+
+"Ờm, không sao, không sao. Tấm lòng của Cao lão ca ta nhận rồi, quyển sách này ta rất thích. Cảm ơn lão ca." — Lâm Tử Lạc bình thản nói, đoạn thu luôn sách vào không gian chứa đồ của mình.
+
+*Ngươi mà thích thật thì đã tự học từ đời nào rồi.* Cao Đống tưởng Lâm Tử Lạc đang xuống thang giùm mình, mặt càng nóng ran, vội vã: "Là ta có lỗi với huynh đệ Lâm. Thế này đi, chỗ ta còn một tấm phiếu vật tư thùng gà rán cỡ đại, mấy huynh đệ mình cùng đánh chén nhé?"
+
+Đấy, thấy chưa — đó chính là ma lực của lời nói và cử chỉ. Xơi không quyển sách kỹ năng của người ta, còn khiến người ta ôm lòng áy náy.
+
+"Thôi thôi, khỏi. Ta phải cùng Đại Ngốc ra ngoài kiếm zombie cày kinh nghiệm đây." — Lâm Tử Lạc từ chối.
+
+Cao Đống nghe vậy: ừ được, giờ đều là huynh đệ tốt cả, các ngươi mạnh lên thì ta cũng mừng. "Được, các ngươi cứ đi. Thiếu ăn thiếu uống cứ vào kho mà lấy, đừng khách sáo." — gã hào phóng nói.
+
+Lâm Tử Lạc gật đầu tỏ ý đã hiểu, nhưng cũng chẳng thèm lấy vật tư thật, đi thẳng ra khỏi văn phòng. Đại Ngốc nãy giờ đứng cạnh xem hai người "anh anh em em"; tuy chẳng hiểu họ nói gì, nhưng thấy Lâm Tử Lạc cất bước là lon ton bám theo ngay.
+
+Còn lại một mình trong văn phòng, Cao Đống tự sướng: "Huynh đệ Lâm Lạc đúng là được! Ta tặng quyển sách kỹ năng rách ấy mà hắn chẳng chê tiếng nào. Huynh đệ tốt a." — gã cảm khái.
+
+.........
+
+Vừa bước ra ngoài, Lâm Tử Lạc lập tức đánh hơi thấy điều bất thường. Trực giác nhạy bén mách bảo: từ khoảnh khắc ra khỏi cửa văn phòng, đã có ba bốn kẻ bám mắt vào mình, như thể chực sẵn đợi mình ra.
+
+*Hầy, xem ra là muốn kiếm chuyện với ta đây.* Lâm Tử Lạc bất đắc dĩ hết sức. *Ta vốn là người thật thà lương thiện mà, sao các ngươi cứ thích bắt nạt người thật thà thế hả?*
+
+Quả nhiên, đi được nửa đường tới thang chở hàng, hắn bị mấy kẻ vây lại chặn lối. Một gã ngậm điếu thuốc, khoác áo lông chồn từ đám người chui ra. Gã này chính là cái gai khiến Cao Đống nhức đầu bấy lâu: bản thân có thế lực không nhỏ, lại luôn nhăm nhe thay Cao Đống ngồi ghế đại ca câu lạc bộ Tử Thần, nên thường xuyên chọc ngoáy gã hội trưởng cả trước mặt lẫn sau lưng.
+
+Gã đàn ông vênh mặt nhìn Lâm Tử Lạc, ngông nghênh mở miệng: "Huynh đệ, ta không dọa ngươi, chỉ nhắc nhở một câu: đừng có xáp lại gần gã Cao Đống quá. Bằng không, dù gã huynh đệ của ngươi có đánh đấm giỏi cỡ nào......"
+
+Lâm Tử Lạc hết kiên nhẫn. Đúng là ta huấn luyện chưa tới nơi tới chốn. "Đại Ngốc, đực mặt ra đấy làm gì? Làm việc đi!"
+
+Gã kia thấy mình đang nói mà bị cắt ngang, tức sôi máu, trông chừng sắp bùng nổ.
+
+Đại Ngốc từ sau lưng Lâm Tử Lạc bước ra.
+
+"Hừ, to xác thì giỏi chắc? Cũng chỉ cấp bốn thôi. Ta nói cho ngươi biết, sau lưng ta có mấy gã cấp bốn......"
+
+**"Bốp."**
+
+Lần này lời gã lại đứt giữa chừng — và vĩnh viễn không nói được nữa. Bởi Đại Ngốc vừa dốc toàn lực tát cho gã một cái. Cái tát ấy mới ghê gớm làm sao: quật cho đầu gã xoay tròn 180 độ theo chiều kim đồng hồ.
+
+Mấy gã lực lưỡng đứng sau lưng gã kia, thấy mặt đại ca mình mọc ra sau gáy, quay ngoắt lại đối diện với chính chúng, tức thì hồn bay phách lạc. Thậm chí hai đứa sợ đến nhũn chân, ngồi phịch xuống đất.
+
+Đám người đang cuồng hoan trong sảnh nghe tiếng tát cũng tò mò ngoái nhìn.
+
+**"Rầm."**
+
+Thi thể gã đàn ông đổ sập.
+
+Lâm Tử Lạc điềm nhiên phủi phủi tay, giẫm thẳng qua xác gã mà đi. Đến cạnh thang chở hàng, bấm mở cửa thang, dẫn theo Đại Ngốc — kẻ trông như chưa từng có chuyện gì xảy ra — rời khỏi tầng thượng.
+
+---
+
+## Chương 55
+
+Im lặng. Im lặng đến cùng cực.
+
+Đại sảnh náo nhiệt là thế, lại một lần nữa vì Lâm Tử Lạc mà chìm vào im ắng. Ai nấy trân trối nhìn cái xác trên sàn, kinh hãi đến không thốt nổi thành lời.
+
+Đến cả Cao Đống trong văn phòng cũng nhận ra có gì đó không ổn. Gã đang tự trách mình quên đứng dậy tiễn huynh đệ Lâm Lạc xuống lầu, thì chợt phát hiện tiếng ồn ào bên ngoài... biến mất.
+
+Cao Đống mở cửa văn phòng. "Có chuyện gì vậy, các ngươi......" — câu chưa dứt, gã đã thấy cái xác nằm sõng soài. "Đây, đây... đây chẳng phải Giả Đài sao, sao lại chết rồi?" — Cao Đống thảng thốt.
+
+Câu ấy phá vỡ màn tĩnh lặng. Không ít kẻ lúc này mới hoàn hồn, tiếng thét cùng tiếng bàn tán nổ ra:
+
+"Giết người rồi!"
+
+"Vãi cả chưởng, một cái tát quật đầu người ta xoay nửa vòng, vãi thật."
+
+"Không xong, ta sắp nôn rồi, ghê chết đi được, ọe."
+
+.........
+
+Đại sảnh trở lại ồn ã như trước, thậm chí còn loạn hơn. Một đàn em trung thành của Cao Đống chủ động chạy tới, thuật lại đầu đuôi. Nghe đến đoạn Lâm Tử Lạc sai Đại Ngốc tát chết Giả Đài, Cao Đống suýt bật cười thành tiếng. *Kẻ thù lớn của ta cứ thế mà ngoẻo rồi? Lâm Lạc, Đại Ngốc — hai người đúng là huynh đệ tốt của ta! Lần sau phải chịu chi đậm mà lấy lòng họ mới được!*
+
+Cao Đống đảo mắt một vòng, sai thuộc hạ dọn xác, rồi lại chui về văn phòng, phấn khích lẩm bẩm: "Huynh đệ Lâm Lạc này đúng là tặng ta một món quà lớn!"
+
+......
+
+"Ta thế này là tặng Cao Đống một món quà lớn còn gì."
+
+"Nhưng vậy cũng tốt — vừa dựng được uy, đỡ khối chuyện lằng nhằng. Đến lúc bàn đánh bảo tàng, chắc chắn tiếng nói của ta sẽ nặng ký." — trong thang chở hàng, Lâm Tử Lạc thầm tính.
+
+Mà Cao Đống cũng tặng ta một món quà lớn đấy chứ! Nghĩ tới 【Thất Thần Cuồng Nộ】, Lâm Tử Lạc cũng thấy khoái — xơi không nguyên một quyển sách kỹ năng xịn!
+
+Không sai. Quyển sách trong mắt người khác là đồ bỏ, thậm chí là kỹ năng dùng để tự sát, vào tay Lâm Tử Lạc lại là bảo bối. Bảo bối này không phải cho hắn — mà cho Đại Ngốc.
+
+【Thất Thần Cuồng Nộ】 đúng là khiến người chơi mất lý trí, thậm chí quay sang đánh cả đồng đội. Nhưng Đại Ngốc thì cần gì lý trí! Lâm Tử Lạc đã hỏi hệ thống golden finger rồi: dù có lý trí hay không, Đại Ngốc tuyệt đối không bao giờ hại hắn — đó là bản năng bị hệ thống khắc sâu, chẳng liên quan gì tới tỉnh hay điên. Thậm chí hắn còn có thể trực tiếp thao túng hành vi của Đại Ngốc.
+
+Nghĩa là: Đại Ngốc bật "Thất Thần Cuồng Nộ" xong sẽ hưởng không đống thuộc tính tăng vọt, rồi hoặc tấn công mọi sinh vật trừ Lâm Tử Lạc, hoặc hoàn toàn theo sự điều khiển của hắn.
+
+Lại thêm một cái BUG của trò chơi. Trò chơi tận thế có đánh chết cũng không ngờ cái kỹ năng phế vật "Thất Thần Cuồng Nộ" vào tay Lâm Tử Lạc lại chơi ra hoa được.
+
+Lâm Tử Lạc móc quyển sách đưa cho Đại Ngốc. Đại Ngốc ngoan ngoãn học luôn. Nhìn kỹ năng mới trên bảng của nó, Lâm Tử Lạc không khỏi cảm khái: Đại Ngốc đúng là zombie ngốc có cái phúc của zombie ngốc. Ban ngày ta còn đè nó một bậc, chứ vào đêm — có màn đêm cộng hưởng thêm Thất Thần Cuồng Nộ — thì trong hai phút đó, chính ta cũng phải tạm tránh mũi nhọn của nó.
+
+Không được, phải gắng cày cấp thôi. Tranh thủ lên cấp mười — sau khi chuyển nghề ở cấp mười, thực lực của ta ít nhất tăng gấp đôi.
+
+Thang máy dừng. Đã tới hành lang cửa sau thương xá; cả dãy hành lang từ lâu đã bị người của câu lạc bộ Tử Thần dọn sạch. Lâm Tử Lạc và Đại Ngốc nghênh ngang bước ra.
+
+Giờ là khoảng năm giờ chiều, còn hai tiếng nữa màn đêm buông. Vậy thì kiếm đại một chỗ cày kinh nghiệm, xem có nổ ra được cái quần, đôi găng hay tấm giáp ngực còn thiếu không.
+
+Khoan, không đúng chứ? Màn đêm thì liên quan gì tới ta? Ta với Đại Ngốc hai đứa thừa sức nghiền nát đám zombie được màn đêm cường hóa. Lâm Tử Lạc chợt tỉnh ngộ — ta vẫn còn bị lối nghĩ kiếp trước ám. Đã vậy thì... quẩy luôn! Trong lúc kẻ khác chỉ đáng ngoan ngoãn trốn trong nhà chờ trời sáng, ta tung hoành giữa bầy zombie, kinh nghiệm tăng vùn vụt — sướng nào bằng!
+
+Nghĩ tới đây, Lâm Tử Lạc chẳng lề mề, lôi ngay bản đồ ra lật tìm. Cần một chỗ giết zombie được liên tục mà không lo bị vây, tốt nhất còn có rương báu hoang dã hay vật phẩm trò chơi. Phó bản thì thôi, gần đây làm gì có.
+
+Nhưng mà, có một chỗ ngon: Lâm Tử Lạc nhìn vào "**Thư viện Ma Đô**" trên bản đồ.
+
+Thư viện Ma Đô cách thương xá Tiểu Nhuận Phát chỉ chừng bốn cây số. Thư viện rộng thật đấy nhưng lối đi bố trí khá hẹp, mỗi loại sách lại được ngăn thành một phòng khép kín. Quan trọng nhất: trên nóc thư viện có "**Cửa hàng trò chơi**"!
+
+Tài khoản Lâm Tử Lạc hiện có ngót 6000 vàng. Tính giá hai nghìn vàng một món trang bị Thanh Đồng hảo hạng, hắn dư sức sắm đủ cả quần, găng lẫn giáp ngực.
+
+Chốt, thư viện Ma Đô!
+
+Lâm Tử Lạc dẫn Đại Ngốc xuất phát luôn. Ba bốn cây số chẳng phải xa, dọc đường zombie tụ tập cũng lắm, nhưng dưới sự phối hợp của hai người, đám zombie đó hoàn toàn bị nghiền ép. Lâm Tử Lạc còn dặn kỹ Đại Ngốc chỉ cần đánh tàn phế, chừa lại cho ta bồi đao. Tuy làm vậy nó không được kinh nghiệm, nhưng tỷ lệ rơi đồ trăm phần trăm của ta đâu phải nói chơi! Kết hợp thêm 【Tự Động Nhặt Đồ】 kích hoạt liên hồi, Lâm Tử Lạc chỉ việc mỗi nhát một nhát chém đám zombie đã bị Đại Ngốc đấm cho tàn phế — thẻ, đạo cụ, thậm chí trang bị cứ thế ùn ùn rót vào không gian chứa đồ.
+
+Kinh khủng khiếp. Dưới vòng xoay phối hợp của ba golden finger — tỷ lệ rơi tuyệt đối, nô dịch tuyệt đối, tự động nhặt đồ — Lâm Tử Lạc thành một cỗ máy cày quái vô tình. Cày miết tới gần thư viện Ma Đô mới chịu thu liễm.
+
+---
+
+## Chương 56
+
+Lâm Tử Lạc thu Đường đao.
+
+Lúc này hắn và Đại Ngốc đã đánh thốc vào một tiệm tạp hóa nhỏ bên ngoài thư viện Ma Đô. Giải quyết xong bà thím zombie trong tiệm, Lâm Tử Lạc ngồi phịch xuống ghế, tiện tay quơ gói que cay trên kệ, nhai ngon lành.
+
+"Để xem nãy giờ nổ được những báu vật gì nào."
+
+Cả chặng đường, Lâm Tử Lạc giết hơn trăm con zombie. Cộng với số giết trước đó, 800 điểm kinh nghiệm cần để lên cấp chín đã lấp được một nửa.
+
+Khoản thẻ thì bỏ qua — nhiều quá, xếp thành mấy chồng dày cộp ở đó. Trừ mấy tấm thẻ công cụ sau này có thể dùng, còn lại hắn lười liếc lấy một cái.
+
+Đạo cụ và trang bị mới là chính! Lượt này tổng cộng ra năm món đạo cụ và hai món trang bị. Ngoài những thứ đã có, thêm một món mới:
+
+【**Bù nhìn rơm cũ nát**】: đạo cụ dùng một lần cấp Thanh Đồng. Đặt xuống đất, mọi sinh vật đang mang thù hận với người chơi sẽ chuyển mục tiêu sang bù nhìn; chỉ khi bù nhìn bị phá hủy hoàn toàn, chúng mới quay lại tấn công người chơi.
+
+Con bù nhìn này là đồ tốt, đạo cụ giữ mạng chính hiệu. "Sinh vật" ở đây bao gồm cả người chơi đấy nhé! Dù đối phương biết rõ phải đánh ngươi, thân thể gã vẫn bất giác lao vào đánh con bù nhìn. Thần kỳ vậy đó.
+
+Cất kỹ món đồ ngon, Lâm Tử Lạc lấy tiếp hai món trang bị vừa nổ:
+
+【**Găng Liên Kích**】: trang bị Thanh Đồng. Đeo vào có tỷ lệ đánh liên hoàn. Thuộc tính: Sức mạnh +1, Thể chất +1; 5% tỷ lệ bồi thêm một đòn sau mỗi đòn đánh.
+
+【**Hoàn Thủ Đao**】: trang bị Thanh Đồng. Trường đao lưỡi thẳng, rèn từ thép gấp đập nhiều lớp rồi tôi luyện. Thuộc tính: Sức mạnh +3.
+
+Đúng là thiếu gì được nấy! Lâm Tử Lạc khoái chí xỏ Găng Liên Kích: thuộc tính cộng đã hời, còn kèm hiệu ứng liên kích — hễ kích hoạt thì chẳng khác gì "Tạc Liệt Song Trảm" của hắn, chém liền hai nhát cực nhanh; uy lực có thể kém hơn, thiếu cả hiệu ứng nổ, nhưng của trời cho thì còn đòi xe đạp gì nữa.
+
+Còn Hoàn Thủ Đao, Lâm Tử Lạc chỉ có thể nhận xét: đẩy sức mạnh tới cực hạn, vứt bỏ mọi hiệu ứng phụ để dồn hết vào Sức mạnh — thuộc hàng đỉnh nhất trong đám trang bị Thanh Đồng.
+
+Lâm Tử Lạc chợt động tâm niệm. "Đường Hoành Đao" của ta cũng là hàng đỉnh. Nghĩa là viên 【**Dung Hợp Thạch**】 cất giữ bấy lâu dùng được rồi!
+
+Dung Hợp Thạch lập tức hiện ra trong tay — chiến lợi phẩm từ con zombie dính liền trong nhà thi đấu. Công dụng: hợp nhất hai trang bị Thanh Đồng cùng loại thành một; nếu phẩm chất cả hai đủ tốt, rất có thể hợp ra trang bị cấp **Bạch Ngân**!
+
+Lâm Tử Lạc chẳng dông dài, đặt luôn 【Đường Hoành Đao +1】 và 【Hoàn Thủ Đao】 lên bàn, chọn dùng Dung Hợp Thạch.
+
+【Người chơi Nhai Xải kích hoạt Dung Hợp Thạch, chuẩn bị dung hợp trang bị "Hoàn Thủ Đao" và "Đường Hoành Đao +1"】
+
+【Xác nhận dung hợp? Sau khi dung hợp, hai trang bị sẽ vĩnh viễn biến mất】
+
+"Dung hợp." — Lâm Tử Lạc nói.
+
+【Bắt đầu dung hợp, thời gian cần: 30 phút】
+
+Viên đá trong tay hắn tức thì tỏa ánh sáng trắng, dần dần bao trùm cả hai thanh đao, tiến vào trạng thái dung hợp. Nhân cơ hội này, Lâm Tử Lạc cùng Đại Ngốc giải quyết luôn bữa tối.
+
+Hắn vừa buông bát đũa, bên tai đã vang lên tiếng nhắc hệ thống êm ái:
+
+【Dung hợp thành công! Chúc mừng người chơi nhận được trang bị cấp Bạch Ngân: "Trảm Thủ Ma Đao"】
+
+Vũ khí Bạch Ngân! Đẹp, sức tấn công của ta sắp tăng cả khúc rồi!
+
+Lâm Tử Lạc vội ngắm món trang bị mới. Thân đao vốn trắng ngần sáng loáng giờ nhuộm một màu đen thẳm sâu hun hút, chỉ nơi lưỡi đao sắc nhất còn ánh lên một tia sáng mảnh. Hình dáng Trảm Thủ Ma Đao chẳng khác Đường đao là mấy, chỉ thêm hai đường vân tinh xảo huyền ảo chạy dọc hai bên thân. Cầm lên, cảm nhận rõ trọng lượng nặng thêm chừng 30% — vấn đề không lớn, nhấc thử vài nhịp là hắn đã quen tay.
+
+【**Trảm Thủ Ma Đao +1**】: trang bị Bạch Ngân. Hợp nhất từ Đường Hoành Đao và Hoàn Thủ Đao, cộng thêm "thành tích" thường xuyên được dùng để chặt đầu, đã dung hợp thành công thanh ma đao có gia trì cho việc chém đầu. Thuộc tính: Sức mạnh +4, Thể chất +1. Rời trạng thái chiến đấu, vết tích trên thân đao dần tự phục hồi. Kỹ năng bị động — **Trảm Thủ**: tốc độ chém đầu tăng 20%; chém đầu thành công cộng 1 Sức mạnh trong 3 phút, cộng dồn tối đa 2 tầng.
+
+Bất ngờ! Bất ngờ ngoài sức tưởng tượng! Lâm Tử Lạc không ngờ hai món Thanh Đồng đỉnh cấp lại hợp ra được một món Bạch Ngân đỉnh cấp nhường này. Thanh Trảm Thủ Ma Đao hoàn toàn xứng hai chữ "đỉnh": bản thân đã cộng 4 Sức mạnh, tính cả hiệu ứng cộng dồn của bị động Trảm Thủ, mức gia trì tối đa lên tới sáu điểm Sức mạnh — con số đáng sợ!
+
+Lâm Tử Lạc sốt sắng mở xem thuộc tính sau khi trang bị:
+
+Thuộc tính cơ bản: Sức mạnh 27 · Tinh thần 19 · Thể chất 18 · Nhanh nhẹn 23
+
+Đúng là bò con trồng cây chuối — trâu bò hết chỗ chê!
+
+Có vũ khí mới, Lâm Tử Lạc ý khí phong phát. Nhưng quay sang thấy Đại Ngốc vẫn cắm đầu ăn lấy ăn để, hắn lập tức hận sắt không thành thép:
+
+"Ăn cái gì mà ăn, Đại Ngốc! Xuất phát — mục tiêu: thư viện Ma Đô!"
+
+---
+
+## Chương 57
+
+Đại Ngốc đầy lưu luyến đặt con gà nướng trong tay xuống, rồi đứng dậy, nhấc cây gậy sắt lớn vừa nhặt được — mặt vẫn một vẻ ỉu xìu.
+
+Lâm Tử Lạc buồn cười, bất đắc dĩ nói: "Tối nay chịu khó cày cho tử tế, mai ta thưởng ngươi hẳn hai con gà nướng!"
+
+Đại Ngốc lập tức lên tinh thần, cây gậy sắt giơ cao quá đầu, trong mắt ánh lên thần thái khác hẳn.
+
+Hầy, thế giới của đứa háu ăn cứ chất phác mà đơn điệu như thế đấy.
+
+Thư viện Ma Đô là tòa nhà hình tròn, có hai cửa vòng cung trước sau. Vì trò chơi tận thế giáng lâm lúc bảy giờ tối — giờ ấy còn ngồi thư viện đọc sách chẳng được mấy ai — nên zombie tụ trước cổng không đông bằng nhà thi đấu dạo trước.
+
+Nay là ngày tận thế thứ tư. Một bộ phận zombie đã lên cấp ba, số ít lên cấp bốn, thuộc tính cơ bản nhỉnh hơn trước chừng năm điểm. Với người thường dưới cấp bốn, đó là áp lực không nhỏ. Nhưng với Lâm Tử Lạc và Đại Ngốc — có khác gì nhau không?
+
+Theo lệ cũ, Lâm Tử Lạc tìm tấm sơ đồ chi tiết kết cấu thư viện đặt trước quảng trường cổng chính, vạch sẵn lộ tuyến di chuyển, rồi dẫn Đại Ngốc hùng hổ lao vào bầy zombie vây trước cổng lớn.
+
+Còn chừng nửa tiếng nữa màn đêm buông — phải đánh thốc vào trong thư viện trước lúc đó, mới khỏi bị zombie vây kín.
+
+Ngứa tay từ lâu, Lâm Tử Lạc một mình một ngựa xông lên trước, thanh ma đao trong tay vung ra một vệt tàn ảnh đen, bổ thẳng vào cổ con zombie gần nhất. Trảm Thủ Ma Đao — không chém đầu thì còn ra thể thống gì. Thân đao lướt qua cổ zombie trơn tru lạ thường, rõ ràng nhẹ tay hơn hẳn — hóa ra "tốc độ chém đầu tăng 20%" thực chất là chém đầu đỡ tốn sức, thuận tay hơn.
+
+Đầu zombie rơi xuống đất. Thanh ma đao truyền qua lòng bàn tay hắn một tia ấm áp. Sức mạnh cộng một.
+
+Ngon!
+
+Lâm Tử Lạc không khỏi cảm khái: so với trang bị Bạch Ngân thông thường, thanh Trảm Thủ Ma Đao này dễ dùng hơn không biết bao nhiêu lần.
+
+Đám zombie xung quanh hiển nhiên cũng đã trông thấy hai vị khách không mời, lũ lượt xúm lại.
+
+"Đại Ngốc, lần này khỏi nương tay chờ ta bồi đao. Cứ xông thẳng, giết vào được thư viện đã rồi tính." — Lâm Tử Lạc ngoái đầu dặn, đoạn lao thẳng vào bầy zombie.
+
+Nhận lệnh chủ nhân, Đại Ngốc lập tức vung gậy sắt nện thẳng xuống đầu con zombie trước mặt. Sức mạnh khủng khiếp dồn lên cây gậy — chỉ một gậy, đầu con zombie nở tung như pháo hoa, máu tươi lẫn óc bắn tóe theo tiếng nổ của hộp sọ. Đại Ngốc không né không tránh, mặc cho máu me óc não bám đầy người.
+
+Lâm Tử Lạc còn phải để tâm né vuốt sắc và cú cắn xé của zombie, chứ Đại Ngốc thì cần gì. *Sao hả, cùng là zombie cả, chẳng lẽ ngươi còn cắn cho ta "biến dị" được nữa?* Thể phách cường tráng, sức lực dũng mãnh — Đại Ngốc như con khủng long bạo chúa dạng người, húc dọc xéo ngang giữa bầy zombie.
+
+Lâm Tử Lạc bên cạnh thì thanh thoát hơn nhiều. Mỗi nhát ma đao vung ra đều trúng cổ zombie chuẩn xác không sai lệch, biến từng con thành kinh nghiệm và vàng, "vĩnh viễn ở bên" hắn. Rồi thân hình xoay vặn, lách qua hai bộ vuốt tập kích sau lưng trong đường tơ kẽ tóc, tiện tay đem đi thêm một mạng nữa.
+
+Thấy phía trước bị cả mảng zombie chặn kín lối, Lâm Tử Lạc giơ cao Trảm Thủ Ma Đao, nhắm góc, dốc sức ném ra.
+
+"**Hồi Toàn Trảm Kích**."
+
+Lần đầu Hồi Toàn Trảm Kích kết hợp với ma đao cấp Bạch Ngân: tốc độ xoay nhanh hơn hẳn, đang bay thậm chí không phân biệt nổi đâu là lưỡi, đâu là thân, đâu là chuôi — chỉ thấy thanh ma đao xoay tít thành một vòng tròn đen ngòm, không ngừng gặt hái sinh mạng zombie. Một con, hai con, ba con......
+
+Thanh đao bay về được Lâm Tử Lạc bắt gọn. Chỉ một kỹ năng ấy đã cứng rắn đoạt mạng bảy con zombie! Hắn thừa thế theo lối vừa dọn quang, bứt lên một quãng dài.
+
+Mắt thấy cổng thư viện mỗi lúc một gần, Lâm Tử Lạc còn tranh thủ ngoái nhìn Đại Ngốc — nó đi hơi chậm, còn cách hắn kha khá. Hắn lại vung đao, lần này còn may mắn kích hoạt hiệu ứng của Găng Liên Kích: cái xác zombie vốn một nhát đã xong, xui xẻo lãnh oan thêm nhát thứ hai. Thật ra hiệu ứng trấn nhiếp của "Hộ Uyển Sư Vương" cũng kích hoạt luôn miệng, chỉ là với đám zombie một đao một mạng này, có trấn nhiếp hay không cũng chẳng nhìn ra khác biệt.
+
+Dùng "Tạc Liệt Song Trảm" tiễn nốt con zombie cuối cùng trước mặt, Lâm Tử Lạc đặt chân tới cổng lớn thư viện. May sao cổng không đóng, hắn xông thẳng vào trong.
+
+Thây ma chỗ cổng chẳng có mấy. Lâm Tử Lạc tiện tay chém hai con, rồi tới thẳng nơi hắn ưng ý nhất — đoạn hành lang dài dẫn vào nhà vệ sinh công cộng. Khụ khụ, ưng chủ yếu là vì dễ thủ khó công. Trụ vững giữa hành lang, hắn tiếp tục nghênh chiến đám zombie bám theo mình tràn vào thư viện. Giữa chừng, toàn thân ê ẩm, Lâm Tử Lạc hào phóng móc bình thuốc thể lực ra tu bù sức.
+
+Lúc này Đại Ngốc rốt cuộc cũng xông được vào thư viện, lập tức lao về phía hắn. Loáng cái, một người một zombie hội quân thành công.
+
+"Vãi, ngươi làm cái gì mà ra nông nỗi này?" — Lâm Tử Lạc giật cả mình. Bộ vest chỉnh tề trên người Đại Ngốc đã bị đám zombie xé thành từng dải; không nhìn kỹ, chẳng khác gì ăn mày.
+
+Rồi Lâm Tử Lạc liếc xuống phía dưới của Đại Ngốc.
+
+Ừm, quả không hổ danh dã thú dạng người.
+
+---
+
+## Chương 58
+
+"Đại Ngốc, ngươi trụ ở đây một lát, ta đi càn quét cái nhà vệ sinh." — Lâm Tử Lạc dặn.
+
+Đại Ngốc gật đầu. Cây gậy sắt trong tay nó chẳng biết rơi mất phương nào, thế là nó nhặt luôn hai cái xác zombie dưới đất làm vũ khí, quật thẳng vào bầy zombie. Hành lang vốn hẹp, hai cái xác quật ngã sấp cả một mảng. Đại Ngốc nhìn mà mắt sáng lên: *Ơ, hiệu quả phết.* Nó nhặt tiếp hai cái đầu zombie ném bồi thêm.
+
+Thấy Đại Ngốc giữ được thế trận, Lâm Tử Lạc không chần chừ, chạy thẳng vào nhà vệ sinh kiểm tra — phải dọn sạch zombie trong đó, mới yên tâm tử chiến ngoài hành lang.
+
+Lần này hắn chơi cực kỳ bạo lực: vào nhà vệ sinh, chẳng buồn mở từng cánh cửa xem có zombie hay không, mà xách ma đao đâm xuyên thẳng qua từng tấm cửa. Hỏi lỡ bên trong có người thì sao à? Xin lỗi nhé, thuần túy là ngộ thương.
+
+Đâm nát cả dãy nhà vệ sinh nam — không moi ra nổi một con zombie. Không cam lòng, Lâm Tử Lạc xộc luôn vào nhà vệ sinh nữ, đâm sạch sành sanh hai dãy buồng. Kết quả vẫn trắng tay.
+
+Lâm Tử Lạc thất vọng tột độ. *Nhìn xem, cùng là nhà vệ sinh với nhau cả: cái ở nhà thi đấu Ma Đô cho ta hẳn một rương Thanh Đồng, thêm đôi vợ chồng zombie tặng viên Dung Hợp Thạch. Còn cái nhà vệ sinh thư viện nhà ngươi thì nghèo rớt mồng tơi, sạch không còn cọng lông.*
+
+Chưa kịp lải nhải hết, Lâm Tử Lạc vội quay lại hành lang. Đại Ngốc đã không giữ nổi phòng tuyến cũ, vừa đánh vừa phải lùi. Hắn lập tức chêm lên. Có Lâm Tử Lạc nhập cuộc, Đại Ngốc nhẹ gánh hẳn; một người một zombie du đao có thừa, khống chế chắc cục diện — ngươi một đao, ta một đấm, ghìm chết đám zombie bên ngoài phòng tuyến. Xác zombie trong hành lang chất mỗi lúc một cao, Lâm Tử Lạc cố ý dồn hết xác lại một chỗ, bịt kín được một khúc hành lang — áp lực trước sóng zombie lại vơi thêm mấy phần.
+
+Lâm Tử Lạc thở hồng hộc. Từ lúc đánh thốc vào thư viện đến trận phòng thủ nơi hành lang nhà vệ sinh, chuỗi ác chiến không ngơi nghỉ ấy ngốn của hắn cả núi thể lực — không nhờ bình thuốc thể lực kia, hắn sớm lăn quay ra rồi. Ngay cả tấm thân trâu mộng của Đại Ngốc cũng có phần đuối. Thây ma tuy không biết mệt, nhưng tố chất cơ thể nằm sờ sờ đó: vận hành quá tải — tay chân dùng quá độ chẳng hạn — ắt sinh chuyện. Lâm Tử Lạc thấy rõ động tác của nó bắt đầu chậm chạp đờ đẫn.
+
+Tin mừng là zombie trước mặt cũng chẳng còn lại bao nhiêu — nhiều lắm hơn hai chục con.
+
+Lâm Tử Lạc kiểm tra: thuốc thể lực của ta còn CD. Vậy thì... giao hết sân khấu cho Đại Ngốc diễn.
+
+"Gào ú!"
+
+Một con zombie trước mặt bắt đầu tru lên. Theo tiếng tru, thấy rõ thuộc tính của nó đang leo thang.
+
+**Màn đêm buông rồi!**
+
+Lâm Tử Lạc hiểu không thể dây dưa thêm. Hắn vắt kiệt toàn thân sức lực, ném vèo Trảm Thủ Ma Đao ra, rồi... móc một tấm đệm lót, ngồi bệt xuống đất. Đám zombie đối diện thưa hơn trước nhiều; dù hắn căn góc chuẩn tới đâu, đường đao xoay ấy cũng chỉ gặt được năm con.
+
+【Chúc mừng người chơi "Nhai Xải" tiêu diệt zombie thành công, nhận 3 điểm kinh nghiệm, 5 vàng】
+【Chúc mừng người chơi "Nhai Xải" tiêu diệt zombie thành công, nhận 3 điểm kinh nghiệm, 4 vàng】
+......
+【Chúc mừng người chơi thăng lên cấp 9, nhận 1 điểm thuộc tính tự do】
+【Người chơi "Nhai Xải" cần thêm 1000 điểm kinh nghiệm để thăng cấp】
+
+"Phù, rốt cuộc cũng lên cấp." — Lâm Tử Lạc ngồi dưới đất bắt lấy thanh đao bay về, thở hắt ra một hơi. Tính theo lượng kinh nghiệm thu được, quãng vừa rồi hắn giết ngót 150 con zombie. Khái niệm gì đây? Là lượng zombie mà toàn bộ câu lạc bộ Tử Thần cộng lại phải cày gần sáu tiếng mới giết nổi!
+
+Mắt thấy mười mấy con còn lại — đã ăn trọn cường hóa màn đêm — đang lao tới, Lâm Tử Lạc vẫn ngồi nguyên, thần thái ung dung, chẳng vội chẳng vàng: "Đại Ngốc, kích hoạt 'Thất Thần Cuồng Nộ'."
+
+Nghe lệnh, Đại Ngốc kích hoạt không mảy may do dự. Trong nháy mắt, cuồng nộ cuồn cuộn tràn ngập đầu óc nó, nhấn chìm hoàn toàn chút ý thức ít ỏi còn sót.
+
+"GÀO Ú!"
+
+Đại Ngốc rống lên, xé vụn nốt mấy dải vải cuối cùng trên người. Răng nanh, vuốt sắc — những thứ hiếm khi lộ ra — đồng loạt phô bày.
+
+"Đại Ngốc! Chính là mười mấy con zombie trước mặt ngươi đó, chúng nó ăn sạch gà nướng của ngươi rồi, mai ngươi hết gà nướng để ăn rồi!" — Lâm Tử Lạc quyết định bồi thêm một liều thuốc mạnh. Nên biết, thuộc tính "Thất Thần Cuồng Nộ" tăng bao nhiêu là tính theo mức độ phẫn nộ.
+
+Quả nhiên, câu ấy vừa buông, Đại Ngốc càng điên tiết! Làn da xám tro khắp người đỏ phừng lên vì lửa giận, bắp thịt nổi cuộn gân xanh! Chẳng kịp nghĩ sâu xa vì sao mấy con zombie này lại ăn vụng gà nướng của mình — Đại Ngốc đã mất sạch lý trí, gầm rú lao vọt ra, húc tan tành phòng tuyến đắp bằng xác zombie.
+
+Nó chộp lấy con zombie gần nhất, hai tay ghì chặt hai cánh tay đối phương.
+
+"GÀO Ú!"
+
+Trong tiếng rống giận dữ, Đại Ngốc sống sượng XÉ RỜI cả hai cánh tay con zombie. Máu tươi trát lên vách tường — khung cảnh bạo lực và đẫm máu hết chỗ nói!
+
+Ngồi dưới đất bên cạnh, Lâm Tử Lạc bưng 【một chén Long Tỉnh vừa pha】, khẽ nhấp một ngụm. Chứng kiến màn dũng mãnh của Đại Ngốc, hắn không nhịn được giơ ngón cái, hô lớn: "Hay!" — rồi lại nhấp thêm ngụm Long Tỉnh.
+
+Được chủ nhân khen, Đại Ngốc càng hăng. Nó vặn đầu con zombie trong tay xoay tròn 360 độ theo chiều kim đồng hồ, rồi dốc sức giật mạnh — cái đầu bị nhổ bật khỏi cổ, còn lòng thòng mấy sợi huyết quản.
+
+---
+
+## Chương 59
+
+Thời gian duy trì của Thất Thần Cuồng Nộ chỉ vỏn vẹn hai phút. Vừa rồi Đại Ngốc xử một con zombie mất mười giây — thế này không ổn. Cứ cái đà đó, đám zombie còn lại chưa chắc dọn kịp.
+
+"Đại Ngốc, ngươi vừa nãy chậm chạp quá, để chúng nó cuỗm mất một cái chân giò heo rồi kìa." — Lâm Tử Lạc lại đổ thêm dầu vào lửa.
+
+Đại Ngốc nghe xong: *Trời đánh, các ngươi dám cướp cái chân giò heo yêu dấu của ông đây!*
+
+Lửa giận triệt để lấp đầy đầu óc Đại Ngốc. Mức tăng thuộc tính của Thất Thần Cuồng Nộ kéo kịch trần 50% — một con số gần như bất khả. E rằng chính trò chơi tận thế cũng không ngờ có người chơi kéo nổi thuộc tính kịch khung chỉ bằng cơn giận. Nghĩ lại, chắc cũng chỉ cái đầu thuần chất đến cực điểm như Đại Ngốc mới làm nổi.
+
+Thất Thần Cuồng Nộ tăng 50%, cường hóa màn đêm cũng phá lệ chạm mốc 50%. Ngay khoảnh khắc này, dưới kích thích kép, thuộc tính của Đại Ngốc sống sượng nhân đôi! Mà thuộc tính nhân đôi thì chiến lực đâu chỉ đơn giản là gấp đôi!
+
+Đại Ngốc thậm chí chẳng buồn dùng nắm đấm nữa. Trợn cặp mắt đỏ ngầu, phì phò thở, nó húc thẳng vào đám zombie phía hành lang. Ba con dàn hàng chắn trước nhất bị nó húc bay lên không; tiếng xương gãy toàn thân nổ lách tách như pháo rang, máu tươi lẫn nội tạng cứ thế phun ra chẳng tiếc, cuối cùng rơi phịch xuống đất. May nhờ sức sống lì lợm của loài zombie, chúng vẫn gắng gượng, giãy giụa chực bò dậy — liền bị Đại Ngốc lao tới giẫm cho mấy đạp, ghim chặt xuống sàn. Như bị xe lu cán qua: chỗ bị giẫm lún sâu hoắm, dán cứng vào mặt đất, cạy cũng không nhúc nhích.
+
+Đám zombie phía sau cũng chẳng thoát nổi kết cục bi thảm ấy. Dưới màn húc văng man rợ của Đại Ngốc, mười mấy con còn lại bị đâm sầm đến thân thể gần như rời rã, thậm chí không trụ nổi một phút đã đổ gục cả loạt.
+
+Đối diện con zombie cuối cùng đứng cuối hành lang, Đại Ngốc giơ nắm đấm. Quầng sáng đỏ hội tụ trên nắm tay nó — kỹ năng của Đại Ngốc: **Toàn Lực Nhất Kích**. Khi ánh đỏ đặc quánh tới cực điểm, nắm đấm rốt cuộc tung ra.
+
+"**Bùng.**"
+
+Tiếng phá không trầm đục vang lên. Nắm đấm giáng nặng nề vào ngực con zombie. Tiếng xương ức gãy vụn vang lên; cùng lúc, sau lưng nó bỗng gồ hẳn lên — rồi chỗ gồ ấy vỡ toác, một nắm đấm khổng lồ xuyên hẳn ra ngoài, kéo theo cả mảng máu tươi.
+
+Cú đấm ấy của Đại Ngốc đấm **thủng xuyên** lồng ngực con zombie!
+
+Lâm Tử Lạc đang ngồi nhấm trà dưới đất cũng phải cảm khái: "Quả không hổ là thần lực trời sinh!" Muốn một quyền xuyên thủng lồng ngực một gã đàn ông trưởng thành khó tới mức nào, hắn hiểu quá rõ.
+
+Thi thể zombie đổ rầm.
+
+"Thất Thần Cuồng Nộ" cũng vừa vặn hết giờ. Đại Ngốc gần như cạn kiệt, ngồi phịch luôn lên cái xác vừa rồi.
+
+*Ơ kìa, tình huống gì đây? Thây ma chẳng phải không biết mệt sao?* Lâm Tử Lạc thoáng nghi hoặc, giây sau chợt vỡ lẽ: là tác dụng phụ của Thất Thần Cuồng Nộ — hiệu ứng hỗn loạn phát tác rồi.
+
+"Đại Ngốc." — hắn gọi một tiếng.
+
+Nghe tiếng, Đại Ngốc lập tức ngoảnh đầu... về hướng ngược lại, phía đầu kia hành lang.
+
+Được rồi, hỗn loạn thật, mất sạch cảm giác phương hướng.
+
+Lâm Tử Lạc cũng không quấy rầy nó nữa. Một người một zombie, cứ tư thế ấy, lặng lẽ ngồi giữa hành lang. Dưới chân họ, thậm chí dưới mông họ, là cả vũng máu loang, la liệt tàn chi zombie cùng những cái đầu tròn lông lốc.
+
+Đến đây, trước cổng chính lẫn trong đại sảnh thư viện, zombie không còn một mống. À không, còn sót một con Đại Ngốc.
+
+Nghỉ một chốc, Lâm Tử Lạc rốt cuộc rảnh tay kiểm kê chiến lợi phẩm trận này. Phạm vi của Tự Động Nhặt Đồ vẫn hơi hẹp: mấy con zombie chết dưới "Hồi Toàn Trảm Kích" vì cách hắn quá xa nên đồ rơi không nhặt được — thiếu vài món, chẳng bõ bận tâm.
+
+Lâm Tử Lạc khoái chí soát chiến lợi phẩm. Trước tiên là thẻ — hắn liếc phát thấy ngay món gà nướng và chân giò heo mà Đại Ngốc mê tít, bèn kích hoạt luôn, bước tới dúi vào tay nó.
+
+Đại Ngốc vẫn chìm trong trạng thái hỗn loạn chưa tỉnh. Vậy mà — dù mất sạch cảm giác phương hướng — nó vẫn đón lấy con gà nướng và cái chân giò chuẩn xác không trượt phát nào.
+
+Thần kỳ quá thể! Lâm Tử Lạc không nhịn được tấm tắc: thiên phú ăn uống của Đại Ngốc xem chừng chẳng thua kém gì thần lực trời sinh.
+
+Và Đại Ngốc rất nhanh chứng minh cho hắn thấy: *chủ nhân, ngài phán không sai!* Bởi ngay khi nó đang hồng hộc ngấu nghiến, Lâm Tử Lạc kinh ngạc phát hiện những vết cào, vết cắn trên người nó đang liền lại với tốc độ mắt thường thấy được.
+
+Đây là!
+
+Lâm Tử Lạc mở bảng của Đại Ngốc. Quả nhiên, cột thiên phú mọc thêm một dòng:
+
+【**Bổ Sung Năng Lượng**】: tốc độ ăn của bạn tăng 30%; trong trạng thái đang ăn, thức ăn nuốt vào nhanh chóng chuyển hóa thành năng lượng để chữa lành vết thương và hồi phục thể lực.
+
+*Ta đập ngươi cái vỏ chuối bây giờ.* Lâm Tử Lạc đành phải cảm thán một câu: Đại Ngốc tuy ngốc, nhưng xét ở góc độ nào đó, nó tuyệt đối là thiên tài. Sẵn có thiên phú sức mạnh "Thần Lực Trời Sinh", giờ lại thêm thiên phú tank "Bổ Sung Năng Lượng" — Đại Ngốc, ngươi càng lúc càng đi xa trên con đường chiến-tank rồi đấy.
+
+Vui.
+
+Đại Ngốc là tiểu đệ của ta. Nó mạnh lên nghĩa là ta mạnh lên. Ta mạnh lên thì vui một chút, có vấn đề gì không? Không có vấn đề gì.
+
+Hơn nữa, tiếp theo đây, thực lực của ta cũng sắp tăng rồi.
+
+Lâm Tử Lạc nhìn vào không gian chứa đồ của mình, phấn khích hẳn lên.
+
+---
+
+*Hết c50–c59. Ghi chú: một số thuật ngữ hệ thống tôi chốt nhất quán — 金手指 "golden finger" (giữ nguyên vì là thuật ngữ meta của thể loại), 睚眦 "Nhai Xải" (danh hiệu của Lâm Tử Lạc, một trong long sinh cửu tử — chuẩn Hán-Việt là "Nhai Tí/Nhai Xải", tôi theo bản đang lưu), 失神狂怒 "Thất Thần Cuồng Nộ", 斩首魔刀 "Trảm Thủ Ma Đao", 融合之石 "Dung Hợp Thạch", 游戏商店 "Cửa hàng trò chơi", 全力一击 "Toàn Lực Nhất Kích", 回旋斩击 "Hồi Toàn Trảm Kích", 炸裂双斩 "Tạc Liệt Song Trảm", 雄狮护腕 "Hộ Uyển Sư Vương".*

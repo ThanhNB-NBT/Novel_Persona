@@ -6,9 +6,10 @@ os.environ.setdefault("SUPABASE_URL", "https://example.supabase.co")
 os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "test")
 
 from novelworker.translator.worker import (
-    GLOSSARY_LINE, _clean_output, _extract_json, _merge_names, _pop_summary, _term_dicts,
+    GLOSSARY_LINE, _clean_output, _extract_json, _glossary_conflicts, _merge_names, _pop_summary, _term_dicts,
     _is_unique_violation, _split_chunks, _strip_meta,
-    check_translation, han_ratio,
+    CHUNK_LIMIT, _build_synopsis_input, _should_keep_old_summary,
+    _valid_summary, _valid_synopsis, check_translation, han_ratio,
 )
 
 
@@ -19,6 +20,10 @@ def main() -> None:
     assert _is_unique_violation(UniqueError())
     assert _is_unique_violation(RuntimeError("duplicate key value violates unique constraint"))
     assert not _is_unique_violation(RuntimeError("network timeout"))
+    from novelworker.translator.worker import _needs_style_refresh
+    assert _needs_style_refresh({"src_chapter": 2})
+    assert not _needs_style_refresh({"src_chapter": 1})
+    assert not _needs_style_refresh({"tone": "co phong"})
 
     from novelworker.translator import worker as worker_mod
     refreshed = []
@@ -61,6 +66,7 @@ def main() -> None:
     assert "quá ngắn" in (check_translation("原" * 100, "cụt") or "")
     assert "mất hết xuống dòng" in (check_translation(zh5, "một khối chữ liền dài " * 3) or "")
     assert check_translation("原文本", "Bản dịch ổn.\nĐủ dòng.") is None
+    assert "Cyrillic" in (check_translation("原文本", "Bản dịch có либо bị sót") or "")
     assert check_translation("", "Chỉ soi tỷ lệ Hán khi thiếu bản gốc.") is None
     from novelworker.translator.worker import _is_first_person
     assert _is_first_person("我走了过去。“你好。”")            # 我 trong lời kể
@@ -96,6 +102,46 @@ def main() -> None:
     # "SUMMARY:" nằm sâu giữa nội dung (cách cuối >1500 ký tự) thì không được ăn nhầm
     long_text = "x\nSUMMARY: giả\n" + "a" * 2000
     assert _pop_summary(long_text) == (long_text, None)
+    assert _valid_summary("Lâm Tùng an toàn.") == "Lâm Tùng an toàn."
+    assert _valid_summary("Lâm 松") is None
+    too_long = ("Một câu đủ dài. " * 30) + "đoạn dang dở"
+    clipped = _valid_summary(too_long)
+    assert clipped and len(clipped) <= 400 and clipped.endswith(".")
+    assert _valid_synopsis("Lâm Tùng tiến vào bí cảnh.") == "Lâm Tùng tiến vào bí cảnh."
+    assert _valid_synopsis("Lâm 松") is None
+    assert len(_valid_synopsis("a" * 700) or "") == 600
+    # nhãn/markdown model dán thêm bị bóc máy
+    assert _valid_synopsis("SYNOPSIS: **Lâm Tùng** vào bí cảnh.") == "Lâm Tùng vào bí cảnh."
+    assert "Bối cảnh cũ:\nCũ" in _build_synopsis_input("Cũ", ["c2", "c1"])
+    assert "Tên nhân vật chuẩn (giữ nguyên): Lâm Tùng" in _build_synopsis_input(None, ["c1"], ["Lâm Tùng"])
+    # chỉ nén khi đủ 10 summary liền nhau kết thúc tại chương hiện tại
+    from novelworker.translator.worker import _synopsis_ready
+    full = [{"chapter_index": i} for i in range(11, 21)]
+    assert _synopsis_ready(full, 20)
+    assert not _synopsis_ready(full[1:], 20)                       # thiếu c11
+    assert not _synopsis_ready(full[:9] + [{"chapter_index": 9}], 20)  # thủng giữa, vá bằng chương cũ
+    assert _should_keep_old_summary(True, "summary cũ")
+    assert not _should_keep_old_summary(False, "summary cũ")
+    assert not _should_keep_old_summary(True, None)
+
+    # vá văn phong máy: thay an toàn + toàn bộ ngoại lệ giữ nguyên nghĩa
+    from novelworker.translator.worker import _fix_register, _fix_soft_style
+    assert _fix_soft_style("Chẳng ai tin. Hắn chẳng nói gì.") == "Không ai tin. Hắn không nói gì."
+    keep = ("Chẳng lẽ vậy? Chẳng qua là đùa. Chẳng hạn như y. Chẳng những thế. "
+            "Chẳng mấy chốc trời sáng. Chẳng trách hắn giận. Chẳng thà chết. "
+            "Cực chẳng đã mới làm. Ai mà chẳng thích.")
+    assert _fix_soft_style(keep) == keep
+    assert _fix_soft_style("Hắn không khỏi bật cười.") == "Hắn bật cười."
+    for s in ("Bệnh chữa không khỏi đâu.", "Vết thương vẫn không khỏi.",
+              "Trị mãi không khỏi được."):
+        assert _fix_soft_style(s) == s
+    assert _fix_soft_style("Tổng cảm thấy sai sai.") == "Cứ cảm thấy sai sai."
+    assert _fix_soft_style("Trên thực tế, hắn sợ.") == "Thật ra, hắn sợ."
+    assert _fix_soft_style("Hắn gật đầu một cái rồi cười một cái.") == "Hắn gật đầu rồi bật cười."
+    # vá đại từ kể: chỉ ngoài thoại; trong ngoặc kép giữ nguyên
+    assert _fix_register('Cô ấy đi rồi. “Anh ta là ai?” Ông ta hỏi.') == \
+        'Nàng đi rồi. “Anh ta là ai?” Lão hỏi.'
+    assert _fix_register("Anh hùng cứu tinh anh dũng.") == "Anh hùng cứu tinh anh dũng."
 
     assert han_ratio("Bản dịch thuần Việt.") == 0
     assert han_ratio("哈哈" * 50) == 1.0
@@ -108,6 +154,9 @@ def main() -> None:
     chunks = _split_chunks(long_ch, limit=1000)
     assert all(len(c) <= 1000 for c in chunks)
     assert "\n".join(chunks) == long_ch
+    default_chunks = _split_chunks(long_ch)
+    assert CHUNK_LIMIT == 5000  # trần theo output 8192 tok; 3000/12-đoạn là di sản marker đã gỡ
+    assert all(len(c) <= CHUNK_LIMIT for c in default_chunks)
 
     # merge tên: chỉ thêm tên mới có đủ zh+vi, bỏ trùng/thiếu; đếm đúng số tên mới
     terms = [{"term_zh": "林松", "correct_vi": "Lâm Tùng"}]
@@ -123,9 +172,37 @@ def main() -> None:
     assert terms[-1]["term_zh"] == "苏雨" and terms[-1]["note"] == "nữ"
     # gọi lại với chính tên đó → không thêm nữa
     assert _merge_names(terms, existing, [{"zh": "苏雨", "vi": "Tô Vũ"}]) == []
+    # chữ phổ thông/danh từ chung bị chặn; 朕 là person vẫn là tên hợp lệ.
+    assert _merge_names(terms, existing, [{"zh": "的", "vi": "của"}, {"zh": "鲜血", "vi": "máu tươi"}]) == []
+    assert _merge_names(terms, existing, [{"zh": "朕", "vi": "Trẫm", "type": "person"}])
+    assert _merge_names(terms, existing, [
+        {"zh": "火焰剑", "vi": "Kiếm Lửa", "type": "item"},
+        {"zh": "清虚山", "vi": "Núi Thanh Hư", "type": "place"},
+        {"zh": "火球术", "vi": "Hỏa Cầu Thuật", "type": "skill"},
+    ])
+    suspect = {"zh": "白衣少女", "vi": "cô gái áo trắng", "type": "person"}
+    _merge_names(terms, existing, [suspect])
+    assert terms[-1]["note"] == "nghi sai" and terms[-1]["approved"] is False
+    from novelworker.translator.prompts import _build_glossary_block
+    assert "白衣少女" not in _build_glossary_block(terms, "白衣少女来了")
+    terms[-1]["approved"] = True
+    assert "白衣少女" in _build_glossary_block(terms, "白衣少女来了")
+    # 鲜血/máu tươi từng được cho merge; nay là danh từ chung cần chặn.
     assert _term_dicts(["rác", {"zh": "鲜血", "vi": "máu tươi"}, None]) == [
         {"zh": "鲜血", "vi": "máu tươi"}
     ]
+
+    # Gợi ý mâu thuẫn chỉ được lộ ra để duyệt, không sửa term đang dùng.
+    current = {"id": 9, "novel_id": 7, "term_zh": "林松", "correct_vi": "Lâm Tùng",
+               "term_type": "other", "approved": True, "conflict_vi": None}
+    conflicts = _glossary_conflicts([current], [{"zh": "林松", "vi": "Lâm Tồng", "type": "other"}], 105)
+    assert conflicts == [{"term_zh": "林松", "candidate_vi": "Lâm Tồng", "conflict_vi": "Lâm Tồng (c105)"}]
+    assert current["correct_vi"] == "Lâm Tùng" and current["approved"] is True
+    assert _glossary_conflicts([current], [{"zh": "林松", "vi": "Lâm Tùng", "type": "other"}], 105) == []
+    current["conflict_vi"] = "Lâm Tồng (c105)"
+    assert _glossary_conflicts([current], [{"zh": "林松", "vi": "Khác", "type": "other"}], 106) == []
+    current["conflict_vi"] = None
+    assert _glossary_conflicts([current], [{"zh": "林松", "vi": "Lâm Tồng", "type": "person"}], 105) == []
 
     # _tail: cắt đuôi tại ranh giới đoạn, ngắn thì giữ nguyên, rỗng → None
     from novelworker.translator.worker import _tail

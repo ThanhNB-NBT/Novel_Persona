@@ -1,0 +1,643 @@
+[
+ {
+  "chapter": "novel 293 ch.1 (Kiếm Đế Cuồng Thần) [(file)]",
+  "problems": [
+   "[lint] 'X một cái' kiểu convert: 1 lần (vd 'đá một cái')"
+  ],
+  "narrator_terms": {
+   "hắn": 33,
+   "nàng": 7
+  }
+ },
+ {
+  "chapter": "novel 293 ch.2 (Kiếm Đế Cuồng Thần) [(file)]",
+  "problems": [
+   "[lint] 2 đoạn quá 2 dấu '!'"
+  ],
+  "narrator_terms": {
+   "hắn": 44,
+   "ta": 1
+  }
+ },
+ {
+  "chapter": "novel 293 ch.3 (Kiếm Đế Cuồng Thần) [(file)]",
+  "problems": [
+   "[lint] convert 'rốt cuộc là': 1 lần (vd 'rốt cuộc là')",
+   "[lint] tượng thanh tiếng Anh: 1 lần (vd 'Hmph')"
+  ],
+  "narrator_terms": {
+   "hắn": 49,
+   "ta": 1
+  }
+ },
+ {
+  "chapter": "novel 293 ch.4 (Kiếm Đế Cuồng Thần) [(file)]",
+  "problems": [],
+  "narrator_terms": {
+   "hắn": 29
+  }
+ },
+ {
+  "chapter": "novel 293 ch.5 (Kiếm Đế Cuồng Thần) [(file)]",
+  "problems": [
+   "[lint] 2 đoạn quá 2 dấu '!'"
+  ],
+  "narrator_terms": {
+   "hắn": 18,
+   "cô": 1,
+   "nàng": 1,
+   "y": 1
+  }
+ },
+ {
+  "chapter": "novel 293 ch.6 (Kiếm Đế Cuồng Thần) [(file)]",
+  "problems": [],
+  "narrator_terms": {
+   "y": 4,
+   "hắn": 15,
+   "cô": 2
+  }
+ },
+ {
+  "chapter": "novel 293 ch.7 (Kiếm Đế Cuồng Thần) [(file)]",
+  "problems": [
+   "[lint] lặp 'hắn' ≥3/câu: Lâm Hiên mỉm cười, không đáp lại, Trương Bân muốn giết hắn, hắn làm sao có thể đi xin lỗi "
+  ],
+  "narrator_terms": {
+   "hắn": 19,
+   "ta": 1
+  }
+ },
+ {
+  "chapter": "novel 293 ch.8 (Kiếm Đế Cuồng Thần) [(file)]",
+  "problems": [],
+  "narrator_terms": {
+   "hắn": 27
+  }
+ },
+ {
+  "chapter": "novel 293 ch.9 (Kiếm Đế Cuồng Thần) [(file)]",
+  "problems": [
+   "[lint] 1 đoạn quá 2 dấu '!'"
+  ],
+  "narrator_terms": {
+   "hắn": 22
+  }
+ },
+ {
+  "chapter": "novel 293 ch.10 (Kiếm Đế Cuồng Thần) [(file)]",
+  "problems": [
+   "[lint] lặp 'hắn' ≥3/câu: Hắn không biết chuyện gì xảy ra, song đóa hắc sắc liên hoa ấy hắn rất quen thuộc, thuở xưa",
+   "[lint] 1 đoạn quá 2 dấu '!'"
+  ],
+  "narrator_terms": {
+   "hắn": 41
+  }
+ },
+ {
+  "chapter": "novel 293 ch.11 (Kiếm Đế Cuồng Thần) [(file)]",
+  "problems": [
+   "[xưng hô] 老子 thiếu dấu vết (lão tử/ông đây/bố đây/ta đây/bố mày/ông mày)",
+   "[lint] convert 'rốt cuộc là': 1 lần (vd 'rốt cuộc là')",
+   "[lint] convert 'trực tiếp + động từ': 1 lần (vd 'trực tiếp nói')"
+  ],
+  "narrator_terms": {
+   "hắn": 19,
+   "gã": 1
+  }
+ },
+ {
+  "chapter": "novel 293 ch.12 (Kiếm Đế Cuồng Thần) [(file)]",
+  "problems": [
+   "[lint] lặp 'hắn' ≥3/câu: Theo suy nghĩ của hắn, hắn không cần công pháp tu luyện linh lực nữa, thân pháp và tấn côn"
+  ],
+  "narrator_terms": {
+   "hắn": 17,
+   "lão": 2
+  }
+ },
+ {
+  "chapter": "novel 293 ch.13 (Kiếm Đế Cuồng Thần) [(file)]",
+  "problems": [
+   "[lint] 1 đoạn quá 2 dấu '!'"
+  ],
+  "narrator_terms": {
+   "hắn": 1,
+   "lão": 1
+  }
+ },
+ {
+  "chapter": "novel 293 ch.14 (Kiếm Đế Cuồng Thần) [(file)]",
+  "problems": [],
+  "narrator_terms": {
+   "hắn": 29,
+   "lão": 1
+  }
+ },
+ {
+  "chapter": "novel 293 ch.15 (Kiếm Đế Cuồng Thần) [(file)]",
+  "problems": [],
+  "narrator_terms": {
+   "hắn": 32,
+   "cô": 1,
+   "tôi": 1
+  }
+ },
+ {
+  "chapter": "novel 1223 ch.1 (Thiên Khuyết Trường Sinh) [(file)]",
+  "problems": [
+   "[lint] 'đối với X tới nói': 1 lần (vd 'đối với phàm nhân mà nói')"
+  ],
+  "narrator_terms": {
+   "lão": 7,
+   "cô": 1
+  }
+ },
+ {
+  "chapter": "novel 1223 ch.2 (Thiên Khuyết Trường Sinh) [(file)]",
+  "problems": [
+   "[lint] lặp 'hắn' ≥3/câu: Dù nhìn Vương Trường Sinh tóc bạc phơ, nhưng người trước mắt hắn, tuổi tác đã lớn hơn hắn ",
+   "[lint] 3 đoạn quá 2 dấu '!'"
+  ],
+  "narrator_terms": {
+   "hắn": 44
+  }
+ },
+ {
+  "chapter": "novel 1223 ch.3 (Thiên Khuyết Trường Sinh) [(file)]",
+  "problems": [],
+  "narrator_terms": {
+   "hắn": 16
+  }
+ },
+ {
+  "chapter": "novel 1223 ch.4 (Thiên Khuyết Trường Sinh) [(file)]",
+  "problems": [
+   "[lint] 1 đoạn quá 2 dấu '!'"
+  ],
+  "narrator_terms": {
+   "hắn": 6
+  }
+ },
+ {
+  "chapter": "novel 1223 ch.5 (Thiên Khuyết Trường Sinh) [(file)]",
+  "problems": [
+   "[lint] 'đối với X tới nói': 1 lần (vd 'Đối với tu sĩ mà nói')",
+   "[lint] convert 'trực tiếp + động từ': 1 lần (vd 'trực tiếp ném')"
+  ],
+  "narrator_terms": {
+   "lão": 1
+  }
+ },
+ {
+  "chapter": "novel 1223 ch.6 (Thiên Khuyết Trường Sinh) [(file)]",
+  "problems": [],
+  "narrator_terms": {
+   "hắn": 17
+  }
+ },
+ {
+  "chapter": "novel 1223 ch.7 (Thiên Khuyết Trường Sinh) [(file)]",
+  "problems": [],
+  "narrator_terms": {
+   "hắn": 13
+  }
+ },
+ {
+  "chapter": "novel 1223 ch.8 (Thiên Khuyết Trường Sinh) [(file)]",
+  "problems": [],
+  "narrator_terms": {
+   "hắn": 22,
+   "lão": 7
+  }
+ },
+ {
+  "chapter": "novel 1223 ch.9 (Thiên Khuyết Trường Sinh) [(file)]",
+  "problems": [],
+  "narrator_terms": {
+   "hắn": 14,
+   "lão": 2
+  }
+ },
+ {
+  "chapter": "novel 1223 ch.10 (Thiên Khuyết Trường Sinh) [(file)]",
+  "problems": [
+   "[lint] lặp 'hắn' ≥3/câu: Trong thư nhị thúc gửi cho hắn, nhị thúc chỉ bảo hắn đến tìm Hộ Quốc Đại Tướng Quân của Vâ"
+  ],
+  "narrator_terms": {
+   "hắn": 26
+  }
+ },
+ {
+  "chapter": "novel 1223 ch.11 (Thiên Khuyết Trường Sinh) [(file)]",
+  "problems": [],
+  "narrator_terms": {
+   "hắn": 45,
+   "lão": 1
+  }
+ },
+ {
+  "chapter": "novel 1223 ch.12 (Thiên Khuyết Trường Sinh) [(file)]",
+  "problems": [],
+  "narrator_terms": {
+   "hắn": 34
+  }
+ },
+ {
+  "chapter": "novel 1223 ch.13 (Thiên Khuyết Trường Sinh) [(file)]",
+  "problems": [],
+  "narrator_terms": {
+   "hắn": 8
+  }
+ },
+ {
+  "chapter": "novel 1223 ch.14 (Thiên Khuyết Trường Sinh) [(file)]",
+  "problems": [],
+  "narrator_terms": {
+   "hắn": 18
+  }
+ },
+ {
+  "chapter": "novel 1223 ch.15 (Thiên Khuyết Trường Sinh) [(file)]",
+  "problems": [
+   "[xưng hô] 晚辈 thiếu dấu vết (vãn bối/hậu bối)",
+   "[lint] convert 'rốt cuộc là': 3 lần (vd 'rốt cuộc là')"
+  ],
+  "narrator_terms": {
+   "hắn": 25
+  }
+ },
+ {
+  "chapter": "novel 1281 ch.1 (Kiếm Đạo Chúa Tể) [(file)]",
+  "problems": [
+   "[lint] 'Anh/Cô' trần đầu câu kể (nghi vấn): 2 lần (vd '.\n\nCô liền')",
+   "[lint] lặp 'hắn' ≥3/câu: “Đúng vậy, Cố gia chủ tuy chỉ là nghĩa phụ của hắn, nhưng lại nuôi hắn mười bảy năm không ",
+   "[văn phong] 'chẳng' ×21 — mặc định dùng 'không'"
+  ],
+  "narrator_terms": {
+   "y": 1,
+   "cô ta": 1,
+   "cô": 7,
+   "lão": 5,
+   "hắn": 3,
+   "anh": 5
+  }
+ },
+ {
+  "chapter": "novel 1281 ch.2 (Kiếm Đạo Chúa Tể) [(file)]",
+  "problems": [
+   "[lint] 1 đoạn quá 2 dấu '!'"
+  ],
+  "narrator_terms": {
+   "lão": 1,
+   "hắn": 27
+  }
+ },
+ {
+  "chapter": "novel 1281 ch.3 (Kiếm Đạo Chúa Tể) [(file)]",
+  "problems": [
+   "[lint] 1 đoạn quá 2 dấu '!'"
+  ],
+  "narrator_terms": {
+   "cô": 12,
+   "hắn": 25,
+   "ta": 2,
+   "nàng": 1
+  }
+ },
+ {
+  "chapter": "novel 1281 ch.4 (Kiếm Đạo Chúa Tể) [(file)]",
+  "problems": [
+   "[lint] lặp 'hắn' ≥3/câu: Thanh kiếm cũ kỹ này vốn là do Cố Thiên năm xưa nhặt được khi tìm thấy hắn, là manh mối du",
+   "[văn phong] 'chẳng' ×9 — mặc định dùng 'không'"
+  ],
+  "narrator_terms": {
+   "hắn": 31,
+   "cô ấy": 1,
+   "cô": 6,
+   "y": 3,
+   "lão": 9
+  }
+ },
+ {
+  "chapter": "novel 1281 ch.5 (Kiếm Đạo Chúa Tể) [(file)]",
+  "problems": [
+   "[lint] convert 'rốt cuộc là': 2 lần (vd 'rốt cuộc là')",
+   "[lint] 1 đoạn quá 2 dấu '!'"
+  ],
+  "narrator_terms": {
+   "hắn": 40,
+   "ta": 2
+  }
+ },
+ {
+  "chapter": "novel 1281 ch.6 (Kiếm Đạo Chúa Tể) [(file)]",
+  "problems": [
+   "[lint] 'X một cái' kiểu convert: 1 lần (vd 'Nhìn một cái')",
+   "[lint] convert 'không khỏi': 1 lần (vd 'không khỏi')",
+   "[lint] lặp 'hắn' ≥3/câu: Có kiếm lao ở đây, Hắc Ảnh tuyệt đối không thể bày trò được, hơn nữa lai lịch của hắn khôn",
+   "[lint] lặp 'hắn' ≥3/câu: Nếu là trước đây, hắn đương nhiên không có trực giác rõ ràng như vậy, nhưng sau khi được H",
+   "[lint] 2 đoạn quá 2 dấu '!'",
+   "[văn phong] 'chẳng' ×7 — mặc định dùng 'không'"
+  ],
+  "narrator_terms": {
+   "hắn": 52,
+   "nàng": 2
+  }
+ },
+ {
+  "chapter": "novel 1281 ch.7 (Kiếm Đạo Chúa Tể) [(file)]",
+  "problems": [
+   "[lint] 1 đoạn quá 2 dấu '!'"
+  ],
+  "narrator_terms": {
+   "hắn": 30,
+   "ta": 1,
+   "cô": 1
+  }
+ },
+ {
+  "chapter": "novel 1281 ch.8 (Kiếm Đạo Chúa Tể) [(file)]",
+  "problems": [
+   "[lint] 1 đoạn quá 2 dấu '!'"
+  ],
+  "narrator_terms": {
+   "hắn": 21,
+   "cô": 6,
+   "nàng": 1,
+   "y": 1
+  }
+ },
+ {
+  "chapter": "novel 1281 ch.9 (Kiếm Đạo Chúa Tể) [(file)]",
+  "problems": [
+   "[lint] lặp 'hắn' ≥3/câu: Hắn là người đến trước, quả Liệt Dương Quả ấy đáng lẽ thuộc về hắn, hắn không muốn đưa, ng",
+   "[lint] lặp 'hắn' ≥3/câu: Hắn đương nhiên hiểu rõ, dù là Tiết Thần Y hay Lý Tổng Quản trước mặt, tu vi của họ đều sâ"
+  ],
+  "narrator_terms": {
+   "lão": 6,
+   "hắn": 30,
+   "nàng": 5,
+   "y": 16
+  }
+ },
+ {
+  "chapter": "novel 1281 ch.10 (Kiếm Đạo Chúa Tể) [(file)]",
+  "problems": [
+   "[xưng hô] 晚辈 thiếu dấu vết (vãn bối/hậu bối)",
+   "[lint] lặp 'hắn' ≥3/câu: Hắn đâu biết rằng kinh mạch mới của Cố Hàn vốn dị thường, vốn định hại hắn, ai ngờ lại vô ",
+   "[lint] 6 đoạn quá 2 dấu '!'"
+  ],
+  "narrator_terms": {
+   "hắn": 24,
+   "lão": 4,
+   "y": 14,
+   "cô": 6,
+   "nàng": 1
+  }
+ },
+ {
+  "chapter": "novel 1281 ch.11 (Kiếm Đạo Chúa Tể) [(file)]",
+  "problems": [
+   "[lint] 1 đoạn quá 2 dấu '!'"
+  ],
+  "narrator_terms": {
+   "hắn": 19,
+   "nàng": 7,
+   "lão": 1
+  }
+ },
+ {
+  "chapter": "novel 1281 ch.12 (Kiếm Đạo Chúa Tể) [(file)]",
+  "problems": [],
+  "narrator_terms": {
+   "hắn": 27,
+   "y": 5,
+   "lão": 3,
+   "cô": 6,
+   "gã": 3
+  }
+ },
+ {
+  "chapter": "novel 1281 ch.13 (Kiếm Đạo Chúa Tể) [(file)]",
+  "problems": [
+   "[lint] 4 đoạn quá 2 dấu '!'"
+  ],
+  "narrator_terms": {
+   "cô": 10,
+   "hắn": 14
+  }
+ },
+ {
+  "chapter": "novel 1281 ch.14 (Kiếm Đạo Chúa Tể) [(file)]",
+  "problems": [
+   "[lint] convert 'không khỏi': 1 lần (vd 'không khỏi')",
+   "[lint] 1 đoạn quá 2 dấu '!'",
+   "[văn phong] 'chẳng' ×26 — mặc định dùng 'không'"
+  ],
+  "narrator_terms": {
+   "hắn": 20,
+   "cô": 5,
+   "lão": 1
+  }
+ },
+ {
+  "chapter": "novel 1281 ch.15 (Kiếm Đạo Chúa Tể) [(file)]",
+  "problems": [
+   "[lint] lặp 'hắn' ≥3/câu: Nếu hắn bình phàm cũng đành, nhưng hắn quá xuất chúng, xuất chúng đến nỗi tất cả mọi người",
+   "[lint] 2 đoạn quá 2 dấu '!'"
+  ],
+  "narrator_terms": {
+   "hắn": 58,
+   "lão": 1,
+   "cô": 1
+  }
+ },
+ {
+  "chapter": "novel 1380 ch.50 (Ngày Tận Thế: Tỷ Lệ Bùng Nổ Trăm Phần Trăm, Kiếm Đao Bùng Nổ) [(file)]",
+  "problems": [
+   "[lint] convert 'trực tiếp + động từ': 1 lần (vd 'trực tiếp ra tay')"
+  ],
+  "narrator_terms": {
+   "hắn": 4
+  }
+ },
+ {
+  "chapter": "novel 1380 ch.51 (Ngày Tận Thế: Tỷ Lệ Bùng Nổ Trăm Phần Trăm, Kiếm Đao Bùng Nổ) [(file)]",
+  "problems": [
+   "[văn phong] 'chẳng' ×5 — mặc định dùng 'không'"
+  ],
+  "narrator_terms": {
+   "hắn": 10,
+   "ta": 1
+  }
+ },
+ {
+  "chapter": "novel 1380 ch.52 (Ngày Tận Thế: Tỷ Lệ Bùng Nổ Trăm Phần Trăm, Kiếm Đao Bùng Nổ) [(file)]",
+  "problems": [
+   "[xưng hô] 老子 thiếu dấu vết (lão tử/ông đây/bố đây/ta đây/bố mày/ông mày)"
+  ],
+  "narrator_terms": {
+   "anh ta": 8,
+   "anh": 2,
+   "gã": 2,
+   "cô": 3,
+   "hắn": 3
+  }
+ },
+ {
+  "chapter": "novel 1380 ch.53 (Ngày Tận Thế: Tỷ Lệ Bùng Nổ Trăm Phần Trăm, Kiếm Đao Bùng Nổ) [(file)]",
+  "problems": [
+   "[lint] 1 đoạn quá 2 dấu '!'"
+  ],
+  "narrator_terms": {
+   "anh ta": 8,
+   "hắn": 10,
+   "anh": 2
+  }
+ },
+ {
+  "chapter": "novel 1380 ch.54 (Ngày Tận Thế: Tỷ Lệ Bùng Nổ Trăm Phần Trăm, Kiếm Đao Bùng Nổ) [(file)]",
+  "problems": [],
+  "narrator_terms": {
+   "hắn": 11,
+   "ta": 3,
+   "anh": 2,
+   "gã": 7
+  }
+ },
+ {
+  "chapter": "novel 1380 ch.55 (Ngày Tận Thế: Tỷ Lệ Bùng Nổ Trăm Phần Trăm, Kiếm Đao Bùng Nổ) [(file)]",
+  "problems": [
+   "[lint] convert 'không khỏi': 1 lần (vd 'không khỏi')"
+  ],
+  "narrator_terms": {
+   "anh": 1,
+   "ta": 4,
+   "hắn": 11
+  }
+ },
+ {
+  "chapter": "novel 1380 ch.56 (Ngày Tận Thế: Tỷ Lệ Bùng Nổ Trăm Phần Trăm, Kiếm Đao Bùng Nổ) [(file)]",
+  "problems": [],
+  "narrator_terms": {
+   "hắn": 21
+  }
+ },
+ {
+  "chapter": "novel 1380 ch.57 (Ngày Tận Thế: Tỷ Lệ Bùng Nổ Trăm Phần Trăm, Kiếm Đao Bùng Nổ) [(file)]",
+  "problems": [
+   "[lint] convert 'không khỏi': 1 lần (vd 'không khỏi')"
+  ],
+  "narrator_terms": {
+   "hắn": 13,
+   "ta": 1
+  }
+ },
+ {
+  "chapter": "novel 1380 ch.58 (Ngày Tận Thế: Tỷ Lệ Bùng Nổ Trăm Phần Trăm, Kiếm Đao Bùng Nổ) [(file)]",
+  "problems": [
+   "[lint] convert 'không khỏi': 1 lần (vd 'không khỏi')",
+   "[lint] convert 'trực tiếp + động từ': 1 lần (vd 'trực tiếp đẩy')"
+  ],
+  "narrator_terms": {
+   "hắn": 23
+  }
+ },
+ {
+  "chapter": "novel 1380 ch.59 (Ngày Tận Thế: Tỷ Lệ Bùng Nổ Trăm Phần Trăm, Kiếm Đao Bùng Nổ) [(file)]",
+  "problems": [
+   "[lint] convert 'không khỏi': 3 lần (vd 'không khỏi')"
+  ],
+  "narrator_terms": {
+   "hắn": 19,
+   "ta": 4
+  }
+ },
+ {
+  "chapter": "novel 1380 ch.60 (Ngày Tận Thế: Tỷ Lệ Bùng Nổ Trăm Phần Trăm, Kiếm Đao Bùng Nổ) [(file)]",
+  "problems": [],
+  "narrator_terms": {
+   "hắn": 15
+  }
+ },
+ {
+  "chapter": "novel 1380 ch.61 (Ngày Tận Thế: Tỷ Lệ Bùng Nổ Trăm Phần Trăm, Kiếm Đao Bùng Nổ) [(file)]",
+  "problems": [
+   "[văn phong] 'chẳng' ×9 — mặc định dùng 'không'"
+  ],
+  "narrator_terms": {
+   "hắn": 17,
+   "lão": 2,
+   "ta": 1
+  }
+ },
+ {
+  "chapter": "novel 1380 ch.62 (Ngày Tận Thế: Tỷ Lệ Bùng Nổ Trăm Phần Trăm, Kiếm Đao Bùng Nổ) [(file)]",
+  "problems": [],
+  "narrator_terms": {
+   "hắn": 18
+  }
+ },
+ {
+  "chapter": "novel 1380 ch.63 (Ngày Tận Thế: Tỷ Lệ Bùng Nổ Trăm Phần Trăm, Kiếm Đao Bùng Nổ) [(file)]",
+  "problems": [],
+  "narrator_terms": {
+   "hắn": 20,
+   "cô": 2
+  }
+ },
+ {
+  "chapter": "novel 1380 ch.64 (Ngày Tận Thế: Tỷ Lệ Bùng Nổ Trăm Phần Trăm, Kiếm Đao Bùng Nổ) [(file)]",
+  "problems": [],
+  "narrator_terms": {
+   "hắn": 16,
+   "cô": 2,
+   "ta": 1
+  }
+ },
+ {
+  "chapter": "novel 1380 ch.65 (Ngày Tận Thế: Tỷ Lệ Bùng Nổ Trăm Phần Trăm, Kiếm Đao Bùng Nổ) [(file)]",
+  "problems": [],
+  "narrator_terms": {
+   "hắn": 14
+  }
+ },
+ {
+  "chapter": "novel 1380 ch.66 (Ngày Tận Thế: Tỷ Lệ Bùng Nổ Trăm Phần Trăm, Kiếm Đao Bùng Nổ) [(file)]",
+  "problems": [
+   "[lint] convert 'trực tiếp + động từ': 1 lần (vd 'trực tiếp đẩy')"
+  ],
+  "narrator_terms": {
+   "hắn": 15
+  }
+ },
+ {
+  "chapter": "novel 1380 ch.67 (Ngày Tận Thế: Tỷ Lệ Bùng Nổ Trăm Phần Trăm, Kiếm Đao Bùng Nổ) [(file)]",
+  "problems": [
+   "[văn phong] 'chẳng' ×4 — mặc định dùng 'không'"
+  ],
+  "narrator_terms": {
+   "hắn": 16
+  }
+ },
+ {
+  "chapter": "novel 1380 ch.68 (Ngày Tận Thế: Tỷ Lệ Bùng Nổ Trăm Phần Trăm, Kiếm Đao Bùng Nổ) [(file)]",
+  "problems": [],
+  "narrator_terms": {
+   "hắn": 30,
+   "gã": 1,
+   "cô": 2,
+   "ta": 7
+  }
+ },
+ {
+  "chapter": "novel 1380 ch.69 (Ngày Tận Thế: Tỷ Lệ Bùng Nổ Trăm Phần Trăm, Kiếm Đao Bùng Nổ) [(file)]",
+  "problems": [
+   "[văn phong] 'chẳng' ×6 — mặc định dùng 'không'"
+  ],
+  "narrator_terms": {
+   "hắn": 13
+  }
+ }
+]
