@@ -69,10 +69,9 @@ class _CultivationScreenState extends ConsumerState<CultivationScreen> {
     try {
       final r = await cultAdvance();
       if (!mounted) return;
-      ref.invalidate(cultStateProvider);
       // dialog trong suốt tự vẽ hiệu ứng — thành công nổ vòng xung kích vàng,
       // thất bại rung đỏ; nền mờ đậm cho cảm giác "trời long đất lở"
-      showGeneralDialog(
+      await showGeneralDialog<void>(
         context: context,
         barrierDismissible: true,
         barrierLabel: 'đột phá',
@@ -85,6 +84,9 @@ class _CultivationScreenState extends ConsumerState<CultivationScreen> {
           gender: st['gender'] as String?,
         ),
       );
+      // Giữ màn Tu Tiên ở snapshot cũ trong suốt animation; chỉ hiện state server
+      // mới sau khi user đóng kết quả, tránh thấy cảnh giới/exp đổi dưới lớp kiếp lôi.
+      if (mounted) ref.invalidate(cultStateProvider);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
@@ -103,8 +105,7 @@ class _CultivationScreenState extends ConsumerState<CultivationScreen> {
     try {
       final r = await cultAscend();
       if (!mounted) return;
-      ref.invalidate(cultStateProvider);
-      showGeneralDialog(
+      await showGeneralDialog<void>(
         context: context,
         barrierDismissible: true,
         barrierLabel: 'phi thăng',
@@ -124,6 +125,7 @@ class _CultivationScreenState extends ConsumerState<CultivationScreen> {
           gender: st['gender'] as String?,
         ),
       );
+      if (mounted) ref.invalidate(cultStateProvider);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
@@ -1974,6 +1976,76 @@ class _BurstPainter extends CustomPainter {
       );
     }
 
+    // Pháp trận sau va chạm: mảnh, lệch pha, để cảm giác "khai khiếu" thay vì HUD tròn đều.
+    final wheel = ((bt - 0.04) / 0.68).clamp(0.0, 1.0);
+    if (wheel > 0) {
+      final ease = Curves.easeOut.transform(wheel);
+      final spin = bt * math.pi * (major ? 0.9 : 1.4);
+      final radius = s * (0.10 + ease * (major ? 0.38 : 0.28));
+      final rune = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round
+        ..strokeWidth = major ? 1.4 : 1.1
+        ..color = color.withValues(alpha: (1 - wheel) * (major ? 0.72 : 0.58));
+      canvas.save();
+      canvas.translate(c.dx, c.dy);
+      canvas.rotate(spin);
+      canvas.drawArc(
+        Rect.fromCircle(center: Offset.zero, radius: radius),
+        -math.pi * 0.82,
+        math.pi * 1.48,
+        false,
+        rune,
+      );
+      canvas.drawArc(
+        Rect.fromCircle(center: Offset.zero, radius: radius * 0.78),
+        math.pi * 0.18,
+        math.pi * 1.35,
+        false,
+        rune,
+      );
+      for (var i = 0; i < 12; i++) {
+        final a = i * math.pi * 2 / 12;
+        final inner = radius * (0.92 + (i.isEven ? 0.02 : 0.0));
+        final outer = inner + (i.isEven ? s * 0.045 : s * 0.022);
+        canvas.drawLine(
+          Offset(math.cos(a) * inner, math.sin(a) * inner),
+          Offset(math.cos(a) * outer, math.sin(a) * outer),
+          rune,
+        );
+      }
+      canvas.restore();
+    }
+
+    // Dải khí nâng người lên sau khi phá cảnh, chạy lệch nhịp để không thành vòng loading.
+    final qi = ((bt - 0.12) / 0.72).clamp(0.0, 1.0);
+    if (qi > 0) {
+      final qiPaint = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = major ? 2.0 : 1.3
+        ..strokeCap = StrokeCap.round
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2);
+      for (var i = 0; i < (major ? 5 : 3); i++) {
+        final phase = bt * math.pi * 2.4 + i * 1.7;
+        final y = c.dy + s * 0.28 - qi * s * (0.54 + i * 0.035);
+        final w = s * (0.12 + qi * 0.18);
+        qiPaint.color = color.withValues(
+          alpha: (1 - qi) * (major ? 0.32 : 0.24),
+        );
+        final path = Path()
+          ..moveTo(c.dx - w, y)
+          ..cubicTo(
+            c.dx - w * 0.35,
+            y - 9 + math.sin(phase) * 8,
+            c.dx + w * 0.35,
+            y + 9 + math.cos(phase) * 8,
+            c.dx + w,
+            y,
+          );
+        canvas.drawPath(path, qiPaint);
+      }
+    }
+
     // 4) TRỤ SÁNG dựng lên — major cao vút, lên tầng cột ngắn nhẹ
     {
       final pt = (bt / (major ? 0.4 : 0.6)).clamp(0.0, 1.0);
@@ -2250,10 +2322,19 @@ class _AnimatedCultivator extends StatefulWidget {
 
 class _AnimatedCultivatorState extends State<_AnimatedCultivator>
     with SingleTickerProviderStateMixin {
-  late final _ctrl = AnimationController(
+  int _elementTurn = 0;
+  late final AnimationController _ctrl = AnimationController(
     vsync: this,
     duration: const Duration(seconds: 4),
-  )..repeat();
+  )
+    ..addStatusListener((status) {
+      if (status == AnimationStatus.completed) {
+        // Linh khí dùng thời gian tích luỹ để các tần số vô tỉ không bị reset sau 4s.
+        _elementTurn++;
+        _ctrl.forward(from: 0);
+      }
+    })
+    ..forward();
   ui.Image? _weaponImg; // icon webp của vũ khí đang đeo, decode 1 lần
   ui.Image? _phapbaoImg; // icon pháp bảo đang đeo — bay lệch pha nửa vòng
   ui.Image? _swordWheelImg; // kiếm luân minh họa, xoay sau đầu
@@ -2381,6 +2462,7 @@ class _AnimatedCultivatorState extends State<_AnimatedCultivator>
             tienTier: widget.tienTier,
             elements: widget.elements,
             haloImg: _haloImg,
+            elementTime: _elementTurn + _ctrl.value,
           ),
           // trước: hiệu ứng công pháp + nửa vòng TRƯỚC của vũ khí/pháp bảo
           foregroundPainter: _AuraPainter(
@@ -2468,6 +2550,7 @@ String _cultivatorAsset(String? race, String? gender) {
 /// Hình học khớp docs/tu-tien.md §3: canvas 150×145, đầu nhân vật ≈ (75, 37).
 class _SkyPainter extends CustomPainter {
   final double t; // 0..1
+  final double elementTime; // thời gian tích luỹ, không reset theo vòng idle 4s
   final Color moon; // màu cảnh giới
   final Color aura; // màu hệ công pháp (quầng thở)
   final int realm; // 1..9 — kiếm luân nhích to, sao từ Hóa Thần
@@ -2491,6 +2574,7 @@ class _SkyPainter extends CustomPainter {
     this.tienTier = -1,
     this.elements = const [],
     this.haloImg,
+    this.elementTime = 0,
   });
 
   @override
@@ -2648,35 +2732,59 @@ class _SkyPainter extends CustomPainter {
     canvas.restore();
   }
 
-  /// Sương linh khí ngũ sắc theo BỘ HỆ linh căn: mỗi hệ một đốm màu bay vòng quanh
-  /// người (lệch pha đều), có vệt đuôi mờ. Nhiều hệ (tạp) = nhiều màu quấn quýt; đơn
-  /// hệ chỉ 1 dải thuần. Vẽ lớp nền nên chìm sau thân người ở nửa vòng sau.
+  /// Hạt linh khí trôi quanh đan điền theo các tần số vô tỉ. Thời gian tích luỹ không
+  /// reset theo vòng idle nên dòng hạt không lặp lại thành một quỹ đạo đóng hay bị giật.
   void _drawElementWisps(Canvas canvas, Offset c) {
     if (elements.isEmpty) return;
     final n = elements.length;
+    final golden = (1 + math.sqrt(5)) / 2;
     for (var i = 0; i < n; i++) {
-      final col = _elemAura[elements[i]]?.$2 ?? aura;
-      final a = t * 2 * math.pi + i / n * 2 * math.pi;
-      final rx = 42.0, ry = 20.0; // quỹ đạo ellipse dẹt quanh eo
-      final p = Offset(c.dx + math.cos(a) * rx, c.dy + math.sin(a) * ry - 4);
-      final depth = 0.55 + 0.45 * math.sin(a); // xa/gần → to/nhỏ + đậm/nhạt
-      // vệt đuôi ngắn
-      for (var k = 1; k <= 3; k++) {
-        final a2 = a - k * 0.28;
-        final pk = Offset(c.dx + math.cos(a2) * rx, c.dy + math.sin(a2) * ry - 4);
-        canvas.drawCircle(
-          pk,
-          (1.6 + depth * 1.6) * (1 - k * 0.25),
-          Paint()..color = col.withValues(alpha: 0.10 * depth * (1 - k * 0.28)),
+      final element = elements[i];
+      final col = _elemAura[element]?.$2 ?? aura;
+      final lane = i / n;
+      final phase = lane * math.pi * 2;
+      final direction = i.isOdd ? -1.0 : 1.0;
+
+      Offset orbitAt(double time) {
+        final wave = time * math.pi * 2;
+        final a = wave * direction / golden + phase;
+        final rx = 29 + 5 * math.sin(wave * golden + phase);
+        final ry = 16 + 4 * math.cos(wave * math.sqrt(2) - phase);
+        final side = 5 * math.sin(wave * math.sqrt(3) + phase * 0.7);
+        final lift = 4 * math.cos(wave / golden - phase * 1.3);
+        return Offset(
+          c.dx + math.cos(a) * rx + side,
+          c.dy - 4 + math.sin(a) * ry + lift,
         );
       }
-      canvas.drawCircle(
-        p,
-        2.0 + depth * 2.2,
-        Paint()
-          ..color = col.withValues(alpha: 0.35 + 0.35 * depth)
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1.2),
-      );
+
+      // Mỗi hệ là một dòng 6 hạt, đuôi thưa và mờ dần như linh khí tản ra.
+      for (var particle = 5; particle >= 0; particle--) {
+        final age = particle / 6;
+        final p = orbitAt(elementTime - particle * 0.115);
+        final pulse = 0.5 + 0.5 * math.sin(elementTime * 7 + particle + phase);
+        final radius = 0.75 + (1 - age) * (1.35 + pulse * 0.45);
+        final alpha = (1 - age) * (0.22 + pulse * 0.22);
+        canvas.drawCircle(
+          p,
+          radius * 2.6,
+          Paint()
+            ..color = col.withValues(alpha: alpha * 0.22)
+            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.4),
+        );
+        canvas.drawCircle(
+          p,
+          radius,
+          Paint()..color = col.withValues(alpha: alpha),
+        );
+        if (particle == 0) {
+          canvas.drawCircle(
+            p,
+            radius * 0.42,
+            Paint()..color = Colors.white.withValues(alpha: 0.72),
+          );
+        }
+      }
     }
   }
 
@@ -2723,6 +2831,7 @@ class _SkyPainter extends CustomPainter {
   @override
   bool shouldRepaint(_SkyPainter old) =>
       old.t != t ||
+      old.elementTime != elementTime ||
       old.moon != moon ||
       old.aura != aura ||
       old.realm != realm ||
