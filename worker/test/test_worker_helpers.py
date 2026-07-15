@@ -263,6 +263,21 @@ def main() -> None:
     assert len(sleeps) == 1
     assert abs(sleeps[0] - 60 / providers.settings.nvidia_rpm_limit) < 0.001
 
+    # dừng mượt: cờ _shutdown đã set → _consume_loop thoát NGAY, không claim job nào
+    import threading
+    import novelworker.translator.worker as W
+    old_bc, old_claim = W.build_chain, W.db.claim_next_job
+    claimed = []
+    W.build_chain = lambda slot: object()
+    W.db.claim_next_job = lambda wid: claimed.append(wid)  # KHÔNG được gọi
+    try:
+        W._shutdown.set()
+        W._consume_loop("t:0", 0, threading.Event(), 0.01)  # phải return ngay
+    finally:
+        W._shutdown.clear()
+        W.build_chain, W.db.claim_next_job = old_bc, old_claim
+    assert claimed == [], "shutdown set mà vẫn claim job"
+
 
 if __name__ == "__main__":
     main()

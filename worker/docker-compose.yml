@@ -24,5 +24,9 @@ services:
   translator:
     <<: *common
     command: python -m novelworker.main translate
+    # Dừng mượt lúc deploy: worker bắt SIGTERM, ngừng nhận job mới rồi đợi chương đang
+    # dịch xong (~30-60s) mới thoát. Cho Docker chờ 180s trước khi SIGKILL (mặc định 10s
+    # là cắt ngang giữa chương). Worker tự thoát sớm khi đã xả xong nên hiếm khi chờ đủ.
+    stop_grace_period: 180s
     depends_on:
       - crawler       # đảm bảo image đã build trước khi translator chạy

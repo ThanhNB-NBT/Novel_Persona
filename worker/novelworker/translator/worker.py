@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import signal
 import threading
 import time
 
@@ -14,6 +15,10 @@ from . import providers
 from .providers import build_chain
 
 log = logging.getLogger(__name__)
+
+# Dừng mượt: SIGTERM (docker stop / recreate lúc deploy) set cờ này. Luồng dịch chỉ
+# thoát GIỮA các job (không cắt ngang chương đang dịch) → không bỏ job dở khi update code.
+_shutdown = threading.Event()
 
 # nhận cả khi model bọc mảng trong ```json fence (hay gặp) — trước đây trượt là
 # cả cục JSON rơi nguyên vào nội dung chương (lỗi "phình 5-6x" trong quality report)
@@ -1142,9 +1147,9 @@ def _consume_loop(worker_id: str, slot: int, paused: threading.Event, poll_secon
     `paused` set = đã chạm trần chi phí ngày → nghỉ."""
     llm = build_chain(slot)  # ghim 1 key nvidia cho luồng này, tái dùng suốt vòng đời
     idle_sleep = poll_seconds
-    while True:
+    while not _shutdown.is_set():  # thoát GIỮA các job khi có tín hiệu dừng
         if paused.is_set():
-            time.sleep(30)
+            _shutdown.wait(30)
             continue
         # TOÀN BỘ thân vòng lặp trong try — lỗi mạng tạm thời (Supabase "Server
         # disconnected") ở claim/finish_job từng giết chết thread âm thầm, worker
@@ -1154,7 +1159,7 @@ def _consume_loop(worker_id: str, slot: int, paused: threading.Event, poll_secon
             if not job:
                 # hàng đợi trống → giãn dần poll tới 15s (đỡ ~50k RPC/ngày lúc rảnh);
                 # có job lại về poll_seconds ngay — người đọc không phải chờ thêm
-                time.sleep(idle_sleep)
+                _shutdown.wait(idle_sleep)  # tín hiệu dừng cắt ngang nghỉ ngay
                 idle_sleep = min(idle_sleep + poll_seconds, 15.0)
                 continue
             idle_sleep = poll_seconds
@@ -1207,19 +1212,23 @@ def run_forever(poll_seconds: float = 3.0) -> None:
         settings.worker_id, settings.translator_concurrency,
         settings.llm_provider, settings.max_chapters_per_day,
     )
+    _install_shutdown_handler()
     paused = threading.Event()
+    workers = []
     for i in range(settings.translator_concurrency):
-        threading.Thread(
+        t = threading.Thread(
             target=_consume_loop,
             args=(f"{settings.worker_id}:{i}", i, paused, poll_seconds),
             daemon=True,
-        ).start()
+        )
+        t.start()
+        workers.append(t)
 
     last_audit = time.time()  # chờ đủ 1 chu kỳ mới quét lần đầu (khỏi trùng lúc mới khởi động)
     # Audit định kỳ chỉ quét chương dịch SAU watermark — restart process thì quét lại từ
     # lúc boot; nợ cũ trước đó đã dọn bởi các lần audit full (lệnh `audit`/nút Quét lỗi).
     audit_since = db.utc_now()
-    while True:
+    while not _shutdown.is_set():
         try:
             db.heartbeat("translator")  # điểm danh mỗi 60s
             db.requeue_stale_jobs(settings.stale_job_minutes)
@@ -1261,4 +1270,31 @@ def run_forever(poll_seconds: float = 3.0) -> None:
                 paused.clear()
         except Exception:
             log.exception("Lỗi housekeeping")
-        time.sleep(60)
+        _shutdown.wait(60)  # tín hiệu dừng cắt ngang chu kỳ housekeeping
+
+    # Dừng mượt: luồng dịch đã ngừng nhận job mới; đợi chúng xả nốt job đang chạy rồi thoát.
+    # Biên < stop_grace_period của Docker (180s) để khỏi bị SIGKILL giữa lúc join.
+    log.info("Nhận tín hiệu dừng — đợi %d luồng dịch xả nốt job đang chạy…",
+             len(workers))
+    deadline = time.time() + 170
+    for t in workers:
+        t.join(timeout=max(1.0, deadline - time.time()))
+    stuck = sum(1 for t in workers if t.is_alive())
+    if stuck:
+        log.warning("%d luồng chưa xả kịp — thoát, reaper sẽ trả job dở về hàng đợi", stuck)
+    else:
+        log.info("Đã xả hết job đang chạy — thoát sạch")
+
+
+def _install_shutdown_handler() -> None:
+    """SIGTERM (docker recreate/stop) + SIGINT (Ctrl+C dev) → bật cờ dừng mượt.
+    Chỉ đăng ký được ở main thread; nơi khác gọi thì lặng lẽ bỏ qua."""
+    def _handler(signum, _frame):
+        if not _shutdown.is_set():
+            log.info("Nhận tín hiệu %s — bắt đầu dừng mượt", signal.Signals(signum).name)
+        _shutdown.set()
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        try:
+            signal.signal(sig, _handler)
+        except (ValueError, OSError):
+            pass
