@@ -197,6 +197,12 @@ def main() -> None:
     assert "白衣少女" not in _build_glossary_block(terms, "白衣少女来了")
     terms[-1]["approved"] = True
     assert "白衣少女" in _build_glossary_block(terms, "白衣少女来了")
+    # _clean_title: dấu toàn giác → thường, ngoặc kép lẻ bị gỡ, viết hoa chữ đầu
+    from novelworker.translator.worker import _clean_title
+    assert _clean_title("Mẫn Diệt Lôi Quang”! Mẫn diệt tất cả！") == "Mẫn Diệt Lôi Quang! Mẫn diệt tất cả!"
+    assert _clean_title("Đại Ngốc，đi thôi") == "Đại Ngốc, đi thôi"
+    assert _clean_title("quảng trường nguy cấp") == "Quảng trường nguy cấp"
+    assert _clean_title("“Kiếm Đao” bùng nổ") == "“Kiếm Đao” bùng nổ"  # cặp đủ → giữ
     # tiêu đề "第x章..." phải được bóc số chương trước khi vào prompt
     from novelworker.translator.worker import TITLE_CHAPTER_PREFIX
     assert TITLE_CHAPTER_PREFIX.sub("", "第158章“引灭雷光”！").strip() == "“引灭雷光”！"

@@ -340,11 +340,17 @@ _TITLE_TRIM = "«»\"'“”‘’[]() \t#*"
 
 
 def _clean_title(t: str) -> str:
-    """Dọn tiêu đề model trả: bỏ ngoặc/quote bọc quanh, nhãn lặp, "Chương N:" tự chế."""
+    """Dọn tiêu đề model trả: bỏ ngoặc/quote bọc quanh, nhãn lặp, "Chương N:" tự chế,
+    dấu câu toàn giác sót và ngoặc kép lẻ (model hay đánh rơi vế mở: `Mẫn Diệt”!`)."""
     t = t.strip(_TITLE_TRIM)
     t = re.sub(r"^(?:chương|chapter)\s*\d+\s*[:：.．\-–—]?\s*", "", t, flags=re.I)
     t = re.sub(r"^(?:tiêu đề(?: chương)?|tieu de|nhan đề|title)\s*[:：]\s*", "", t, flags=re.I)
-    return t.strip(_TITLE_TRIM)
+    for full, half in (("，", ", "), ("！", "!"), ("？", "?"), ("：", ": "), ("；", "; ")):
+        t = t.replace(full, half)
+    if t.count("“") != t.count("”"):
+        t = t.replace("“", "").replace("”", "")
+    t = re.sub(r"\s{2,}", " ", t).strip(_TITLE_TRIM)
+    return t[:1].upper() + t[1:] if t else t
 
 
 def _pop_title(text: str) -> tuple[str | None, str]:
