@@ -7,10 +7,12 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'data.dart';
 import 'errorlog.dart';
 import 'hanviet.dart';
+import 'ink_transition.dart';
 import 'notify.dart';
 import 'theme.dart';
 import 'screens/admin/admin.dart';
 import 'screens/account/edit_profile.dart';
+import 'screens/account/guide.dart';
 import 'screens/cultivation/cultivation.dart';
 import 'screens/admin/errors.dart';
 import 'screens/novel/glossary.dart';
@@ -54,25 +56,56 @@ Future<void> main() async {
 
 final _router = GoRouter(routes: [
   GoRoute(path: '/', builder: (_, _) => const RootShell()),
-  GoRoute(path: '/login', builder: (_, _) => const LoginScreen()),
-  GoRoute(path: '/search', builder: (_, _) => const SearchScreen()),
-  GoRoute(path: '/profile/edit', builder: (_, _) => const EditProfileScreen()),
-  GoRoute(path: '/offline', builder: (_, _) => const OfflineLibraryScreen()),
-  GoRoute(path: '/notifications', builder: (_, _) => const NotificationsScreen()),
-  GoRoute(path: '/errors', builder: (_, _) => const ErrorLogScreen()),
-  GoRoute(path: '/admin', builder: (_, _) => const AdminScreen()),
-  GoRoute(path: '/cultivation', builder: (_, _) => const CultivationScreen()),
+  // Mọi màn push đi qua chuyển cảnh MỰC LOANG (ink_transition.dart) — chữ ký
+  // chuyển động của app. Riêng màn đọc giữ transition riêng theo chế độ lật/cuộn.
+  GoRoute(
+      path: '/login',
+      pageBuilder: (_, s) => inkPage(key: s.pageKey, child: const LoginScreen())),
+  GoRoute(
+      path: '/search',
+      pageBuilder: (_, s) => inkPage(key: s.pageKey, child: const SearchScreen())),
+  GoRoute(
+      path: '/profile/edit',
+      pageBuilder: (_, s) =>
+          inkPage(key: s.pageKey, child: const EditProfileScreen())),
+  GoRoute(
+      path: '/offline',
+      pageBuilder: (_, s) =>
+          inkPage(key: s.pageKey, child: const OfflineLibraryScreen())),
+  GoRoute(
+      path: '/guide',
+      pageBuilder: (_, s) => inkPage(key: s.pageKey, child: const GuideScreen())),
+  GoRoute(
+      path: '/notifications',
+      pageBuilder: (_, s) =>
+          inkPage(key: s.pageKey, child: const NotificationsScreen())),
+  GoRoute(
+      path: '/errors',
+      pageBuilder: (_, s) => inkPage(key: s.pageKey, child: const ErrorLogScreen())),
+  GoRoute(
+      path: '/admin',
+      pageBuilder: (_, s) => inkPage(key: s.pageKey, child: const AdminScreen())),
+  GoRoute(
+      path: '/cultivation',
+      pageBuilder: (_, s) =>
+          inkPage(key: s.pageKey, child: const CultivationScreen())),
   GoRoute(
     path: '/admin/novel/:id',
-    builder: (_, s) => AdminNovelScreen(novelId: int.parse(s.pathParameters['id']!)),
+    pageBuilder: (_, s) => inkPage(
+        key: s.pageKey,
+        child: AdminNovelScreen(novelId: int.parse(s.pathParameters['id']!))),
   ),
   GoRoute(
     path: '/novel/:id',
-    builder: (_, s) => NovelDetailScreen(novelId: int.parse(s.pathParameters['id']!)),
+    pageBuilder: (_, s) => inkPage(
+        key: s.pageKey,
+        child: NovelDetailScreen(novelId: int.parse(s.pathParameters['id']!))),
   ),
   GoRoute(
     path: '/novel/:id/glossary',
-    builder: (_, s) => GlossaryScreen(novelId: int.parse(s.pathParameters['id']!)),
+    pageBuilder: (_, s) => inkPage(
+        key: s.pageKey,
+        child: GlossaryScreen(novelId: int.parse(s.pathParameters['id']!))),
   ),
   GoRoute(
     path: '/novel/:id/read/:index',

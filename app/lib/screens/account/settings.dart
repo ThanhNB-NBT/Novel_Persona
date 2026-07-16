@@ -7,6 +7,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import '../../data.dart';
 import '../../theme.dart';
 import '../../update.dart';
+import '../../widgets.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -20,20 +21,31 @@ class SettingsScreen extends ConsumerWidget {
 
     if (user == null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Cài đặt')),
-        body: Center(
-          child: FilledButton(
-              onPressed: () => context.push('/login'), child: const Text('Đăng nhập')),
+        body: SafeArea(
+          child: Column(children: [
+            const PageHeader('CÁ NHÂN', 'Cài đặt'),
+            Expanded(
+              child: Center(
+                child: FilledButton(
+                    onPressed: () => context.push('/login'),
+                    child: const Text('Đăng nhập')),
+              ),
+            ),
+          ]),
         ),
       );
     }
 
     final name = profile?['display_name'] ?? user.email?.split('@').first ?? 'Bạn đọc';
     return Scaffold(
-      appBar: AppBar(title: const Text('Cài đặt')),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 110), // chừa chỗ dock nổi
-        children: [
+      body: SafeArea(
+        child: Column(children: [
+          // header editorial đồng bộ các tab (thay AppBar phẳng)
+          const PageHeader('CÁ NHÂN', 'Cài đặt'),
+          Expanded(
+              child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 110), // chừa chỗ dock nổi
+            children: [
           _ProfileCard(
               name: name,
               email: user.email ?? '',
@@ -79,10 +91,14 @@ class SettingsScreen extends ConsumerWidget {
           ]),
           const _SectionLabel('Ứng dụng'),
           _TileGroup(children: [
+            _Tile(Icons.menu_book_outlined, 'Hướng dẫn sử dụng',
+                onTap: () => context.push('/guide')),
             _Tile(Icons.system_update_alt_rounded, 'Kiểm tra cập nhật',
                 onTap: () => _checkUpdate(context, ref)),
           ]),
-        ],
+            ],
+          )),
+        ]),
       ),
     );
   }
@@ -232,31 +248,52 @@ class _Segmented extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    // nang chọn TRƯỢT giữa các ô (không nhảy màu từng ô như bản cũ) — cùng ngôn
+    // ngữ chuyển động với pill dock.
     return Container(
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(color: cs.surface, borderRadius: BorderRadius.circular(12),
           border: Border.all(color: cs.outlineVariant)),
-      child: Row(children: [
-        for (var i = 0; i < labels.length; i++)
-          Expanded(
-            child: GestureDetector(
-              onTap: () => onChanged(i),
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 9),
+      child: SizedBox(
+        height: 36,
+        child: Stack(children: [
+          AnimatedAlign(
+            duration: const Duration(milliseconds: 260),
+            curve: Curves.easeOutCubic,
+            alignment: Alignment(
+                labels.length == 1 ? 0 : -1 + 2 * value / (labels.length - 1), 0),
+            child: FractionallySizedBox(
+              widthFactor: 1 / labels.length,
+              heightFactor: 1,
+              child: DecoratedBox(
                 decoration: BoxDecoration(
-                  color: i == value ? cs.primary : Colors.transparent,
+                  color: cs.primary,
                   borderRadius: BorderRadius.circular(9),
                 ),
-                alignment: Alignment.center,
-                child: Text(labels[i],
-                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                        // onPrimary chứ không phải trắng cứng — dark mode nền nhấn sáng
-                        color: i == value ? cs.onPrimary : cs.onSurfaceVariant,
-                        fontWeight: FontWeight.w600)),
               ),
             ),
           ),
-      ]),
+          Row(children: [
+            for (var i = 0; i < labels.length; i++)
+              Expanded(
+                child: GestureDetector(
+                  onTap: () => onChanged(i),
+                  behavior: HitTestBehavior.opaque,
+                  child: Center(
+                    child: AnimatedDefaultTextStyle(
+                      duration: const Duration(milliseconds: 200),
+                      style: Theme.of(context).textTheme.labelMedium!.copyWith(
+                          // onPrimary chứ không phải trắng cứng — dark mode nền nhấn sáng
+                          color: i == value ? cs.onPrimary : cs.onSurfaceVariant,
+                          fontWeight: FontWeight.w600),
+                      child: Text(labels[i]),
+                    ),
+                  ),
+                ),
+              ),
+          ]),
+        ]),
+      ),
     );
   }
 }
@@ -265,12 +302,16 @@ class _SectionLabel extends StatelessWidget {
   final String text;
   const _SectionLabel(this.text);
   @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.fromLTRB(4, 22, 0, 10),
-        child: Text(text.toUpperCase(),
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                letterSpacing: 1.5, color: Theme.of(context).colorScheme.primary)),
-      );
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    // không vạch nhấn — chỉ header trang có (rải nhiều là loãng)
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 22, 0, 10),
+      child: Text(text.toUpperCase(),
+          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              letterSpacing: 1.5, color: cs.primary)),
+    );
+  }
 }
 
 /// Nhóm tile kiểu Linear/Vercel: 1 khối viền hairline, kẻ mảnh giữa các dòng —

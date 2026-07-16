@@ -457,13 +457,12 @@ void _showSpeedBreakdown(BuildContext context, Rec st) {
       match
     ),
     (
-      'Linh căn (${rootName(elements.length, variant)})',
-      '×${linhCanMult(elements, variant).toStringAsFixed(1)}',
+      'Linh căn (${rootName(elements.length, variant, refine + 1)})',
+      '×${linhCanMult(elements, variant, refine + 1).toStringAsFixed(1)}',
       variant != null,
     ),
     if (refine > 0)
-      ('Luyện căn (Tẩy Tủy Đan Lv.$refine)',
-          '×${(1 + 0.1 * refine).toStringAsFixed(1)}', true),
+      ('Luyện căn', '$refine điểm (đã gộp vào bậc)', true),
     if (isMa) ('Tà tốc Ma tộc', '×1.10', true),
     if (ascended && tienTier > 0)
       ('Tiên uy (${tienTierNames[tienTier]})',
@@ -1125,7 +1124,8 @@ class _RealmCard extends StatelessWidget {
                   _infoChip(
                     context,
                     Icons.spa_rounded,
-                    rootName(elements.length, variant),
+                    rootName(elements.length, variant,
+                        (st['linh_can'] as num?)?.toInt() ?? 1),
                     on: variant != null, // dị/thiên căn nổi bật
                   ),
                   if (elements.isNotEmpty)
@@ -1333,7 +1333,7 @@ class _AdvanceFxDialogState extends State<_AdvanceFxDialog>
   static const _cloudEnd = 0.18;
   static const _resultStart = 0.86;
 
-  late final _ctrl = AnimationController(
+  late final AnimationController _ctrl = AnimationController(
     vsync: this,
     // Đại cảnh giới cần đủ nhịp tụ mây → ba đạo lôi → dư chấn; tiểu cảnh giới gọn hơn.
     duration: Duration(milliseconds: widget.major ? 8000 : 1250),
@@ -1621,7 +1621,15 @@ class _AdvanceFxDialogState extends State<_AdvanceFxDialog>
           animation: _ctrl,
           builder: (_, _) {
             final active = _ctrl.value >= _cloudEnd && _ctrl.value < _resultStart;
-            return active ? const TribulationPreview() : const SizedBox.shrink();
+            if (!active) return const SizedBox.shrink();
+            final stormT =
+                ((_ctrl.value - _cloudEnd) / (_resultStart - _cloudEnd))
+                    .clamp(0.0, 1.0)
+                    .toDouble();
+            return CustomPaint(
+              painter: _TribulationAtmospherePainter(stormT),
+              child: const TribulationPreview(),
+            );
           },
         ),
       ),
@@ -1718,7 +1726,8 @@ class _AdvanceFxDialogState extends State<_AdvanceFxDialog>
             return Transform.translate(
               offset: Offset(dx, 0),
               child: CustomPaint(
-                painter: _BurstPainter(v, color, win, false),
+                painter: _TammaPainter(v, win),
+                foregroundPainter: _BurstPainter(v, color, win, false),
                 child: child,
               ),
             );
@@ -1779,6 +1788,123 @@ class _AdvanceFxDialogState extends State<_AdvanceFxDialog>
 
 /// Chớp sáng + 2 vòng xung kích + 12 tia lan ra (thành công); quầng đỏ tắt dần (bại).
 /// loi = lôi kiếp: thiên lôi vàng giáng từ trên xuống trong nửa đầu hoạt ảnh.
+/// Lớp khí tượng chạy sau WebP: mây không đứng yên và từng đạo lôi có dư quang
+/// riêng, còn tia chính vẫn do asset `tribulation_sequence.webp` đảm nhiệm.
+class _TribulationAtmospherePainter extends CustomPainter {
+  final double t;
+  const _TribulationAtmospherePainter(this.t);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final s = size.shortestSide;
+    final sky = Rect.fromLTWH(0, 0, size.width, size.height * 0.48);
+    canvas.drawRect(
+      sky,
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            const Color(0xFF02050D).withValues(alpha: 0.62),
+            const Color(0xFF11162A).withValues(alpha: 0.28),
+            Colors.transparent,
+          ],
+        ).createShader(sky),
+    );
+
+    final cloud = Paint()
+      ..color = const Color(0xFF171B2A).withValues(alpha: 0.42)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 18);
+    for (var i = 0; i < 9; i++) {
+      final drift = math.sin(t * math.pi * 2 + i * 1.71) * s * 0.035;
+      final x = (i + 0.35) * size.width / 9 + drift;
+      final y = s * (0.045 + (i % 3) * 0.045) +
+          math.cos(t * math.pi * 2.4 + i) * s * 0.014;
+      final w = s * (0.30 + (i % 3) * 0.055);
+      canvas.drawOval(
+        Rect.fromCenter(center: Offset(x, y), width: w, height: w * 0.45),
+        cloud,
+      );
+    }
+
+    for (final (i, hit) in [0.29, 0.56, 0.82].indexed) {
+      final d = (t - hit).abs();
+      if (d >= 0.055) continue;
+      final flash = 1 - d / 0.055;
+      final x = size.width * (0.34 + i * 0.16);
+      final bolt = Path()
+        ..moveTo(x, 0)
+        ..lineTo(x - s * 0.026, s * 0.11)
+        ..lineTo(x + s * 0.018, s * 0.18)
+        ..lineTo(x - s * 0.045, s * 0.28);
+      canvas.drawPath(
+        bolt,
+        Paint()
+          ..color = const Color(0xFFD7E7FF).withValues(alpha: flash * 0.42)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.1 + i * 0.35
+          ..strokeCap = StrokeCap.round
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2),
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _TribulationAtmospherePainter oldDelegate) =>
+      oldDelegate.t != t;
+}
+
+/// Ma khí bện quanh linh thể thay vì để riêng một sprite tĩnh giữa màn hình.
+class _TammaPainter extends CustomPainter {
+  final double t;
+  final bool subdued;
+  const _TammaPainter(this.t, this.subdued);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final c = Offset(size.width / 2, size.height * 0.43);
+    final s = size.shortestSide;
+    final color = subdued ? const Color(0xFF8B5CF6) : const Color(0xFFE03131);
+    final pulse = 0.5 + 0.5 * math.sin(t * math.pi * 4);
+    canvas.drawCircle(
+      c,
+      s * (0.18 + pulse * 0.025),
+      Paint()
+        ..shader = RadialGradient(
+          colors: [color.withValues(alpha: 0.19), Colors.transparent],
+        ).createShader(Rect.fromCircle(center: c, radius: s * 0.23)),
+    );
+    final smoke = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3);
+    for (var i = 0; i < 6; i++) {
+      final a = i * math.pi * 2 / 6 + t * (subdued ? 1.1 : 2.0);
+      final start = c + Offset(math.cos(a), math.sin(a) * 0.45) * s * 0.26;
+      final end =
+          c + Offset(math.cos(a + 1.7), math.sin(a + 1.7) * 0.52) * s * 0.10;
+      smoke
+        ..color = color.withValues(alpha: 0.22 + pulse * 0.18)
+        ..strokeWidth = 1.4 + (i % 2);
+      final path = Path()
+        ..moveTo(start.dx, start.dy)
+        ..cubicTo(
+          start.dx - math.sin(a) * s * 0.16,
+          start.dy + math.cos(a) * s * 0.12,
+          end.dx + math.cos(a) * s * 0.13,
+          end.dy - math.sin(a) * s * 0.10,
+          end.dx,
+          end.dy,
+        );
+      canvas.drawPath(path, smoke);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _TammaPainter oldDelegate) =>
+      oldDelegate.t != t || oldDelegate.subdued != subdued;
+}
+
 class _BurstPainter extends CustomPainter {
   final double t; // 0..1
   final Color color;

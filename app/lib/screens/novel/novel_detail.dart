@@ -113,7 +113,7 @@ class _Header extends StatelessWidget {
             const SizedBox(width: 4),
           ]),
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 4, 20, 18),
+            padding: const EdgeInsets.fromLTRB(20, 4, 20, 14),
             child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
               Hero(
                 tag: 'cover-${n['id']}',
@@ -226,26 +226,43 @@ class _ChapterListTab extends ConsumerStatefulWidget {
 
 class _ChapterListTabState extends ConsumerState<_ChapterListTab> {
   bool _asc = true;
+  // Chế độ CHỌN NHIỀU chương để dịch lại (2026-07-16): bấm nút dịch lại →
+  // checkbox cạnh từng chương, mặc định tick chương đang đọc dở.
+  bool _selecting = false;
+  final _sel = <int>{};
 
-  /// Xác nhận rồi xếp lại MỌI chương đã dịch để dịch lại (prompt/glossary mới).
-  Future<void> _retranslateAll({required int translated}) async {
+  void _startSelect() {
     if (sb.auth.currentUser == null) {
       context.push('/login');
       return;
     }
+    final cur = ref.read(progressProvider(widget.novelId)).value;
+    setState(() {
+      _selecting = true;
+      _sel.clear();
+      if (cur != null && cur >= 1) _sel.add(cur); // mặc định: chương đang đọc
+    });
+  }
+
+  /// Xác nhận rồi xếp các chương ĐÃ CHỌN (và đã dịch) để dịch lại.
+  /// Chọn đúng trọn bộ chương done → đi đường RPC retranslate_all (1 call).
+  Future<void> _retranslateSelected(List<Rec> list) async {
     final messenger = ScaffoldMessenger.of(context);
-    if (translated == 0) {
-      messenger.showSnackBar(
-          const SnackBar(content: Text('Chưa có chương nào đã dịch để dịch lại')));
+    final done = {
+      for (final c in list)
+        if (c['translation_status'] == 'done') c['chapter_index'] as int,
+    };
+    final picked = _sel.where(done.contains).toList()..sort();
+    if (picked.isEmpty) {
+      messenger.showSnackBar(const SnackBar(
+          content: Text('Chỉ dịch lại được chương ĐÃ dịch — chưa chọn chương nào hợp lệ')));
       return;
     }
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Dịch lại tất cả?'),
-        content: Text('Xếp lại $translated chương đã dịch để dịch lại từ đầu bằng '
-            'bản dịch mới. Bản cũ vẫn đọc được cho tới khi bản mới thay thế. '
-            'Truyện dài sẽ mất nhiều thời gian.'),
+        title: Text('Dịch lại ${picked.length} chương?'),
+        content: const Text('Bản cũ vẫn đọc được cho tới khi bản mới thay thế.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Huỷ')),
           FilledButton(
@@ -253,13 +270,21 @@ class _ChapterListTabState extends ConsumerState<_ChapterListTab> {
         ],
       ),
     );
-    if (ok != true) return;
+    if (ok != true || !mounted) return;
+    setState(() => _selecting = false);
     try {
-      final n = await retranslateAll(widget.novelId);
+      if (picked.length == done.length) {
+        await retranslateAll(widget.novelId);
+      } else {
+        for (final i in picked) {
+          await retranslateChapter(widget.novelId, i);
+        }
+      }
       if (!mounted) return;
       ref.invalidate(chapterListProvider(widget.novelId));
       ref.invalidate(translateQueueProvider);
-      messenger.showSnackBar(SnackBar(content: Text('Đã xếp lại $n chương để dịch lại')));
+      messenger.showSnackBar(
+          SnackBar(content: Text('Đã xếp ${picked.length} chương để dịch lại')));
     } catch (e) {
       messenger.showSnackBar(SnackBar(content: Text('Lỗi: $e')));
     }
@@ -284,40 +309,78 @@ class _ChapterListTabState extends ConsumerState<_ChapterListTab> {
             _TocHint(have: list.length, total: total),
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 12, 12, 4),
-            child: Row(children: [
-              Expanded(
-                child: Text('${list.length} chương',
-                    style: Theme.of(context).textTheme.labelLarge
-                        ?.copyWith(color: cs.onSurfaceVariant)),
-              ),
-              TextButton.icon(
-                // Chủ động yêu cầu dịch (song song với tự-dịch khi đọc, phòng khi quên).
-                onPressed: () => translateRangeDialog(context, ref, widget.novelId,
-                    translated: (novel?['chapter_count_translated'] ?? 0) as int,
-                    source: (novel?['chapter_count_source'] ?? 0) as int,
-                    onDone: () => ref.invalidate(chapterListProvider(widget.novelId))),
-                icon: const Icon(Icons.playlist_add_rounded, size: 18),
-                label: const Text('Dịch'),
-              ),
-              IconButton(
-                tooltip: 'Dịch lại tất cả chương đã dịch',
-                icon: const Icon(Icons.restart_alt_rounded, size: 20),
-                onPressed: () => _retranslateAll(
-                    translated: (novel?['chapter_count_translated'] ?? 0) as int),
-              ),
-              TextButton.icon(
-                onPressed: () => setState(() => _asc = !_asc),
-                icon: Icon(_asc ? Icons.arrow_downward : Icons.arrow_upward, size: 18),
-                label: Text(_asc ? 'Cũ → mới' : 'Mới → cũ'),
-              ),
-            ]),
+            child: _selecting
+                // thanh công cụ chế độ chọn: đếm + chọn hết + huỷ + xác nhận
+                ? Row(children: [
+                    Expanded(
+                      child: Text('Đã chọn ${_sel.length}',
+                          style: Theme.of(context).textTheme.labelLarge
+                              ?.copyWith(color: cs.primary)),
+                    ),
+                    IconButton(
+                      tooltip: 'Chọn hết chương đã dịch',
+                      icon: const Icon(Icons.done_all_rounded, size: 20),
+                      onPressed: () => setState(() => _sel
+                        ..clear()
+                        ..addAll([
+                          for (final c in list)
+                            if (c['translation_status'] == 'done')
+                              c['chapter_index'] as int,
+                        ])),
+                    ),
+                    TextButton(
+                        onPressed: () => setState(() => _selecting = false),
+                        child: const Text('Huỷ')),
+                    FilledButton.icon(
+                      onPressed: _sel.isEmpty ? null : () => _retranslateSelected(list),
+                      icon: const Icon(Icons.restart_alt_rounded, size: 18),
+                      label: Text('Dịch lại (${_sel.length})'),
+                    ),
+                  ])
+                : Row(children: [
+                    Expanded(
+                      child: Text('${list.length} chương',
+                          style: Theme.of(context).textTheme.labelLarge
+                              ?.copyWith(color: cs.onSurfaceVariant)),
+                    ),
+                    TextButton.icon(
+                      // Chủ động yêu cầu dịch (song song với tự-dịch khi đọc, phòng khi quên).
+                      onPressed: () => translateRangeDialog(context, ref, widget.novelId,
+                          translated: (novel?['chapter_count_translated'] ?? 0) as int,
+                          source: (novel?['chapter_count_source'] ?? 0) as int,
+                          onDone: () => ref.invalidate(chapterListProvider(widget.novelId))),
+                      icon: const Icon(Icons.playlist_add_rounded, size: 18),
+                      label: const Text('Dịch'),
+                    ),
+                    IconButton(
+                      tooltip: 'Dịch lại — chọn chương',
+                      icon: const Icon(Icons.restart_alt_rounded, size: 20),
+                      onPressed: _startSelect,
+                    ),
+                    TextButton.icon(
+                      onPressed: () => setState(() => _asc = !_asc),
+                      icon: Icon(_asc ? Icons.arrow_downward : Icons.arrow_upward, size: 18),
+                      label: Text(_asc ? 'Cũ → mới' : 'Mới → cũ'),
+                    ),
+                  ]),
           ),
           Expanded(
             child: ListView.separated(
               padding: const EdgeInsets.only(top: 4, bottom: 96), // chừa chỗ cho bong bóng nổi
               itemCount: ordered.length,
               separatorBuilder: (_, _) => const RowDivider(),
-              itemBuilder: (_, i) => _ChapterTile(ordered[i], widget.novelId),
+              itemBuilder: (_, i) {
+                final c = ordered[i];
+                final idx = c['chapter_index'] as int;
+                return _ChapterTile(
+                  c,
+                  widget.novelId,
+                  selecting: _selecting,
+                  checked: _sel.contains(idx),
+                  onToggle: (v) =>
+                      setState(() => v ? _sel.add(idx) : _sel.remove(idx)),
+                );
+              },
             ),
           ),
         ]);
@@ -361,18 +424,34 @@ class _TocHint extends StatelessWidget {
 class _ChapterTile extends StatelessWidget {
   final Rec c;
   final int novelId;
-  const _ChapterTile(this.c, this.novelId);
+  final bool selecting, checked;
+  final ValueChanged<bool>? onToggle;
+  const _ChapterTile(this.c, this.novelId,
+      {this.selecting = false, this.checked = false, this.onToggle});
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final done = c['translation_status'] == 'done';
-    // dòng thường + kẻ mảnh — không đóng khung từng chương
+    // dòng thường + kẻ mảnh — không đóng khung từng chương.
+    // Chế độ chọn: tap = tick (chỉ chương đã dịch mới dịch lại được).
     return InkWell(
-      onTap: () => context.push('/novel/$novelId/read/${c['chapter_index']}'),
+      onTap: selecting
+          ? (done ? () => onToggle?.call(!checked) : null)
+          : () => context.push('/novel/$novelId/read/${c['chapter_index']}'),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 13),
         child: Row(children: [
+          if (selecting)
+            // IgnorePointer: cả DÒNG là vùng chạm, checkbox chỉ hiển thị trạng thái
+            IgnorePointer(
+              child: Checkbox(
+                value: checked,
+                visualDensity: VisualDensity.compact,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                onChanged: done ? (_) {} : null, // null = disabled (chưa dịch)
+              ),
+            ),
           // số thứ tự chương (mono, phải-căn cho thẳng cột khi số dài ngắn khác nhau)
           SizedBox(
             width: 34,

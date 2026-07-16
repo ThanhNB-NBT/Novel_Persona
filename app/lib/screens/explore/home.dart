@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:ui';
+import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -21,6 +21,7 @@ class HomeScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final sections = ref.watch(homeSectionsProvider);
     return Scaffold(
+      backgroundColor: Colors.transparent, // lộ tầng khí quyển của shell
       body: SafeArea(
         child: sections.when(
           loading: () => const SkeletonHome(),
@@ -75,13 +76,33 @@ class _Brand extends StatelessWidget {
           // logo xoá nền, tự nhuộm theo theme (BrandLogo) — hợp cả sáng lẫn tối
           const BrandLogo(height: 44),
           const SizedBox(width: 12),
-          // header kiểu NEO: nhãn nhỏ tracking rộng + tiêu đề display
+          // header kiểu NEO: nhãn nhỏ tracking rộng + tiêu đề display — đồng họ
+          // với PageHeader (vạch nhấn + tiêu đề mực loang) cho cả 4 tab một giọng
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('KHÁM PHÁ',
-                  style: t.labelSmall?.copyWith(color: cs.primary, letterSpacing: 3)),
+              Row(children: [
+                Container(
+                    width: 16,
+                    height: 2,
+                    margin: const EdgeInsets.only(right: 6),
+                    decoration: BoxDecoration(
+                        color: cs.primary,
+                        borderRadius: BorderRadius.circular(1))),
+                Text('KHÁM PHÁ',
+                    style:
+                        t.labelSmall?.copyWith(color: cs.primary, letterSpacing: 3)),
+              ]),
               const SizedBox(height: 2),
-              Text('Gác truyện', style: t.headlineMedium),
+              ShaderMask(
+                shaderCallback: (r) => LinearGradient(colors: [
+                  cs.onSurface,
+                  cs.onSurface,
+                  Color.lerp(cs.onSurface, cs.primary, 0.55)!,
+                ], stops: const [0, 0.55, 1])
+                    .createShader(r),
+                child: Text('Gác truyện',
+                    style: t.headlineMedium?.copyWith(color: Colors.white)),
+              ),
             ]),
           ),
           // nút icon trần, nhỏ — không viền tròn
@@ -130,7 +151,7 @@ class _HeroCarouselState extends State<_HeroCarousel> {
   void initState() {
     super.initState();
     _ctrl = PageController(
-        viewportFraction: 0.9,
+        viewportFraction: 1.0, // full-bleed: ảnh tràn mép màn, không hé thẻ kế
         initialPage: _loop ? widget.items.length * 10000 : 0);
     if (_loop) {
       _timer = Timer.periodic(const Duration(milliseconds: 4500), (_) {
@@ -154,14 +175,14 @@ class _HeroCarouselState extends State<_HeroCarousel> {
     final cs = Theme.of(context).colorScheme;
     final n = widget.items.length;
     return Padding(
-      padding: const EdgeInsets.only(top: 12, bottom: 4),
+      padding: const EdgeInsets.only(top: 8, bottom: 4),
       child: Column(children: [
         SizedBox(
-          height: 196,
+          height: 320, // hero cao, choán tầm mắt — ấn tượng đầu tiên của app
           child: PageView.builder(
             controller: _ctrl,
             itemCount: _loop ? null : n, // null = vô hạn 2 chiều
-            itemBuilder: (_, i) => _HeroCard(widget.items[i % n]),
+            itemBuilder: (_, i) => _HeroCard(widget.items[i % n], _ctrl, i),
           ),
         ),
         if (n > 1) ...[
@@ -200,11 +221,21 @@ class _HeroCarouselState extends State<_HeroCarousel> {
   }
 }
 
-/// 1 thẻ hero trong carousel — kiểu NEO "khí quyển": viền/quầng sáng/nút nhuộm
-/// màu TRÍCH TỪ BÌA của từng truyện, bìa mờ phủ màu nền (không phủ đen).
+/// 1 thẻ hero FULL-BLEED (đại tu 2026-07-16): ảnh bìa SẮC NÉT tràn mép màn,
+/// chân ảnh tan vào nền trang bằng gradient (không khung, không viền — ảnh LÀ
+/// giao diện), chữ + nút đè trực tiếp lên vùng đã tan. Nút vẫn nhuộm màu bìa.
 class _HeroCard extends ConsumerWidget {
   final Rec n;
-  const _HeroCard(this.n);
+  final PageController ctrl; // để tính parallax theo vị trí vuốt thật
+  final int page;
+  const _HeroCard(this.n, this.ctrl, this.page);
+
+  /// Lệch trang hiện tại (0 = đứng giữa, ±1 = lệch nguyên trang).
+  double get _delta {
+    if (!ctrl.hasClients || !ctrl.position.haveDimensions) return 0;
+    return ((ctrl.page ?? page.toDouble()) - page).clamp(-1.0, 1.0);
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final cs = Theme.of(context).colorScheme;
@@ -215,90 +246,104 @@ class _HeroCard extends ConsumerWidget {
     // khí quyển theo bìa: mỗi truyện một màu riêng (như NEO)
     final amb = ref.watch(ambientProvider(cover)).value ?? Ambient.fallback;
     final accent = amb.accent(dark);
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 6),
-      child: TapScale(
-        onTap: () => context.push('/novel/${n['id']}'),
-        // RepaintBoundary: thẻ (blur + bóng) không vẽ lại theo từng frame trượt trang
-        child: RepaintBoundary(
-            child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: accent.withValues(alpha: 0.4)),
-            boxShadow: [
-              BoxShadow(color: accent.withValues(alpha: dark ? 0.16 : 0.14), blurRadius: 18),
-            ],
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(20),
-            child: Stack(children: [
-              Positioned.fill(
-                child: (cover == null || cover.isEmpty)
-                    ? Container(color: cs.primaryContainer)
-                    : ImageFiltered(
-                        imageFilter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-                        // nền sẽ bị mờ hoá — decode nhỏ (400px) + lọc low cho nhẹ GPU,
-                        // decode nguyên ảnh làm khựng lúc lướt slide
-                        child: Image.network(cover, fit: BoxFit.cover,
-                            cacheWidth: 400,
-                            filterQuality: FilterQuality.low,
-                            errorBuilder: (_, _, _) =>
-                                Container(color: cs.primaryContainer)),
-                      ),
+    return TapScale(
+      onTap: () => context.push('/novel/${n['id']}'),
+      child: RepaintBoundary(
+        child: Stack(fit: StackFit.expand, children: [
+          // NỀN = chính ảnh bìa phóng to + blur (không sợ cắt vì chỉ là khí quyển);
+          // bìa THẬT hiển thị nguyên vẹn ở lớp trên — hết cảnh cắt đầu cắt đuôi.
+          (cover == null || cover.isEmpty)
+              ? Container(color: cs.primaryContainer)
+              : ImageFiltered(
+                  imageFilter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+                  child: Image.network(cover, fit: BoxFit.cover,
+                      cacheWidth: 300,
+                      filterQuality: FilterQuality.low,
+                      errorBuilder: (_, _, _) =>
+                          Container(color: cs.primaryContainer)),
+                ),
+          // chân ảnh tan dần vào nền trang — hero "mọc ra" từ trang, không đóng khung
+          DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                stops: const [0.28, 0.72, 1],
+                colors: [
+                  bg.withValues(alpha: 0.12),
+                  bg.withValues(alpha: 0.86),
+                  bg,
+                ],
               ),
-              Positioned.fill(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.centerLeft,
-                      end: Alignment.centerRight,
-                      colors: [
-                        bg.withValues(alpha: 0.88),
-                        bg.withValues(alpha: 0.5),
-                      ],
-                    ),
-                  ),
+            ),
+          ),
+          // bìa nét NGUYÊN VẸN đứng giữa như poster, đổ bóng màu bìa.
+          // Parallax: bìa trôi NHANH hơn nền khi vuốt + thu nhỏ nhẹ lúc rời tâm
+          // → thẻ có chiều sâu, "linh hoạt" thay vì dán cứng.
+          Positioned(
+            top: 6, left: 0, right: 0,
+            child: AnimatedBuilder(
+              animation: ctrl,
+              builder: (_, child) => Transform.translate(
+                offset: Offset(-_delta * 70, 0),
+                child: Transform.scale(
+                    scale: 1 - 0.12 * _delta.abs(), child: child),
+              ),
+              child: Center(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(10),
+                  boxShadow: [
+                    BoxShadow(
+                        color: accent.withValues(alpha: 0.45),
+                        blurRadius: 24,
+                        offset: const Offset(0, 8)),
+                  ],
+                ),
+                child: Hero(
+                  tag: 'cover-${n['id']}',
+                  child: Cover(url: cover, width: 122, label: _title(n)),
                 ),
               ),
-              Padding(
-                padding: const EdgeInsets.all(11),
-                child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  // bìa cao kín thẻ (196 - 2×11 padding ≈ 174 = 124×1.4) — đáy
-                  // ngang hàng nút Đọc ngay, không còn hụt
-                  Hero(tag: 'cover-${n['id']}', child: Cover(url: cover, width: 124, label: _title(n))),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      TagChip(n['status'] == 'completed' ? 'Hoàn thành' : 'Đang ra',
-                          color: accent),
-                      const SizedBox(height: 8),
-                      Text(_title(n), maxLines: 2, overflow: TextOverflow.ellipsis,
-                          style: t.titleLarge?.copyWith(height: 1.2)),
-                      const SizedBox(height: 4),
-                      Text(_author(n), maxLines: 1, overflow: TextOverflow.ellipsis,
-                          style: t.labelMedium),
-                      const Spacer(),
-                      // FilledButton theo theme (một kiểu nút toàn app), chỉ
-                      // nhuộm màu theo bìa; chữ trắng/đen theo độ sáng màu nền
-                      FilledButton(
-                        onPressed: () => context.push('/novel/${n['id']}/read/1'),
-                        style: FilledButton.styleFrom(
-                          backgroundColor: accent,
-                          foregroundColor: accent.computeLuminance() > 0.45
-                              ? const Color(0xFF1D2129)
-                              : Colors.white,
-                          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
-                          textStyle: t.labelLarge?.copyWith(fontSize: 13),
-                        ),
-                        child: const Text('Đọc ngay'),
-                      ),
-                    ]),
-                  ),
-                ]),
+            ),
+            ),
+          ),
+          Positioned(
+            left: 20, right: 20, bottom: 10,
+            child: AnimatedBuilder(
+              animation: ctrl,
+              builder: (_, child) => Opacity(
+                opacity: (1 - _delta.abs() * 1.4).clamp(0.0, 1.0),
+                child: Transform.translate(
+                    offset: Offset(-_delta * 26, 0), child: child),
+              ),
+              child: Column(children: [
+              Text(_title(n), maxLines: 2, overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: t.titleLarge?.copyWith(height: 1.15)),
+              const SizedBox(height: 3),
+              Text(
+                  '${_author(n)} · ${n['chapter_count_source'] ?? 0} chương · '
+                  '${n['status'] == 'completed' ? 'Hoàn thành' : 'Đang ra'}',
+                  maxLines: 1, overflow: TextOverflow.ellipsis,
+                  style: t.labelMedium?.copyWith(color: cs.onSurfaceVariant)),
+              const SizedBox(height: 8),
+              FilledButton(
+                onPressed: () => context.push('/novel/${n['id']}/read/1'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: accent,
+                  foregroundColor: accent.computeLuminance() > 0.45
+                      ? const Color(0xFF1D2129)
+                      : Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 8),
+                  textStyle: t.labelLarge?.copyWith(fontSize: 13),
+                ),
+                child: const Text('Đọc ngay'),
               ),
             ]),
+            ),
           ),
-        )),
+        ]),
       ),
     );
   }

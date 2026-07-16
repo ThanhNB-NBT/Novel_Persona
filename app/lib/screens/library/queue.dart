@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../data.dart';
+import '../../theme.dart' show monoStyle;
 import '../../widgets.dart';
 
 /// Hàng đợi = tiến độ DỊCH theo chương (đồng bộ chung, không chia user):
@@ -14,8 +15,19 @@ class QueueScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final q = ref.watch(translateQueueProvider);
     return Scaffold(
-      appBar: AppBar(title: const Text('Hàng đợi dịch')),
-      body: q.when(
+      backgroundColor: Colors.transparent, // lộ tầng khí quyển của shell
+      body: SafeArea(
+        child: Column(children: [
+          // header editorial đồng bộ các tab (thay AppBar phẳng)
+          const PageHeader('TIẾN ĐỘ', 'Hàng đợi dịch'),
+          Expanded(child: _body(context, ref, q)),
+        ]),
+      ),
+    );
+  }
+
+  Widget _body(BuildContext context, WidgetRef ref, AsyncValue<QueueState> q) {
+    return q.when(
         loading: () => const AppLoading(),
         error: (e, _) => AppError(e, onRetry: () => ref.invalidate(translateQueueProvider)),
         data: (state) => RefreshIndicator(
@@ -54,7 +66,6 @@ class QueueScreen extends ConsumerWidget {
             ],
           ),
         ),
-      ),
     );
   }
 }
@@ -186,6 +197,8 @@ class _NovelGroup {
   }
 }
 
+/// Bảng "trạm dịch": eyebrow + chấm LIVE đập nhịp khi có chương đang dịch,
+/// 3 số mono lớn — nhìn như bảng điều khiển đang chạy, không phải bảng tĩnh.
 class _Summary extends StatelessWidget {
   final QueueState s;
   const _Summary(this.s);
@@ -193,35 +206,126 @@ class _Summary extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final translating = s.active.where((c) => c['translation_status'] == 'translating').length;
+    final t = Theme.of(context).textTheme;
+    final translating =
+        s.active.where((c) => c['translation_status'] == 'translating').length;
     final queued = s.active.length - translating;
+    final live = translating > 0;
+
+    Widget cell(String v, String label, {Color? c}) => Expanded(
+          child: Column(children: [
+            Text(v, style: monoStyle(context, size: 24, w: FontWeight.w700, color: c)),
+            const SizedBox(height: 3),
+            Text(label.toUpperCase(),
+                style: t.labelSmall?.copyWith(
+                    letterSpacing: 0.8, fontSize: 10, color: cs.onSurfaceVariant)),
+          ]),
+        );
+
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 18),
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        color: cs.primaryContainer.withValues(alpha: 0.5),
         borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: cs.outlineVariant),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            cs.primaryContainer.withValues(alpha: live ? 0.55 : 0.3),
+            cs.surface,
+          ],
+        ),
       ),
-      child: Row(children: [
-        _cell(context, '${s.doneLastHour}', 'chương/giờ', cs.primary),
-        _divider(cs),
-        _cell(context, '$translating', 'đang dịch', null),
-        _divider(cs),
-        _cell(context, '$queued', 'đang chờ', null),
+      child: Column(children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+          child: Row(children: [
+            _LiveDot(active: live, color: live ? cs.primary : cs.outlineVariant),
+            const SizedBox(width: 8),
+            Text(live ? 'ĐANG DỊCH' : 'ĐANG NGHỈ',
+                style: t.labelSmall?.copyWith(
+                    letterSpacing: 2,
+                    fontWeight: FontWeight.w700,
+                    color: live ? cs.primary : cs.onSurfaceVariant)),
+          ]),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          child: Row(children: [
+            cell('${s.doneLastHour}', 'chương/giờ', c: cs.primary),
+            Container(width: 1, height: 30, color: cs.outlineVariant),
+            cell('$translating', 'đang dịch'),
+            Container(width: 1, height: 30, color: cs.outlineVariant),
+            cell('$queued', 'đang chờ'),
+          ]),
+        ),
       ]),
     );
   }
+}
 
-  Widget _cell(BuildContext context, String v, String label, Color? c) => Expanded(
-        child: Column(children: [
-          Text(v,
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(color: c)),
-          const SizedBox(height: 2),
-          Text(label, style: Theme.of(context).textTheme.bodySmall),
-        ]),
-      );
+/// Chấm LIVE: đập nhịp (phồng + quầng lan rồi tắt) khi đang có việc chạy.
+class _LiveDot extends StatefulWidget {
+  final bool active;
+  final Color color;
+  const _LiveDot({required this.active, required this.color});
+  @override
+  State<_LiveDot> createState() => _LiveDotState();
+}
 
-  Widget _divider(ColorScheme cs) =>
-      Container(width: 1, height: 30, color: cs.outlineVariant);
+class _LiveDotState extends State<_LiveDot> with SingleTickerProviderStateMixin {
+  late final _c =
+      AnimationController(vsync: this, duration: const Duration(milliseconds: 1400));
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.active) _c.repeat();
+  }
+
+  @override
+  void didUpdateWidget(_LiveDot old) {
+    super.didUpdateWidget(old);
+    if (widget.active && !_c.isAnimating) _c.repeat();
+    if (!widget.active && _c.isAnimating) _c.stop();
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _c,
+      builder: (_, _) {
+        final v = _c.value;
+        return SizedBox(
+          width: 14,
+          height: 14,
+          child: Stack(alignment: Alignment.center, children: [
+            if (widget.active)
+              Container(
+                width: 6 + 8 * v,
+                height: 6 + 8 * v,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: widget.color.withValues(alpha: 0.35 * (1 - v)),
+                ),
+              ),
+            Container(
+              width: 7,
+              height: 7,
+              decoration:
+                  BoxDecoration(shape: BoxShape.circle, color: widget.color),
+            ),
+          ]),
+        );
+      },
+    );
+  }
 }
 
 /// Thẻ 1 truyện đang trong hàng đợi: bìa + trạng thái chương + thanh tiến độ dịch
