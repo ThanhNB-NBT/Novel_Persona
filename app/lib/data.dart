@@ -310,21 +310,30 @@ final translateQueueProvider = FutureProvider.autoDispose<QueueState>((
   // Đọc từ `translation_jobs` (nguồn sự thật của hàng đợi, CÓ priority) chứ không từ
   // chapters.status → (1) ưu tiên cao (truyện đang đọc, pri nhỏ) nổi lên đầu, (2) không
   // dính "chương mồ côi" (status kẹt nhưng job đã xoá).
-  final jobs = List<Rec>.from(
+  const jobCols = 'priority, status, novel_id, chapter_id, '
+      'chapters(chapter_index, title_vi, title_zh), '
+      'novels(title_vi, title_zh, cover_url, chapter_count_translated, '
+      'chapter_count_source, sources(name, enabled))';
+  // Job RUNNING lấy riêng (chỉ vài dòng): worker chọn job theo lane riêng nên job
+  // đang chạy có thể priority CAO HƠN 200 job pending đầu → dính limit là "mất tích".
+  final running = List<Rec>.from(
     await sb
         .from('translation_jobs')
-        .select(
-          'priority, status, novel_id, chapter_id, '
-          'chapters(chapter_index, title_vi, title_zh), '
-          'novels(title_vi, title_zh, cover_url, chapter_count_translated, '
-          'chapter_count_source, sources(name, enabled))',
-        )
+        .select(jobCols)
         .eq('type', 'chapter')
-        .inFilter('status', ['pending', 'running'])
+        .eq('status', 'running'),
+  );
+  final pending = List<Rec>.from(
+    await sb
+        .from('translation_jobs')
+        .select(jobCols)
+        .eq('type', 'chapter')
+        .eq('status', 'pending')
         .order('priority', ascending: true) // nhỏ = ưu tiên cao → lên đầu
         .order('created_at', ascending: true)
         .limit(200),
   );
+  final jobs = [...running, ...pending];
   // Chương pending mà content_zh CHƯA tải về = crawler đang lấy nguồn → "đang tải".
   // Truy vấn nhẹ (chỉ id, content_zh null) trên đúng các chapter_id đang chờ.
   final pendingIds = [
