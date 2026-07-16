@@ -134,22 +134,21 @@ def _eval_source_health(adapter: SourceAdapter) -> bool:
     return disabled
 
 
-def _cfg_int(rs: dict, key: str, cur: int) -> int:
-    try:
-        return max(1, int(rs.get(key, cur)))
-    except (TypeError, ValueError):
-        return cur
-
-
 def _refresh_cfg(cfg: dict) -> None:
     """Config chỉnh từ app (worker_settings) → cập nhật dict dùng chung; luồng nguồn đọc
     mỗi tick nên đổi là ăn trong ~10s. Lỗi/thiếu → giữ giá trị hiện tại."""
     rs = db.runtime_settings()
-    cfg["interval_min"] = _cfg_int(rs, "crawl_interval_min", cfg["interval_min"])
-    cfg["max_new"] = _cfg_int(rs, "discover_new_per_cycle", cfg["max_new"])
-    cfg["refresh_n"] = _cfg_int(rs, "refresh_per_cycle", cfg["refresh_n"])
-    settings.faloo_free_chapter_threshold = _cfg_int(
+    cfg["interval_min"] = db.runtime_int(rs, "crawl_interval_min", cfg["interval_min"])
+    cfg["max_new"] = db.runtime_int(rs, "discover_new_per_cycle", cfg["max_new"])
+    cfg["refresh_n"] = db.runtime_int(rs, "refresh_per_cycle", cfg["refresh_n"])
+    settings.faloo_free_chapter_threshold = db.runtime_int(
         rs, "faloo_free_chapter_threshold", settings.faloo_free_chapter_threshold)
+    settings.discover_min_chapters = db.runtime_int(
+        rs, "discover_min_chapters", settings.discover_min_chapters)
+    settings.sample_chapters = db.runtime_int(
+        rs, "sample_chapters", settings.sample_chapters, lo=0)  # 0 = tắt dịch đọc thử
+    settings.crawl_fetch_batch = db.runtime_int(
+        rs, "crawl_fetch_batch", settings.crawl_fetch_batch)
 
 
 def _source_tick(adapter: SourceAdapter, pending_fetch: list[dict], due: bool,

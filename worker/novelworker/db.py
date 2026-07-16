@@ -338,6 +338,14 @@ def runtime_settings() -> dict[str, str]:
         return {}
 
 
+def runtime_int(rs: dict, key: str, cur: int, lo: int = 1) -> int:
+    """Ép 1 giá trị worker_settings về int ≥ lo; thiếu/hỏng → giữ giá trị hiện tại."""
+    try:
+        return max(lo, int(rs.get(key, cur)))
+    except (TypeError, ValueError):
+        return cur
+
+
 # ---------- cache bìa (Supabase Storage) ----------
 
 def upload_cover(path: str, data: bytes, content_type: str) -> None:

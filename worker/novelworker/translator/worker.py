@@ -1231,6 +1231,12 @@ def run_forever(poll_seconds: float = 3.0) -> None:
     while not _shutdown.is_set():
         try:
             db.heartbeat("translator")  # điểm danh mỗi 60s
+            # knob dịch chỉnh từ app (worker_settings) — ăn trong ≤60s, không cần restart
+            rs = db.runtime_settings()
+            settings.max_chapters_per_day = db.runtime_int(
+                rs, "max_chapters_per_day", settings.max_chapters_per_day)
+            settings.audit_interval_min = db.runtime_int(
+                rs, "audit_interval_min", settings.audit_interval_min)
             db.requeue_stale_jobs(settings.stale_job_minutes)
             db.reset_orphan_chapters()  # dọn chương queued/translating không còn job (ghost Hàng đợi)
             try:
