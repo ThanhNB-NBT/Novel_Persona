@@ -58,6 +58,10 @@ def main() -> None:
     txt = a.fetch_chapter("niwen_2/9296")
     assert txt == body, repr(txt)
 
+    # chương ngắn không còn raise — trả nguyên văn, translator sẽ ghi chú "nguồn thiếu"
+    a._get = lambda p: '<div class="articlebody">短。</div>'
+    assert a.fetch_chapter("niwen_2/9296") == "短。"
+
     # content_class override
     b = DingdianAdapter(base_url="https://x.com", config={"content_class": "content"},
                         source_row={"name": "x"})

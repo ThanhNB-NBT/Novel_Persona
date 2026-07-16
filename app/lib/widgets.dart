@@ -150,6 +150,52 @@ class BrandLogo extends StatelessWidget {
   }
 }
 
+/// Header editorial đồng bộ các tab (kiểu Khám phá): nhãn nhỏ tracking rộng
+/// màu nhấn + tiêu đề display, actions dồn phải. Thay AppBar phẳng.
+class PageHeader extends StatelessWidget {
+  final String eyebrow, title;
+  final List<Widget> actions;
+  const PageHeader(this.eyebrow, this.title, {super.key, this.actions = const []});
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final t = Theme.of(context).textTheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 16, 8, 10),
+      child: Row(children: [
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              // vạch nhấn nhỏ trước eyebrow — nét bút điểm nhãn
+              Container(
+                  width: 16,
+                  height: 2,
+                  margin: const EdgeInsets.only(right: 6),
+                  decoration: BoxDecoration(
+                      color: cs.primary, borderRadius: BorderRadius.circular(1))),
+              Text(eyebrow.toUpperCase(),
+                  style: t.labelSmall?.copyWith(color: cs.primary, letterSpacing: 3)),
+            ]),
+            const SizedBox(height: 2),
+            // tiêu đề "mực loang": đầu chữ đậm mực, cuối phai nhẹ về màu nhấn
+            ShaderMask(
+              shaderCallback: (r) => LinearGradient(colors: [
+                cs.onSurface,
+                cs.onSurface,
+                Color.lerp(cs.onSurface, cs.primary, 0.55)!,
+              ], stops: const [0, 0.55, 1])
+                  .createShader(r),
+              child: Text(title,
+                  style: t.headlineMedium?.copyWith(color: Colors.white)),
+            ),
+          ]),
+        ),
+        ...actions,
+      ]),
+    );
+  }
+}
+
 /// Trạng thái đang tải toàn màn: logo xoá nền + vòng quay.
 class AppLoading extends StatelessWidget {
   const AppLoading({super.key});
@@ -482,6 +528,8 @@ class SectionHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    // vạch nhấn CHỈ ở header trang (PageHeader/_Brand) — rải xuống từng mục là loãng
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 18, 12, 10),
       child: Row(
@@ -492,11 +540,20 @@ class SectionHeader extends StatelessWidget {
                 style: Theme.of(context).textTheme.headlineSmall),
           ),
           if (onMore != null)
-            IconButton(
-              tooltip: 'Xem tất cả',
-              visualDensity: VisualDensity.compact,
-              icon: const Icon(Icons.chevron_right_rounded),
+            // pill "Xem tất cả" chữ + mũi tên — rõ nghĩa hơn chevron trơ
+            TextButton(
               onPressed: onMore,
+              style: TextButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                foregroundColor: cs.primary,
+              ),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Text('Xem tất cả',
+                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                        color: cs.primary, fontWeight: FontWeight.w600)),
+                const Icon(Icons.chevron_right_rounded, size: 16),
+              ]),
             ),
         ],
       ),
@@ -662,6 +719,59 @@ class TagChip extends StatelessWidget {
           context,
         ).textTheme.labelSmall?.copyWith(color: c, fontWeight: FontWeight.w600),
       ),
+    );
+  }
+}
+
+/// Ô poster dùng chung (lưới Khám phá, màn Xem tất cả…): bìa chiếm trọn ô,
+/// gradient chân + tên/số chương đè lên — ngôn ngữ cover-first 2026-07-16.
+class PosterTile extends StatelessWidget {
+  final Rec n;
+  final double width;
+  final VoidCallback onTap;
+  const PosterTile({super.key, required this.n, required this.width, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).textTheme;
+    final title = n['title_vi'] ?? n['title_zh'] ?? '';
+    return TapScale(
+      onTap: onTap,
+      child: Stack(children: [
+        Cover(url: n['cover_url'], width: width, label: title),
+        Positioned.fill(
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  stops: const [0.55, 1],
+                  colors: [
+                    Colors.transparent,
+                    Colors.black.withValues(alpha: 0.78),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+        Positioned(
+          left: 9, right: 9, bottom: 8,
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('$title',
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: t.labelLarge?.copyWith(
+                    color: Colors.white, fontWeight: FontWeight.w700, height: 1.2)),
+            const SizedBox(height: 2),
+            Text('${n['chapter_count_source'] ?? 0} chương',
+                style: t.labelSmall
+                    ?.copyWith(color: Colors.white.withValues(alpha: 0.8))),
+          ]),
+        ),
+      ]),
     );
   }
 }

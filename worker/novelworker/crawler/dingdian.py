@@ -170,7 +170,8 @@ class DingdianAdapter(SourceAdapter):
         lines = [ln.strip() for ln in unescape(raw).split("\n")]
         lines = [ln for ln in lines if ln and not any(k in ln.lower() for k in markers)]
         text = "\n".join(lines).strip()
-        if len(text) < 50:
-            raise ValueError(f"Chương {source_chapter_id} quá ngắn ({len(text)} ký tự)")
+        # Chương ngắn không phải lỗi (xem biquge.py) — chỉ rỗng mới raise.
+        if not text:
+            raise ValueError(f"Chương {source_chapter_id} rỗng sau khi lọc — đổi cấu trúc?")
         return text
 

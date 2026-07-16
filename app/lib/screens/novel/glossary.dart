@@ -384,7 +384,9 @@ class _GlossaryScreenState extends ConsumerState<GlossaryScreen> {
       builder: (ctx) => AlertDialog(
         title: const Text('Văn phong dịch'),
         content: StatefulBuilder(builder: (_, setState) {
-          return Column(mainAxisSize: MainAxisSize.min, children: [
+          // scroll: bàn phím bật lên trên màn nhỏ thì cuộn thay vì tràn/cắt ô nhập
+          return SingleChildScrollView(
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
             DropdownButtonFormField<String>(
               initialValue: pov,
               decoration: const InputDecoration(labelText: 'Ngôi kể'),
@@ -422,7 +424,7 @@ class _GlossaryScreenState extends ConsumerState<GlossaryScreen> {
             Text('Để trống tất cả rồi Lưu → xoá hồ sơ, worker tự sinh lại từ chương 1.',
                 style: Theme.of(ctx).textTheme.labelSmall?.copyWith(
                     color: Theme.of(ctx).colorScheme.onSurfaceVariant)),
-          ]);
+          ]));
         }),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Huỷ')),
@@ -470,7 +472,9 @@ class _GlossaryScreenState extends ConsumerState<GlossaryScreen> {
                 RegExp(r'[㐀-䶿一-鿿]+'), (m) => hanVietOf(m.group(0)!) ?? m.group(0)!);
             if (filled != z) hanFill = filled;
           }
-          return Column(mainAxisSize: MainAxisSize.min, children: [
+          // scroll: form dài + bàn phím → cuộn thay vì tràn/cắt ô nhập
+          return SingleChildScrollView(
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
             TextField(
               controller: zh,
               onChanged: (_) => setState(() {}),
@@ -528,7 +532,7 @@ class _GlossaryScreenState extends ConsumerState<GlossaryScreen> {
                     helperText: 'Cách LỜI KỂ gọi nhân vật này — bỏ trống = mặc định'),
               ),
             ],
-          ]);
+          ]));
         }),
         actions: [
           if (term != null)

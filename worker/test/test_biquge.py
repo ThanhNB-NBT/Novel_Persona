@@ -60,6 +60,10 @@ def main() -> None:
     txt = a.fetch_chapter("59979/1")
     assert txt == f"{p1}。\n{p2}。", repr(txt)
 
+    # chương ngắn không còn raise — trả nguyên văn, translator sẽ ghi chú "nguồn thiếu"
+    a._get = lambda p: '<div id="content">短。</div>'
+    assert a.fetch_chapter("59979/1") == "短。"
+
     # content_id override
     c = _adapter({"content_id": "chaptercontent"})
     c._get = lambda p: '<div id="chaptercontent">' + "内容" * 30 + "</div>"

@@ -272,7 +272,10 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   void _revealTappedWord(Offset globalPos) {
     Future.delayed(const Duration(milliseconds: 350), () {
       if (!mounted || !_scroll.hasClients || !_editing.value) return;
-      final mq = MediaQuery.of(context);
+      // getInheritedWidget… (KHÔNG phải MediaQuery.of): .of trong callback đăng ký
+      // cả màn đọc phụ thuộc MediaQuery → mỗi frame bàn phím trượt là rebuild cả
+      // nghìn từ, gây giật khi mở bàn phím. Ở đây chỉ cần ĐỌC giá trị một lần.
+      final mq = context.getInheritedWidgetOfExactType<MediaQuery>()!.data;
       final visibleBottom = mq.size.height - mq.viewInsets.bottom - 230; // ~230 = form sửa
       if (globalPos.dy > visibleBottom) {
         final target = (_scroll.offset + (globalPos.dy - mq.size.height * 0.28))
@@ -334,7 +337,9 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
           title: const Text('Báo lỗi bản dịch'),
-          content: Column(mainAxisSize: MainAxisSize.min, children: [
+          // scroll: bàn phím bật lên trên màn nhỏ thì cuộn thay vì tràn/cắt ô nhập
+          content: SingleChildScrollView(
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
             Text('Đoạn chọn: “${selected.trim()}”', maxLines: 2,
                 overflow: TextOverflow.ellipsis),
             const SizedBox(height: 12),
@@ -359,7 +364,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                 hintText: 'Không sửa nội dung chương',
               ),
             ),
-          ]),
+          ])),
           actions: [
             TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Hủy')),
             FilledButton(
@@ -802,20 +807,28 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     // Khớp: từ đang chọn == correct_vi (đúng, hiện chữ Trung gốc) hoặc == wrong_vi /
     // chứa nhau (sai → gợi ý correct_vi). Đây là "từ điển" của chính truyện.
     final sel0 = wrong.trim();
+    // Khớp KHÔNG phân biệt hoa/thường ("hiên" vẫn ra "Lâm Hiên") + theo TỪ: một từ
+    // của vùng chọn trùng một từ trong term là gợi — trước đây bắt substring nguyên
+    // cụm phân biệt hoa thường nên rất nhiều từ "trơ" không có gợi ý.
+    final selLow = sel0.toLowerCase();
+    final selWords = selLow.split(RegExp(r'\s+')).where((w) => w.length >= 2).toSet();
+    bool wordHit(String s) {
+      if (s.isEmpty) return false;
+      final low = s.toLowerCase();
+      if (low.contains(selLow) || selLow.contains(low)) return true;
+      return low.split(RegExp(r'\s+')).any(selWords.contains);
+    }
+
     final terms = ref.read(glossaryProvider(novelId)).value ?? const [];
     final sug = <Map<String, dynamic>>[];
     for (final tm in terms) {
       final zh = (tm['term_zh'] ?? '').toString();
       if (zh.isEmpty || sel0.isEmpty) continue;
-      final cv = (tm['correct_vi'] ?? '').toString();
-      final wv = (tm['wrong_vi'] ?? '').toString();
-      final hit = cv == sel0 ||
-          wv == sel0 ||
-          sel0.contains(zh) || // chọn trúng chữ Hán còn sót → term của chính nó
-          (cv.isNotEmpty && (sel0.contains(cv) || cv.contains(sel0))) ||
-          (wv.isNotEmpty && sel0.contains(wv));
+      final hit = sel0.contains(zh) || // chọn trúng chữ Hán còn sót → term của chính nó
+          wordHit((tm['correct_vi'] ?? '').toString()) ||
+          wordHit((tm['wrong_vi'] ?? '').toString());
       if (hit) sug.add(tm);
-      if (sug.length >= 4) break;
+      if (sug.length >= 6) break;
     }
 
     // Chọn trúng chữ Hán sót trong bản dịch → tra bảng ra thẳng âm Hán-Việt để điền,
@@ -851,11 +864,13 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
         color: cs.surface,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(18)),
         child: Padding(
-          // đáy: né bàn phím (viewInsets) HOẶC thanh điều hướng (viewPadding) + chừa 16
+          // đáy: né bàn phím (viewInsets) HOẶC thanh điều hướng (viewPadding) + chừa 16.
+          // Dùng *Of theo khía cạnh (không phải MediaQuery.of) để chỉ overlay này
+          // rebuild theo bàn phím, không kéo cây ngoài.
           padding: EdgeInsets.fromLTRB(16, 10, 16,
-              (MediaQuery.of(context).viewInsets.bottom > 0
-                      ? MediaQuery.of(context).viewInsets.bottom
-                      : MediaQuery.of(context).viewPadding.bottom) +
+              (MediaQuery.viewInsetsOf(context).bottom > 0
+                      ? MediaQuery.viewInsetsOf(context).bottom
+                      : MediaQuery.viewPaddingOf(context).bottom) +
                   16),
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children: [
@@ -897,6 +912,13 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
             // gợi ý bản đúng từ glossary (chữ Trung → Hán-Việt) — bấm để điền.
             // Kèm chip "tra bảng ⇒" khi phiên âm Hán-Việt theo bảng KHÁC bản trong
             // glossary — người không biết tiếng Trung vẫn đối chiếu được chuẩn.
+            if (sug.isEmpty && hanFill == null) ...[
+              // không có gì để gợi (từ thường, chưa có trong thuật ngữ) — nói rõ
+              // thay vì form trơ khiến user tưởng lỗi
+              const SizedBox(height: 8),
+              Text('Từ này chưa có trong thuật ngữ truyện — gõ thẳng bản đúng bên dưới.',
+                  style: t.labelMedium?.copyWith(color: cs.onSurfaceVariant)),
+            ],
             if (sug.isNotEmpty || hanFill != null) ...[
               const SizedBox(height: 10),
               Wrap(spacing: 8, runSpacing: 6, children: [
@@ -1530,6 +1552,10 @@ class _CommentsPanelState extends ConsumerState<_CommentsPanel> {
                 maxLines: 3,
                 minLines: 1,
                 maxLength: 2000,
+                // màn đọc resizeToAvoidBottomInset:false → phải tự nới scrollPadding
+                // theo bàn phím, không thì ô nhập bị bàn phím che khi focus
+                scrollPadding: EdgeInsets.only(
+                    bottom: MediaQuery.viewInsetsOf(context).bottom + 90),
                 style: TextStyle(color: fg.withValues(alpha: 0.9), fontSize: 14),
                 cursorColor: fg.withValues(alpha: 0.7),
                 decoration: InputDecoration(

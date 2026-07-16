@@ -90,6 +90,7 @@ class _SectionScreenState extends ConsumerState<SectionScreen> {
       if (_error != null) return Center(child: Text('Lỗi: $_error'));
       return const Center(child: Text('Chưa có truyện nào.'));
     }
+    // list dòng như cũ — user chê lưới poster tốn diện tích (2026-07-16)
     return ListView.separated(
       controller: _scroll,
       padding: const EdgeInsets.only(top: 4, bottom: 24),

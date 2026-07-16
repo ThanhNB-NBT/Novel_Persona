@@ -47,6 +47,10 @@ DEFAULT_MODELS = [
 
 QUALITY_CANDIDATES = [
     "mistralai/mistral-small-4-119b-2603",
+    # Mới lên preview 07/2026: Inkling (Thinking Machines, MoE 975B/41B active),
+    # minimax-m3-shadow (biến thể preview chưa công bố của M3)
+    "thinkingmachines/inkling", "minimaxai/minimax-m3-shadow",
+    "nvidia/nemotron-3-ultra-550b-a55b",
     "nvidia/nemotron-3-super-120b-a12b", "meta/llama-3.3-70b-instruct",
     "qwen/qwen3.5-397b-a17b", "qwen/qwen3.5-122b-a10b",
     "qwen/qwen3-next-80b-a3b-instruct", "google/gemma-4-31b-it",
@@ -163,6 +167,87 @@ def fetch_sample(chars: int, novel_id: int | None = None, chapter_index: int = 1
     return rows[0]["content_zh"][:chars]
 
 
+def fetch_dialogue_sample(chars: int) -> str:
+    """Chương nhiều thoại nhất (đếm dấu ngoặc kép) trong số chương còn content_zh."""
+    rows = (db.sb().table("chapters").select("novel_id,chapter_index,content_zh")
+            .not_.is_("content_zh", "null").limit(150).execute().data or [])
+    rows = [r for r in rows if r.get("content_zh")]
+    if not rows:
+        raise SystemExit("DB không có chương nào còn content_zh — cần 1 chương mẫu")
+    best = max(rows, key=lambda r: sum(r["content_zh"].count(q) for q in "“”「」"))
+    quotes = sum(best["content_zh"].count(q) for q in "“”「」")
+    print(f"Đề bài: novel {best['novel_id']} chương {best['chapter_index']} "
+          f"({quotes} dấu thoại trong {len(best['content_zh'])} ký tự)")
+    return best["content_zh"][:chars]
+
+
+def _esc(s: str) -> str:
+    return (s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"))
+
+
+def write_html(results: list[dict], zh: str, runs: int, path: Path) -> None:
+    """Report tự chứa: bảng thông số + bản dịch từng model để so mắt thường."""
+    avg = lambda xs: sum(xs) / len(xs) if xs else 0
+    rows, cards = [], []
+    for r in sorted(results, key=lambda r: (r["ok"] == 0, r["problem_runs"], avg(r["lat"]))):
+        ok_cls = "bad" if not r["ok"] else ("warn" if r["problem_runs"] else "good")
+        rows.append(
+            f"<tr class='{ok_cls}'><td><a href='#{_esc(r['model'])}'>{_esc(r['model'])}</a></td>"
+            f"<td>{r['ok']}/{runs}</td><td>{avg(r['lat']):.1f}s</td><td>{avg(r['tps']):.0f}</td>"
+            f"<td>{avg(r['han'])*100:.1f}%</td><td>{avg(r['ratio']):.2f}</td>"
+            f"<td>{r['problem_runs']}</td><td>{_esc(r['err'])}</td></tr>")
+        problems = "".join(f"<li>{_esc(p)}</li>" for p in dict.fromkeys(r["problems"]))
+        terms = ", ".join(f"{k}×{v}" for k, v in sorted(
+            r["narrator_terms"].items(), key=lambda kv: -kv[1]))
+        cards.append(f"""
+<section class="card {ok_cls}" id="{_esc(r['model'])}">
+  <h2>{_esc(r['model'])}</h2>
+  <p class="chips">
+    <span>ok {r['ok']}/{runs}</span><span>{avg(r['lat']):.1f}s</span>
+    <span>{avg(r['tps']):.0f} tok/s</span><span>hán {avg(r['han'])*100:.1f}%</span>
+    <span>phình {avg(r['ratio']):.2f}×</span><span>run lỗi {r['problem_runs']}</span>
+  </p>
+  {f"<ul class='problems'>{problems}</ul>" if problems else ""}
+  {f"<p class='terms'>Xưng hô người kể: {_esc(terms)}</p>" if terms else ""}
+  <pre class="vi">{_esc(r['sample']) or '(không có output)'}</pre>
+</section>""")
+    html = f"""<!doctype html><meta charset="utf-8">
+<title>Benchmark NIM — so chất lượng dịch</title>
+<style>
+  body {{ font: 15px/1.7 system-ui, sans-serif; margin: 0 auto; max-width: 1100px;
+         padding: 24px; background: #0f1420; color: #dde3ee; }}
+  h1 {{ font-size: 22px; }} h2 {{ font-size: 16px; margin: 0 0 8px; }}
+  table {{ border-collapse: collapse; width: 100%; font-size: 13.5px; }}
+  th, td {{ border: 1px solid #2a3350; padding: 6px 10px; text-align: left; }}
+  th {{ background: #1a2238; }}
+  tr.good td:first-child {{ border-left: 4px solid #3fbf7f; }}
+  tr.warn td:first-child {{ border-left: 4px solid #e8b23e; }}
+  tr.bad  td:first-child {{ border-left: 4px solid #e05b5b; }}
+  a {{ color: #7fb0ff; }}
+  details {{ margin: 18px 0; }} summary {{ cursor: pointer; color: #9fb2d8; }}
+  .zh, .vi {{ white-space: pre-wrap; background: #161d30; border: 1px solid #2a3350;
+              border-radius: 10px; padding: 14px 16px; max-height: 480px; overflow: auto; }}
+  .card {{ margin: 22px 0; padding: 16px 18px; background: #131a2c;
+           border: 1px solid #2a3350; border-radius: 12px; }}
+  .card.good {{ border-left: 4px solid #3fbf7f; }}
+  .card.warn {{ border-left: 4px solid #e8b23e; }}
+  .card.bad  {{ border-left: 4px solid #e05b5b; }}
+  .chips span {{ display: inline-block; background: #1a2238; border-radius: 20px;
+                 padding: 2px 12px; margin: 0 6px 6px 0; font-size: 13px; }}
+  .problems li {{ color: #e8b23e; font-size: 13.5px; }}
+  .terms {{ color: #9fb2d8; font-size: 13.5px; }}
+</style>
+<h1>Benchmark NIM — chất lượng dịch từng model</h1>
+<p>Đề bài {len(zh)} ký tự Hán · {runs} lượt/model · hán% = chữ Hán sót lại ·
+phình = độ dài output/gốc (chuẩn ~2–3×) · bản dịch bên dưới là lượt chạy đầu.</p>
+<table><tr><th>model</th><th>ok</th><th>lat</th><th>tok/s</th><th>hán%</th>
+<th>phình</th><th>run lỗi</th><th>lỗi gần nhất</th></tr>{"".join(rows)}</table>
+<details open><summary>Nguyên văn tiếng Trung (đề bài)</summary>
+<pre class="zh">{_esc(zh)}</pre></details>
+{"".join(cards)}"""
+    path.write_text(html, encoding="utf-8")
+
+
 def bench_model(model: str, zh: str, runs: int, timeout_sec: int, key_offset: int = 0) -> dict:
     providers = [TranslationProvider(NVIDIA_BASE_URL, key, model, "nvidia",
                                      timeout_sec=timeout_sec)
@@ -217,6 +302,11 @@ def main() -> None:
     ap.add_argument("--chars", type=int, default=3000, help="độ dài đề bài (ký tự Hán)")
     ap.add_argument("--novel", type=int, help="novel id dùng làm mẫu benchmark")
     ap.add_argument("--chapter", type=int, default=1, help="chapter_index của mẫu")
+    ap.add_argument("--dialogue", action="store_true",
+                    help="tự chọn chương nhiều thoại nhất trong DB làm đề bài")
+    ap.add_argument("--html", nargs="?", const="benchmark_out/benchmark_report.html",
+                    default=None, metavar="FILE",
+                    help="xuất report HTML trực quan (mặc định benchmark_out/benchmark_report.html)")
     ap.add_argument("--synthetic", action="store_true", help="dùng mẫu tự tạo, không đọc/gửi nội dung DB")
     ap.add_argument("--synthetic-repeat", type=int, default=1,
                     help="lặp mẫu tự tạo để giả lập input dài hơn (mặc định 1)")
@@ -237,7 +327,9 @@ def main() -> None:
         return
 
     zh = ((SYNTHETIC_QUALITY_SAMPLE + "\n") * max(args.synthetic_repeat, 1)
-          if args.synthetic else fetch_sample(args.chars, args.novel, args.chapter))[:args.chars]
+          if args.synthetic
+          else fetch_dialogue_sample(args.chars) if args.dialogue
+          else fetch_sample(args.chars, args.novel, args.chapter))[:args.chars]
     print(f"Đề bài: {len(zh)} ký tự Hán, {args.runs} lượt/model\n")
     hdr = f"{'model':<45} {'ok':>5} {'lat(s)':>8} {'tok/s':>7} {'hán%':>6} {'phình':>6} {'run lỗi':>8}"
     print(hdr)
@@ -257,6 +349,11 @@ def main() -> None:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(results, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"\nĐã ghi kết quả: {args.out}")
+    if args.html:
+        html_path = Path(args.html)
+        html_path.parent.mkdir(parents=True, exist_ok=True)
+        write_html(results, zh, args.runs, html_path)
+        print(f"Report HTML: {html_path} — mở bằng trình duyệt")
     good = [r for r in results if r["ok"] and not r["problem_runs"]]
     if good:
         best = min(good, key=lambda r: sum(r["lat"]) / len(r["lat"]))

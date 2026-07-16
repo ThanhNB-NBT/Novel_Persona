@@ -5,7 +5,7 @@ import re
 from html import unescape
 from itertools import zip_longest
 
-from .base import ChapterRef, NovelMeta, SourceAdapter
+from .base import ChapterRef, NovelMeta, SourceAdapter, SourceBlocked
 
 
 # Nhóm lớn đúng bộ lọc chung: 玄幻奇幻, 武侠仙侠, 科幻网游, 恐怖灵异.
@@ -17,6 +17,13 @@ def _text(fragment: str) -> str:
                       flags=re.I | re.S)
     fragment = re.sub(r"</p\s*>|<br\s*/?>", "\n", fragment, flags=re.I)
     return unescape(re.sub(r"<[^>]+>", "", fragment)).strip()
+
+
+# Faloo chặn IP (VPS) bằng trang "系统提示" HTTP 200 → trước đây bị hiểu nhầm là
+# "truyện thiếu metadata"/"không có chương free" và đánh failed oan hàng loạt candidate
+# (278 truyện trong 3 ngày, 2026-07). Chỉ kiểm khi parse fail để giữ fallback wap→desktop.
+def _blocked(html: str) -> bool:
+    return "系统提示" in html[:2000]
 
 
 class FalooAdapter(SourceAdapter):
@@ -110,6 +117,8 @@ class FalooAdapter(SourceAdapter):
             html = self._get(f"https://b.faloo.com/{source_novel_id}.html")
             title_match = re.search(r"<h1[^>]*>(.*?)</h1>", html, re.I | re.S)
         if not title_match:
+            if _blocked(html):
+                raise SourceBlocked(f"Faloo chặn IP (trang 系统提示) khi đọc metadata {source_novel_id}")
             raise ValueError(f"Faloo WAP và desktop đều thiếu metadata {source_novel_id}")
 
         def meta_value(name: str) -> str | None:
@@ -185,6 +194,8 @@ class FalooAdapter(SourceAdapter):
                 seen.add(chapter_id)
                 free.append((chapter_id, title))
         if not free:
+            if _blocked(html):
+                raise SourceBlocked(f"Faloo chặn IP (trang 系统提示) khi đọc mục lục {source_novel_id}")
             raise ValueError(f"Faloo không có chương miễn phí cho {source_novel_id}")
         return [
             ChapterRef(index=index, source_chapter_id=f"{source_novel_id}/{chapter_id}", title_zh=title)
@@ -204,5 +215,7 @@ class FalooAdapter(SourceAdapter):
             ("飞卢小说网提醒", "飞卢小说，飞要你好看", "手机用户请浏览"))]
         text = "\n".join(lines).strip()
         if len(text) < 50:
+            if _blocked(html):
+                raise SourceBlocked(f"Faloo chặn IP (trang 系统提示) khi tải chương {source_chapter_id}")
             raise ValueError(f"Chương Faloo {source_chapter_id} không công khai hoặc là VIP")
         return text

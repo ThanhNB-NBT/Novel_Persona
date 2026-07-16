@@ -14,73 +14,91 @@ class LibraryScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final reading = ref.watch(readingProvider);
-    return Scaffold(
-      appBar: AppBar(title: const Text('Tủ truyện'), actions: [
-        IconButton(
-          tooltip: 'Yêu cầu truyện mới',
-          icon: const Icon(Icons.travel_explore_rounded),
-          onPressed: () => showRequestSheet(context),
-        ),
-        IconButton(
-          tooltip: 'Bản offline',
-          icon: const Icon(Icons.download_done_rounded),
-          onPressed: () => context.push('/offline'),
-        ),
-        IconButton(
-          tooltip: 'Thông báo',
-          // chấm đỏ khi có chương dịch xong chưa xem (từ lần mở màn Thông báo trước)
-          icon: Stack(clipBehavior: Clip.none, children: [
-            const Icon(Icons.notifications_none_rounded),
-            if (ref.watch(unseenNotifProvider).value ?? false)
-              Positioned(
-                right: -1, top: -1,
-                child: Container(
-                  width: 9, height: 9,
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.error,
-                    shape: BoxShape.circle,
-                  ),
+    // Header editorial đồng bộ với Khám phá (thay AppBar phẳng cũ).
+    final header = PageHeader('TỦ SÁCH', 'Đang đọc', actions: [
+      IconButton(
+        tooltip: 'Yêu cầu truyện mới',
+        iconSize: 22,
+        visualDensity: VisualDensity.compact,
+        icon: const Icon(Icons.travel_explore_rounded),
+        onPressed: () => showRequestSheet(context),
+      ),
+      IconButton(
+        tooltip: 'Bản offline',
+        iconSize: 22,
+        visualDensity: VisualDensity.compact,
+        icon: const Icon(Icons.download_done_rounded),
+        onPressed: () => context.push('/offline'),
+      ),
+      IconButton(
+        tooltip: 'Thông báo',
+        iconSize: 22,
+        visualDensity: VisualDensity.compact,
+        // chấm đỏ khi có chương dịch xong chưa xem (từ lần mở màn Thông báo trước)
+        icon: Stack(clipBehavior: Clip.none, children: [
+          const Icon(Icons.notifications_none_rounded),
+          if (ref.watch(unseenNotifProvider).value ?? false)
+            Positioned(
+              right: -1, top: -1,
+              child: Container(
+                width: 9, height: 9,
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.error,
+                  shape: BoxShape.circle,
                 ),
               ),
-          ]),
-          onPressed: () async {
-            await context.push('/notifications');
-            ref.invalidate(unseenNotifProvider); // vừa xem xong → tắt chấm
-          },
-        ),
-        const SizedBox(width: 4),
-      ]),
-      body: reading.when(
-        loading: () => const SkeletonList(),
-        error: (e, _) => AppError(e, onRetry: () => ref.invalidate(readingProvider)),
-        data: (list) {
-          if (sb.auth.currentUser == null) {
-            return _Empty(
-              icon: Icons.login_rounded,
-              text: 'Đăng nhập để lưu truyện đang đọc',
-              action: FilledButton(
-                onPressed: () => context.push('/login'),
-                child: const Text('Đăng nhập'),
-              ),
-            );
-          }
-          if (list.isEmpty) {
-            return const _Empty(
-              icon: Icons.auto_stories_rounded,
-              text:
-                  'Chưa có truyện đang đọc.\nMở một truyện ở Khám phá để bắt đầu.',
-            );
-          }
-          return RefreshIndicator(
-            onRefresh: () async => ref.invalidate(readingProvider),
-            child: ListView.separated(
-              padding: const EdgeInsets.fromLTRB(0, 6, 0, 110), // chừa chỗ dock nổi
-              itemCount: list.length,
-              separatorBuilder: (_, _) => const RowDivider(),
-              itemBuilder: (_, i) => _ReadingRow(list[i]),
             ),
-          );
+        ]),
+        onPressed: () async {
+          await context.push('/notifications');
+          ref.invalidate(unseenNotifProvider); // vừa xem xong → tắt chấm
         },
+      ),
+      const SizedBox(width: 4),
+    ]);
+    return Scaffold(
+      backgroundColor: Colors.transparent, // lộ tầng khí quyển của shell
+      body: SafeArea(
+        child: Column(children: [
+          header,
+          Expanded(
+            child: reading.when(
+              loading: () => const SkeletonList(),
+              error: (e, _) =>
+                  AppError(e, onRetry: () => ref.invalidate(readingProvider)),
+              data: (list) {
+                if (sb.auth.currentUser == null) {
+                  return _Empty(
+                    icon: Icons.login_rounded,
+                    text: 'Đăng nhập để lưu truyện đang đọc',
+                    action: FilledButton(
+                      onPressed: () => context.push('/login'),
+                      child: const Text('Đăng nhập'),
+                    ),
+                  );
+                }
+                if (list.isEmpty) {
+                  return const _Empty(
+                    icon: Icons.auto_stories_rounded,
+                    text:
+                        'Chưa có truyện đang đọc.\nMở một truyện ở Khám phá để bắt đầu.',
+                  );
+                }
+                // Truyện đọc GẦN NHẤT (list đã sort updated_at desc) lên thẻ hero
+                // "Đọc tiếp" — một chạm vào lại mạch truyện; còn lại là danh sách.
+                return RefreshIndicator(
+                  onRefresh: () async => ref.invalidate(readingProvider),
+                  child: ListView.separated(
+                    padding: const EdgeInsets.fromLTRB(0, 2, 0, 110), // chừa dock nổi
+                    itemCount: list.length,
+                    separatorBuilder: (_, _) => const RowDivider(),
+                    itemBuilder: (_, i) => _ReadingRow(list[i]),
+                  ),
+                );
+              },
+            ),
+          ),
+        ]),
       ),
     );
   }
@@ -109,12 +127,13 @@ class _ReadingRow extends ConsumerWidget {
       ), // → trang thông tin (đồng bộ với mọi nơi)
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        // center: bìa đứng giữa dòng, khoảng trên dưới bằng nhau (start cũ lệch lên)
         child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             // KHÔNG Hero ở đây: các tab sống chung 1 route (PageView keep-alive),
             // truyện nằm cả ở carousel Khám phá sẽ trùng tag 'cover-id' → crash.
-            Cover(url: n['cover_url'], width: 64, aspect: 1.36, label: title),
+            Cover(url: n['cover_url'], width: 72, aspect: 1.36, label: title),
             const SizedBox(width: 14),
             Expanded(
               child: Column(

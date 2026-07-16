@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 
 from .. import db
 from ..config import settings
-from .base import ChapterNotReady, SourceAdapter
+from .base import ChapterNotReady, SourceAdapter, SourceBlocked
 
 log = logging.getLogger(__name__)
 
@@ -376,6 +376,11 @@ def process_discovery_candidates(adapter: SourceAdapter, max_new: int = 10) -> N
         checked += 1
         try:
             meta = adapter.fetch_novel_meta(source_novel_id)
+        except SourceBlocked as exc:
+            # Chặn theo IP là lỗi của CHU KỲ, không phải của truyện: giữ candidate
+            # pending nguyên trạng, dừng ngay để không nuôi mức chặn.
+            log.warning("Discovery queue %s: %s — dừng chu kỳ này", adapter.name, exc)
+            break
         except Exception as exc:
             consec_fail += 1
             retry = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
@@ -1001,6 +1006,10 @@ def ensure_chapters_fetched(adapter: SourceAdapter, novel_id: int) -> None:
             db.save_chapter_raw(ch["id"], content)
             _not_ready_count.pop(ch["id"], None)
             log.info("Đã tải chương %s (novel %s)", ch["chapter_index"], novel_id)
+        except SourceBlocked as e:
+            log.warning("Nguồn %s đang chặn IP (%s) — dừng tải chương chu kỳ này",
+                        adapter.name, e)
+            return
         except ChapterNotReady as e:
             # Lỗi TẠM: nguồn liệt kê chương nhưng trang chưa sinh → giữ queued thử lại.
             # Quá NOT_READY_GIVE_UP lần liên tiếp → kiểm chứng trang truyện rồi mới kết luận.

@@ -138,6 +138,18 @@ def main() -> None:
     except ValueError as error:
         assert "VIP" in str(error)
 
+    # trang chống bot 系统提示 (HTTP 200) → SourceBlocked, không phải lỗi dữ liệu
+    from novelworker.crawler.base import SourceBlocked
+    adapter._get = lambda _: "<title>系统提示</title>"
+    for call in (lambda: adapter.fetch_novel_meta("999"),
+                 lambda: adapter.fetch_chapter_list("999"),
+                 lambda: adapter.fetch_chapter("999/1")):
+        try:
+            call()
+            raise AssertionError("trang chống bot phải raise SourceBlocked")
+        except SourceBlocked:
+            pass
+
 
 if __name__ == "__main__":
     main()

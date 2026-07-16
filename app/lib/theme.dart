@@ -160,6 +160,10 @@ ThemeData _build({required bool dark}) {
       filled: true,
       fillColor: dark ? Pal.dSurfaceAlt : Pal.surface,
       labelStyle: TextStyle(color: soft),
+      // label nổi lên khi focus → nhuộm màu nhấn, form "phản hồi" theo thao tác
+      floatingLabelStyle: TextStyle(color: accent, fontWeight: FontWeight.w600),
+      hintStyle: TextStyle(color: soft.withValues(alpha: 0.55)),
+      prefixIconColor: soft,
       helperStyle: TextStyle(color: soft, fontSize: 12),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       border: OutlineInputBorder(

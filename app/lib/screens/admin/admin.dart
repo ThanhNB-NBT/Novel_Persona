@@ -953,7 +953,10 @@ class _NovelsTabState extends ConsumerState<_NovelsTab> {
                     ),
                   ),
                 ),
-                Padding(
+                // cuộn ngang: số đếm dài (nghìn truyện) làm 3 chip tràn bề ngang
+                // vài px trên máy hẹp (lỗi "right overflowed by 2.9px")
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
                   child: Row(children: [
                     for (final (i, label) in [

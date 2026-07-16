@@ -351,8 +351,11 @@ class BiqugeAdapter(SourceAdapter):
                  if ln and not self._is_pagination_junk(ln)
                  and not any(k in ln.lower() for k in markers)]
         text = "\n".join(lines).strip()
-        if len(text) < 50:
-            raise ValueError(f"Chương {source_chapter_id} quá ngắn ({len(text)} ký tự)")
+        # Chương ngắn KHÔNG coi là lỗi (2026-07-16): nhiều nguồn có chương ngắn thật,
+        # báo lỗi thì không phân biệt được với crawl thiếu. Cứ trả về để dịch;
+        # translator sẽ chèn ghi chú "nguồn thiếu" cho người đọc. Chỉ rỗng mới là lỗi.
+        if not text:
+            raise ValueError(f"Chương {source_chapter_id} rỗng sau khi lọc — đổi cấu trúc?")
         return text
 
 

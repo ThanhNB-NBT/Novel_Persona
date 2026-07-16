@@ -57,6 +57,11 @@ def _retry_after_seconds(resp: Any) -> float:
         return 0.0
 
 
+class SourceBlocked(Exception):
+    """Nguồn trả trang chống bot (HTTP 200 nhưng không phải nội dung thật) — lỗi TẠM
+    theo IP, không phải dữ liệu hỏng: đừng đánh failed, dừng chu kỳ chờ lần sau."""
+
+
 class ChapterNotReady(Exception):
     """Nguồn đã liệt kê chương trong mục lục nhưng trang chương CHƯA tồn tại
     (redirect về trang truyện) — lỗi tạm, giữ hàng đợi thử lại, đừng đánh failed."""
@@ -112,7 +117,9 @@ class SourceAdapter(ABC):
         # Đếm fetch của chu kỳ hiện tại → main.py đo sức khoẻ nguồn (toàn fail = chết).
         self.fetch_ok = 0
         self.fetch_err = 0
-        proxy = (settings.http_proxy_url or "").strip()
+        # Proxy riêng của nguồn (sources.config.proxy) thắng proxy chung — dùng khi
+        # 1 nguồn chặn IP VPS (Faloo 2026-07) mà các nguồn khác vẫn crawl trực tiếp ổn.
+        proxy = (self.config.get("proxy") or settings.http_proxy_url or "").strip()
         proxies = {"http": proxy, "https": proxy} if proxy.startswith(
             ("http://", "https://", "socks5://")) else None
         # timeout đặt PER-REQUEST (_TIMEOUT tuple) thay vì cứng ở Session để tách connect/read

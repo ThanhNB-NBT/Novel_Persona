@@ -65,52 +65,60 @@ const elementNames = {
   'all': 'Vạn Pháp',
 };
 
-/// Linh căn (migration 067): BỘ HỆ ngũ hành cố định trời định. Ít hệ = thuần = tu nhanh
-/// (Đơn 1 hệ nhanh nhất trong linh căn thường). Dị/thiên căn có tên riêng qua `variant`.
+/// Linh căn (migration 078): HỆ (elements + variant) cố định trời định — Chuyển Linh
+/// Đan chỉ tráo bộ hệ. BẬC là thang 7 nấc tách khỏi hệ, thăng bằng điểm luyện căn
+/// (đan kind 'linhcan' cộng vào cột linh_can): chi phí gấp đôi mỗi bậc, tốc ×2 mỗi bậc.
 const linhCanVariants = {
   'thien': 'Thiên Linh Căn', 'hon': 'Hỗn Độn Linh Căn', 'kiem': 'Kiếm Linh Căn',
   'loi': 'Lôi Linh Căn', 'bang': 'Băng Linh Căn', 'phong': 'Phong Linh Căn',
   'am': 'Huyễn Linh Căn',
 };
 
-/// Hệ số tốc độ theo linh căn — MIRROR `cult_linhcan_mult` (067). Chỉ để HIỂN THỊ
-/// phân tích tốc độ; số thật do server tính.
-double linhCanMult(List<String> elements, String? variant) {
-  switch (variant) {
-    case 'hon':
-      return 14;
-    case 'thien':
-      return 10;
-    case 'kiem':
-    case 'loi':
-      return 8;
-    case 'bang':
-    case 'phong':
-    case 'am':
-      return 7.5;
-    case null:
-      return switch (elements.length) {
-        1 => 5.0,
-        2 => 3.4,
-        3 => 2.4,
-        4 => 1.6,
-        _ => 1.0,
-      };
-    default:
-      return 7; // dị căn khác
-  }
+/// Tên thang bậc 1..7 (index 0..6).
+const linhCanTierNames = [
+  'Ngũ Hành Tạp Căn', 'Tứ Linh Căn', 'Tam Linh Căn', 'Song Linh Căn',
+  'Đơn Linh Căn', 'Dị Linh Căn', 'Tiên Linh Căn',
+];
+
+/// Bậc GỐC trời định: dị căn bẩm sinh vào thẳng Dị (6), thiên/hỗn độn vào Tiên (7),
+/// còn lại theo số hệ (5 hệ → Tạp 1 … 1 hệ → Đơn 5).
+int linhCanBornTier(int count, String? variant) {
+  if (variant == 'thien' || variant == 'hon') return 7;
+  if (variant != null) return 6;
+  return 6 - (count < 1 ? 5 : count.clamp(1, 5)); // rỗng = chưa gán → coi như 5 hệ (khớp SQL)
 }
 
-/// Tên bậc linh căn theo số hệ (hoặc tên dị căn). Chỉ hiển thị.
-String rootName(int count, String? variant) {
-  if (variant != null) return linhCanVariants[variant] ?? 'Dị Linh Căn';
-  return switch (count) {
-    <= 1 => 'Đơn Linh Căn',
-    2 => 'Song Linh Căn',
-    3 => 'Tam Linh Căn',
-    4 => 'Tứ Linh Căn',
-    _ => 'Ngũ Hành Tạp Căn',
-  };
+/// (bậc hiện tại, điểm dư trong bậc) sau khi tiêu điểm luyện căn — MIRROR vòng lặp
+/// trong `cult_linhcan_mult` (078). Chi phí thăng bậc b→b+1 là 5×2^(b−1).
+(int, int) linhCanTier(int count, String? variant, int linhCan) {
+  var b = linhCanBornTier(count, variant);
+  var rem = (linhCan - 1).clamp(0, 1 << 30);
+  while (b < 7) {
+    final cost = 5 * (1 << (b - 1));
+    if (rem < cost) break;
+    rem -= cost;
+    b++;
+  }
+  return (b, rem);
+}
+
+/// Hệ số tốc độ theo linh căn — MIRROR `cult_linhcan_mult` (078). Chỉ để HIỂN THỊ
+/// phân tích tốc độ; số thật do server tính. ×2 mỗi bậc, điểm lẻ nội suy trong bậc,
+/// quá trần Tiên +10%/điểm.
+double linhCanMult(List<String> elements, String? variant, [int linhCan = 1]) {
+  final (b, rem) = linhCanTier(elements.length, variant, linhCan);
+  if (b < 7) return (1 << (b - 1)) * (1 + rem / (5 * (1 << (b - 1))));
+  return 64 * (1 + 0.1 * rem);
+}
+
+/// Tên bậc hiển thị: dị căn giữ tên riêng khi còn ở bậc bẩm sinh; thăng vượt lên
+/// thì lấy tên thang bậc. Chỉ hiển thị.
+String rootName(int count, String? variant, [int linhCan = 1]) {
+  final (b, _) = linhCanTier(count, variant, linhCan);
+  if (variant != null && b == linhCanBornTier(count, variant)) {
+    return linhCanVariants[variant] ?? 'Dị Linh Căn';
+  }
+  return linhCanTierNames[b - 1];
 }
 
 const cultTypeNames = {
@@ -231,11 +239,12 @@ String cultEffectText(Rec it) {
   }
   if (e['agi'] != null) return 'thân pháp +${e['agi']}';
   return switch (e['kind']) {
-    'linhcan' => 'linh căn +${e['add']} vĩnh viễn',
+    'linhcan' => 'luyện căn +${e['add']} điểm vĩnh viễn (điểm thăng bậc linh căn, '
+        'bậc càng cao càng tốn điểm)',
     'buff' => '+${e['pct']}% tốc độ trong ${e['hours']} giờ',
     'stone' => '+${e['pct']}% tốc độ trong ${e['hours']} giờ (cộng dồn với đan)',
     'hothan' => '+${e['pct']}% đột phá cho lần kế tiếp',
-    'element' => 'đổi thuộc tính linh căn sang hệ khác (ngẫu nhiên)',
+    'element' => 'tráo bộ hệ linh căn (ngẫu nhiên, giữ nguyên bậc)',
     // công pháp: hệ số theo phẩm + hệ ngũ hành nếu có
     _ => 'hệ số tu luyện theo phẩm (×1.5 → ×24)'
         '${e['element'] != null ? ' · hệ ${elementNames[e['element']] ?? e['element']}'
