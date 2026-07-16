@@ -8,6 +8,17 @@ def test_lint_score_clean_dirty_and_no_source():
     assert lint_score(None, "Bản dịch bình thường.") == 0
 
 
+def test_narrator_mix_han_vs_y():
+    from novelworker.translator.lint import lint_warnings
+    mixed = ("Hắn bước tới. Hắn rút kiếm. Hắn cười.\n"
+             "Y nhìn quanh. Y thu dao. Y bỏ đi.")
+    assert any("trộn 'hắn'" in w for w in lint_warnings(None, mixed))
+    # chỉ 'hắn' hoặc 'y' thưa → không bắt oan; 'y' trong thoại không tính
+    assert not any("trộn" in w for w in lint_warnings(None, "Hắn đi. Hắn cười. Hắn ngủ. Y đứng."))
+    assert not any("trộn" in w for w in lint_warnings(
+        None, 'Hắn đi. Hắn cười. Hắn ngủ. “Y là ai? Y đâu? Y chạy rồi.”'))
+
+
 def test_gated_tail_keeps_summary_and_only_drops_dirty_tail():
     dirty = {"summary_vi": "Tóm tắt", "content_vi": "Đuôi bẩn", "lint_score": 5}
     assert dirty["summary_vi"] == "Tóm tắt" and _gated_tail(dirty) is None

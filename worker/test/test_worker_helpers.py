@@ -183,10 +183,25 @@ def main() -> None:
     suspect = {"zh": "白衣少女", "vi": "cô gái áo trắng", "type": "person"}
     _merge_names(terms, existing, [suspect])
     assert terms[-1]["note"] == "nghi sai" and terms[-1]["approved"] is False
+    # term ghép lệch term gốc (丧尸→zombie đã chốt mà đề xuất "Táng Thi") → nghi sai
+    terms_zomb = [{"term_zh": "丧尸", "correct_vi": "zombie"}]
+    existing_zomb = {"丧尸"}
+    _merge_names(terms_zomb, existing_zomb, [
+        {"zh": "滑翔丧尸", "vi": "Hoạt Tường Táng Thi", "type": "other"},
+        {"zh": "地行丧尸", "vi": "zombie địa hành", "type": "other"},
+    ])
+    by_zh = {t["term_zh"]: t for t in terms_zomb}
+    assert by_zh["滑翔丧尸"]["note"] == "nghi sai"      # lệch gốc → chặn inject
+    assert by_zh["地行丧尸"].get("note") != "nghi sai"  # kế thừa "zombie" → hợp lệ
     from novelworker.translator.prompts import _build_glossary_block
     assert "白衣少女" not in _build_glossary_block(terms, "白衣少女来了")
     terms[-1]["approved"] = True
     assert "白衣少女" in _build_glossary_block(terms, "白衣少女来了")
+    # tiêu đề "第x章..." phải được bóc số chương trước khi vào prompt
+    from novelworker.translator.worker import TITLE_CHAPTER_PREFIX
+    assert TITLE_CHAPTER_PREFIX.sub("", "第158章“引灭雷光”！").strip() == "“引灭雷光”！"
+    assert TITLE_CHAPTER_PREFIX.sub("", "第一百二十章 决战").strip() == "决战"
+    assert TITLE_CHAPTER_PREFIX.sub("", "决战").strip() == "决战"
     # 鲜血/máu tươi từng được cho merge; nay là danh từ chung cần chặn.
     assert _term_dicts(["rác", {"zh": "鲜血", "vi": "máu tươi"}, None]) == [
         {"zh": "鲜血", "vi": "máu tươi"}

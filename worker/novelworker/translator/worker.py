@@ -104,6 +104,10 @@ def _keep_job_lock(job_id: int, worker_id: str, stop: threading.Event, interval:
 
 HAN_CHARS = re.compile(r"[一-鿿㐀-䶿]")
 HAN_RUNS = re.compile(r"[一-鿿㐀-䶿]+")
+# "第158章" đưa vào prompt sẽ bị dịch máy móc thành "Đệ158Chương" — bóc trước khi dịch,
+# app đã hiển thị số chương riêng nên tiêu đề không cần lặp lại số.
+TITLE_CHAPTER_PREFIX = re.compile(
+    r"^第?\s*[\d一二三四五六七八九十百千零〇兩两]+\s*[章回節节卷]\s*[:：.．\-–—]?\s*")
 CYRILLIC_CHARS = re.compile(r"[\u0400-\u04ff]")
 _ITEM_CONTEXT = re.compile(
     r"\b(?:vật phẩm|nguyên liệu|đạo cụ|đan dược|linh dược|bình|lọ|thu thập|"
@@ -449,6 +453,20 @@ def _prepare_suggested_term(term: dict) -> bool:
     return True
 
 
+def _conflicts_with_base_term(terms: list[dict], zh: str, vi: str) -> str | None:
+    """Term ghép phải kế thừa cách dịch của term gốc đã có trong glossary.
+    VD 丧尸→zombie đã chốt mà model đề xuất 滑翔丧尸→'Hoạt Tường Táng Thi' thì
+    đề xuất đó tự mâu thuẫn — trả về term gốc bị vi phạm để đánh dấu 'nghi sai'
+    (khỏi bị inject thành luật BẮT BUỘC cho các chương sau)."""
+    vi_low = vi.lower()
+    for t in terms:
+        base_zh, base_vi = t.get("term_zh") or "", (t.get("correct_vi") or "").strip()
+        if (len(base_zh) >= 2 and base_vi and base_zh != zh and base_zh in zh
+                and base_vi.lower() not in vi_low):
+            return f"{base_zh}→{base_vi}"
+    return None
+
+
 def _merge_names(terms: list[dict], existing_zh: set[str], names: list[dict]) -> list[dict]:
     """Thêm tên mới (chưa có term_zh) vào `terms` để chunk/chương sau dùng ngay.
     Trả về danh sách tên THẬT SỰ mới (đếm cho logic tắt 2-pass + lưu DB làm gợi ý)."""
@@ -461,6 +479,9 @@ def _merge_names(terms: list[dict], existing_zh: set[str], names: list[dict]) ->
         zh, vi = nm["zh"], nm["vi"]
         if zh in existing_zh:
             continue
+        if nm.get("note") != "nghi sai" and (base := _conflicts_with_base_term(terms, zh, vi)):
+            nm["note"] = "nghi sai"
+            log.info("Glossary: '%s → %s' lệch term gốc %s → đánh dấu nghi sai", zh, vi, base)
         existing_zh.add(zh)
         terms.append({
             "term_zh": zh, "correct_vi": vi,
@@ -885,6 +906,7 @@ def handle_chapter(job: dict, llm) -> None:
     # snapshot TRƯỚC khi merge tên mới: chỉ insert gợi ý chưa có trong DB, tránh nhân bản
     preexisting_zh = set(existing_zh)
 
+    title_zh_clean = TITLE_CHAPTER_PREFIX.sub("", ch.get("title_zh") or "").strip() or None
     chunks = _split_chunks(ch["content_zh"])
     parts: list[str] = []
     detected: list[dict] = []
@@ -903,7 +925,7 @@ def handle_chapter(job: dict, llm) -> None:
             prompts.build_main_chapter_system(terms, chunk),
             # chunk sau nhận tóm tắt + đuôi bản dịch chunk trước làm ngữ cảnh nối mạch
             prompts.build_chapter_user(
-                ch.get("title_zh") if i == 0 else None, chunk, prev_summary,
+                title_zh_clean if i == 0 else None, chunk, prev_summary,
                 prev_tail=prev_tail, novel_line=novel_line, register_line=register_line,
                 style_line=style_line, synopsis=nv.get("synopsis_vi")),
             temperature=prompts.CHAPTER_TEMPERATURE,
@@ -949,15 +971,18 @@ def handle_chapter(job: dict, llm) -> None:
     text = _fix_register(_fix_soft_style(text))
 
     title_vi = None
-    if ch.get("title_zh"):
+    if title_zh_clean:
         title_vi, text = _pop_title(text)
         # model đôi khi bỏ dịch tiêu đề → còn trơ chữ Hán. Phiên âm Hán-Việt cho khỏi
-        # trơ chữ Trung (bỏ "第x章" trước). han_viet trả None nếu có chữ ngoài bảng → giữ nguyên.
+        # trơ chữ Trung. han_viet trả None nếu có chữ ngoài bảng → giữ nguyên.
         if title_vi and HAN_CHARS.search(title_vi):
-            zh_clean = re.sub(
-                r"^第?\s*[\d一二三四五六七八九十百千零〇兩两]+\s*[章回節节卷]\s*[:：.．\-–—]?\s*",
-                "", ch["title_zh"]).strip()
-            title_vi = hanviet.han_viet(zh_clean) or title_vi
+            title_vi = hanviet.han_viet(title_zh_clean) or title_vi
+
+    # Crawler chấp nhận chương ngắn từ 2026-07-16 (hết đoán "ngắn thật hay crawl thiếu").
+    # Gốc quá ngắn → chèn ghi chú cho người đọc biết là do nguồn, không phải app lỗi.
+    if len(ch["content_zh"]) < 100:
+        text += ("\n\n[Chương này ở nguồn chỉ có "
+                 f"{len(ch['content_zh'])} ký tự — nội dung gốc có thể bị thiếu.]")
 
     newer_done = (
         db.sb().table("chapters").select("chapter_index")

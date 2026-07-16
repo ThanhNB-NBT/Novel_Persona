@@ -57,6 +57,16 @@ def _self_reference_warnings(zh: str | None, vi: str) -> list[str]:
     return [f"[xưng hô] {missing}" for missing in _self_reference_omissions(zh, vi)]
 
 
+def _narrator_mix_warnings(vi: str) -> list[str]:
+    """Lời kể trôi đại từ: cùng chương vừa 'hắn' vừa 'y' dày đặc gần như luôn là drift.
+    Chỉ xét cặp hắn/y — gã/lão thường là nhân vật phụ được gọi chủ ý."""
+    counts = narrator_terms(vi)
+    han, y = counts.get("hắn", 0), counts.get("y", 0)
+    if han >= 3 and y >= 3:
+        return [f"[xưng hô] lời kể trộn 'hắn' ×{han} với 'y' ×{y} — nghi trôi đại từ nhân vật chính"]
+    return []
+
+
 def _dialogue_self_minh(vi: str) -> list[str]:
     hits = []
     for match in _DIALOGUE.finditer(vi):
@@ -82,6 +92,7 @@ def _style_warnings(vi: str) -> list[str]:
         problems.append(f"[văn phong] 'chẳng' ×{chang} — mặc định dùng 'không'")
     for segment in _dialogue_self_minh(vi)[:3]:
         problems.append(f"[xưng hô] 'mình' tự xưng trong thoại (nghi vấn): {segment}")
+    problems += _narrator_mix_warnings(vi)
     return problems
 
 
