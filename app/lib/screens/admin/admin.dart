@@ -530,7 +530,10 @@ class _CrawlTab extends ConsumerStatefulWidget {
 
 class _CrawlTabState extends ConsumerState<_CrawlTab> {
   // Thu gọn từng mục — tab dài, admin thường chỉ soi 1 mục mỗi lần.
-  bool _openCfg = true, _openSrc = true, _openFresh = true;
+  bool _openCfg = true, _openTrans = true, _openSrc = true, _openFresh = true;
+
+  // Knob của translator (note bắt đầu 'DỊCH ·') tách nhóm riêng khỏi crawler.
+  static bool _isTransKey(Rec s) => '${s['note'] ?? ''}'.startsWith('DỊCH');
 
   @override
   Widget build(BuildContext context) {
@@ -600,7 +603,9 @@ class _CrawlTabState extends ConsumerState<_CrawlTab> {
             child: Row(children: [
               Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(s['note'] ?? s['key'], style: t.bodyMedium),
+                  // bỏ tiền tố nhóm 'DỊCH ·'/'CRAWL ·' — đã tách section rồi
+                  Text('${s['note'] ?? s['key']}'.replaceFirst(RegExp(r'^(DỊCH|CRAWL) · '), ''),
+                      style: t.bodyMedium),
                   const SizedBox(height: 3),
                   Text('${s['key']}',
                       style: monoStyle(context, size: 10.5, color: cs.onSurfaceVariant)),
@@ -688,13 +693,24 @@ class _CrawlTabState extends ConsumerState<_CrawlTab> {
       child: ListView(
         padding: const EdgeInsets.only(bottom: 24),
         children: [
+          sectionLabel(Icons.translate_rounded, 'CẤU HÌNH DỊCH',
+              hint: 'Sửa xong worker tự nhận trong ~1 phút — không cần restart.',
+              open: _openTrans,
+              onToggle: () => setState(() => _openTrans = !_openTrans)),
+          if (_openTrans)
+            card(Column(children: [
+              for (final (i, s) in settings.where(_isTransKey).indexed) ...[
+                if (i > 0) Divider(height: 1, color: cs.outlineVariant.withValues(alpha: 0.5)),
+                settingRow(s),
+              ],
+            ])),
           sectionLabel(Icons.tune_rounded, 'CẤU HÌNH CRAWLER',
               hint: 'Sửa xong worker tự nhận ở chu kỳ kế — không cần restart.',
               open: _openCfg,
               onToggle: () => setState(() => _openCfg = !_openCfg)),
           if (_openCfg)
             card(Column(children: [
-              for (final (i, s) in settings.indexed) ...[
+              for (final (i, s) in settings.where((s) => !_isTransKey(s)).indexed) ...[
                 if (i > 0) Divider(height: 1, color: cs.outlineVariant.withValues(alpha: 0.5)),
                 settingRow(s),
               ],
@@ -767,7 +783,7 @@ class _CrawlTabState extends ConsumerState<_CrawlTab> {
           FilledButton(
             onPressed: () async {
               final v = int.tryParse(ctrl.text.trim());
-              if (v == null || v < 1) return; // chỉ nhận số dương
+              if (v == null || v < 0) return; // chỉ nhận số không âm (0 = tắt với knob hỗ trợ)
               await updateCrawlSetting(s['key'] as String, '$v');
               if (ctx.mounted) Navigator.pop(ctx);
               ref.invalidate(crawlSettingsProvider);
