@@ -24,6 +24,10 @@ services:
   translator:
     <<: *common
     command: python -m novelworker.main translate
+    # Model CT2 Hachimi mount từ host (không bake vào image → gọn + đổi model khỏi rebuild).
+    # Đặt model ở worker/models/hachimi-ct2 trên host; khớp hachimi_model_dir mặc định.
+    volumes:
+      - ./models/hachimi-ct2:/app/models/hachimi-ct2:ro
     # Dừng mượt lúc deploy: worker bắt SIGTERM, ngừng nhận job mới rồi đợi chương đang
     # dịch xong (~30-60s) mới thoát. Cho Docker chờ 180s trước khi SIGKILL (mặc định 10s
     # là cắt ngang giữa chương). Worker tự thoát sớm khi đã xả xong nên hiếm khi chờ đủ.
