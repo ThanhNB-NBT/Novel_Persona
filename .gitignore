@@ -67,3 +67,22 @@ worker/vps.ps1
 worker/eval_out*/
 worker/benchmark_out/
 worker/corpus_translation/
+
+# Caches nang (HuggingFace hub, uv) — khong bao gio commit
+.hf-cache*/
+.uv-cache*/
+
+# Qoder IDE agent
+.qoder/
+
+# Artifact model (nhi phan lon) va goi model tai ve
+hachimi-game-v3/
+*.zip
+
+# Data goc / corpus finetune — de o may, khong commit vao repo
+dataset_game/
+worker/hachimi_finetune/*.jsonl
+worker/hachimi_finetune/*.jsonl.bak*
+worker/hachimi_finetune/*.bak*
+worker/hachimi_finetune/review_queue/
+worker/hachimi_finetune/_kaggle_upload/*.jsonl
