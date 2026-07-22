@@ -478,10 +478,53 @@ def run_request(novel_id: int, up_to: int) -> None:
           " và `... translate` để dịch; theo dõi bảng chapters trong Supabase.")
 
 
+def _chunks(seq: list, n: int):
+    for i in range(0, len(seq), n):
+        yield seq[i:i + n]
+
+
+def run_redich(novel_id: int | None, engine: str = "hachimi") -> None:
+    """Dịch LẠI chương đã done bằng engine khác (mặc định 'hachimi').
+
+    Đổi translation_provider của truyện → engine (model=NULL để re-pin ở chương đầu),
+    xoá job chương cũ, đặt chương done → queued rồi enqueue lại với priority NỀN (90 —
+    không giành lượt với người đang đọc). `--novel <id>` để canary 1 truyện; bỏ trống =
+    TẤT CẢ truyện. Chương có content_zh NULL sẽ được crawler backfill trước khi dịch."""
+    q = db.sb().table("novels").select("id, title_zh, title_vi")
+    if novel_id is not None:
+        q = q.eq("id", novel_id)
+    novels = q.execute().data or []
+    if not novels:
+        print("Không có truyện nào." if novel_id is None else f"Không thấy truyện #{novel_id}.")
+        return
+    total = 0
+    for nv in novels:
+        nid = nv["id"]
+        db.sb().table("novels").update(
+            {"translation_provider": engine, "translation_model": None}).eq("id", nid).execute()
+        ids = [c["id"] for c in (
+            db.sb().table("chapters").select("id")
+            .eq("novel_id", nid).eq("translation_status", "done").execute()
+        ).data or []]
+        for batch in _chunks(ids, 500):
+            db.sb().table("translation_jobs").delete().eq(
+                "novel_id", nid).eq("type", "chapter").in_("chapter_id", batch).execute()
+            db.sb().table("chapters").update(
+                {"translation_status": "queued"}).in_("id", batch).execute()
+            db.sb().table("translation_jobs").insert(
+                [{"type": "chapter", "novel_id": nid, "chapter_id": cid, "priority": 90}
+                 for cid in batch]).execute()
+        total += len(ids)
+        print(f"  nv{nid} {nv.get('title_vi') or nv.get('title_zh')}: {len(ids)} chương")
+    print(f"\nĐã xếp {total} chương của {len(novels)} truyện dịch lại bằng '{engine}' "
+          f"(priority nền 90). Theo dõi bảng chapters/translation_jobs trong Supabase.")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="novelworker")
     parser.add_argument("mode",
-                        choices=["crawl", "translate", "request", "add", "cost", "audit", "quality", "meta"])
+                        choices=["crawl", "translate", "request", "add", "cost", "audit", "quality", "meta", "redich"])
+    parser.add_argument("--engine", default="hachimi", help="redich: engine dịch lại (mặc định hachimi)")
     parser.add_argument("--book-id", help="add: id truyện (số trong URL nguồn)")
     parser.add_argument("--source", default="shuhaige",
                         help="add: sources.name của nguồn crawl (mặc định shuhaige)")
