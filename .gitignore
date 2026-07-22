@@ -86,3 +86,6 @@ worker/hachimi_finetune/*.jsonl.bak*
 worker/hachimi_finetune/*.bak*
 worker/hachimi_finetune/review_queue/
 worker/hachimi_finetune/_kaggle_upload/*.jsonl
+
+# Model CT2 Hachimi cho worker (nhi phan, khong commit)
+worker/models/
