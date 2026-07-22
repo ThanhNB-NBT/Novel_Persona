@@ -267,10 +267,10 @@ def reprioritize_chapters_by_reading(active_hours: int, prio_read: int, prio_idl
     # gom 2 update theo lô thay vì 1 update/job (housekeeping chạy mỗi 60s)
     to_read = [j["id"] for j in jobs if j["novel_id"] in active and j["priority"] != prio_read]
     to_idle = [j["id"] for j in jobs if j["novel_id"] not in active and j["priority"] != prio_idle]
-    if to_read:
-        sb().table("translation_jobs").update({"priority": prio_read}).in_("id", to_read).execute()
-    if to_idle:
-        sb().table("translation_jobs").update({"priority": prio_idle}).in_("id", to_idle).execute()
+    # batch .in_() — backlog lớn (requeue hàng loạt) khiến list id quá dài → PostgREST 400.
+    for ids, prio in ((to_read, prio_read), (to_idle, prio_idle)):
+        for i in range(0, len(ids), 200):
+            sb().table("translation_jobs").update({"priority": prio}).in_("id", ids[i:i + 200]).execute()
     return len(to_read) + len(to_idle)
 
 
@@ -405,6 +405,15 @@ def heal_glossary_terms(terms: list[dict]) -> list[dict]:
     return changed
 
 
+def _is_safe_pending_term(term: dict, canonical_vi: str | None) -> bool:
+    """Chỉ cho tên riêng có đối chiếu chắc chắn đi qua trước khi được duyệt tay."""
+    return (
+        term.get("term_type") in {"person", "place", "sect"}
+        and bool(canonical_vi)
+        and (term.get("correct_vi") or "").strip() == canonical_vi
+    )
+
+
 def get_glossary(novel_id: int) -> tuple[list[dict], int]:
     """Trả về (terms, version). Gồm term đã duyệt (truyện + global) VÀ term gợi ý
     (approved=false) của truyện.
@@ -428,9 +437,12 @@ def get_glossary(novel_id: int) -> tuple[list[dict], int]:
         .order("hit_count", desc=True).order("created_at")
         .execute()
     ).data or []
+    # import muộn: db dùng được độc lập trong các tool không tải translator.
+    from .translator import hanviet
+
     for t in pending:
         zh = t.get("term_zh")
-        if zh and zh not in seen:
+        if zh and zh not in seen and _is_safe_pending_term(t, hanviet.han_viet(zh)):
             seen.add(zh)
             terms.append(t)
     # lành hoá gợi ý mang bản dịch đã bị user sửa; persist để màn Thuật ngữ cũng thấy
