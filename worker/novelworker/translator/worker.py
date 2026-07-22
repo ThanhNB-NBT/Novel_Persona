@@ -978,7 +978,9 @@ def handle_chapter(job: dict, llm) -> None:
     # Một truyện chỉ dùng đúng provider + model chốt ở chương đầu. Khi model lỗi,
     # job sẽ retry cùng cặp thay vì fallback âm thầm sang giọng khác.
     chapter_llm = llm
-    if nv.get("translation_provider") and nv.get("translation_model"):
+    # 'hachimi' không phải provider LLM (chỉ là engine CT2) — đừng pin, tránh warning giả.
+    if (nv.get("translation_provider") and nv.get("translation_model")
+            and nv["translation_provider"] != "hachimi"):
         chapter_llm = llm.pin(nv["translation_provider"], nv["translation_model"])
     # style bible (Q1): có sẵn thì dùng, chưa có thì sinh 1 lần từ chương đang dịch
     style = nv.get("translation_style") or _init_style_bible(
@@ -995,6 +997,7 @@ def handle_chapter(job: dict, llm) -> None:
     summary_vi = None
     prompt_tokens = completion_tokens = 0
     model = ""
+    n_chunks = 1
     from . import hachimi_engine
     use_hachimi = engine == "hachimi"
     if use_hachimi and not hachimi_engine.available():
@@ -1011,6 +1014,7 @@ def handle_chapter(job: dict, llm) -> None:
             }).eq("id", ch["novel_id"]).execute()
     else:
         chunks = _split_chunks(ch["content_zh"])
+        n_chunks = len(chunks)
         parts: list[str] = []
         for i, chunk in enumerate(chunks):
             # Phát hiện tên để đắp glossary và gợi ý màn Thuật ngữ cho các chương sau.
@@ -1117,7 +1121,7 @@ def handle_chapter(job: dict, llm) -> None:
     st = providers.get_call_stats()
     log.info("Đã dịch chương %s/%s (novel %s) — %d chunk, %d LLM request (%d lỗi/retry), "
              "%d+%d tok, %.1fs",
-             ch["chapter_index"], ch["novel_id"], model, len(chunks), st["calls"],
+             ch["chapter_index"], ch["novel_id"], model, n_chunks, st["calls"],
              st["failures"], st["prompt_tokens"], st["completion_tokens"], time.time() - t_start)
 
 
