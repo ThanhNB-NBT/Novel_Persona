@@ -64,5 +64,17 @@ class Settings(BaseSettings):
     # Timeout 1 call LLM (giây) — quá là fail nhanh để fallback sang provider kế
     llm_timeout_sec: int = 150
 
+    # Engine dịch mặc định cho truyện CHƯA ghim provider (truyện mới). 'hachimi' = CT2
+    # local (rẻ), đặt 'nvidia' nếu muốn truyện mới vẫn dùng LLM.
+    default_engine: str = "hachimi"
+    # Engine Hachimi (CT2 local) — dùng cho truyện có translation_provider == 'hachimi'.
+    hachimi_model_dir: str = "models/hachimi-ct2"
+    hachimi_compute_type: str = "int8"
+    hachimi_cpu_threads: int = 0          # 0 = để CT2 tự chọn theo số core
+    hachimi_beam_size: int = 4            # đo A/B: beam=1 chậm hơn (greedy lặp) + kém
+    hachimi_max_len: int = 180            # output thật median 27/max 98 token → 180 dư trần
+    # Chỉ trích tên (LLM liệt kê) để đắp glossary ở CHƯƠNG ĐẦU — chặn cost mass-requeue.
+    hachimi_extract_max_chapter: int = 20
+
 
 settings = Settings()

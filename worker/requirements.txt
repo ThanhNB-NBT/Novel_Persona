@@ -7,3 +7,5 @@ pydantic-settings>=2.2
 tenacity>=8.3
 python-dotenv>=1.0
 opencc-python-reimplemented>=0.1.7   # phồn → giản thể cho yêu cầu truyện nhập tên tiếng Việt
+ctranslate2>=4.4          # engine dịch Hachimi (CT2 INT8 chạy CPU)
+sentencepiece>=0.2        # tokenizer cho model Hachimi (nhẹ, khỏi cần transformers)
