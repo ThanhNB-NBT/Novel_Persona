@@ -1,17 +1,24 @@
-"""Cưỡng chế tên riêng cho engine Hachimi bằng placeholder SỐ.
+"""Cưỡng chế tên riêng cho engine Hachimi bằng placeholder CHỮ HOA hiếm.
 
 Model MT câu→câu không có glossary: tên hiếm/nghĩa bị đoán bừa, mỗi chỗ một kiểu
-(睚眦 → Mộ Tắc / Mão Tí / Mô Tễ...). Đã đo: chuỗi SỐ THUẦN được model copy
-nguyên vẹn 100% qua mọi kiểu câu. Nên trước khi dịch, thay mỗi term glossary bằng
-một mã số 4 chữ số duy nhất (`protect`); dịch xong thay ngược lại đúng bản Việt đã
-duyệt (`restore`). Tên luôn đúng + nhất quán, không trông vào model.
+(睚眦 → Mộ Tắc / Mão Tí / Mô Tễ...). Nên trước khi dịch, thay mỗi term glossary bằng
+một mã duy nhất (`protect`); dịch xong thay ngược lại đúng bản Việt đã duyệt (`restore`).
+
+Trước dùng mã SỐ 4 chữ số nhưng khi nhiều term tier nằm dày trong 1 câu (末世 LitRPG:
+黄金级别BOSS 白银级别BOSS...) CT2 mangle số thành MẢNH RỚT nhìn thấy được ('boss1111',
+số 11/1 lạc giữa câu). Đo trên model thật (5 chương tier-nặng): mã CHỮ để lại 0 mảnh
+rớt, mã số 1-3 mảnh/chương — vì mã chữ hỏng thì HOẶC sống nguyên HOẶC biến mất sạch
+(term không được ép, MT tự dịch — vô hại), không để lại rác như số. Dùng phụ âm hiếm
+né B/O/S/L/V/I/P để không đụng 'BOSS'/'LV'/'VIP' và không tự khớp nhầm chữ thật.
 """
 from __future__ import annotations
 
+import itertools
 import re
 
-# Mã 4 chữ số, cách nhau 137 để model không dính/nuốt (đo: gần nhau bị gộp).
-_CODES = [str(n) for n in range(1000, 10000, 137)]
+# Mã chữ HOA hiếm 2-3 ký tự (49 + 343 = 392 mã, dư cho chương nhiều term).
+_L = "QXZJWKF"
+_CODES = ["".join(p) for r in (2, 3) for p in itertools.product(_L, repeat=r)]
 
 
 def _eligible(terms: list[dict], zh: str) -> list[dict]:
@@ -45,11 +52,11 @@ def protect(zh: str, terms: list[dict]) -> tuple[str, dict[str, str]]:
 
 
 def restore(vi: str, mapping: dict[str, str]) -> str:
-    """Thay ngược mã số về bản Việt. Chịu được việc model chèn space giữa các chữ số,
-    và chèn space khi mã dính liền chữ cái ('1137cười' -> 'Nhai Tý cười') — nguồn Trung
-    không có dấu cách nên CT2 hay dán mã sát từ kế bên, thiếu pad là ra 'Nhai Týcười'."""
+    """Thay ngược mã về bản Việt. Chịu được model chèn space giữa các ký tự mã ('Q X'),
+    đổi hoa/thường (re.I), và chèn space khi mã dính liền chữ cái ('QXcười' -> 'Nhai Tý
+    cười') — nguồn Trung không có dấu cách nên CT2 hay dán mã sát từ kế bên."""
     for code, term_vi in mapping.items():
-        pattern = r"\s*".join(re.escape(d) for d in code)  # "1137" -> "1\s*1\s*3\s*7"
+        pattern = r"\s*".join(re.escape(d) for d in code)  # "QX" -> "Q\s*X"
 
         def repl(m: re.Match, t: str = term_vi) -> str:
             s, e, whole = m.start(), m.end(), m.string
@@ -57,7 +64,7 @@ def restore(vi: str, mapping: dict[str, str]) -> str:
             trail = " " if e < len(whole) and whole[e].isalnum() and t[-1:].isalnum() else ""
             return lead + t + trail
 
-        vi = re.sub(pattern, repl, vi)
+        vi = re.sub(pattern, repl, vi, flags=re.I)
     vi = re.sub(r"[ \t]{2,}", " ", vi)          # gộp space thừa quanh chỗ vừa thay
     vi = re.sub(r"\s+([,.;:!?…”’)])", r"\1", vi)  # bỏ space trước dấu câu
     return vi
@@ -70,29 +77,31 @@ def _self_check() -> None:
     protected, mapping = protect(zh, terms)
     assert "睚眦" not in protected and "冥想项链" not in protected, "term phải bị thay hết"
     assert len(mapping) == 2
-    # Giả lập model: giữ số, dịch phần còn lại + thử chèn space giữa số.
+    assert all(c.isalpha() for c in mapping), "mã phải là chữ, không số: " + str(list(mapping))
+    # Giả lập model: giữ mã, chèn space + đổi case giữa mã cho khắc nghiệt.
     fake_vi = protected
     for code in mapping:
-        fake_vi = fake_vi.replace(code, " ".join(code), 1)  # chèn space 1 lần cho khắc nghiệt
+        fake_vi = fake_vi.replace(code, " ".join(code).lower(), 1)
     out = restore(fake_vi, mapping)
     assert "Nhai Tý" in out and "Dây Chuyền Thiền Định" in out, out
-    assert not any(c.isdigit() for c in out), "không được sót mã số: " + out
+    # Không được sót mã (chữ HOA hiếm QXZJWKF) — đã restore hết.
+    assert not any(c in out for c in mapping), "còn sót mã: " + out
     # Không có term nào trong zh → không đổi gì.
     assert protect("普通句子", terms) == ("普通句子", {})
-    # Mã dán sát chữ cái (CT2 hay ra vậy) phải được tách space, không ra "Nhai Týcười".
-    glued = restore("1137cười lạnh", {"1137": "Nhai Tý"})
+    # Mã dán sát chữ cái (CT2 hay ra vậy) phải được tách space, không ra "Nhai TýXX".
+    glued = restore("QXcười lạnh", {"QX": "Nhai Tý"})
     assert glued == "Nhai Tý cười lạnh", glued
-    assert restore("đeo1137", {"1137": "Nhai Tý"}) == "đeo Nhai Tý"
+    assert restore("đeoQX", {"QX": "Nhai Tý"}) == "đeo Nhai Tý"
     # Term đã ngờ sai không được ép-inject.
     assert protect("睚眦来了", [{"term_zh": "睚眦", "correct_vi": "Sai Bừa",
                               "note": "nghi sai"}]) == ("睚眦来了", {})
-    # Hai term SÁT NHAU trong nguồn: mã không được dính (nếu không CT2 fuse → rớt số).
+    # Hai term SÁT NHAU trong nguồn: mã tách space, không dính → không rớt mảnh.
     adj_terms = [{"term_zh": "白银级", "correct_vi": "bạch ngân cấp"},
                  {"term_zh": "BOSS", "correct_vi": "boss"}]
     p2, m2 = protect("白银级BOSS吞噬", adj_terms)
-    assert not re.search(r"\d{5,}", p2.replace(" ", "X")), "mã bị dính: " + p2
-    # model giữ nguyên mã (kèm khoảng trắng) → restore ra sạch, không rớt digit.
-    assert not any(c.isdigit() for c in restore(p2, m2)), restore(p2, m2)
+    r2 = restore(p2, m2)
+    assert not any(c in r2 for c in m2), "còn sót mã: " + r2
+    assert "bạch ngân cấp" in r2 and "boss" in r2, r2
     print("termguard OK:", out)
 
 
