@@ -65,6 +65,12 @@ def restore(vi: str, mapping: dict[str, str]) -> str:
             return lead + t + trail
 
         vi = re.sub(pattern, repl, vi, flags=re.I)
+    # Dọn mã SÓT: CT2 NHÁI kiểu mã — thấy token 2-3 chữ HOA hiếm thì tự chế thêm cho tên
+    # game/vật phẩm nó không dịch được (thường trong ngoặc: '"JQ"'). Token bịa không nằm
+    # trong mapping nên không restore được. Tổ hợp QXZJWKF không phải từ Việt/Latin tự
+    # nhiên → xoá sạch cả mã thật chưa khớp lẫn mã model bịa.
+    vi = re.sub(rf"\b[{_L}]{{2,3}}\b", "", vi)  # HOA-only: mã model bịa đều HOA; né chữ thường Việt
+    vi = re.sub(r'"\s*"|“\s*”|「\s*」|【\s*】', "", vi)  # ngoặc rỗng còn lại sau khi xoá mã
     vi = re.sub(r"[ \t]{2,}", " ", vi)          # gộp space thừa quanh chỗ vừa thay
     vi = re.sub(r"\s+([,.;:!?…”’)])", r"\1", vi)  # bỏ space trước dấu câu
     return vi
@@ -102,6 +108,11 @@ def _self_check() -> None:
     r2 = restore(p2, m2)
     assert not any(c in r2 for c in m2), "còn sót mã: " + r2
     assert "bạch ngân cấp" in r2 and "boss" in r2, r2
+    # Mã model BỊA (không có trong mapping) phải bị dọn, kể cả ngoặc rỗng theo sau.
+    assert restore('cầm "JQ" lên', {}) == "cầm lên", restore('cầm "JQ" lên', {})
+    assert "FZ" not in restore("một chai FZ của thanh đồng", {}), "mã bịa phải bị xoá"
+    # KHÔNG được nuốt chữ thường tiếng Việt bình thường.
+    assert restore("xa xôi quạnh quẽ", {}) == "xa xôi quạnh quẽ"
     print("termguard OK:", out)
 
 
