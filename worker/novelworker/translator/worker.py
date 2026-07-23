@@ -939,6 +939,9 @@ def _translate_hachimi(
 
     protected, mapping = termguard.protect(clean_source(content), terms)
     text = termguard.restore(hachimi_engine.translate_text(protected), mapping)
+    # gộp nói lắp CT2 ("Cốc cốc cốc cốc" → "Cốc cốc") + dọn rác, DÙNG CHUNG với nhánh LLM.
+    # Model 60M lắp cụm là chuyện thường; thiếu bước này thì nói lắp nằm luôn trong bản dịch.
+    text = _clean_output(text)
     # CT2 bỏ sót lẻ vài chữ Hán (职/型/页...) — phiên âm bằng bảng TSV (0 LLM), như nhánh
     # LLM. Không có bước này thì Hán trơ nằm luôn trong bản dịch (nhánh hachimi không repair).
     text, _ = _hanviet_fallback(text)
