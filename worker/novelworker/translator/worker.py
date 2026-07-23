@@ -939,6 +939,9 @@ def _translate_hachimi(
 
     protected, mapping = termguard.protect(clean_source(content), terms)
     text = termguard.restore(hachimi_engine.translate_text(protected), mapping)
+    # CT2 bỏ sót lẻ vài chữ Hán (职/型/页...) — phiên âm bằng bảng TSV (0 LLM), như nhánh
+    # LLM. Không có bước này thì Hán trơ nằm luôn trong bản dịch (nhánh hachimi không repair).
+    text, _ = _hanviet_fallback(text)
     # vá văn phong/đại từ kể máy móc — hậu xử lý an toàn, không phải validator
     text = _fix_register(_fix_soft_style(text))
 
