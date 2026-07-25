@@ -21,7 +21,12 @@ class Settings(BaseSettings):
     # nvidia_api_key (số ít) giữ để tương thích .env cũ.
     nvidia_api_key: str = ""
     nvidia_api_keys: str = ""
-    nvidia_model: str = "mistralai/mistral-small-4-119b-2603"
+    # Nhánh Hachimi chỉ còn dùng LLM để TRÍCH TÊN cho glossary (+ dịch metadata). Đo trên
+    # 6 chương truyện 32 (hachimi/eval/benchmark_analyze_names.py), tính điểm SAU bước
+    # hanviet.reconcile vì đó mới là thứ vào glossary: qwen3-next 5/5, mistral-small 4/5
+    # (nó viết "Erlton" — chữ Latin nên bảng tra không sửa được, sai là sai luôn),
+    # gemma-4-31b 4/5 và chậm hơn, llama-4-maverick chỉ trích 4 term/chương nên sót nhiều.
+    nvidia_model: str = "qwen/qwen3-next-80b-a3b-instruct"
     # Pacing theo từng API key, thấp hơn trần NVIDIA 40 RPM để chừa biên đồng hồ/retry.
     nvidia_rpm_limit: int = Field(default=30, ge=1, le=39)
 
