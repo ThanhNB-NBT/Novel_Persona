@@ -51,6 +51,12 @@ class _GlossaryScreenState extends ConsumerState<GlossaryScreen> {
                     icon: const Icon(Icons.brush_outlined),
                     onPressed: _showStyleDialog,
                   ),
+                if (ref.watch(isAdminProvider).value ?? false)
+                  IconButton(
+                    tooltip: 'Quét lỗi bản dịch của truyện này',
+                    icon: const Icon(Icons.fact_check_outlined),
+                    onPressed: _requestNovelAudit,
+                  ),
                 IconButton(
                   tooltip: 'Vá chương cũ bằng cặp "bản dịch sai → đúng"',
                   icon: const Icon(Icons.healing_outlined),
@@ -147,6 +153,19 @@ class _GlossaryScreenState extends ConsumerState<GlossaryScreen> {
       )),
       ]),
     );
+  }
+
+  Future<void> _requestNovelAudit() async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await requestNovelAudit(novelId);
+      if (!mounted) return;
+      messenger.showSnackBar(const SnackBar(
+          content: Text('Đã xếp quét lỗi riêng truyện này (tối đa 25 chương mỗi lượt)')));
+    } catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(SnackBar(content: Text('Chưa xếp được quét lỗi: $e')));
+    }
   }
 
   /// Xác nhận trước khi vá: hiện luôn "X/Y term đã duyệt có bản sai" — vì vá chỉ
@@ -469,7 +488,7 @@ class _GlossaryScreenState extends ConsumerState<GlossaryScreen> {
           String? hanFill;
           if (z.isNotEmpty) {
             final filled = z.replaceAllMapped(
-                RegExp(r'[㐀-䶿一-鿿]+'), (m) => hanVietOf(m.group(0)!) ?? m.group(0)!);
+                hanVietRun, (m) => hanVietOf(m.group(0)!) ?? m.group(0)!);
             if (filled != z) hanFill = filled;
           }
           // scroll: form dài + bàn phím → cuộn thay vì tràn/cắt ô nhập
