@@ -347,14 +347,25 @@ _TITLE_TRIM = "«»\"'“”‘’[]() \t#*"
 def _clean_title(t: str) -> str:
     """Dọn tiêu đề model trả: bỏ ngoặc/quote bọc quanh, nhãn lặp, "Chương N:" tự chế,
     dấu câu toàn giác sót và ngoặc kép lẻ (model hay đánh rơi vế mở: `Mẫn Diệt”!`)."""
-    t = t.strip(_TITLE_TRIM)
+    t = t.strip()
+    # Ngoặc kép CÂN ĐỐI là nội dung tiêu đề («“Kiếm Đao” bùng nổ»), không phải vỏ bọc.
+    # Nếu để “” trong bộ ký tự gọt hai đầu, strip() ăn mất vế mở → đếm thành lệch vế →
+    # luật ở cuối hàm xoá nốt vế đóng, tiêu đề mất sạch ngoặc. Kiểu tiêu đề mở đầu bằng
+    # tên chiêu thức trong ngoặc rất phổ biến ở truyện tu tiên nên đây không phải ca hiếm.
+    can_doi = t.count("“") == t.count("”")
+    trim = _TITLE_TRIM.replace("“", "").replace("”", "") if can_doi else _TITLE_TRIM
+    t = t.strip(trim)
+    if can_doi and re.fullmatch(r"“[^“”]*”", t):   # ngoặc bọc TRỌN tiêu đề mới là vỏ
+        t = t[1:-1]
+    # Nguồn Trung hay bọc tên truyện trong 《》/【】 — bỏ vỏ, giữ ruột.
+    t = re.sub(r"^[《【]\s*(.+?)\s*[》】]$", r"\1", t.strip()).strip("《》【】").strip()
     t = re.sub(r"^(?:chương|chapter)\s*\d+\s*[:：.．\-–—]?\s*", "", t, flags=re.I)
     t = re.sub(r"^(?:tiêu đề(?: chương)?|tieu de|nhan đề|title)\s*[:：]\s*", "", t, flags=re.I)
     for full, half in (("，", ", "), ("！", "!"), ("？", "?"), ("：", ": "), ("；", "; ")):
         t = t.replace(full, half)
     if t.count("“") != t.count("”"):
         t = t.replace("“", "").replace("”", "")
-    t = re.sub(r"\s{2,}", " ", t).strip(_TITLE_TRIM)
+    t = re.sub(r"\s{2,}", " ", t).strip(trim)   # dùng lại `trim`, đừng gọt lại ngoặc cân đối
     return t[:1].upper() + t[1:] if t else t
 
 
@@ -911,9 +922,52 @@ def _translate_description_hachimi(description_zh: str, terms: list[dict]) -> st
     return _fix_register(_fix_soft_style(vi)).strip() or None
 
 
+def _translate_metadata_hachimi(novel: dict, terms: list[dict]) -> dict | None:
+    """Dịch toàn bộ metadata bằng engine của truyện — không gọi LLM lượt nào.
+
+    Tiêu đề trước đây để LLM vì luật "phiên âm trọn cụm hay dịch nghĩa" là phán đoán;
+    nhưng đo thật thì LLM cũng lệch (镇守仙秦 → "Thần Thất Trấn Phủ") và còn để sót chữ
+    Hán giữa tên. Hachimi + bảng Hán-Việt cho kết quả ổn định hơn và không tốn lượt gọi.
+    Tác giả tra bảng, thể loại theo map cố định — hai thứ đó vốn đã không cần model.
+    """
+    from . import hachimi_engine, termguard
+
+    if not hachimi_engine.available():
+        return None
+    title_zh = TITLE_CHAPTER_PREFIX.sub("", (novel.get("title_zh") or "")).strip()
+    title_vi = None
+    if title_zh:
+        raw = termguard.translate_text(clean_source(title_zh), terms, hachimi_engine.translate_text)
+        title_vi = _clean_title(_clean_output(raw))
+        if title_vi and HAN_CHARS.search(title_vi):
+            title_vi = hanviet.han_viet(title_zh) or _hanviet_fallback(title_vi)[0]
+    author_zh = (novel.get("author_zh") or "").strip()
+    author_vi = hanviet.han_viet(author_zh) if author_zh and HAN_CHARS.search(author_zh) else author_zh or None
+    return {
+        "title_vi": title_vi,
+        "author_vi": author_vi,
+        "description_vi": _translate_description_hachimi(novel.get("description_zh"), terms),
+    }
+
+
 def handle_metadata(job: dict, llm) -> None:
     novel = db.sb().table("novels").select("*").eq("id", job["novel_id"]).single().execute().data
     terms, _ = db.get_glossary(novel["id"])  # dịch lại metadata → tên khớp glossary đã tích lũy
+    engine = novel.get("translation_provider") or settings.default_engine
+    if engine == "hachimi":
+        done = _translate_metadata_hachimi(novel, terms)
+        if done and done.get("title_vi"):
+            db.sb().table("novels").update({
+                "title_vi": done["title_vi"] or novel.get("title_vi"),
+                "author_vi": done["author_vi"] or novel.get("author_vi"),
+                "description_vi": done["description_vi"] or novel.get("description_vi"),
+                "genres": _map_genres(novel.get("genres")) or novel.get("genres"),
+                "meta_translated": True,
+                "updated_at": db.utc_now(),
+            }).eq("id", novel["id"]).execute()
+            log.info("Đã dịch metadata truyện %s bằng Hachimi: %s", novel["id"], done["title_vi"])
+            return
+        log.warning("Hachimi không dịch được metadata truyện %s — lùi về LLM", novel["id"])
     res = llm.complete(prompts.SYSTEM_METADATA, prompts.build_metadata_user(novel, terms), max_tokens=2048)
     data = _extract_json(res.text)
     # Metadata trước đây ghi thẳng JSON model trả nên title/mô tả có chữ Hán lọt không qua
@@ -924,20 +978,7 @@ def handle_metadata(job: dict, llm) -> None:
         return value
     title_vi = clean(data.get("title_vi")) or novel.get("title_vi")
     author_vi = clean(data.get("author_vi")) or novel.get("author_vi")
-    # Tiêu đề vẫn để LLM: luật "phiên âm Hán-Việt TRỌN cụm hay dịch nghĩa" là một phán đoán
-    # theo thể loại, model MT không nhận chỉ thị. Mô tả thì ngược lại — chỉ cần dịch đúng
-    # giọng, nên giao cho engine của truyện; LLM chỉ đỡ khi engine không sẵn.
-    engine = novel.get("translation_provider") or settings.default_engine
-    description_vi = None
-    if engine == "hachimi":
-        from . import hachimi_engine
-
-        if hachimi_engine.available():
-            try:
-                description_vi = _translate_description_hachimi(novel.get("description_zh"), terms)
-            except Exception:
-                log.exception("Dịch mô tả bằng Hachimi lỗi truyện %s — lùi về bản LLM", novel["id"])
-    description_vi = description_vi or clean(data.get("description_vi")) or novel.get("description_vi")
+    description_vi = clean(data.get("description_vi")) or novel.get("description_vi")
     genres = _map_genres(novel.get("genres")) or novel.get("genres")
     # JSON parse được nhưng thiếu field → GIỮ giá trị cũ, không ghi đè None (meta_translated
     # set True ngay dưới nên không tự dịch lại — ghi None là mất trắng tên đang có)
