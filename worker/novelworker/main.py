@@ -490,7 +490,10 @@ def run_redich(novel_id: int | None, engine: str = "hachimi") -> None:
     xoá job chương cũ, đặt chương done → queued rồi enqueue lại với priority NỀN (90 —
     không giành lượt với người đang đọc). `--novel <id>` để canary 1 truyện; bỏ trống =
     TẤT CẢ truyện. Chương có content_zh NULL sẽ được crawler backfill trước khi dịch."""
-    q = db.sb().table("novels").select("id, title_zh, title_vi")
+    # nhiều chương trước: job cùng priority xếp theo thứ tự chèn, nên enqueue truyện
+    # dày trước là nó được dịch trước.
+    q = db.sb().table("novels").select("id, title_zh, title_vi") \
+        .order("chapter_count_translated", desc=True)
     if novel_id is not None:
         q = q.eq("id", novel_id)
     novels = q.execute().data or []
@@ -557,6 +560,8 @@ def main() -> None:
         novel = sync.add_novel(adapter, args.book_id)
         print(f"Đã thêm truyện #{novel['id']} ({args.source}): {novel['title_zh']} — "
               f"dùng `request --novel {novel['id']} --up-to N` để xếp hàng dịch.")
+    elif args.mode == "redich":
+        run_redich(args.novel, args.engine)   # bỏ --novel = tất cả truyện
     else:
         if args.novel is None:
             parser.error("request cần --novel <id>")
