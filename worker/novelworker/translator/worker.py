@@ -887,6 +887,30 @@ def _map_genres(genres) -> list[str]:
     return out
 
 
+# Rác nguồn hay dính đầu mô tả: "《《Tên》》作者:X,简介:", lời kêu gọi ủng hộ, link.
+_DESC_JUNK = re.compile(
+    r"^\s*《{1,2}[^》]*》{1,2}\s*作者\s*[:：][^,，\n]*[,，]?\s*(?:简介\s*[:：])?"
+    r"|本书又名\s*《[^》]*》|本书又名[^\s，,。]*|求(?:收藏|推荐|月票|订阅)|https?://\S+"
+)
+
+
+def _translate_description_hachimi(description_zh: str, terms: list[dict]) -> str | None:
+    """Mô tả dịch bằng chính engine đang dịch truyện — giữ đúng giọng ta/ngươi.
+
+    Đo 25/07 trên 3 truyện: bản LLM ra "Cho tôi làm điệp viên?… các anh", bản Hachimi ra
+    "Để ta làm gián điệp?… các ngươi". Mô tả hiện ngay trang truyện nên lệch giọng thấy liền.
+    """
+    from . import hachimi_engine, termguard
+
+    source = clean_source(_DESC_JUNK.sub("", description_zh or "").strip())
+    if not source:
+        return None
+    vi = termguard.translate_text(source, terms, hachimi_engine.translate_text)
+    vi = _clean_output(vi)
+    vi, _ = _hanviet_fallback(vi)
+    return _fix_register(_fix_soft_style(vi)).strip() or None
+
+
 def handle_metadata(job: dict, llm) -> None:
     novel = db.sb().table("novels").select("*").eq("id", job["novel_id"]).single().execute().data
     terms, _ = db.get_glossary(novel["id"])  # dịch lại metadata → tên khớp glossary đã tích lũy
@@ -900,7 +924,20 @@ def handle_metadata(job: dict, llm) -> None:
         return value
     title_vi = clean(data.get("title_vi")) or novel.get("title_vi")
     author_vi = clean(data.get("author_vi")) or novel.get("author_vi")
-    description_vi = clean(data.get("description_vi")) or novel.get("description_vi")
+    # Tiêu đề vẫn để LLM: luật "phiên âm Hán-Việt TRỌN cụm hay dịch nghĩa" là một phán đoán
+    # theo thể loại, model MT không nhận chỉ thị. Mô tả thì ngược lại — chỉ cần dịch đúng
+    # giọng, nên giao cho engine của truyện; LLM chỉ đỡ khi engine không sẵn.
+    engine = novel.get("translation_provider") or settings.default_engine
+    description_vi = None
+    if engine == "hachimi":
+        from . import hachimi_engine
+
+        if hachimi_engine.available():
+            try:
+                description_vi = _translate_description_hachimi(novel.get("description_zh"), terms)
+            except Exception:
+                log.exception("Dịch mô tả bằng Hachimi lỗi truyện %s — lùi về bản LLM", novel["id"])
+    description_vi = description_vi or clean(data.get("description_vi")) or novel.get("description_vi")
     genres = _map_genres(novel.get("genres")) or novel.get("genres")
     # JSON parse được nhưng thiếu field → GIỮ giá trị cũ, không ghi đè None (meta_translated
     # set True ngay dưới nên không tự dịch lại — ghi None là mất trắng tên đang có)
