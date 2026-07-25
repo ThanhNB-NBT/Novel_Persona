@@ -87,3 +87,6 @@ worker/hachimi/**/*.bak*
 
 # Model CT2 Hachimi cho worker (nhi phan, khong commit)
 worker/models/
+
+.tmp_eval_g3/
+skills-lock.json

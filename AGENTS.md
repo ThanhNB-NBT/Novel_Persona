@@ -31,6 +31,12 @@ Use the single-context domain-doc layout. See `docs/agents/domain.md`.
 4. **Asset ảnh:** chỉ `.webp` được khai trong pubspec và ship; PNG gốc KHÔNG commit.
    Code trỏ asset phải khớp đuôi file (đã dính bug .png/.webp một lần).
 5. Commit message tiếng Việt không dấu, ngắn, nói CÁI GÌ + VÌ SAO.
+   **CHỈ commit message mới không dấu** — chat, docs, comment trong code viết
+   tiếng Việt CÓ DẤU đầy đủ (file ghi UTF-8). Tên biến/hàm và log tiếng Anh.
+6. **Code tối giản:** diff ngắn nhất chạy được là đúng. Không abstraction/helper
+   khi chỉ có 1 chỗ dùng, không thêm dependency cho việc vài dòng làm được,
+   ưu tiên stdlib/tính năng có sẵn của Flutter/Postgres. Tái dùng widget/util
+   đã có trong repo thay vì viết mới.
 
 ## Trước khi làm việc với hệ Tu Tiên
 

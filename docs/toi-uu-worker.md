@@ -439,10 +439,6 @@ Repo hiện mới dùng chat completion dạng text, chưa khai thác structured
 
 Nguồn: [NVIDIA model card](https://build.nvidia.com/mistralai/mistral-small-4-119b-2603), [NVIDIA structured generation](https://docs.nvidia.com/nim/large-language-models/1.15.0/structured-generation.html).
 
-#### Model Hugging Face chạy local — không triển khai
-
-Đã khảo sát HachimiMT, VP-MT và MoxhiMT nhưng quyết định không dùng: các model chuyên Trung→Việt này phải tải về tự host, context ngắn và không giải quyết bài toán nhất quán toàn truyện. Dự án tiếp tục dùng NVIDIA API để tránh thêm runtime, RAM, dependency và nghĩa vụ vận hành model local.
-
 #### Dataset Trung→Việt web novel — dùng cho evaluation/retrieval, không fine-tune
 
 Các nguồn đáng xem:
