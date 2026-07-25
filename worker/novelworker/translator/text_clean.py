@@ -8,11 +8,34 @@ from __future__ import annotations
 
 import re
 
-# Dấu chống crawl bọc-lẻ cố định. Thêm dấu mới ở đây hoặc để hàm tự phát hiện.
-ANTI_CRAWL_MARKS = ("『", "』", "〖", "〗", "【", "】", "〔", "〕", "〈", "〉", "⦅", "⦆", "‹", "›", "«", "»")
-
 # Ký tự tàng hình / zero-width / BOM do web chèn phá crawl.
 INVISIBLE_CHARS = ("​", "‌", "‍", "﻿", "­", "‎", "‏", "‪", "‬")
+_WRAPPED_HAN = re.compile(
+    r"(?:(?<=[一-鿿])[『〖【〔〈⦅‹«]([一-鿿])[』〗】〕〉⦆›»]|"
+    r"[『〖【〔〈⦅‹«]([一-鿿])[』〗】〕〉⦆›»](?=[一-鿿]))"
+)
+_RARE_WRAPPED_HAN = re.compile(r"[⦅‹«]([一-鿿])[⦆›»]")
+_TRAILING_SLASH = re.compile(r"(?<=[。！？!?])/[ \t]*(?=\r?$)", re.M)
+_EMPTY_BRACKETS = re.compile(r"^[ \t]*[（(][ \t]*[）)][ \t]*(?:\r?\n|\Z)", re.M)
+_HAN_STAR = re.compile(r"(?<=[一-鿿])\*(?=[一-鿿])")
+_PUNCT_RUN = re.compile(r"([。！？!?])[。！？!?]+")
+
+
+def _balance_dialogue_quotes(text: str) -> str:
+    """Đổi dấu mở `“` thứ hai thành dấu đóng khi nguồn gõ nhầm trong cùng dòng."""
+    out: list[str] = []
+    for line in text.splitlines(keepends=True):
+        opened = False
+        for char in line:
+            if char == "“":
+                out.append("”" if opened else char)
+                opened = not opened
+            elif char == "”":
+                out.append(char)
+                opened = False
+            else:
+                out.append(char)
+    return "".join(out)
 
 
 def clean_source(text: str) -> str:
@@ -21,8 +44,30 @@ def clean_source(text: str) -> str:
         return ""
     for inv in INVISIBLE_CHARS:
         text = text.replace(inv, "")
-    # Cặp dấu bọc lẻ ĐÚNG 1 chữ Hán: 脸上『露』出神『色』 -> 脸上露出神色
-    text = re.sub(r"([^\w\s一-鿿\n])([一-鿿])([^\w\s一-鿿\n])", r"\2", text)
-    for mark in ANTI_CRAWL_MARKS:
-        text = text.replace(mark, "")
+    text = _balance_dialogue_quotes(text)
+    text = _TRAILING_SLASH.sub("", text)
+    text = _EMPTY_BRACKETS.sub("", text)
+    text = _HAN_STAR.sub("", text)
+    text = _PUNCT_RUN.sub(r"\1", text)
+    # Chỉ gỡ cặp chống crawl nằm GIỮA chuỗi Hán. Không đụng thoại “哼！”,
+    # nhãn game 【提示】 hay ngoặc sách hợp lệ.
+    text = _RARE_WRAPPED_HAN.sub(r"\1", text)
+    while (cleaned := _WRAPPED_HAN.sub(lambda m: m.group(1) or m.group(2), text)) != text:
+        text = cleaned
     return text.strip()
+
+
+if __name__ == "__main__":
+    assert clean_source("脸上『露』出神『色』") == "脸上露出神色"
+    assert clean_source("⦅一⦆⦅下⦆") == "一下"
+    assert clean_source("‹是›") == "是"
+    assert clean_source("“哼！”") == "“哼！”"
+    assert clean_source("【提示】") == "【提示】"
+    assert clean_source("“回房间休息吧“，她说道！") == "“回房间休息吧”，她说道！"
+    assert clean_source("“甲。”“乙。”") == "“甲。”“乙。”"
+    assert clean_source("厅下都在议论！/\n( )") == "厅下都在议论！"
+    assert clean_source("埃尔顿*希里说道。") == "埃尔顿希里说道。"
+    assert clean_source("好。!!别担心。") == "好。别担心。"
+    assert clean_source("图纸*1") == "图纸*1"
+    assert clean_source("\u200b测试\ufeff") == "测试"
+    print("text_clean OK")

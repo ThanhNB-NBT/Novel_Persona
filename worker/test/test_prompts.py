@@ -1,4 +1,4 @@
-"""Self-check prompts: chèn glossary chọn lọc + lắp ráp prompt chương (không mạng)."""
+"""Self-check prompts: prompt chương GỌN (không glossary) + metadata (vẫn có glossary)."""
 import os
 import sys
 
@@ -7,8 +7,7 @@ os.environ.setdefault("SUPABASE_URL", "https://example.supabase.co")
 os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "test")
 
 from novelworker.translator.prompts import (
-    MAX_TERMS_IN_PROMPT, build_main_chapter_system,
-    build_chapter_user, build_metadata_user,
+    build_main_chapter_system, build_chapter_user, build_metadata_user,
 )
 
 
@@ -16,41 +15,24 @@ def main() -> None:
     terms = [
         {"term_zh": "林松", "correct_vi": "Lâm Tùng", "note": "nam, sư huynh", "term_type": "person"},
         {"term_zh": "苏雨", "correct_vi": "Tô Vũ", "wrong_vi": "Tô Vu"},
-        {"term_zh": "不出现", "correct_vi": "Không Xuất Hiện"},  # không có trong chunk
-        {"correct_vi": "chỉ mức tiếng Việt"},  # không có term_zh → job patch lo, bỏ qua
     ]
 
-    # chỉ chèn term THẬT SỰ xuất hiện trong chunk; kèm note + cảnh báo wrong_vi
-    sys_p = build_main_chapter_system(terms, "林松看着苏雨。")
-    assert "林松 → Lâm Tùng" in sys_p and "[nam, sư huynh]" in sys_p
-    assert "KHÔNG dịch thành 'Tô Vu'" in sys_p
-    assert "不出现" not in sys_p
-    # person tách vào BẢNG NHÂN VẬT (chọn xưng hô), term thường ở khối thuật ngữ
-    assert "BẢNG NHÂN VẬT — tra bảng này" in sys_p
-    assert sys_p.index("林松") < sys_p.index("Bảng thuật ngữ") < sys_p.index("苏雨")
-    # chunk chỉ có term thường → không chèn khối nhân vật rỗng
-    assert "BẢNG NHÂN VẬT — tra bảng này" not in build_main_chapter_system(terms, "苏雨来了。")
+    # Prompt chương GỌN (nhánh B G3): chỉ luật xưng hô + nội dung. KHÔNG chèn glossary
+    # Không bắt model xuất SUMMARY/GLOSSARY_JSON.
+    sys_p = build_main_chapter_system()
+    assert "林松" not in sys_p and "Bảng thuật ngữ" not in sys_p and "BẢNG NHÂN VẬT" not in sys_p
+    # lệnh CŨ bắt model xuất SUMMARY/GLOSSARY_JSON đã gỡ (giờ chỉ còn lệnh CẤM xuất)
+    assert "xuất đúng hai dòng cuối" not in sys_p
+    assert "vẫn xuất SUMMARY và GLOSSARY_JSON" not in sys_p
+    assert "Chỉ trả bản dịch tiếng Việt" in sys_p
+    assert "ta – ngươi" in sys_p
+    assert "Tên ngoại quốc" in sys_p
+    assert "vật phẩm có tên riêng" in sys_p
+    assert "KẾT HỢP REFERENCE + V2" not in sys_p
+    assert "Cao Đống" not in sys_p
 
-    # không có content đối chiếu → chèn mọi term có term_zh
-    assert "不出现" in build_main_chapter_system(terms, "")
-
-    # chunk không khớp term nào → không có khối glossary
-    assert "Bảng thuật ngữ" not in build_main_chapter_system(terms, "无关内容")
-
-    # trần số term trong prompt
-    many = [{"term_zh": f"名{i}", "correct_vi": f"Danh {i}"} for i in range(200)]
-    chunk = "".join(t["term_zh"] for t in many)
-    injected = build_main_chapter_system(many, chunk)
-    assert injected.count("→ Danh") == MAX_TERMS_IN_PROMPT
-    # 5 approved luôn đứng đầu nên trần 80 chỉ loại suggestion ít ưu tiên phía sau.
-    approved = [{"term_zh": f"准{i}", "correct_vi": f"Chuẩn {i}", "approved": True} for i in range(5)]
-    pending = [{"term_zh": f"候{i}", "correct_vi": f"Gợi ý {i}", "approved": False} for i in range(80)]
-    injected = build_main_chapter_system(approved + pending, "".join(t["term_zh"] for t in approved + pending))
-    # đếm CỤ THỂ dòng glossary (template có sẵn nhiều "→" trong hướng dẫn tĩnh)
-    assert injected.count("→ Chuẩn") + injected.count("→ Gợi ý") == MAX_TERMS_IN_PROMPT
-    assert all(t["term_zh"] in injected for t in approved)
-
-    # build_chapter_user: đủ 4 phần đúng thứ tự; phần thiếu thì không chèn nhãn thừa
+    # build_chapter_user: các phần đúng thứ tự; phần thiếu thì không chèn nhãn thừa.
+    # (Hàm vẫn nhận prev_summary/synopsis/prev_tail cho eval/legacy; production G3 bỏ không truyền.)
     u = build_chapter_user("第一章", "内容", prev_summary="tóm tắt", synopsis="bối cảnh",
                            prev_tail="…đuôi dịch trước", novel_line="Truyện A — thể loại: Tiên hiệp")
     for i in range(len(order := ["[Truyện:", "[Bối cảnh truyện đến nay:", "[Ngữ cảnh chương trước:",
@@ -60,20 +42,17 @@ def main() -> None:
     assert bare == "Nội dung chương:\n内容"
     assert "[Bối cảnh truyện đến nay:" not in build_chapter_user(None, "内容", prev_summary="tóm tắt")
 
-    # build_metadata_user: chỉ chèn term xuất hiện trong title/description; không glossary → JSON trần
+    # build_metadata_user VẪN chèn glossary (title/desc khớp tên trong chương); chỉ chèn
+    # term xuất hiện trong title/description → JSON trần khi không có term khớp.
     novel = {"title_zh": "林松传", "description_zh": "讲述林松的故事", "author_zh": "作者", "genres": []}
     meta = build_metadata_user(novel, terms)
     assert "林松 → Lâm Tùng" in meta and "苏雨" not in meta
     assert "Bảng thuật ngữ" not in build_metadata_user(novel)
-    # term nghi sai chưa duyệt không được lọt vào prompt metadata (cùng predicate với chapter)
+    # term nghi sai chưa duyệt không được lọt vào prompt metadata
     ngo = {"term_zh": "林松", "correct_vi": "người họ Lâm", "note": "nghi sai", "approved": False}
     assert "người họ Lâm" not in build_metadata_user(novel, [ngo])
     ngo["approved"] = True
     assert "người họ Lâm" in build_metadata_user(novel, [ngo])
-    main = build_main_chapter_system(terms, "林松看着苏雨。")
-    assert "KẾT HỢP REFERENCE + V2" in main
-    assert "Xác định người nói" in main
-    assert "Không gộp hai đoạn" in main
 
 
 if __name__ == "__main__":

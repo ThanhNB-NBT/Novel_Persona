@@ -25,6 +25,17 @@ def test_translate_fresh_rotates_provider_slots(monkeypatch):
     assert all(row["content_vi"] == "bản mới" for row in translated)
 
 
+def test_pending_glossary_only_allows_deterministic_proper_names():
+    from novelworker.db import _is_safe_pending_term
+
+    assert _is_safe_pending_term(
+        {"term_type": "person", "correct_vi": "Lâm Tùng"}, "Lâm Tùng")
+    assert not _is_safe_pending_term(
+        {"term_type": "item", "correct_vi": "Linh kiếm"}, "Linh Kiếm")
+    assert not _is_safe_pending_term(
+        {"term_type": "person", "correct_vi": "Lão Tùng"}, "Lâm Tùng")
+
+
 def test_patch_replacements_include_old_vietnamese_and_han_residue():
     from novelworker.translator.worker import _patch_replacements
 
@@ -116,6 +127,18 @@ def test_audit_requeues_at_most_25_chapters(monkeypatch):
     monkeypatch.setattr(worker, "requeue_bad", lambda batch: queued.extend(batch))
     worker.handle_audit({})
     assert len(queued) == 25 and queued == bad[:25]
+
+
+def test_audit_scopes_to_one_novel(monkeypatch):
+    import novelworker.translator.worker as worker
+
+    seen = {}
+    monkeypatch.setattr(
+        worker, "scan_bad_chapters",
+        lambda **kwargs: seen.update(kwargs) or [],
+    )
+    worker.handle_audit({"novel_id": 42})
+    assert seen == {"novel_id": 42}
 
 
 def test_apply_line_fixes_accepts_wrapped_object():
@@ -210,9 +233,9 @@ def test_gia_toc_style():
 def test_transliteration_fuse():
     """Văn phiên âm máy móc được ngăn từ prompt, không hard-fail hậu kỳ bằng heuristic."""
     from novelworker.translator import prompts
-    system = prompts.build_main_chapter_system([], "原文")
-    assert "Không ghép nửa dịch nghĩa nửa phiên âm" in system
-    assert "Tránh văn convert" in system
+    system = prompts.build_main_chapter_system()
+    assert "phiên âm Hán-Việt trọn cụm" in system
+    assert "không văn convert" in system
 
 
 def test_english_onomatopoeia():
@@ -245,10 +268,6 @@ def test_style_line_and_narrator_term():
     assert "ngôi ba" in line and "tu tiên cổ đại" in line and "tưng tửng" not in line
     assert prompts.build_style_line(None) is None
     assert prompts.build_style_line({}) is None
-    system = prompts.build_main_chapter_system(
-        [{"term_zh": "洛离", "correct_vi": "Lạc Ly", "term_type": "person",
-          "note": "nam, thiếu niên", "narrator_term": "y"}], "洛离睁开双目")
-    assert "[người kể gọi: y]" in system
     user = prompts.build_chapter_user(None, "原文", style_line="[Văn phong truyện: X]")
     assert "[Văn phong truyện: X]" in user
 
@@ -309,6 +328,11 @@ def test_fix_han_residue_by_line():
     assert fixed == "Nhận được 【Tiên Huyết】."
     fixed, _ = _hanviet_fallback("Hắn luyện thành 鲜血丹.")
     assert fixed == "Hắn luyện thành Tiên Huyết Đan."
+    # Regression: model dịch nửa chừng ('mệnh途', 'sức mạnh存护') → vá không được dính.
+    assert _hanviet_fallback("Kẻ mệnh途 hành giả.")[0] == "Kẻ mệnh Đồ hành giả."
+    assert _hanviet_fallback("Bung sức mạnh存护 ra.")[0] == "Bung sức mạnh Tồn Hộ ra."
+    assert _replace_glossary_han("Toàn bộ sức mạnh存护 ngay.", [
+        {"term_zh": "存护", "correct_vi": "Tồn Hộ"}])[0] == "Toàn bộ sức mạnh Tồn Hộ ngay."
     # Glossary rác từ model không được làm hỏng lượt sửa.
     assert _fix_han_residue(NoFixLLM(), "Trên áo còn chữ 囚.", ["bad"]) == (
         "Trên áo còn chữ Tù.")

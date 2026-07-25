@@ -18,15 +18,21 @@ from audit_hachimi_base_longform import metrics, pipeline, translate_block
 from eval_common import EVAL, EVAL_GAME, MODELS_DIR, balanced_quotes, load_terms, similarity
 
 
-OUTPUT_JSONL = Path(__file__).with_name("hachimi_teacher_v2_eval.jsonl")
-OUTPUT_MD = Path(__file__).with_name("hachimi_teacher_v2_eval.md")
+OUTPUT_JSONL = Path(__file__).with_name("hachimi_eval_locked.jsonl")
+OUTPUT_MD = Path(__file__).with_name("hachimi_eval_locked.md")
 MODELS = {
     "base": MODELS_DIR / "hachimi-base-download" / "ct2-int8_float32",
     "current": MODELS_DIR / "hachimi-ct2",
     "teacher_v2": MODELS_DIR / "hachimi-teacher-v2",
-    # Thêm dòng "teacher_v3": MODELS_DIR / "hachimi-teacher-v3" sau khi train xong.
+    "teacher_v3": MODELS_DIR / "hachimi-teacher-v3",
+    "teacher_v4": MODELS_DIR / "hachimi-teacher-v4",
 }
-KEYS = ("similarity", "han", "modern_pronouns", "padding")
+KEYS = ("similarity", "sentences", "han", "modern_pronouns", "padding")
+
+
+def sentences(text: str) -> int:
+    """Nhịp câu — chỉ số quyết định của vòng v3 (xem docs/hachimi_rhythm_research.md)."""
+    return len([part for part in re.split(r"(?<=[.!?…])\s+", text) if part.strip()])
 
 
 def score(source: str, raw: str, restored: str, reference: str) -> dict:
@@ -34,6 +40,7 @@ def score(source: str, raw: str, restored: str, reference: str) -> dict:
     return {
         "pipeline": restored,
         "similarity": round(similarity(reference, restored), 4),
+        "sentences": sentences(restored),
         "han": counts["pipeline_han"],
         "modern_pronouns": counts["pipeline_modern_pronouns"],
         "padding": counts["pipeline_padding"],
@@ -50,20 +57,22 @@ def accumulate(summary: dict[str, float], item: dict) -> None:
     summary["digit_fail"] += not item["digits_match"]
 
 
-def table(title: str, summary: dict[str, dict[str, float]], total: int) -> list[str]:
+def table(title: str, summary: dict[str, dict[str, float]], total: int, reference_sentences: float = 0) -> list[str]:
     lines = [
         f"## {title} ({total} câu)",
         "",
-        "| Model | Similarity TB | Hán sót | Đại từ hiện đại | Đệm thừa | Quote lỗi | Số lỗi |",
-        "|---|---:|---:|---:|---:|---:|---:|",
+        "| Model | Similarity TB | Câu/cảnh | Hán sót | Đại từ hiện đại | Đệm thừa | Quote lỗi | Số lỗi |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for name in MODELS:
         item = summary[name]
         lines.append(
-            f"| `{name}` | {item['similarity'] / total:.4f} | {int(item['han'])} | "
-            f"{int(item['modern_pronouns'])} | {int(item['padding'])} | "
+            f"| `{name}` | {item['similarity'] / total:.4f} | {item['sentences'] / total:.1f} | "
+            f"{int(item['han'])} | {int(item['modern_pronouns'])} | {int(item['padding'])} | "
             f"{int(item['quote_fail'])} | {int(item['digit_fail'])} |"
         )
+    if reference_sentences:
+        lines.append(f"| `tham chiếu` | — | {reference_sentences / total:.1f} | — | — | — | — | — |")
     return lines + [""]
 
 
@@ -92,6 +101,7 @@ def run_reference(engines: dict[str, _Engine]) -> tuple[list[dict], dict, int]:
             "outputs": outputs,
         })
         print(f"[60 cảnh {index}/{len(rows)}] {row['eval_category']}", flush=True)
+    summary["reference"]["sentences"] = sum(sentences(row["reference_vi"]) for row in rows)
     return results, summary, len(rows)
 
 
@@ -138,14 +148,14 @@ def main() -> None:
         encoding="utf-8",
     )
     lines = [
-        "# Hachimi teacher-v2 — so sánh trên eval đã khóa",
+        "# Hachimi — so sánh các bản trên eval đã khóa",
         "",
         "> `similarity` chỉ là chỉ báo ký tự để hỗ trợ đọc tay, không thay cho đánh giá nghĩa.",
         "> Tập 60 cảnh chạy qua pipeline production (termguard + glossary approved); tập game",
         "> là raw model, không glossary.",
         "",
     ]
-    lines += table("60 cảnh tham chiếu", ref_summary, ref_total)
+    lines += table("60 cảnh tham chiếu", ref_summary, ref_total, ref_summary["reference"]["sentences"])
     lines += table("Game tiếng Anh đã khóa", game_summary, game_total)
     for index, row in enumerate(results, start=1):
         lines.extend([

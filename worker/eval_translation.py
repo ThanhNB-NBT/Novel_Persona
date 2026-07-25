@@ -350,10 +350,10 @@ def _translate_one(r: dict, llm, carry: dict | None = None) -> dict:
     """Dry-run 1 chương qua pipeline production (không ghi DB)."""
     from novelworker.translator import prompts
     from novelworker.translator.worker import (
-        GLOSSARY_LINE, _analyze_names, _clean_output, _drop_context_echo,
+        GLOSSARY_LINE, TITLE_CHAPTER_PREFIX, _analyze_names, _clean_output,
         _extract_json, _fix_han_residue,
         _merge_names, _pop_summary,
-        _register_line, _split_chunks, _tail,
+        _register_line, _split_chunks,
     )
     if r.get("_from_file"):
         terms = [dict(term) for term in ((carry or {}).get("terms") or [])]
@@ -392,43 +392,29 @@ def _translate_one(r: dict, llm, carry: dict | None = None) -> dict:
     novel_line = title + (f" — thể loại: {', '.join(nv.get('genres') or [])}"
                           if title and nv.get("genres") else "") if title else None
 
-    prev_summary = (carry or {}).get("prev_summary") if r.get("_from_file") else None
-    prev_tail = (carry or {}).get("prev_tail") if r.get("_from_file") else None
-    if r["chapter_index"] > 1 and not r.get("_from_file"):
-        prev = (db.sb().table("chapters").select("summary_vi,content_vi")
-                .eq("novel_id", r["novel_id"])
-                .eq("chapter_index", r["chapter_index"] - 1)
-                .maybe_single().execute())
-        pd = getattr(prev, "data", None) or {}
-        prev_summary, prev_tail = pd.get("summary_vi"), _tail(pd.get("content_vi"))
-
+    # Production không nối prev_summary/prev_tail; evaluator dùng đúng luồng này.
     existing_zh = {t["term_zh"] for t in terms if t.get("term_zh")}
     register_line = _register_line(r["content_zh"])
+    title_zh_clean = TITLE_CHAPTER_PREFIX.sub("", r.get("title_zh") or "").strip() or None
     parts = []
     for i, chunk in enumerate(_split_chunks(r["content_zh"])):
         _merge_names(terms, existing_zh, _analyze_names(chapter_llm, chunk))
         res = chapter_llm.complete(
-            prompts.build_main_chapter_system(terms, chunk),
+            prompts.build_main_chapter_system(),
             prompts.build_chapter_user(
-                r.get("title_zh") if i == 0 else None, chunk, prev_summary,
-                prev_tail=prev_tail, novel_line=novel_line, register_line=register_line,
-                style_line=style_line),
+                title_zh_clean if i == 0 else None, chunk,
+                novel_line=novel_line, register_line=register_line, style_line=style_line),
             temperature=prompts.CHAPTER_TEMPERATURE,
         )
-        text = res.text
+        text = _pop_summary(res.text)[0]
         m = GLOSSARY_LINE.search(text)
         if m:
             text = text[:m.start()].rstrip()
-        text, summary = _pop_summary(text)
-        prev_summary = summary or prev_summary
-        text = _drop_context_echo(_clean_output(text), prev_tail)
-        parts.append(_fix_han_residue(chapter_llm, text, terms))
-        prev_tail = _tail(parts[-1])
+        parts.append(_fix_han_residue(chapter_llm, _clean_output(text), terms))
     from novelworker.translator.worker import _fix_register, _fix_soft_style
     text = _fix_register(_fix_soft_style("\n\n".join(parts)))  # cùng hậu xử lý với production
     if carry is not None:
-        carry.update({"terms": terms, "style": style,
-                      "prev_summary": prev_summary, "prev_tail": prev_tail})
+        carry.update({"terms": terms, "style": style})
     return {**r, "content_vi": text, "model_used": "(fresh-full)"}
 
 

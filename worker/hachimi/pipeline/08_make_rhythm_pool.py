@@ -17,7 +17,7 @@ from novelworker import db
 
 
 DATA = Path(__file__).resolve().parents[1] / "data"
-OUT = DATA / "source" / "rhythm_pool.jsonl"
+OUT = DATA / "source" / "rhythm_pool_2.jsonl"
 EVAL_FILES = [
     DATA / "eval_locked" / "eval_reference_60.jsonl",
     DATA / "eval_locked" / "hachimi_vnext_e_fullchapters.jsonl",
@@ -30,7 +30,12 @@ EXISTING_ZH = [
 ]
 HAN = re.compile(r"[一-鿿]")
 CAP = next((int(arg) for arg in sys.argv[1:] if arg.isdigit()), 3600)
-PER_NOVEL = 12
+PER_NOVEL = 30  # vòng đầu lấy 12 dòng/truyện; nới ra để gom thêm cho vòng train sau
+# Dòng đã giao thầy ở các vòng trước — không lấy lại.
+DONE_FILES = [
+    DATA / "source" / "rhythm_pool.jsonl",
+    DATA / "source" / "rhythm_labeled_all.jsonl",
+]
 
 
 def locked_groups() -> set[tuple[int, int]]:
@@ -47,7 +52,7 @@ def locked_groups() -> set[tuple[int, int]]:
 
 def known_sources() -> set[str]:
     known = set()
-    for path in EXISTING_ZH:
+    for path in [*EXISTING_ZH, *DONE_FILES]:
         if not path.is_file():
             continue
         for line in path.read_text(encoding="utf-8").splitlines():

@@ -9,6 +9,7 @@ from datetime import datetime, timedelta, timezone
 
 from .. import db
 from ..config import settings
+from ..translator.text_clean import clean_source
 from .base import ChapterNotReady, SourceAdapter, SourceBlocked
 
 log = logging.getLogger(__name__)
@@ -1002,7 +1003,9 @@ def ensure_chapters_fetched(adapter: SourceAdapter, novel_id: int) -> None:
         db.heartbeat("crawler",
                      note=f"tải chương {ch['chapter_index']} novel {novel_id} ({i + 1}/{len(rows)})")
         try:
-            content = adapter.fetch_chapter(ch["source_chapter_id"])
+            content = clean_source(adapter.fetch_chapter(ch["source_chapter_id"]))
+            if not content:
+                raise ValueError(f"Chương {ch['source_chapter_id']} rỗng sau khi làm sạch")
             db.save_chapter_raw(ch["id"], content)
             _not_ready_count.pop(ch["id"], None)
             log.info("Đã tải chương %s (novel %s)", ch["chapter_index"], novel_id)

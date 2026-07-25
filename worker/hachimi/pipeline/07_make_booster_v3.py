@@ -66,6 +66,13 @@ ATTRIBUTIONS = [
 SPEAR = [
     ("他握紧手中长枪。", "Hắn nắm chặt trường thương trong tay."),
     ("少年挺枪刺出。", "Thiếu niên vung thương đâm ra."),
+    # v3 chỉ học đúng mẫu có trong booster: 当做枪练习 thì đúng, 把枪叉入地里 vẫn ra "súng".
+    ("他把枪叉入地里。", "Hắn cắm thương xuống đất."),
+    ("他将枪拄在身前。", "Hắn chống thương trước người."),
+    ("他横枪立马。", "Hắn ngang thương ghìm ngựa."),
+    ("他抖了个枪花。", "Hắn rung lên một đóa thương hoa."),
+    ("他挑枪扫向对手。", "Hắn hất thương quét về phía đối thủ."),
+    ("枪杆在他手中转了半圈。", "Cán thương xoay nửa vòng trong tay hắn."),
     ("枪尖上寒光闪烁。", "Trên mũi thương hàn quang lấp lánh."),
     ("他把枪插入地里。", "Hắn cắm thương xuống đất."),
     ("那杆枪重达百斤。", "Cây thương đó nặng cả trăm cân."),
@@ -86,6 +93,33 @@ GUN = [
     ("手枪局他只买了防弹衣。", "Round súng lục hắn chỉ mua giáp chống đạn."),
     ("枪声在走廊里回荡。", "Tiếng súng vang vọng trong hành lang."),
     ("他换上默认的USP手枪。", "Hắn đổi sang khẩu súng lục USP mặc định."),
+]
+# --- 3. Danh xưng thân tộc: cổ phong dùng ca ca/tỷ tỷ, không dùng anh trai/chị gái ---
+KIN = [
+    ("两个哥哥和姐姐妹妹的谈话", "cuộc nói chuyện của hai vị ca ca và các tỷ muội"),
+    ("他的哥哥走了过来。", "Ca ca của hắn bước tới."),
+    ("姐姐轻声说道。", "Tỷ tỷ nhẹ giọng nói."),
+    ("妹妹龙若兰说道。", "Muội muội Long Nhược Lan nói."),
+    ("弟弟还在闭关。", "Đệ đệ vẫn còn đang bế quan."),
+    ("大哥和二哥都来了。", "Đại ca và nhị ca đều đã tới."),
+    ("他看向自己的姐姐和妹妹。", "Hắn nhìn về phía tỷ tỷ và muội muội của hắn."),
+    ("三弟是九阴脉象不能习武了。", "Tam đệ là Cửu Âm mạch tượng, không thể luyện võ được nữa."),
+    # 小孙 là "cháu ta", không phải tên riêng "Tiểu Tôn".
+    ("下面我们开始小孙的洗礼仪式。", "Tiếp theo chúng ta bắt đầu nghi thức tẩy lễ cho cháu ta."),
+    ("小孙将和华家的华凝霜定亲。", "Cháu ta sẽ đính hôn với Hoa Ngưng Sương của Hoa gia."),
+    ("这是埃尔顿家主的小孙女。", "Đây là cháu gái nhỏ của gia chủ Elton."),
+]
+
+# --- 4. Thuật ngữ hay dịch bậy: trường học và thời gian hồi kỹ năng ---
+TERMS = [
+    ("两个高中生模样的男女。", "Hai nam nữ có dáng vẻ học sinh cấp ba."),
+    ("他们的校服上写着象山区高中。", "Trên đồng phục của họ viết Trường cấp ba khu Tượng Sơn."),
+    ("他刚考上高中。", "Hắn vừa thi đỗ vào trường cấp ba."),
+    ("这所高校在本市排名第一。", "Ngôi trường đại học này xếp hạng nhất thành phố."),
+    ("【复活次数：1（冷却时间：24小时）】", "【Số lần hồi sinh: 1 (CD: 24 giờ)】"),
+    ("该技能冷却时间为30秒。", "Kỹ năng này có CD 30 giây."),
+    ("技能还在冷却中。", "Kỹ năng vẫn đang trong CD."),
+    ("冷却结束后可以再次使用。", "Hết CD là có thể dùng lại."),
 ]
 SPEAR_CONTEXT = [
     ("在演武场上，", "Trên diễn võ trường, "),
@@ -123,6 +157,7 @@ def term_rows() -> list[dict]:
     for pairs, contexts in ((SPEAR, SPEAR_CONTEXT), (GUN, GUN_CONTEXT)):
         for (zh, vi), (zc, vc) in itertools.product(pairs, contexts):
             rows.append({"zh": f"{zc}{zh}", "vi": f"{vc}{vi if not vc else lower_first(vi)}"})
+    rows += [{"zh": zh, "vi": vi} for zh, vi in KIN + TERMS]
     return rows
 
 
@@ -140,7 +175,9 @@ def build() -> list[dict]:
 def self_check() -> None:
     import re
 
-    modern = re.compile(r"(?i)(?<!\w)(?:tôi|mình|bạn|cậu|cháu|anh ta|cô ta|cô ấy|ông ta|bà ta)(?!\w)")
+    # "cháu" ở đây là danh xưng thân tộc đúng nghĩa (小孙 = cháu ta), không phải đại từ
+    # hiện đại; cổng register của kaggle_train chỉ áp cho replay nên gold vẫn qua.
+    modern = re.compile(r"(?i)(?<!\w)(?:tôi|mình|bạn|cậu|anh ta|cô ta|cô ấy|ông ta|bà ta|anh trai|chị gái|em gái|em trai)(?!\w)")
     rows = build()
     assert len(rows) == len({row["zh"] for row in rows}), "trùng nguồn Trung"
     for row in rows:
@@ -148,6 +185,8 @@ def self_check() -> None:
         assert row["vi"].count("“") == row["vi"].count("”"), row["vi"]
         assert not re.search(r"[㐀-鿿]", row["vi"]), row["vi"]
     assert any("thương" in row["vi"] for row in rows) and any("súng" in row["vi"] for row in rows)
+    assert any("ca ca" in row["vi"] for row in rows) and any("CD" in row["vi"] for row in rows)
+    assert any("cấp ba" in row["vi"] for row in rows)
     print(f"07_make_booster_v3 OK — {len(rows)} câu")
 
 

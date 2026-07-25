@@ -1,8 +1,11 @@
 """Self-check bảng tra Hán-Việt + quy tắc reconcile (không mạng, không DB)."""
 import os
 import sys
+from pathlib import Path
 
-sys.path.insert(0, os.path.dirname(__file__))
+_WORKER = Path(__file__).resolve().parents[1]
+_REPO = _WORKER.parent
+sys.path.insert(0, str(_WORKER))
 os.environ.setdefault("SUPABASE_URL", "https://example.supabase.co")
 os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "test")
 
@@ -10,10 +13,15 @@ from novelworker.translator.hanviet import han_viet, reconcile, transliteration_
 
 
 def main() -> None:
+    # Bảng app và worker phải cùng một dữ liệu, nếu không form sửa và auto-glossary sẽ lệch nhau.
+    assert (_REPO / "app/assets/hanviet.tsv").read_bytes() == (
+        _WORKER / "novelworker/data/hanviet.tsv").read_bytes()
+
     # tra bảng thuần
     assert han_viet("罗森") == "La Sâm"
     assert han_viet("张景四") == "Trương Cảnh Tứ"
     assert han_viet("筑基") == "Trúc Cơ"
+    assert han_viet("卧羡冨栅") == "Ngoạ Tiện Phú Sách"
 
     # LLM phiên bừa kiểu pinyin → thay bằng bản tra (bug "Lao Sen" 2026-07)
     assert reconcile("罗森", "Lao Sen", "person") == "La Sâm"

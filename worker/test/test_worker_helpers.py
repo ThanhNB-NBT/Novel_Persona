@@ -193,10 +193,11 @@ def main() -> None:
     by_zh = {t["term_zh"]: t for t in terms_zomb}
     assert by_zh["滑翔丧尸"]["note"] == "nghi sai"      # lệch gốc → chặn inject
     assert by_zh["地行丧尸"].get("note") != "nghi sai"  # kế thừa "zombie" → hợp lệ
-    from novelworker.translator.prompts import _build_glossary_block
-    assert "白衣少女" not in _build_glossary_block(terms, "白衣少女来了")
-    terms[-1]["approved"] = True
-    assert "白衣少女" in _build_glossary_block(terms, "白衣少女来了")
+    # nghi-sai chưa duyệt bị chặn khỏi prompt metadata qua _injectable.
+    from novelworker.translator.prompts import _injectable
+    assert not _injectable({"note": "nghi sai", "approved": False})
+    assert _injectable({"note": "nghi sai", "approved": True})
+    assert _injectable({"note": None, "approved": False})
     # _clean_title: dấu toàn giác → thường, ngoặc kép lẻ bị gỡ, viết hoa chữ đầu
     from novelworker.translator.worker import _clean_title
     assert _clean_title("Mẫn Diệt Lôi Quang”! Mẫn diệt tất cả！") == "Mẫn Diệt Lôi Quang! Mẫn diệt tất cả!"

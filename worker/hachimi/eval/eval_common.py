@@ -46,6 +46,39 @@ def load_terms(novel_id: int) -> list[dict]:
     )
 
 
+def production_terms(novel_id: int) -> list[dict]:
+    """Đúng bộ term production dùng: term đã duyệt + term GỢI Ý (approved=false) của truyện.
+
+    `db.get_glossary` còn ghi lại DB ở bước lành hoá, nên ở đây chép lại phần chọn lọc và
+    lành hoá trong bộ nhớ. Đo bằng `load_terms` (chỉ approved) sẽ thổi phồng lỗi tên riêng
+    vì termguard không có gì để cưỡng chế.
+    """
+    from novelworker.db import _is_safe_pending_term, heal_glossary_terms
+    from novelworker.translator import hanviet
+
+    columns = ("id,novel_id,term_zh,wrong_vi,correct_vi,term_type,note,narrator_term,"
+               "approved,first_chapter,hit_count,conflict_vi")
+    terms = (
+        db.sb().table("glossary_terms").select(columns)
+        .eq("approved", True).or_(f"novel_id.eq.{novel_id},novel_id.is.null")
+        .execute().data or []
+    )
+    seen = {term["term_zh"] for term in terms if term.get("term_zh")}
+    pending = (
+        db.sb().table("glossary_terms").select(columns)
+        .eq("approved", False).eq("novel_id", novel_id)
+        .order("hit_count", desc=True).order("created_at")
+        .execute().data or []
+    )
+    for term in pending:
+        zh = term.get("term_zh")
+        if zh and zh not in seen and _is_safe_pending_term(term, hanviet.han_viet(zh)):
+            seen.add(zh)
+            terms.append(term)
+    heal_glossary_terms(terms)  # sửa in-place, không ghi DB
+    return terms
+
+
 def self_check() -> None:
     assert similarity("Ta đi.", "Ta đi!") >= 0.8
     assert balanced_quotes("“Được.”") and balanced_quotes('"Được."')

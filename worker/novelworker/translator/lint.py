@@ -27,6 +27,9 @@ _RULES: list[tuple[str, re.Pattern]] = [
     ("tượng thanh tiếng Anh", re.compile(r"\b(?:cough|sigh|ahem|gasp|hmph|tsk)\b", re.I)),
     ("convert 'tổng cảm thấy' (总感觉)", re.compile(r"\btổng cảm thấy\b", re.I)),
     ("chữ Hán sót lẻ", re.compile(r"[一-鿿㐀-䶿]+")),
+    # Dính từ khi thay chữ Hán sót: 'mệnhĐồ', 'mạnhTồn Hộ' (chữ thường liền chữ hoa).
+    # ponytail: hiếm khi thương hiệu (GitHub/iPhone) lọt vào truyện dịch nên chấp nhận.
+    ("dính từ khi vá Hán (mệnhĐồ)", re.compile(r"[a-zà-ỹ][A-ZĐ][a-zà-ỹ]")),
 ]
 _CHANG_THRESHOLD = 4
 _DIALOGUE = re.compile(r'"[^"\n]*"|“[^”]*”|「[^」]*」|^[ \t]*[—–-]\s+[^\n]*', re.M)

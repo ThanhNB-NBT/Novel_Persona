@@ -5,10 +5,14 @@ from .base import SourceAdapter
 from .biquge import BiqugeAdapter, XinBiqugeAdapter
 from .dingdian import DingdianAdapter
 from .faloo import FalooAdapter
+from .piaotia import PiaotiaAdapter
+from .shuba import ShubaAdapter
 
 TEMPLATE_REGISTRY: dict[str, type[SourceAdapter]] = {
     "biquge": BiqugeAdapter,
     "dingdian": DingdianAdapter,
     "faloo": FalooAdapter,
+    "piaotia": PiaotiaAdapter,
+    "shuba": ShubaAdapter,
     "xinbiquge": XinBiqugeAdapter,
 }

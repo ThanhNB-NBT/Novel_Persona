@@ -58,6 +58,11 @@ def reject_reason(row: dict, seen: set[str]) -> str | None:
         return "quote lệch"
     if _MODERN.search(vi):
         return "đại từ hiện đại"
+    # Danh xưng thân tộc hiện đại: cổng đại từ không bắt được (user bắt ở chương thật).
+    for zh_kin, modern_vi in (("哥哥", "anh trai"), ("姐姐", "chị gái"), ("妹妹", "em gái"),
+                              ("弟弟", "em trai"), ("小孙", "Tiểu Tôn")):
+        if zh_kin in zh and modern_vi.lower() in vi.lower():
+            return f"danh xưng hiện đại ({zh_kin} → {modern_vi})"
     if any(mark in zh for mark in "“「『") and not any(mark in vi for mark in "“\"「『"):
         return "mất dấu thoại"
     if re.findall(r"\d+", zh) != re.findall(r"\d+", vi):
@@ -133,6 +138,13 @@ def self_check() -> None:
     assert reject_reason({**good, "vi": good["vi"].replace(", ánh", ". ánh")}, set()) \
         == "câu mới không viết hoa (dấu hiệu thay phẩy bằng chấm)"
     assert reject_reason({**good, "vi": "Hắn nắm thương. Xoay người. Rời đi. Gió thổi. Qua sơn cốc. Lạnh lẽo."}, set()) == "băm câu quá vụn"
+    kin = {"zh": "他的哥哥走过来，姐姐也跟着，两人都不说话，只是静静看着他。",
+           "vi": "Ca ca của hắn bước tới, tỷ tỷ cũng lặng lẽ đi theo phía sau. "
+                 "Hai người đều không nói lời nào, chỉ đứng đó yên lặng nhìn hắn.",
+           "vi_model": "x"}
+    assert reject_reason(kin, set()) is None
+    assert reject_reason({**kin, "vi": kin["vi"].replace("Ca ca", "Anh trai")}, set()) \
+        == "danh xưng hiện đại (哥哥 → anh trai)"
     print("09_gate_rhythm_gold OK")
 
 
