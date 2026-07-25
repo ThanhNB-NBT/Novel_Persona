@@ -1,9 +1,15 @@
+from pathlib import Path
+
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# Trỏ tuyệt đối vào worker/.env để script chạy từ thư mục con (hachimi/pipeline, hachimi/eval)
+# vẫn đọc được cấu hình; trong container cwd đã là /app nên không đổi hành vi.
+_ENV_FILE = Path(__file__).resolve().parents[1] / ".env"
+
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_file=(".env", _ENV_FILE), extra="ignore")
 
     # Supabase
     supabase_url: str
@@ -71,8 +77,14 @@ class Settings(BaseSettings):
     hachimi_model_dir: str = "models/hachimi-ct2"
     hachimi_compute_type: str = "int8"
     hachimi_cpu_threads: int = 0          # 0 = để CT2 tự chọn theo số core
-    hachimi_beam_size: int = 4            # đo A/B: beam=1 chậm hơn (greedy lặp) + kém
+    # Quét beam×n-best trên 60 cảnh khoá: 4→6 cho đại từ hiện đại 10→9, similarity 0,7220→
+    # 0,7238, câu/cảnh 3,5→3,6 với +27% thời gian; beam 8 không hơn beam 6 mà tốn +62%.
+    hachimi_beam_size: int = 6            # đo A/B: beam=1 chậm hơn (greedy lặp) + kém
     hachimi_max_len: int = 180            # output thật median 27/max 98 token → 180 dư trần
+    # n-best: beam search đã tính sẵn 4 giả thuyết; lấy hết ra rồi chọn bằng cổng chất
+    # lượng của dự án. Đo 12 chương thật: đại từ hiện đại 81→64, quote lệch 3→2, câu/chương
+    # 97→100, thời gian +1,6% (nhiễu). 1 = giữ hành vi cũ (chỉ lấy giả thuyết đầu).
+    hachimi_nbest: int = 6
     # Chỉ trích tên (LLM liệt kê) để đắp glossary ở CHƯƠNG ĐẦU — chặn cost mass-requeue.
     hachimi_extract_max_chapter: int = 20
 

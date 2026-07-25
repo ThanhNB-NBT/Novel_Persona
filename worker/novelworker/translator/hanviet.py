@@ -12,14 +12,58 @@ from pathlib import Path
 _TSV = Path(__file__).resolve().parent.parent / "data" / "hanviet.tsv"
 _table: dict[str, list[str]] | None = None
 
-# chữ đa âm mà âm đầu trong bảng nguồn KHÔNG phải âm phổ biến trong tên riêng
-# (phát hiện qua thực chiến — thêm dần khi gặp)
-_PREFERRED = {"宁": "ninh"}
+# chữ đa âm mà âm đầu trong bảng nguồn KHÔNG phải âm phổ biến trong TÊN RIÊNG
+# (phát hiện qua thực chiến — thêm dần khi gặp). Chỉ thêm chữ CHẮC CHẮN: han_viet()
+# chỉ chạy trên tên đã tách (person/place/sect), nên ưu tiên âm-làm-tên là an toàn;
+# chữ nào âm-tên còn mập mờ (乐 lạc/nhạc, 重 trùng/trọng) thì ĐỪNG ép, kẻo hại diện rộng.
+_PREFERRED = {
+    "宁": "ninh",   # 宁 tên → Ninh (mặc định bảng cũng ninh, giữ chắc)
+    "曾": "tăng",   # họ 曾 → Tăng (曾国藩 Tăng Quốc Phiên); mặc định 'tằng' là nghĩa "đã từng"
+}
 
 # term_type áp quy tắc Hán-Việt bắt buộc; item/skill có thể dịch nghĩa ("Kiếm Lửa") → không ép
 _HV_TYPES = {"person", "place", "sect"}
 
 _HAN = re.compile(r"[一-鿿㐀-䶿]")
+
+# Chữ chuyên dùng để PHIÊN ÂM tên nước ngoài (音译用字). Tác giả Trung viết 埃尔顿 chứ
+# không viết "Elton", nên muốn giữ tên Tây ở dạng Latin thì phải nhận ra từ phía chữ Hán.
+_TRANSLIT_CHARS = set(
+    "阿埃艾奥澳巴贝彼布波伯博达德迪蒂多顿俄厄尔法菲弗夫芙戈格哈赫"
+    "基吉杰卡凯克科库拉莱兰朗劳勒雷莉丽琳卢鲁伦罗洛玛曼梅蒙米娜奈尼诺"
+    "帕佩皮普齐乔琼萨塞桑瑟森莎沙什斯司苏索塔泰特提托图瓦威韦维沃乌西希夏"
+    "谢辛雅亚娅扬伊依尤约兹泽詹珍朱茜妮丝黛琪蕾茉薇利摩安"
+)
+_NAME_DOT = re.compile(r"[·•‧・]")
+# Họ người Trung: 林平安/李希希/马夫人 cũng toàn chữ nằm trong bảng phiên âm, nhưng chúng
+# là tên Trung và phải giữ Hán-Việt. Tên bắt đầu bằng họ thì không coi là tên ngoại.
+_CHINESE_SURNAMES = set(
+    "赵钱孙李周吴郑王冯陈褚卫蒋沈韩杨朱秦尤许何吕施张孔曹严华金魏陶姜"
+    "戚谢邹喻柏水窦章云苏潘葛奚范彭郎鲁韦昌马苗凤花方俞任袁柳鲍史唐费"
+    "岑薛雷贺倪汤滕殷罗毕郝安常乐于时傅皮卞齐康伍余元卜顾孟平黄和穆萧尹"
+    "姚邵湛汪祁毛禹狄米贝明臧计伏成戴宋茅庞熊纪舒屈项祝董梁杜阮蓝闵"
+    "林刁钟徐邱骆高夏蔡田樊胡凌霍虞万支柯昝管卢莫房裘缪干解应宗丁宣贲邓劳"
+)
+
+
+def looks_western(zh: str | None) -> bool:
+    """Đoán cụm chữ Hán này là PHIÊN ÂM một cái tên nước ngoài.
+
+    Tín hiệu: dấu chấm giữa tên (罗林·埃尔顿 — người Trung không viết vậy), hoặc cụm ≥3 chữ
+    mà ≥3/4 là chữ chuyên phiên âm và KHÔNG mở đầu bằng một họ người Trung.
+    Ngưỡng đặt cao vì nhầm theo chiều ngược lại (biến tên Trung thành chữ Latin) tệ hơn
+    nhiều so với bỏ sót một tên Tây: 林黛玉, 哈尔滨, 内蒙古 phải giữ Hán-Việt.
+    """
+    zh = (zh or "").strip()
+    if not zh:
+        return False
+    hits = sum(1 for char in zh if char in _TRANSLIT_CHARS)
+    if _NAME_DOT.search(zh):
+        # Dấu chấm thôi chưa đủ: 内力型·瞬身, 《破阵子·地球困》 cũng có dấu chấm.
+        return hits >= 1
+    if len(zh) < 3 or zh[0] in _CHINESE_SURNAMES:
+        return False
+    return hits >= 3 and hits / len(zh) >= 0.75
 
 
 def _load() -> dict[str, list[str]]:
@@ -59,7 +103,7 @@ def transliteration_suspect(zh: str | None, vi: str | None, term_type: str | Non
     if not zh or not vi or term_type not in _HV_TYPES:
         return False
     chars = [ch for ch in zh if _HAN.search(ch)]
-    if len(chars) != len(zh) or (vi.isascii() and len(vi.split()) == 1):
+    if len(chars) != len(zh) or (vi.isascii() and (len(vi.split()) == 1 or looks_western(zh))):
         return False
     syls = vi.split()
     if not syls or _HAN.search(vi):
@@ -97,6 +141,11 @@ def reconcile(zh: str | None, vi: str | None, term_type: str | None) -> str | No
         return han_viet(zh) or vi
     if vi.isascii() and len(vi.split()) == 1:
         return vi  # tên ngoại 1 từ (Anna, Jack, Jean-Pierre, goblin)
+    # Tên Tây nhiều từ ("Simon Elton"): giữ chữ Latin, đừng ép thành "Tây Mông Ai Nhĩ Đốn".
+    # Chỉ khi nguồn đúng là phiên âm ngoại — tên Trung viết pinyin ("Long Aotian") vẫn bị
+    # bảng tra sửa như cũ.
+    if vi.isascii() and looks_western(zh):
+        return vi
     if "-" in vi:  # phiên âm gạch nối có dấu ("An-đê-ri-an") — kiểu bị cấm → tra bảng thay
         return han_viet(zh) or vi
     syls = vi.split()

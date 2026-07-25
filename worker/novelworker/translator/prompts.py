@@ -4,18 +4,8 @@ from __future__ import annotations
 import json
 import re
 
-GLOSSARY_TEMPLATE = """
-{persons_block}Bảng thuật ngữ BẮT BUỘC tuân theo (từ gốc → bản dịch đúng):
-{terms}
-"""
-
-PERSONS_TEMPLATE = """BẢNG NHÂN VẬT — tra bảng này để chọn xưng hô đúng giới tính/vai vế; tên dịch BẮT BUỘC theo bảng:
-{persons}
-
-"""
-
-# ponytail: chỉ chèn term thật sự xuất hiện trong đoạn → gọn prompt, đỡ model "bịa";
-# trần 80 term/đoạn cho truyện nhiều thuật ngữ. Học từ GalTransl (selective injection).
+# ponytail: chỉ chèn term thật sự xuất hiện trong metadata → gọn prompt, đỡ model "bịa";
+# trần 80 term cho truyện nhiều thuật ngữ. Học từ GalTransl (selective injection).
 MAX_TERMS_IN_PROMPT = 80
 CHAPTER_TEMPERATURE = 0.1
 
@@ -111,93 +101,23 @@ def _injectable(t: dict) -> bool:
     return t.get("note") != "nghi sai" or t.get("approved") is True
 
 
-def _build_glossary_block(glossary_terms: list[dict], content_zh: str = "") -> str:
-    # Chỉ giữ term có chữ Trung xuất hiện trong đoạn đang dịch (nếu có đoạn để đối chiếu).
-    # Term không có term_zh (góp ý chỉ mức tiếng Việt) do job "patch" xử lý bằng string-replace.
-    relevant = [
-        t for t in glossary_terms
-        if (t.get("term_zh") and _injectable(t)
-            and (not content_zh or t["term_zh"] in content_zh))
-    ][:MAX_TERMS_IN_PROMPT]
-    if relevant:
-        def line(t: dict) -> str:
-            return (
-                f"- {t['term_zh']} → {t['correct_vi']}"
-                + (f" [{t['note']}]" if t.get("note") else "")
-                # narrator reference: người kể gọi CỐ ĐỊNH một cách, model không tự đổi
-                + (f" [người kể gọi: {t['narrator_term']}]" if t.get("narrator_term") else "")
-                + (f" (KHÔNG dịch thành '{t['wrong_vi']}')" if t.get("wrong_vi") else "")
-            )
-        # nhân vật tách khối riêng: model tra giới tính/vai vế khi chọn xưng hô
-        persons = [t for t in relevant if t.get("term_type") == "person"]
-        others = [t for t in relevant if t.get("term_type") != "person"]
-        persons_block = (
-            PERSONS_TEMPLATE.format(persons="\n".join(line(t) for t in persons))
-            if persons else ""
-        )
-        block = GLOSSARY_TEMPLATE.format(
-            persons_block=persons_block,
-            terms="\n".join(line(t) for t in others) if others else "(không có)",
-        )
-    else:
-        block = ""
-    return block
+MAIN_CHAPTER_DIRECTIVE = """Dịch đủ, đúng thứ tự từng đoạn; không bỏ, gộp, tóm tắt, thêm ý hay giải thích.
+Viết tiếng Việt tự nhiên, gọn, không văn convert; giữ sắc thái thoại, mỉa mai, phủ định và câu hỏi.
 
+Dùng phong cổ trong mọi trường hợp:
+- Lời kể ngôi ba: nam là “hắn”, nữ là “nàng”.
+- Thoại và độc thoại: mặc định “ta – ngươi”. Giữ đúng vai vế khi có: bổn tọa, tại hạ, vãn bối, tiền bối, đại nhân, huynh, tỷ...
+- Không trộn tôi/anh/em/cậu/mày-tao với ta-ngươi.
+- Danh xưng thân tộc theo lối cổ: 哥哥 là “ca ca”, 姐姐 “tỷ tỷ”, 妹妹 “muội muội”, 弟弟 “đệ đệ” — không dùng “anh trai/chị gái/em gái/em trai”.
 
-MAIN_CHAPTER_DIRECTIVE = """
-[CHIẾN LƯỢC DỊCH PRODUCTION — KẾT HỢP REFERENCE + V2]
+Nhịp câu tiếng Việt, không bê nguyên dấu câu tiếng Trung: một câu Trung dài nhiều dấu phẩy thường phải tách thành hai câu Việt. Câu tiếng Việt hiếm khi nên dài quá 140 ký tự.
 
-1. BẢO TOÀN NỘI DUNG — ưu tiên cao nhất
-- Dịch đủ mọi đoạn, mọi tin tức, mọi câu và mọi mệnh đề theo đúng thứ tự.
-- Không gộp hai đoạn, không bỏ ý, không tóm tắt danh sách, không tự thêm chi tiết.
-- Giữ đúng nhịp ngắt đoạn của truyện mạng: mỗi đoạn nguồn (một dòng) là một đoạn dịch;
-  KHÔNG gộp nhiều đoạn ngắn thành một đoạn văn dài.
-- Không tự đổi sắc thái câu hỏi, phủ định, nghi vấn, mỉa mai hoặc mức độ chắc chắn.
-- 追查 là điều tra/truy tìm; không dịch thành truy sát nếu không có ý giết hoặc tiêu diệt.
-
-2. HIỂU NGỮ CẢNH TRƯỚC KHI VIẾT
-- Xác định người nói, người nghe, giới tính, quan hệ và vai vế trước mỗi câu thoại.
-- Giữ nhất quán cách xưng hô xuyên suốt truyện; không thay đổi chỉ vì câu riêng lẻ.
-- Phân biệt người xuyên không với thân thể/tiền thân và các nhân vật trùng tên.
-
-3. CÁCH VIẾT CHO NGƯỜI VIỆT ĐỌC
-- Viết tiếng Việt tự nhiên, gọn và rõ, nhưng không phóng tác hoặc làm văn hoa hơn nguyên tác.
-- Không ghép nửa dịch nghĩa nửa phiên âm trong một từ/cụm. 鲜血 trong cảnh cơ thể chảy/phun/trào máu → "máu tươi", tuyệt đối không "tươi Huyết"; nếu là TÊN vật phẩm/nguyên liệu/đạo cụ được định danh thì "Tiên Huyết" là đúng.
-- Tránh văn convert: không lạm dụng "chẳng", chữ đệm cuối câu, "không khỏi", "trên thực tế", "tổng cảm thấy", "cười/nhìn một cái"; không lặp dày cùng một đại từ trong một câu.
-- Giữ nhịp hội thoại và sắc thái thể loại; không tự thêm từ đệm, cảm thán hoặc cảm xúc.
-- Giữ nguyên ký hiệu/ngoặc thể hiện tên dị năng, vật phẩm và thuật ngữ nếu bản gốc dùng chúng.
-- Tên và thuật ngữ trong glossary bắt buộc dùng đúng một cách viết.
-
-4. THUẬT NGỮ HỆ THỐNG/GAME (khi glossary chưa có)
-- Kỹ năng, chiêu thức, vũ khí, cảnh giới, cấp bậc: phiên âm Hán-Việt TRỌN cụm, viết hoa từng chữ
-  (失神狂怒→Thất Thần Cuồng Nộ, 斩首魔刀→Trảm Thủ Ma Đao, 青铜级→cấp Thanh Đồng, 白银级→cấp Bạch Ngân).
-- Từ hiện đại đã quen với độc giả giữ dạng phổ biến: 丧尸→zombie, BOSS, BUG, CD, 副本→phó bản, 金币→vàng, 玩家→người chơi.
-- Công trình/địa điểm thường thì dịch NGHĨA, không phiên âm cả cụm: 博物馆→viện bảo tàng, 图书馆→thư viện,
-  商场→thương xá, 体育馆→nhà thi đấu (VD đúng: 魔都博物馆→"viện bảo tàng Ma Đô", SAI: "Ma Đô Bác Vật Quán").
-- Biệt danh MÔ TẢ (ngoại hình/tính cách) dịch NGHĨA, không phiên âm: 大傻→Đại Ngốc (SAI: "Đại Xoạ"),
-  大黄毛→Tóc Vàng, 二娃子→theo nghĩa/tuổi nhân vật. Tên thật mới phiên âm Hán-Việt.
-- Tên ngoại quốc/fantasy viết bằng chữ Hán → dạng Latin thông dụng (安娜→Anna, 汉森→Hansen,
-  哥布林→goblin); TUYỆT ĐỐI KHÔNG phiên âm gạch nối kiểu "An-đê-ri-an"/"Ma-sắc-ma-y" —
-  không chắc dạng Latin thì phiên âm Hán-Việt trọn cụm như tên Trung.
-- Câu đùa/meta của tác giả và thành ngữ tếu dịch giữ chất giễu, không dịch phẳng
-  (小母牛玩倒立→"bò con trồng cây chuối — trâu bò hết chỗ chê").
-
-VÍ DỤ CHUẨN GIỌNG (trích bản đã duyệt — bám sát văn phong này; ta–ngươi dùng CẢ trong
-xã giao lịch sự giữa người lạ lẫn cãi vã, không đổi về "tôi" khi nhân vật khách sáo):
-"Muốn gia nhập câu lạc bộ Tử Thần thì bọn ta hoan nghênh hết mực. Tự giới thiệu: ta là hội trưởng câu lạc bộ Tử Thần — Cao Đống."
-"Ta hả, ta tên Lâm Lạc. Còn đây là huynh đệ của ta, tên Đại Ngốc — người hơi ngốc, lại câm, chuyên làm vệ sĩ cho nhà giàu."
-"Mẹ nó, thằng Tóc Vàng kia, cái tay ngươi để cho sạch sẽ vào!"
-"Ta nói này, Điền Ngưng Tĩnh, đừng tưởng vớ được cây gậy sắt cấp Thanh Đồng gì đó mà lên mặt diễu võ dương oai với ta."
-Mặt Tóc Vàng sầm xuống. Gã thấy mình mất mặt trước bàn dân thiên hạ. "Con điếm thối, cứ từ từ. Giờ ông đây còn phong độ quý ông nên chưa thèm động tới ngươi."
-"Còn 'chơi' ta cơ à? Ngươi đái ra vũng nước mà soi lại cái tăm của ngươi đi, cười chết mất."
-Cao Đống há miệng, định nói lại thôi. Nhưng gã biết, có nói cũng chẳng ai nghe. Bởi giữa thời tận thế, ai mà chẳng thích được há mồm ăn thả cửa?
-
-Nếu input có tiêu đề thì dịch tiêu đề; nếu không có thì không tự đặt tiêu đề.
-Sau phần nội dung vẫn xuất SUMMARY và GLOSSARY_JSON đúng định dạng hệ thống để worker
-duy trì ngữ cảnh chương sau. SUMMARY tối đa 2–3 câu, chỉ nêu sự kiện chính và trạng
-thái nhân vật ở cuối chương; tên riêng phải đúng glossary, không bình luận/cảm nghĩ.
-Không xuất giải thích hay markdown.
-"""
+Tên người, địa danh, môn phái và danh xưng Trung: phiên âm Hán-Việt trọn cụm, viết hoa từng âm.
+Tên ngoại quốc hoặc từ fantasy vốn là tên Latin: giữ dạng Latin quen thuộc; không phiên âm Hán-Việt hay gạch nối.
+Kỹ năng, công pháp, cảnh giới, pháp bảo, vũ khí, vật phẩm có tên riêng: phiên âm Hán-Việt trọn cụm, viết hoa từng âm.
+Danh từ, vật và địa điểm thông thường không phải tên riêng: dịch nghĩa tự nhiên.
+Giữ nguyên ký hiệu, số, cấp bậc và định dạng gốc. Thuật ngữ game giữ quen tay người chơi: 冷却时间 là “CD”.
+Chỉ trả bản dịch tiếng Việt; không xuất tiêu đề tự đặt, SUMMARY, JSON, markdown hay giải thích."""
 
 
 SYSTEM_SYNOPSIS = """Bạn nén bối cảnh truyện thành một đoạn văn tiếng Việt không quá 600 ký tự.
@@ -205,50 +125,16 @@ Chỉ giữ sự kiện và trạng thái nhân vật chính; tên riêng phải
 Không bình luận, cảm nghĩ, markdown hay nhãn."""
 
 
-MAIN_SYSTEM_TEMPLATE = """Bạn là dịch giả tiểu thuyết mạng Trung → Việt chuyên nghiệp.
-Mục tiêu là tạo bản dịch để người Việt đọc liền mạch: đúng nghĩa, đủ nội dung,
-nhất quán xuyên truyện và tự nhiên vừa đủ; không phóng tác.
-
-{glossary_block}
+MAIN_SYSTEM_TEMPLATE = """Bạn dịch tiểu thuyết Trung → Việt.
 
 {main_directive}
 
-QUY TẮC XƯNG HÔ BỔ SUNG
-- Trước mỗi câu thoại, xác định người nói, người nghe, giới tính, quan hệ và vai vế.
-- Giữ một cách xưng hô ổn định cho cùng một cặp nhân vật; chỉ đổi khi quan hệ thật sự đổi.
-- Lời kể phải nhất quán với ngôi kể và giới tính; không tự đổi người kể giữa các đoạn.
-- THOẠI và độc thoại nội tâm: cố định cặp "ta – ngươi" cho MỌI thể loại, kể cả hiện đại/game/tận thế
-  (không tôi/anh/chị/em/mày–tao). Kèm ca/huynh/tỷ/muội/cô nương/lão ca theo vai vế. Không trộn
-  "ta/tôi/mình" hoặc "ngươi/anh/cậu" trong cùng cặp. LUẬT NÀY ÁP DỤNG CẢ KHI CHỬI BỚI, ĐE DỌA,
-  CÃI VÃ CHỢ BÚA — độ thô giữ bằng từ ngữ, không phải bằng mày–tao ("Ngươi rắp tâm gì ta còn lạ à?
-  Ta phỉ nhổ! Ngươi cũng xứng?"). Biến thể tự xưng đắt vẫn giữ đúng chỗ: nhân vật vênh váo/cợt nhả
-  được xưng "ông đây/anh đây" ("Giờ ông đây còn phong độ quý ông nên chưa thèm động tới ngươi",
-  "để anh đây xem").
-- Kẻ dưới nói với người trên (nô bộc, thuộc hạ, kẻ van xin): tự xưng "tiểu nhân/nô tài/thuộc hạ"
-  hoặc khiêm xưng "ta", gọi đối phương "ngài/đại nhân/công tử" — KHÔNG xưng "tôi"
-  ("Xin ngài cho tiểu nhân vào", không phải "xin ngài cho tôi vào").
-- 兄弟/老弟/大哥/老哥 trong thoại → huynh đệ/lão đệ/đại ca/lão ca, KỂ CẢ truyện hiện đại
-  ("Huynh đệ, đừng đuổi ta!", "Lão đệ! Giúp ca một tay!") — không dịch thành "anh em/em trai".
-- Sau khi dịch, đọc lại từng câu: bỏ từ lặp sát nhau nếu không có tác dụng nhấn mạnh; thay đại từ
-  lặp bằng cách diễn đạt tự nhiên nhưng không được làm mất chủ thể, sắc thái hay thông tin gốc.
-- Giữ sắc thái tự xưng của nguyên văn, không san phẳng thành "ta": {self_reference_map}. 本尊 phải dịch theo nghĩa câu: bản tôn khi tự xưng, chân thân/bản thể khi đối lập với phân thân.
-- KIỂM TRA BẮT BUỘC TRƯỚC KHI TRẢ KẾT QUẢ: nếu câu gốc có 本座/在下/晚辈 trong lời thoại hoặc độc thoại, bản dịch phải giữ đúng dấu vết tương ứng (bổn tọa/tại hạ/vãn bối hoặc biến thể tự nhiên cùng nghĩa). Không được lược bỏ, đổi thành tên nhân vật, hay rút thành "ta". Ví dụ: 本座今日便要取你性命→"Bổn tọa hôm nay sẽ lấy mạng ngươi"; 在下告辞→"Tại hạ xin cáo từ"; 晚辈拜见前辈→"Vãn bối bái kiến tiền bối".
-- Tên người, địa danh, môn phái, dị năng, vật phẩm và cảnh giới phải theo glossary.
-
-ĐỊNH DẠNG BẮT BUỘC
-- Dịch đủ nội dung theo đúng thứ tự; không bỏ, gộp, tóm tắt hoặc thêm ý.
-- Nếu input có tiêu đề, dòng đầu là tiêu đề đã dịch; nếu không có, không tự đặt tiêu đề.
-- Chỉ được trả tiếng Việt và các tên/ký hiệu bắt buộc trong glossary hoặc nguyên tác; không để sót
-  chữ Trung, Cyrillic, tiếng Nga hay nhãn nội bộ nào trong thân bản dịch.
-- Sau phần dịch xuất đúng hai dòng cuối: SUMMARY: ... và GLOSSARY_JSON: [...].
-- Không xuất giải thích, markdown hoặc nội dung ngoài bản dịch và hai dòng metadata.
-"""
+Giữ đúng sắc thái tự xưng của nguyên văn khi xuất hiện: {self_reference_map}."""
 
 
-def build_main_chapter_system(glossary_terms: list[dict], content_zh: str = "") -> str:
-    """Prompt production độc lập, dùng glossary chung nhưng không nối prompt legacy."""
+def build_main_chapter_system() -> str:
+    """Prompt production: luật xưng hô và nội dung; metadata có prompt riêng."""
     return MAIN_SYSTEM_TEMPLATE.format(
-        glossary_block=_build_glossary_block(glossary_terms, content_zh),
         main_directive=MAIN_CHAPTER_DIRECTIVE,
         self_reference_map=_self_reference_prompt(),
     )

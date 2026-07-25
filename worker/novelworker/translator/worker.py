@@ -937,8 +937,7 @@ def _translate_hachimi(
         st = providers.get_call_stats()
         prompt_tokens, completion_tokens = st["prompt_tokens"], st["completion_tokens"]
 
-    protected, mapping = termguard.protect(clean_source(content), terms)
-    text = termguard.restore(hachimi_engine.translate_text(protected), mapping)
+    text = termguard.translate_text(content, terms, hachimi_engine.translate_text)
     # gộp nói lắp CT2 ("Cốc cốc cốc cốc" → "Cốc cốc") + dọn rác, DÙNG CHUNG với nhánh LLM.
     # Model 60M lắp cụm là chuyện thường; thiếu bước này thì nói lắp nằm luôn trong bản dịch.
     text = _clean_output(text)
@@ -950,8 +949,9 @@ def _translate_hachimi(
 
     title_vi = None
     if title_zh_clean:
-        tp, tmap = termguard.protect(clean_source(title_zh_clean), terms)
-        title_vi = termguard.restore(hachimi_engine.translate_text(tp), tmap).strip() or None
+        title_vi = termguard.translate_text(
+            clean_source(title_zh_clean), terms, hachimi_engine.translate_text
+        ).strip() or None
         # model bỏ dịch → trơ chữ Hán: phiên âm Hán-Việt (None nếu có chữ ngoài bảng).
         if title_vi and HAN_CHARS.search(title_vi):
             title_vi = hanviet.han_viet(title_zh_clean) or title_vi
@@ -962,6 +962,11 @@ def handle_chapter(job: dict, llm) -> None:
     ch = db.sb().table("chapters").select("*").eq("id", job["chapter_id"]).single().execute().data
     if not ch.get("content_zh"):
         raise MissingContentError(f"Chương {ch['id']} chưa có content_zh — crawler chưa tải xong")
+    # Chương mới đã sạch từ crawler; chạy lại ở biên dịch để cứu dữ liệu cũ trong DB
+    # và bảo đảm Hachimi/LLM nhìn cùng một nguồn.
+    ch["content_zh"] = clean_source(ch["content_zh"])
+    if not ch["content_zh"]:
+        raise MissingContentError(f"Chương {ch['id']} rỗng sau khi làm sạch nguồn")
 
     db.sb().table("chapters").update({"translation_status": "translating"}).eq("id", ch["id"]).execute()
 
@@ -974,12 +979,9 @@ def handle_chapter(job: dict, llm) -> None:
         .select("title_vi,title_zh,genres,translation_provider,translation_model,translation_style,synopsis_vi")
         .eq("id", ch["novel_id"]).single().execute()
     ).data or {}
-    # Bối cảnh truyện (thể loại → register xưng hô).
-    novel_line = None
-    title = nv.get("title_vi") or nv.get("title_zh")
-    if title:
-        genres = ", ".join(nv.get("genres") or [])
-        novel_line = f"{title}" + (f" — thể loại: {genres}" if genres else "")
+    # Tên truyện + thể loại ĐÃ GỠ khỏi prompt: nó vốn để model tự chọn register theo thể
+    # loại, mà register giờ chốt cứng phong cổ cho mọi truyện nên chèn vào chỉ tốn token.
+    # Chỉ giữ POV — thứ này suy từ CHÍNH nội dung chương, không phải bộ nhớ truyện.
     register_line = _register_line(ch["content_zh"])
     # Một truyện chỉ dùng đúng provider + model chốt ở chương đầu. Khi model lỗi,
     # job sẽ retry cùng cặp thay vì fallback âm thầm sang giọng khác.
@@ -988,10 +990,9 @@ def handle_chapter(job: dict, llm) -> None:
     if (nv.get("translation_provider") and nv.get("translation_model")
             and nv["translation_provider"] != "hachimi"):
         chapter_llm = llm.pin(nv["translation_provider"], nv["translation_model"])
-    # style bible (Q1): có sẵn thì dùng, chưa có thì sinh 1 lần từ chương đang dịch
-    style = nv.get("translation_style") or _init_style_bible(
-        chapter_llm, nv, ch["novel_id"], ch["content_zh"], ch["chapter_index"])
-    style_line = prompts.build_style_line(style)
+    # Style bible ĐÃ GỠ khỏi đường dịch (25/07): nó là "bộ nhớ" sinh bằng một lượt LLM riêng,
+    # trong khi luật văn phong đã nằm cứng trong prompt. Tiểu thuyết vốn viết cho người đọc —
+    # model chỉ cần dịch đúng và đủ theo luật, không cần nhớ chương trước.
     existing_zh = {t["term_zh"] for t in terms if t.get("term_zh")}
     # snapshot TRƯỚC khi merge tên mới: chỉ insert gợi ý chưa có trong DB, tránh nhân bản
     preexisting_zh = set(existing_zh)
@@ -1023,16 +1024,17 @@ def handle_chapter(job: dict, llm) -> None:
         n_chunks = len(chunks)
         parts: list[str] = []
         for i, chunk in enumerate(chunks):
-            # Phát hiện tên để đắp glossary và gợi ý màn Thuật ngữ cho các chương sau.
-            names = _analyze_names(chapter_llm, chunk)
-            detected += names
-            _merge_names(terms, existing_zh, names)
+            # Phát hiện tên để đắp glossary — CHỈ ở các chương đầu, đúng như nhánh Hachimi.
+            # Chương sau đã có đủ term trong glossary; gọi tiếp chỉ tốn thêm một lượt LLM/chunk.
+            if ch["chapter_index"] <= settings.hachimi_extract_max_chapter:
+                names = _analyze_names(chapter_llm, chunk)
+                detected += names
+                _merge_names(terms, existing_zh, names)
 
             res = chapter_llm.complete(
                 prompts.build_main_chapter_system(),
                 prompts.build_chapter_user(
-                    title_zh_clean if i == 0 else None, chunk,
-                    novel_line=novel_line, register_line=register_line, style_line=style_line),
+                    title_zh_clean if i == 0 else None, chunk, register_line=register_line),
                 temperature=prompts.CHAPTER_TEMPERATURE,
             )
             if not nv.get("translation_model"):
@@ -1313,10 +1315,8 @@ def run_forever(poll_seconds: float = 3.0) -> None:
                 rs, "audit_interval_min", settings.audit_interval_min)
             db.requeue_stale_jobs(settings.stale_job_minutes)
             db.reset_orphan_chapters()  # dọn chương queued/translating không còn job (ghost Hàng đợi)
-            try:
-                _refresh_one_style_bible()
-            except Exception as e:
-                log.warning("Tái tạo style bible lỗi (thử lại chu kỳ sau): %s", e)
+            # Style bible đã gỡ khỏi đường dịch (25/07) → không tái tạo nữa, khỏi tốn
+            # một lượt LLM mỗi chu kỳ cho thứ không ai đọc.
             # Audit định kỳ: tự quét chương done hỏng (Trung/cụt/mất đoạn lọt qua) → xếp lại dịch,
             # không phải đợi vào đọc mới biết. Fuse đã chặn chương mới nên đây chủ yếu dọn nợ cũ.
             if time.time() - last_audit > settings.audit_interval_min * 60:

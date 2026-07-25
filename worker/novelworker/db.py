@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import threading
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -405,13 +406,33 @@ def heal_glossary_terms(terms: list[dict]) -> list[dict]:
     return changed
 
 
+# Tên phương Tây giữ nguyên chữ Latin: "Maria", "Elton", "GG-Captain", "Simon Elton".
+_LATIN_NAME = re.compile(r"^[A-Z][A-Za-z]*(?:[ .'\-][A-Za-z]+)*$")
+# Danh từ chung LLM hay gắn nhãn person: ghim lại thì mọi chỗ "cha" thành "Ba Ba".
+_NOT_A_NAME = {
+    "爸爸", "妈妈", "父亲", "母亲", "爷爷", "奶奶", "外公", "外婆", "哥哥", "姐姐",
+    "弟弟", "妹妹", "叔叔", "阿姨", "舅舅", "儿子", "女儿", "老师", "师父", "师傅",
+    "先生", "小姐", "夫人", "老板", "大人", "少爷", "小子", "老头", "丫头",
+}
+
+
 def _is_safe_pending_term(term: dict, canonical_vi: str | None) -> bool:
-    """Chỉ cho tên riêng có đối chiếu chắc chắn đi qua trước khi được duyệt tay."""
-    return (
-        term.get("term_type") in {"person", "place", "sect"}
-        and bool(canonical_vi)
-        and (term.get("correct_vi") or "").strip() == canonical_vi
-    )
+    """Chỉ cho tên riêng có đối chiếu chắc chắn đi qua trước khi được duyệt tay.
+
+    Hai dạng được coi là chắc chắn:
+    1. Bản dịch trùng đúng cách đọc Hán-Việt (tên Trung).
+    2. Bản dịch là tên Latin thuần (tên Tây phiên qua tiếng Trung). Trước đây dạng này bị
+       loại vì hanviet(玛利亚) = "Mã Lợi Á" ≠ "Maria" — đúng lớp tên mà model phiên loạn
+       nhất (Malia/Marya/Mary/Mã Lợi Á trong cùng một chương) nên không ghim là hỏng nhất.
+    """
+    if term.get("term_type") not in {"person", "place", "sect"}:
+        return False
+    correct = (term.get("correct_vi") or "").strip()
+    if not correct or (term.get("term_zh") or "").strip() in _NOT_A_NAME:
+        return False
+    if canonical_vi and correct == canonical_vi:
+        return True
+    return correct.isascii() and bool(_LATIN_NAME.match(correct))
 
 
 def get_glossary(novel_id: int) -> tuple[list[dict], int]:
