@@ -49,7 +49,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Sửa thông tin')),
+      appBar: AppBar(title: const Text('Hồ sơ của bạn')),
       body: profile.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => AppError(e, onRetry: () => ref.invalidate(profileProvider)),
@@ -64,10 +64,26 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
             _init = true;
           }
           return ListView(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
             children: [
-              Center(child: _bigAvatar(cs)),
-              const SizedBox(height: 24),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: cs.primaryContainer.withValues(alpha: 0.45),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(children: [
+                  _bigAvatar(cs),
+                  const SizedBox(width: 12),
+                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text('HỒ SƠ CÁ NHÂN', style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: cs.primary, letterSpacing: 1.2)),
+                    Text('Chọn một diện mạo hợp với bạn',
+                        style: Theme.of(context).textTheme.titleMedium),
+                  ])),
+                ]),
+              ),
+              const SizedBox(height: 16),
               Text('Tên hiển thị', style: Theme.of(context).textTheme.labelLarge),
               const SizedBox(height: 8),
               TextField(
@@ -77,39 +93,46 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                 decoration: const InputDecoration(
                     hintText: 'Ví dụ: Bạn đọc', isDense: true),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 18),
               Text('Ảnh đại diện', style: Theme.of(context).textTheme.labelLarge),
               const SizedBox(height: 12),
-              Wrap(
-                spacing: 12,
-                runSpacing: 12,
-                children: [for (final e in avatarPresets) _avatarChoice(e, cs)],
+              SizedBox(
+                height: 48,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: avatarPresets.length,
+                  separatorBuilder: (_, _) => const SizedBox(width: 8),
+                  itemBuilder: (_, i) => _avatarChoice(avatarPresets[i], cs),
+                ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 18),
               Text('Biểu tượng tab Tu Tiên',
                   style: Theme.of(context).textTheme.labelLarge),
-              const SizedBox(height: 4),
-              Text('Đĩa xoay giữa thanh điều hướng — đổi là thấy ngay.',
-                  style: Theme.of(context).textTheme.bodySmall),
-              const SizedBox(height: 12),
+              const SizedBox(height: 8),
               // đổi ngay (lưu cục bộ) — không đợi nút Lưu như tên/avatar (server)
               Consumer(builder: (context, ref, _) {
                 final cur = ref.watch(tabEmblemProvider);
-                return Wrap(
-                  spacing: 12,
-                  runSpacing: 12,
-                  children: [
-                    for (final e in tabEmblems) _emblemChoice(e, cur, cs, ref),
-                  ],
+                return SizedBox(
+                  height: 48,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: tabEmblems.length,
+                    separatorBuilder: (_, _) => const SizedBox(width: 8),
+                    itemBuilder: (_, i) => _emblemChoice(tabEmblems[i], cur, cs, ref),
+                  ),
                 );
               }),
-              const SizedBox(height: 32),
-              FilledButton(
-                onPressed: _saving ? null : _save,
-                child: _saving
-                    ? const SizedBox(
-                        width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Text('Lưu'),
+              const SizedBox(height: 24),
+              SizedBox(
+                height: 48,
+                child: FilledButton.icon(
+                  onPressed: _saving ? null : _save,
+                  icon: _saving
+                      ? const SizedBox(
+                          width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Icon(Icons.check_rounded),
+                  label: Text(_saving ? 'Đang lưu' : 'Lưu thay đổi'),
+                ),
               ),
             ],
           );
@@ -122,40 +145,41 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     final name = _name.text.trim();
     final initial = name.isNotEmpty ? name.characters.first.toUpperCase() : '?';
     return Container(
-      width: 96,
-      height: 96,
+      width: 64,
+      height: 64,
       decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        gradient: LinearGradient(colors: [cs.primary, cs.tertiary]),
+        borderRadius: BorderRadius.circular(18),
+        color: cs.surface,
+        border: Border.all(color: cs.primary.withValues(alpha: 0.35)),
       ),
       alignment: Alignment.center,
       // height:1 — bỏ leading của font emoji (mặc định đẩy glyph lệch lên trên)
       child: _avatar != null
-          ? Text(_avatar!, style: const TextStyle(fontSize: 48, height: 1))
+          ? Text(_avatar!, style: const TextStyle(fontSize: 32, height: 1))
           : Text(initial,
               style: Theme.of(context)
                   .textTheme
-                  .displaySmall
-                  ?.copyWith(color: Colors.white)),
+                  .headlineSmall
+                  ?.copyWith(color: cs.primary)),
     );
   }
 
   Widget _avatarChoice(String emoji, ColorScheme cs) {
     final sel = _avatar == emoji;
     return InkWell(
-      customBorder: const CircleBorder(),
+      customBorder: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       onTap: () => setState(() => _avatar = sel ? null : emoji),
       child: Container(
-        width: 56,
-        height: 56,
+        width: 48,
+        height: 48,
         decoration: BoxDecoration(
-          shape: BoxShape.circle,
+          borderRadius: BorderRadius.circular(14),
           color: sel ? cs.primaryContainer : cs.surface,
           border: Border.all(
               color: sel ? cs.primary : cs.outlineVariant, width: sel ? 2 : 1),
         ),
         alignment: Alignment.center,
-        child: Text(emoji, style: const TextStyle(fontSize: 26, height: 1)),
+        child: Text(emoji, style: const TextStyle(fontSize: 23, height: 1)),
       ),
     );
   }
@@ -167,15 +191,15 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
       customBorder: const CircleBorder(),
       onTap: () => ref.read(tabEmblemProvider.notifier).set(key),
       child: Container(
-        padding: const EdgeInsets.all(3),
+        padding: const EdgeInsets.all(2),
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           border: Border.all(
               color: sel ? cs.primary : Colors.transparent, width: 2),
         ),
         child: Container(
-          width: 50,
-          height: 50,
+          width: 42,
+          height: 42,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             gradient: LinearGradient(
@@ -185,7 +209,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
             border: Border.all(color: cs.surface.withValues(alpha: 0.9), width: 2),
           ),
           alignment: Alignment.center,
-          child: PixelIcon(key, grade: 5, size: 26),
+          child: PixelIcon(key, grade: 5, size: 23),
         ),
       ),
     );

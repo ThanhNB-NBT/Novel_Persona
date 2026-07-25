@@ -131,8 +131,12 @@ class _Header extends StatelessWidget {
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                           color: onDark.withValues(alpha: 0.85))),
                   const SizedBox(height: 8),
-                  TagChip(n['status'] == 'completed' ? 'Hoàn thành' : 'Đang ra',
-                      color: onDark),
+                  Wrap(spacing: 8, runSpacing: 6, children: [
+                    TagChip(n['status'] == 'completed' ? 'Hoàn thành' : 'Đang ra',
+                        color: onDark),
+                    if (sourceName(n).isNotEmpty)
+                      TagChip(sourceName(n), color: onDark),
+                  ]),
                 ]),
               ),
             ]),

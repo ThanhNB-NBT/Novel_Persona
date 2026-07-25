@@ -11,6 +11,17 @@ import '../../widgets.dart';
 import 'filter.dart';
 import 'section.dart';
 
+/// Xoay danh sách theo ngày để carousel không đứng yên: thứ tự "Đề cử" là tất
+/// định (source_rank = lượt đọc toàn thời gian), nên không xoay thì 6 truyện đầu
+/// gần như cố định vĩnh viễn.
+/// ponytail: xoay client theo ngày; muốn cá nhân hoá thì cộng thêm hash user id.
+List<Rec> _rotateDaily(List<Rec> items, int take) {
+  if (items.length <= take) return items;
+  final day = DateTime.now().difference(DateTime(2026)).inDays;
+  final start = (day * take) % items.length;
+  return [...items, ...items].sublist(start, start + take);
+}
+
 String _title(Rec n) => n['title_vi'] ?? n['title_zh'] ?? 'Không tên';
 String _author(Rec n) => n['author_vi'] ?? n['author_zh'] ?? '';
 
@@ -33,7 +44,7 @@ class HomeScreen extends ConsumerWidget {
               children: [
                 const _Brand(),
                 if (s.recommended.isNotEmpty)
-                  _HeroCarousel(s.recommended.take(6).toList()),
+                  _HeroCarousel(_rotateDaily(s.recommended, 6)),
                 // Mỗi mục một kiểu bày riêng để trang không lặp một dạng rail:
                 // spotlight → rail dọc → bảng xếp hạng → poster lớn.
                 if (s.latest.isNotEmpty)
@@ -504,10 +515,12 @@ class _Ranking extends StatelessWidget {
                           style: t.titleMedium?.copyWith(fontSize: 14.5, height: 1.2)),
                       const SizedBox(height: 3),
                       Text(
-                          ((items[i]['genres'] as List?) ?? const [])
-                                  .take(3)
-                                  .join(' · ')
-                                  .toString(),
+                          [
+                            if (sourceName(items[i]).isNotEmpty)
+                              sourceName(items[i]),
+                            ...((items[i]['genres'] as List?) ?? const [])
+                                .take(3),
+                          ].join(' · '),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: t.labelSmall
@@ -548,6 +561,8 @@ class _PosterRail extends StatelessWidget {
               onTap: () => context.push('/novel/${n['id']}'),
               child: Stack(children: [
                 Cover(url: n['cover_url'], width: 130, label: _title(n)),
+                if (sourceName(n).isNotEmpty)
+                  Positioned(top: 8, left: 8, child: SourceBadge(sourceName(n))),
                 // gradient + tên ở chân bìa (bo theo góc Cover = 8)
                 Positioned.fill(
                   child: ClipRRect(
@@ -668,6 +683,8 @@ class _RailCard extends StatelessWidget {
                 left: 6, bottom: 6,
                 child: _ChapterBadge(n['chapter_count_source'] ?? 0),
               ),
+              if (sourceName(n).isNotEmpty)
+                Positioned(right: 6, top: 6, child: SourceBadge(sourceName(n))),
             ]),
             const SizedBox(height: 8),
             // Cao cố định 2 dòng → tiêu đề các thẻ thẳng hàng, hết lộn xộn.

@@ -89,6 +89,33 @@ int nextWordEnd(String s, int from) {
   return i == s.length ? clamped : wordRight(s, i);
 }
 
+/// Chạm trúng 1 âm tiết VIẾT HOA (tên riêng Hán-Việt nhiều âm tiết: "Trần Đại Chinh")
+/// → nuốt TRỌN cụm âm tiết viết hoa liền nhau, dừng ở từ thường/dấu câu. Từ thường
+/// ("hệ thống") → giữ nguyên 1 từ (khỏi quơ trúng từ bên cạnh làm hỏng gợi ý theo tên).
+(int, int) nameRunBounds(String s, int a, int b) {
+  bool capAt(int i) {
+    if (i < 0 || i >= s.length) return false;
+    final ch = s[i];
+    return ch.toUpperCase() == ch && ch.toLowerCase() != ch; // chữ CÁI viết hoa
+  }
+  if (!capAt(a)) return (a, b);
+  var start = a, end = b;
+  while (true) {
+    final na = extendLeftWord(s, start);
+    if (na == start || !capAt(na)) break;
+    start = na;
+  }
+  while (true) {
+    final nb = extendRightWord(s, end);
+    if (nb == end) break;
+    var w = end; // đầu âm tiết vừa với tới
+    while (w < nb && !isWordChar(s, w)) { w++; }
+    if (!capAt(w)) break; // âm tiết kế viết thường → không nuốt
+    end = nb;
+  }
+  return (start, end);
+}
+
 /// Bản dịch cũ có thể đã chép đuôi chương trước do model nhìn thấy context.
 /// Chỉ ẩn các đoạn đầu khớp nguyên văn đuôi trước; dữ liệu DB không bị sửa khi đọc.
 String withoutLeadingPreviousEcho(String current, String? previous) {
@@ -258,11 +285,17 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     final a = wordLeft(block, off);
     final b = wordRight(block, off);
     if (b <= a) return; // chạm chỗ trống
-    _sel.value = (block: block, start: a, end: b);
+    // chạm trúng tên riêng → lấy trọn cụm viết hoa (cả tên), khỏi phải nới ⟨ ⟩ tay
+    final (na, nb) = nameRunBounds(block, a, b);
+    _sel.value = (block: block, start: na, end: nb);
     if (!_editing.value) {
-      _correct.clear();
       _editing.value = true;
     }
+    // Điền sẵn để sửa vài ký tự chỉ cần gõ đè; select-all vẫn cho phép thay cả cụm ngay.
+    _correct.value = TextEditingValue(
+      text: block.substring(na, nb),
+      selection: TextSelection(baseOffset: 0, extentOffset: nb - na),
+    );
     _correctFocus.requestFocus();
     _revealTappedWord(globalPos);
   }
@@ -300,8 +333,15 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     final v = _correct.text.trim();
     final w = wrong.trim();
     if (v.isEmpty || w.isEmpty || v == w) return; // trống/không đổi → bỏ
-    await editChapterText(novelId, chapterIndex, w, v); // sửa THẲNG chương này (không LLM, không queue)
-    await submitCorrection(novelId, w, v); // lưu glossary cho chương/truyện dịch SAU
+    try {
+      await editChapterText(novelId, chapterIndex, w, v); // sửa THẲNG chương này (không LLM, không queue)
+      await submitCorrection(novelId, w, v); // lưu glossary cho chương/truyện dịch SAU
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Chưa lưu được: $e')));
+      }
+      return; // giữ nguyên form để người dùng không mất bản đang gõ
+    }
     _closeEdit();
     // refetch chương → bản sửa hiện NGAY
     ref.invalidate(chapterProvider(ChapterKey(novelId, chapterIndex)));
@@ -811,15 +851,25 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     // của vùng chọn trùng một từ trong term là gợi — trước đây bắt substring nguyên
     // cụm phân biệt hoa thường nên rất nhiều từ "trơ" không có gợi ý.
     final selLow = sel0.toLowerCase();
-    final selWords = selLow.split(RegExp(r'\s+')).where((w) => w.length >= 2).toSet();
+    // Giờ chạm là gom TRỌN tên (nameRunBounds) nên vùng chọn thường khớp nguyên tên →
+    // chỉ cần CHỨA-NHAU, bỏ kiểu khớp theo-từng-chữ cũ (chung 1 chữ "Cảnh" là dính cả rổ).
     bool wordHit(String s) {
       if (s.isEmpty) return false;
       final low = s.toLowerCase();
-      if (low.contains(selLow) || selLow.contains(low)) return true;
-      return low.split(RegExp(r'\s+')).any(selWords.contains);
+      return low.contains(selLow) || selLow.contains(low);
     }
 
-    final terms = ref.read(glossaryProvider(novelId)).value ?? const [];
+    // Gợi ý glossary CHỈ khi vùng chọn trông như TÊN RIÊNG (mọi từ viết hoa) — tên
+    // trong bản Việt viết hoa từng chữ. Cụm thường ("giống như hệ thống") mà khớp lỏng
+    // theo từ sẽ lôi cả rổ thuật ngữ chứa "hệ thống" ra → nhiễu. Chữ Hán sót xử riêng.
+    bool isCap(String w) =>
+        w.isNotEmpty && w[0].toUpperCase() == w[0] && w[0].toLowerCase() != w[0];
+    final nameWords = sel0.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
+    final looksLikeName = nameWords.isNotEmpty && nameWords.every(isCap);
+
+    final terms = looksLikeName
+        ? (ref.read(glossaryProvider(novelId)).value ?? const [])
+        : const <Map<String, dynamic>>[];
     final sug = <Map<String, dynamic>>[];
     for (final tm in terms) {
       final zh = (tm['term_zh'] ?? '').toString();
@@ -833,12 +883,18 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
 
     // Chọn trúng chữ Hán sót trong bản dịch → tra bảng ra thẳng âm Hán-Việt để điền,
     // kể cả khi glossary chưa có term (trước đây chọn chữ Hán là form trơ, không gợi gì).
+    // Nếu vùng chọn là MỘT tên thuần chữ Hán → hiện các CÁCH ĐỌC để bấm chọn (đa âm).
     String? hanFill;
+    String? hanName;
     if (sel0.isNotEmpty) {
-      final filled = sel0.replaceAllMapped(
-          RegExp(r'[㐀-䶿一-鿿]+'),
-          (m) => hanVietOf(m.group(0)!) ?? m.group(0)!);
-      if (filled != sel0) hanFill = filled;
+      if (hanVietOnly.hasMatch(sel0)) {
+        hanName = sel0;
+      } else {
+        final filled = sel0.replaceAllMapped(
+            hanVietRun,
+            (m) => hanVietOf(m.group(0)!) ?? m.group(0)!);
+        if (filled != sel0) hanFill = filled;
+      }
     }
 
     Widget extend(IconData icon, String tip, VoidCallback onTap) => IconButton.filledTonal(
@@ -846,6 +902,19 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
           visualDensity: VisualDensity.compact,
           onPressed: onTap,
           icon: Icon(icon, size: 20),
+        );
+
+    // Chip điền [text] vào ô sửa. alt=true: gợi ý tra-bảng (viền xanh, "tra bảng ⇒").
+    Widget fillChip(String text, {bool alt = false}) => ActionChip(
+          visualDensity: VisualDensity.compact,
+          side: alt ? BorderSide(color: cs.primary.withValues(alpha: 0.6)) : null,
+          label: Text(alt ? 'tra bảng ⇒ $text' : text,
+              style: t.labelMedium?.copyWith(color: alt ? cs.primary : null)),
+          onPressed: () {
+            _correct.text = text;
+            _correct.selection = TextSelection.collapsed(offset: _correct.text.length);
+            _correctFocus.requestFocus();
+          },
         );
 
     return Positioned(
@@ -912,54 +981,27 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
             // gợi ý bản đúng từ glossary (chữ Trung → Hán-Việt) — bấm để điền.
             // Kèm chip "tra bảng ⇒" khi phiên âm Hán-Việt theo bảng KHÁC bản trong
             // glossary — người không biết tiếng Trung vẫn đối chiếu được chuẩn.
-            if (sug.isEmpty && hanFill == null) ...[
+            if (sug.isEmpty && hanFill == null && hanName == null) ...[
               // không có gì để gợi (từ thường, chưa có trong thuật ngữ) — nói rõ
               // thay vì form trơ khiến user tưởng lỗi
               const SizedBox(height: 8),
               Text('Từ này chưa có trong thuật ngữ truyện — gõ thẳng bản đúng bên dưới.',
                   style: t.labelMedium?.copyWith(color: cs.onSurfaceVariant)),
             ],
-            if (sug.isNotEmpty || hanFill != null) ...[
+            if (sug.isNotEmpty || hanFill != null || hanName != null) ...[
               const SizedBox(height: 10),
               Wrap(spacing: 8, runSpacing: 6, children: [
-                if (hanFill case final hf?)
-                  ActionChip(
-                    visualDensity: VisualDensity.compact,
-                    side: BorderSide(color: cs.primary.withValues(alpha: 0.6)),
-                    label: Text('tra bảng ⇒ $hf',
-                        style: t.labelMedium?.copyWith(color: cs.primary)),
-                    onPressed: () {
-                      _correct.text = hf;
-                      _correct.selection =
-                          TextSelection.collapsed(offset: _correct.text.length);
-                      _correctFocus.requestFocus();
-                    },
-                  ),
+                // vùng chọn là tên chữ Hán → hiện các CÁCH ĐỌC để bấm chọn (đa âm ra nhiều)
+                if (hanName case final hn?)
+                  for (final c in hanVietCandidates(hn)) fillChip(c, alt: true),
+                if (hanFill case final hf?) fillChip(hf, alt: true),
                 for (final m in sug) ...[
-                  ActionChip(
-                    visualDensity: VisualDensity.compact,
-                    label: Text('${m['term_zh']} → ${m['correct_vi']}', style: t.labelMedium),
-                    onPressed: () {
-                      _correct.text = '${m['correct_vi']}';
-                      _correct.selection =
-                          TextSelection.collapsed(offset: _correct.text.length);
-                      _correctFocus.requestFocus();
-                    },
-                  ),
-                  if (hanVietOf('${m['term_zh']}') case final hv?
-                      when hv != '${m['correct_vi']}')
-                    ActionChip(
-                      visualDensity: VisualDensity.compact,
-                      side: BorderSide(color: cs.primary.withValues(alpha: 0.6)),
-                      label: Text('tra bảng ⇒ $hv',
-                          style: t.labelMedium?.copyWith(color: cs.primary)),
-                      onPressed: () {
-                        _correct.text = hv;
-                        _correct.selection =
-                            TextSelection.collapsed(offset: _correct.text.length);
-                        _correctFocus.requestFocus();
-                      },
-                    ),
+                  fillChip('${m['correct_vi']}'),
+                  // Cách đọc khác CHỈ hiện khi chọn ĐÚNG tên này (đa âm → nhiều ứng viên);
+                  // khớp lỏng (chung 1 chữ) thì chỉ gợi bản đúng, khỏi xịt cách đọc lung tung.
+                  if ('${m['correct_vi']}'.toLowerCase() == selLow)
+                    for (final c in hanVietCandidates('${m['term_zh']}'))
+                      if (c != '${m['correct_vi']}') fillChip(c, alt: true),
                 ],
               ]),
             ],
@@ -969,7 +1011,11 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
               focusNode: _correctFocus,
               textInputAction: TextInputAction.done,
               onSubmitted: (_) => _submitEdit(wrong),
-              decoration: const InputDecoration(labelText: 'Sửa thành', isDense: true),
+              decoration: const InputDecoration(
+                labelText: 'Bản sửa',
+                helperText: 'Đã điền sẵn từ đang chọn — gõ để thay.',
+                isDense: true,
+              ),
             ),
             const SizedBox(height: 12),
             SizedBox(

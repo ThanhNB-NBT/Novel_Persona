@@ -73,27 +73,33 @@ class SettingsScreen extends ConsumerWidget {
           const _SectionLabel('Thư viện'),
           _TileGroup(children: [
             _Tile(Icons.download_done_rounded, 'Bản offline',
+                subtitle: 'Truyện đã tải để đọc không cần mạng',
                 onTap: () => context.push('/offline')),
           ]),
           if (ref.watch(isAdminProvider).value == true) ...[
             const _SectionLabel('Quản trị'),
             _TileGroup(children: [
               _Tile(Icons.admin_panel_settings_outlined, 'Quản lí',
+                  subtitle: 'Hàng đợi dịch và kho truyện',
                   onTap: () => context.push('/admin')),
-              _Tile(Icons.bug_report_outlined, 'Nhật ký lỗi (app)',
+              _Tile(Icons.bug_report_outlined, 'Nhật ký lỗi',
+                  subtitle: 'Sự cố của ứng dụng và worker',
                   onTap: () => context.push('/errors')),
             ]),
           ],
           const _SectionLabel('Tài khoản'),
           _TileGroup(children: [
             _Tile(Icons.person_outline, 'Sửa thông tin',
+                subtitle: 'Tên hiển thị và ảnh đại diện',
                 onTap: () => context.push('/profile/edit')),
           ]),
           const _SectionLabel('Ứng dụng'),
           _TileGroup(children: [
             _Tile(Icons.menu_book_outlined, 'Hướng dẫn sử dụng',
+                subtitle: 'Mẹo đọc, lưu và yêu cầu dịch',
                 onTap: () => context.push('/guide')),
             _Tile(Icons.system_update_alt_rounded, 'Kiểm tra cập nhật',
+                subtitle: 'Tìm phiên bản mới nhất',
                 onTap: () => _checkUpdate(context, ref)),
           ]),
             ],
@@ -128,9 +134,21 @@ class _ProfileCard extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final initial = name.isNotEmpty ? name.characters.first.toUpperCase() : '?';
     final hasEmoji = avatar != null && avatar!.isNotEmpty;
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
+    return Container(
+      decoration: BoxDecoration(
+        color: cs.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: cs.outlineVariant),
+      ),
+      child: Stack(children: [
+        Positioned(
+          right: -24,
+          top: -38,
+          child: Icon(Icons.auto_stories_rounded,
+              size: 150, color: cs.primary.withValues(alpha: 0.07)),
+        ),
+        Padding(
+          padding: const EdgeInsets.all(18),
         child: Row(children: [
           // avatar phẳng kiểu tech: nền nhấn nhạt + viền 1px, bo vuông mềm (không gradient)
           Container(
@@ -149,8 +167,10 @@ class _ProfileCard extends StatelessWidget {
                         ?.copyWith(color: cs.primary)),
           ),
           const SizedBox(width: 16),
-          Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('THƯ CÁC CỦA BẠN', style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: cs.primary, letterSpacing: 1.2)),
+              const SizedBox(height: 3),
               Text(name, style: Theme.of(context).textTheme.titleLarge, maxLines: 1, overflow: TextOverflow.ellipsis),
               const SizedBox(height: 2),
               Text(email, style: monoStyle(context), maxLines: 1, overflow: TextOverflow.ellipsis),
@@ -162,8 +182,9 @@ class _ProfileCard extends StatelessWidget {
             icon: Icon(Icons.logout_rounded, size: 22, color: cs.error),
             onPressed: onLogout,
           ),
-        ]),
-      ),
+          ]),
+        ),
+      ]),
     );
   }
 }
@@ -195,7 +216,7 @@ class _ReadingPanel extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: cs.surface,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(color: cs.outlineVariant),
       ),
       clipBehavior: Clip.antiAlias, // dải gradient bo theo góc thẻ
@@ -225,7 +246,7 @@ class _ReadingPanel extends StatelessWidget {
             ]),
           ]),
         ),
-        Divider(height: 1, color: cs.outlineVariant),
+        const SizedBox(height: 4),
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 14),
           child: Row(children: [
@@ -251,11 +272,11 @@ class _Segmented extends StatelessWidget {
     // nang chọn TRƯỢT giữa các ô (không nhảy màu từng ô như bản cũ) — cùng ngôn
     // ngữ chuyển động với pill dock.
     return Container(
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(color: cs.surface, borderRadius: BorderRadius.circular(12),
+        padding: const EdgeInsets.all(5),
+        decoration: BoxDecoration(color: cs.surface, borderRadius: BorderRadius.circular(16),
           border: Border.all(color: cs.outlineVariant)),
       child: SizedBox(
-        height: 36,
+        height: 42,
         child: Stack(children: [
           AnimatedAlign(
             duration: const Duration(milliseconds: 260),
@@ -268,7 +289,7 @@ class _Segmented extends StatelessWidget {
               child: DecoratedBox(
                 decoration: BoxDecoration(
                   color: cs.primary,
-                  borderRadius: BorderRadius.circular(9),
+                  borderRadius: BorderRadius.circular(12),
                 ),
               ),
             ),
@@ -304,9 +325,8 @@ class _SectionLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    // không vạch nhấn — chỉ header trang có (rải nhiều là loãng)
     return Padding(
-      padding: const EdgeInsets.fromLTRB(4, 22, 0, 10),
+      padding: const EdgeInsets.fromLTRB(4, 26, 0, 10),
       child: Text(text.toUpperCase(),
           style: Theme.of(context).textTheme.labelSmall?.copyWith(
               letterSpacing: 1.5, color: cs.primary)),
@@ -328,17 +348,10 @@ class _TileGroup extends StatelessWidget {
       color: cs.surface,
       clipBehavior: Clip.antiAlias,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(20),
         side: BorderSide(color: cs.outlineVariant),
       ),
-      child: Column(children: [
-        for (var i = 0; i < children.length; i++) ...[
-          if (i > 0)
-            Divider(height: 1, thickness: 1, indent: 52,
-                color: cs.outlineVariant.withValues(alpha: 0.6)),
-          children[i],
-        ],
-      ]),
+      child: Column(children: children),
     );
   }
 }
@@ -346,17 +359,30 @@ class _TileGroup extends StatelessWidget {
 class _Tile extends StatelessWidget {
   final IconData icon;
   final String label;
+  final String? subtitle;
   final VoidCallback onTap;
-  const _Tile(this.icon, this.label, {required this.onTap});
+  const _Tile(this.icon, this.label, {this.subtitle, required this.onTap});
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     return ListTile(
-      dense: true,
-      visualDensity: const VisualDensity(vertical: 1),
-      leading: Icon(icon, size: 21, color: cs.onSurfaceVariant),
-      title: Text(label, style: Theme.of(context).textTheme.bodyLarge),
-      trailing: Icon(Icons.chevron_right, size: 18, color: cs.onSurfaceVariant),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+      leading: Container(
+        width: 38, height: 38,
+        decoration: BoxDecoration(color: cs.primaryContainer.withValues(alpha: 0.55),
+            borderRadius: BorderRadius.circular(12)),
+        child: Icon(icon, size: 20, color: cs.primary),
+      ),
+      title: Text(label, style: Theme.of(context).textTheme.titleMedium),
+      subtitle: subtitle == null ? null : Text(subtitle!,
+          maxLines: 1, overflow: TextOverflow.ellipsis,
+          style: Theme.of(context).textTheme.bodySmall),
+      trailing: Container(
+        width: 28, height: 28,
+        decoration: BoxDecoration(color: cs.surface,
+            shape: BoxShape.circle, border: Border.all(color: cs.outlineVariant)),
+        child: Icon(Icons.chevron_right_rounded, size: 18, color: cs.onSurfaceVariant),
+      ),
       onTap: onTap,
     );
   }
