@@ -204,6 +204,12 @@ def main() -> None:
     assert _clean_title("Đại Ngốc，đi thôi") == "Đại Ngốc, đi thôi"
     assert _clean_title("quảng trường nguy cấp") == "Quảng trường nguy cấp"
     assert _clean_title("“Kiếm Đao” bùng nổ") == "“Kiếm Đao” bùng nổ"  # cặp đủ → giữ
+    # Ngoặc BỌC TRỌN tiêu đề vẫn là vỏ → gỡ (phân biệt với ca ngay trên).
+    assert _clean_title("“Kiếm Đao”") == "Kiếm Đao"
+    # Nhiều cặp cân đối nằm giữa cũng phải giữ nguyên.
+    assert _clean_title("“Lôi” và “Hoả”") == "“Lôi” và “Hoả”"
+    # Lệch vế thì vẫn phải xoá sạch như cũ, kể cả khi vế lẻ nằm ở đầu.
+    assert _clean_title("“Mẫn Diệt Lôi Quang! Mẫn diệt") == "Mẫn Diệt Lôi Quang! Mẫn diệt"
     # tiêu đề "第x章..." phải được bóc số chương trước khi vào prompt
     from novelworker.translator.worker import TITLE_CHAPTER_PREFIX
     assert TITLE_CHAPTER_PREFIX.sub("", "第158章“引灭雷光”！").strip() == "“引灭雷光”！"
