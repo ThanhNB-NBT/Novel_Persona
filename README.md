@@ -1,7 +1,11 @@
-# Novel Reader — Backend P0
+# Novel Reader — Backend
 
 Ứng dụng đọc tiểu thuyết mạng Trung → Việt. Repo này chứa schema Supabase + worker crawl/dịch.
 Kế hoạch tổng thể: xem `docs/ke-hoach.md`.
+
+**Dịch:** engine mặc định là **Hachimi** (model CT2 60M chạy local trên worker, không tốn token);
+LLM chỉ dùng khi truyện được ghim provider hoặc khi Hachimi fallback. Script/dataset
+fine-tune model Hachimi nằm ở `worker/hachimi_finetune/` (không đi kèm production).
 
 ```
 supabase/migrations/   # schema + RLS + RPC (001 gốc, 002+ là migration tuần tự)
@@ -51,7 +55,10 @@ python -m novelworker.main translate   # terminal 2: dịch
 python -m novelworker.main add --book-id 59979         # trong Docker: docker compose exec crawler python -m novelworker.main add --book-id 59979
 python -m novelworker.main request --novel 1 --up-to 10  # giả lập app bấm "Đọc" (không cần app/auth)
 python -m novelworker.main cost                          # thống kê token LLM đã dùng
+python -m novelworker.main redich --novel 1 --engine hachimi  # dịch lại chương đã done bằng engine khác
 ```
+
+Các lệnh khác: `audit`, `quality`, `meta` (xem `python -m novelworker.main -h`).
 
 `request` xếp chương vào hàng đợi → crawler tải `content_zh` → translator dịch;
 theo dõi cột `translation_status` (`queued → translating → done`) trong bảng
@@ -70,6 +77,7 @@ Test app Flutter: `cd app && flutter test`.
 Đa nguồn, cấu hình trong bảng `sources` (DB) — adapter theo *khuôn* (template):
 
 - `biquge` (`crawler/biquge.py`) — đang chạy nguồn **shuhaige** (www.shuhaige.net).
+- `xinbiquge` (`crawler/biquge.py`) — nguồn **xsbique**.
 - `dingdian` (`crawler/dingdian.py`) — nguồn **ddxs** (www.dingdian-xiaoshuo.com).
 - Thêm nguồn cùng khuôn = 1 dòng INSERT vào `sources`. Khuôn mới = viết adapter kế
   thừa `SourceAdapter` (`crawler/base.py`) + đăng ký vào `crawler/registry.py`.
@@ -117,6 +125,9 @@ flutter run --release --dart-define-from-file=.env
 Lệnh trên build + cài + mở app luôn; rút cáp thoải mái, app nằm lại máy như cài từ store.
 (Nhiều thiết bị thì thêm `-d <device-id>`. Chỉ muốn lấy file APK: `flutter build apk --release --dart-define-from-file=.env` → `build/app/outputs/flutter-apk/app-release.apk`.)
 
+**Không muốn cắm USB** (bật USB debugging làm app ngân hàng chặn): xem
+`app/ANDROID_WIFI_DEBUG.md` — chạy `flutter run` qua Wireless debugging cùng Wi-Fi.
+
 **iPhone**: xem `app/IPHONE.md` — build IPA bằng GitHub Actions (workflow "iOS unsigned IPA",
 bấm Run workflow trên tab Actions) rồi cài qua SideStore.
 
@@ -124,6 +135,8 @@ Tài khoản demo: xem `worker/seed_users.py` (đăng ký trong app đã tắt).
 Tài khoản admin có màn **Quản trị** trong Cài đặt: thống kê kho, hàng đợi worker,
 tìm/ẩn/xoá truyện, sức khỏe model LLM, báo cáo lỗi từ người đọc.
 
-## 6. Tiếp theo
+## 6. Vận hành thực tế
 
-- Worker chạy trên máy cá nhân là đủ; muốn 24/7 thì deploy Railway/Fly.io (2 process: crawl + translate).
+- Worker production chạy trên VPS (Docker Compose, `restart: unless-stopped`); cập nhật bằng `git pull` + rebuild.
+- Model Hachimi CT2 đặt ở `worker/models/hachimi-ct2/` trên host (gitignored), mount read-only vào container translator.
+- Backup DB: cron trên VPS `pg_dump` Supabase → giữ bản trên đĩa VPS + đẩy lên R2.
