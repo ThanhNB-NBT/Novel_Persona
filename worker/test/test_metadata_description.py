@@ -1,9 +1,9 @@
 """Mô tả truyện: bỏ rác nguồn trước khi dịch, và dịch bằng engine của truyện."""
-from novelworker.translator.worker import _DESC_JUNK
+from novelworker.translator.worker import _DESC_JUNK, _DESC_TAIL
 
 
 def strip(text: str) -> str:
-    return _DESC_JUNK.sub("", text).strip()
+    return _DESC_TAIL.sub("", _DESC_JUNK.sub("", text)).strip().rstrip("…. ")
 
 
 def test_bo_khoi_tieu_de_tac_gia_gioi_thieu():
@@ -13,6 +13,12 @@ def test_bo_khoi_tieu_de_tac_gia_gioi_thieu():
 
 def test_bo_loi_keu_goi_va_link():
     assert strip("本书又名《大佬》 剧情很好 求收藏求推荐 https://x.com/a") == "剧情很好"
+
+
+def test_cat_duoi_danh_sach_truyen_goi_y():
+    # 2.616/5.388 mô tả trong kho có đuôi "小说推荐：..." — dịch cả đống đó chỉ tổ rác.
+    raw = "林浩拥有五行灵根，最终成为绝世仙帝。...《五行仙帝》小说推荐：烟雨楼、凡人修仙记、开局一张混沌符"
+    assert strip(raw) == "林浩拥有五行灵根，最终成为绝世仙帝。"
 
 
 def test_giu_nguyen_mo_ta_sach():

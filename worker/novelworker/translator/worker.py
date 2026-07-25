@@ -903,6 +903,12 @@ _DESC_JUNK = re.compile(
     r"^\s*《{1,2}[^》]*》{1,2}\s*作者\s*[:：][^,，\n]*[,，]?\s*(?:简介\s*[:：])?"
     r"|本书又名\s*《[^》]*》|本书又名[^\s，,。]*|求(?:收藏|推荐|月票|订阅)|https?://\S+"
 )
+# Đuôi rác: nguồn nhét danh sách truyện gợi ý vào cuối mô tả (2.616/5.388 truyện có
+# "小说推荐"). Cắt từ dấu hiệu đầu tiên tới hết — dịch cả đống đó chỉ tổ rác trang truyện.
+_DESC_TAIL = re.compile(
+    r"(?:《[^》]*》\s*)?(?:小说推荐|推荐小说|相关推荐|同类推荐|猜你喜欢|热门推荐|精彩推荐|为您推荐"
+    r"|书友还看|最新章节|全文阅读|无弹窗|请记住|手机阅读|本站)[\s\S]*$"
+)
 
 
 def _translate_description_hachimi(description_zh: str, terms: list[dict]) -> str | None:
@@ -913,7 +919,8 @@ def _translate_description_hachimi(description_zh: str, terms: list[dict]) -> st
     """
     from . import hachimi_engine, termguard
 
-    source = clean_source(_DESC_JUNK.sub("", description_zh or "").strip())
+    stripped = _DESC_TAIL.sub("", _DESC_JUNK.sub("", description_zh or "")).strip()
+    source = clean_source(stripped.rstrip("…. "))
     if not source:
         return None
     vi = termguard.translate_text(source, terms, hachimi_engine.translate_text)
