@@ -911,70 +911,19 @@ _DESC_TAIL = re.compile(
 )
 
 
-def _translate_description_hachimi(description_zh: str, terms: list[dict]) -> str | None:
-    """Mô tả dịch bằng chính engine đang dịch truyện — giữ đúng giọng ta/ngươi.
-
-    Đo 25/07 trên 3 truyện: bản LLM ra "Cho tôi làm điệp viên?… các anh", bản Hachimi ra
-    "Để ta làm gián điệp?… các ngươi". Mô tả hiện ngay trang truyện nên lệch giọng thấy liền.
-    """
-    from . import hachimi_engine, termguard
-
-    stripped = _DESC_TAIL.sub("", _DESC_JUNK.sub("", description_zh or "")).strip()
-    source = clean_source(stripped.rstrip("…. "))
-    if not source:
-        return None
-    vi = termguard.translate_text(source, terms, hachimi_engine.translate_text)
-    vi = _clean_output(vi)
-    vi, _ = _hanviet_fallback(vi)
-    return _fix_register(_fix_soft_style(vi)).strip() or None
-
-
-def _translate_metadata_hachimi(novel: dict, terms: list[dict]) -> dict | None:
-    """Dịch toàn bộ metadata bằng engine của truyện — không gọi LLM lượt nào.
-
-    Tiêu đề trước đây để LLM vì luật "phiên âm trọn cụm hay dịch nghĩa" là phán đoán;
-    nhưng đo thật thì LLM cũng lệch (镇守仙秦 → "Thần Thất Trấn Phủ") và còn để sót chữ
-    Hán giữa tên. Hachimi + bảng Hán-Việt cho kết quả ổn định hơn và không tốn lượt gọi.
-    Tác giả tra bảng, thể loại theo map cố định — hai thứ đó vốn đã không cần model.
-    """
-    from . import hachimi_engine, termguard
-
-    if not hachimi_engine.available():
-        return None
-    title_zh = TITLE_CHAPTER_PREFIX.sub("", (novel.get("title_zh") or "")).strip()
-    title_vi = None
-    if title_zh:
-        raw = termguard.translate_text(clean_source(title_zh), terms, hachimi_engine.translate_text)
-        title_vi = _clean_title(_clean_output(raw))
-        if title_vi and HAN_CHARS.search(title_vi):
-            title_vi = hanviet.han_viet(title_zh) or _hanviet_fallback(title_vi)[0]
-    author_zh = (novel.get("author_zh") or "").strip()
-    author_vi = hanviet.han_viet(author_zh) if author_zh and HAN_CHARS.search(author_zh) else author_zh or None
-    return {
-        "title_vi": title_vi,
-        "author_vi": author_vi,
-        "description_vi": _translate_description_hachimi(novel.get("description_zh"), terms),
-    }
+def strip_desc_junk(description_zh: str | None) -> str:
+    """Bỏ rác nguồn đầu/đuôi mô tả trước khi đưa vào prompt — đỡ token, đỡ dịch rác."""
+    return _DESC_TAIL.sub("", _DESC_JUNK.sub("", description_zh or "")).strip().rstrip("…. ")
 
 
 def handle_metadata(job: dict, llm) -> None:
     novel = db.sb().table("novels").select("*").eq("id", job["novel_id"]).single().execute().data
     terms, _ = db.get_glossary(novel["id"])  # dịch lại metadata → tên khớp glossary đã tích lũy
-    engine = novel.get("translation_provider") or settings.default_engine
-    if engine == "hachimi":
-        done = _translate_metadata_hachimi(novel, terms)
-        if done and done.get("title_vi"):
-            db.sb().table("novels").update({
-                "title_vi": done["title_vi"] or novel.get("title_vi"),
-                "author_vi": done["author_vi"] or novel.get("author_vi"),
-                "description_vi": done["description_vi"] or novel.get("description_vi"),
-                "genres": _map_genres(novel.get("genres")) or novel.get("genres"),
-                "meta_translated": True,
-                "updated_at": db.utc_now(),
-            }).eq("id", novel["id"]).execute()
-            log.info("Đã dịch metadata truyện %s bằng Hachimi: %s", novel["id"], done["title_vi"])
-            return
-        log.warning("Hachimi không dịch được metadata truyện %s — lùi về LLM", novel["id"])
+    # Metadata luôn đi LLM kể cả truyện dịch bằng Hachimi: tên truyện cần phán đoán
+    # "phiên âm trọn cụm hay dịch nghĩa", mô tả cần văn bìa sách — cả hai ngoài tầm model 60M.
+    # Giọng ta/ngươi ép bằng luật xưng hô trong SYSTEM_METADATA.
+    novel = {**novel, "title_zh": TITLE_CHAPTER_PREFIX.sub("", (novel.get("title_zh") or "")).strip(),
+             "description_zh": strip_desc_junk(novel.get("description_zh"))}
     res = llm.complete(prompts.SYSTEM_METADATA, prompts.build_metadata_user(novel, terms), max_tokens=2048)
     data = _extract_json(res.text)
     # Metadata trước đây ghi thẳng JSON model trả nên title/mô tả có chữ Hán lọt không qua
@@ -983,9 +932,11 @@ def handle_metadata(job: dict, llm) -> None:
         if isinstance(value, str):
             return _fix_han_residue(llm, value, terms)
         return value
-    title_vi = clean(data.get("title_vi")) or novel.get("title_vi")
+    title_vi = _clean_title(clean(data.get("title_vi")) or "") or novel.get("title_vi")
     author_vi = clean(data.get("author_vi")) or novel.get("author_vi")
-    description_vi = clean(data.get("description_vi")) or novel.get("description_vi")
+    # cùng lưới vá đại từ như chương: prompt ép ta/ngươi, cái này bắt "cô ấy/anh ta" sót
+    desc = clean(data.get("description_vi"))
+    description_vi = _fix_register(desc).strip() if desc else novel.get("description_vi")
     genres = _map_genres(novel.get("genres")) or novel.get("genres")
     # JSON parse được nhưng thiếu field → GIỮ giá trị cũ, không ghi đè None (meta_translated
     # set True ngay dưới nên không tự dịch lại — ghi None là mất trắng tên đang có)

@@ -64,21 +64,25 @@ Trả về DUY NHẤT một JSON object, không giải thích, không văn bản
 type ∈ person|place|sect|item|skill|other. Không có tên riêng → "terms": [].
 """
 
-SYSTEM_METADATA = """Bạn là biên tập viên truyện dịch kỳ cựu. Dịch metadata truyện Trung sau sang tiếng Việt cho độc giả Việt.
+SYSTEM_METADATA = """Bạn là biên tập viên truyện dịch kỳ cựu. Dịch metadata truyện Trung sang tiếng Việt cho độc giả Việt.
 
-- title_vi: dịch như tên truyện xuất bản ở VN — ngắn, êm tai, gợi đúng chất truyện.
-  · LUẬT CỨNG: KHÔNG nửa dịch nghĩa nửa phiên âm trong CÙNG một tên. Cả cụm phải NHẤT QUÁN — hoặc phiên âm Hán-Việt trọn cụm, hoặc dịch nghĩa trọn cụm. Sai điển hình: 赤心巡天 → "Tâm Đỏ Tuần Thiên" (nửa nghĩa "Tâm Đỏ" + nửa âm "Tuần Thiên"); ĐÚNG → "Xích Tâm Tuần Thiên" (phiên âm trọn).
-  · Tu tiên/tiên hiệp/huyền huyễn/cổ đại/kiếm hiệp → MẶC ĐỊNH phiên âm Hán-Việt TRỌN cụm, kể cả chữ mang nghĩa (凡人修仙传 → "Phàm Nhân Tu Tiên", 斗破苍穹 → "Đấu Phá Thương Khung", 遮天 → "Già Thiên", 赤心巡天 → "Xích Tâm Tuần Thiên"). Chỉ dịch nghĩa khi cụm Hán-Việt nghe quá trúc trắc/vô nghĩa với độc giả.
-  · Đô thị/hệ thống/võng du hiện đại → dịch NGHĨA tự nhiên (全民领主 → "Toàn Dân Lãnh Chúa" hoặc "Thời Đại Lãnh Chúa" tùy cái nào xuôi hơn); tránh chuỗi Hán-Việt trúc trắc khó hiểu.
-  · Phần tên gốc Latin/tiếng Anh giữ nguyên (vd "Dragon Raja"). KHÔNG dịch word-by-word tối nghĩa.
-- author_vi: phiên âm Hán-Việt.
-- description_vi: dịch thoáng, mượt như lời giới thiệu bìa sách; giữ ngắt đoạn; BỎ rác nguồn ("本书又名...", "求收藏/求推荐/求月票", link, tag site, số liệu điểm/click). Không tự thêm cảm thán, slogan hoặc lời kêu gọi đọc truyện khi gốc không có.
-- Tên riêng trong title/description: tên Trung → phiên âm Hán-Việt; tên ngoại quốc viết bằng chữ Hán → dạng Latin thông dụng (安娜→Anna, 汉森→Hansen), KHÔNG phiên âm Hán-Việt, KHÔNG phiên âm gạch nối ("An-đê-ri-an", "Héc-nơ" là SAI). Có bảng thuật ngữ kèm theo thì tên phải dịch ĐÚNG theo bảng.
-- genres_vi: thuật ngữ quen thuộc (玄幻→Huyền huyễn, 都市→Đô thị, 修真/仙侠→Tiên hiệp, 言情→Ngôn tình, 网游→Võng du, 系统→Hệ thống, 无限流→Vô hạn lưu...).
-- Không để nguyên ký tự Hán trong bất kỳ giá trị nào. Nếu không chắc một tên riêng, phiên âm Hán-Việt nhất quán thay vì chép nguyên chữ Hán.
+title_vi — tên truyện như bản xuất bản ở VN: ngắn, êm tai, đúng chất truyện.
+- LUẬT CỨNG: cả cụm NHẤT QUÁN — phiên âm Hán-Việt trọn cụm HOẶC dịch nghĩa trọn cụm, không nửa nọ nửa kia. Sai: 赤心巡天 → "Tâm Đỏ Tuần Thiên"; đúng: "Xích Tâm Tuần Thiên".
+- Tu tiên/tiên hiệp/huyền huyễn/cổ đại/kiếm hiệp: MẶC ĐỊNH phiên âm Hán-Việt trọn cụm, kể cả chữ mang nghĩa (凡人修仙传 → "Phàm Nhân Tu Tiên", 斗破苍穹 → "Đấu Phá Thương Khung", 遮天 → "Già Thiên"). Chỉ dịch nghĩa khi cụm Hán-Việt quá trúc trắc/vô nghĩa.
+- Đô thị/hệ thống/võng du hiện đại: dịch nghĩa tự nhiên (全民领主 → "Toàn Dân Lãnh Chúa").
+- Phần vốn là Latin/tiếng Anh giữ nguyên ("Dragon Raja"). Không dịch word-by-word tối nghĩa.
+
+author_vi — phiên âm Hán-Việt.
+
+description_vi — lời giới thiệu bìa sách: dịch thoáng, mượt, giữ ngắt đoạn, không thêm cảm thán/slogan/lời kêu gọi đọc truyện mà gốc không có.
+- Xưng hô phải KHỚP bản dịch chương (phong cổ): lời kể ngôi ba nam "hắn", nữ "nàng"; thoại/độc thoại mặc định "ta – ngươi", giữ vai vế khi có (bổn tọa, tại hạ, tiền bối...). CẤM trộn tôi/anh/em/cậu vào lời kể. Sai điển hình: "Cho tôi làm điệp viên?… các anh"; đúng: "Để ta làm gián điệp?… các ngươi".
+- Câu ngắn theo nhịp Việt; một câu Trung dài nhiều dấu phẩy thường tách thành hai câu Việt.
+
+Tên riêng (cả title lẫn description): tên Trung → phiên âm Hán-Việt trọn cụm, viết hoa từng âm; tên ngoại quốc viết bằng chữ Hán → dạng Latin thông dụng (安娜→Anna, 汉森→Hansen), KHÔNG phiên âm Hán-Việt, KHÔNG gạch nối ("An-đê-ri-an" là SAI). Có bảng thuật ngữ kèm theo thì phải theo ĐÚNG bảng.
+Không để sót ký tự Hán trong bất kỳ giá trị nào; không chắc thì phiên âm Hán-Việt nhất quán.
 
 Trả về DUY NHẤT một JSON object, không giải thích:
-{"title_vi": "...", "author_vi": "...", "description_vi": "...", "genres_vi": ["..."]}"""
+{"title_vi": "...", "author_vi": "...", "description_vi": "..."}"""
 
 def build_style_line(style: dict | None) -> str | None:
     """Nén style bible JSON thành một dòng chỉ thị cho prompt dịch."""

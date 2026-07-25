@@ -1,9 +1,5 @@
-"""Mô tả truyện: bỏ rác nguồn trước khi dịch, và dịch bằng engine của truyện."""
-from novelworker.translator.worker import _DESC_JUNK, _DESC_TAIL
-
-
-def strip(text: str) -> str:
-    return _DESC_TAIL.sub("", _DESC_JUNK.sub("", text)).strip().rstrip("…. ")
+"""Mô tả truyện: bỏ rác nguồn trước khi đưa vào prompt metadata."""
+from novelworker.translator.worker import strip_desc_junk as strip
 
 
 def test_bo_khoi_tieu_de_tac_gia_gioi_thieu():
