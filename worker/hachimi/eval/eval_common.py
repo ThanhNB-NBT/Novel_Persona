@@ -1,0 +1,58 @@
+"""Tiện ích dùng chung cho mọi harness đánh giá Hachimi.
+
+Trước đây nằm rải trong `evaluate_hachimi_vnext_ab.py` (so ứng viên A–E, các model đó đã
+bị loại và xoá). Giữ lại đúng phần còn dùng: đường dẫn eval khoá, chỉ báo similarity,
+kiểm ngoặc kép và đọc glossary approved.
+"""
+from __future__ import annotations
+
+import re
+from difflib import SequenceMatcher
+from pathlib import Path
+
+from novelworker import db
+
+
+HUB = Path(__file__).resolve().parents[1]
+WORKER = Path(__file__).resolve().parents[2]
+MODELS_DIR = WORKER / "models"
+EVAL = HUB / "data" / "eval_locked" / "eval_reference_60.jsonl"
+EVAL_GAME = HUB / "data" / "eval_locked" / "eval_game_english_locked.jsonl"
+EVAL_CHAPTERS = HUB / "data" / "eval_locked" / "hachimi_vnext_e_fullchapters.jsonl"
+QUOTE_PAIRS = (("“", "”"), ("「", "」"), ("『", "』"))
+
+
+def similarity(reference: str, output: str) -> float:
+    normalize = lambda text: re.sub(r"\s+", "", text).lower()
+    return SequenceMatcher(None, normalize(reference), normalize(output), autojunk=False).ratio()
+
+
+def balanced_quotes(text: str) -> bool:
+    return (
+        text.count('"') % 2 == 0
+        and all(text.count(left) == text.count(right) for left, right in QUOTE_PAIRS)
+    )
+
+
+def load_terms(novel_id: int) -> list[dict]:
+    """Chỉ đọc term đã duyệt; không gọi get_glossary vì hàm đó có thể lành hóa và ghi DB."""
+    return (
+        db.sb().table("glossary_terms")
+        .select("term_zh,correct_vi,wrong_vi,term_type,approved")
+        .eq("approved", True)
+        .or_(f"novel_id.eq.{novel_id},novel_id.is.null")
+        .execute().data
+        or []
+    )
+
+
+def self_check() -> None:
+    assert similarity("Ta đi.", "Ta đi!") >= 0.8
+    assert balanced_quotes("“Được.”") and balanced_quotes('"Được."')
+    assert not balanced_quotes("“Hỏng.") and not balanced_quotes('"Hỏng.')
+    assert EVAL.is_file() and EVAL_GAME.is_file() and EVAL_CHAPTERS.is_file()
+    print("eval_common OK")
+
+
+if __name__ == "__main__":
+    self_check()

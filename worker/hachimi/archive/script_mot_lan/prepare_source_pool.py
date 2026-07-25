@@ -53,7 +53,7 @@ def domain_for_title(title: str) -> str:
 
 
 def restored_rows() -> list[dict[str, str]]:
-    path = ROOT / "dataset_game" / "raw_zh.jsonl"
+    path = Path(__file__).with_name("dataset") / "raw_zh.jsonl"
     rows: list[dict[str, str]] = []
     for line in path.read_text(encoding="utf-8").splitlines():
         row = json.loads(line)

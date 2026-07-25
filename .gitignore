@@ -75,17 +75,15 @@ worker/corpus_translation/
 # Qoder IDE agent
 .qoder/
 
-# Artifact model (nhi phan lon) va goi model tai ve
-hachimi-game-v3/
+# Goi model tai ve / artifact nen (nhi phan lon)
 *.zip
 
-# Data goc / corpus finetune — de o may, khong commit vao repo
-dataset_game/
-worker/hachimi_finetune/*.jsonl
-worker/hachimi_finetune/*.jsonl.bak*
-worker/hachimi_finetune/*.bak*
-worker/hachimi_finetune/review_queue/
-worker/hachimi_finetune/_kaggle_upload/*.jsonl
+# Data goc / corpus finetune — de o may, khong commit vao repo.
+# Hub hachimi/: theo doi script + tai lieu + bao cao, bo qua data va goi zip.
+worker/hachimi/data/
+worker/hachimi/packs/
+worker/hachimi/**/*.jsonl
+worker/hachimi/**/*.bak*
 
 # Model CT2 Hachimi cho worker (nhi phan, khong commit)
 worker/models/
