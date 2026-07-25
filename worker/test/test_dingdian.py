@@ -30,6 +30,30 @@ def main() -> None:
     assert m.cover_url and "book_images" in m.cover_url
     assert m.description_zh == "不求名\n只求飞升", repr(m.description_zh)  # br → \n, hết &lt;
 
+    # quanben5: cùng khuôn URL nhưng KHÔNG có <title>《》 → rơi về <h1> + span.author,
+    # và nguồn này CÓ lộ 类别/状态 (ddxs thì không) → status/genres phải đọc ra.
+    a._get = lambda p: (
+        "<title>异世邪君 - 全本小说网</title>"
+        "<h1>异世邪君</h1>"
+        '<p class="info">作者: <span class="author">风凌天下</span></p>'
+        '<p class="info">类别: <span>玄幻</span></p>'
+        '<p class="info">状态: <span>完结</span></p>'
+        '<img src="https://img.x/upload/book_images/1/5.jpg" />'
+    )
+    q = a.fetch_novel_meta("yishixiejun")
+    assert q.title_zh == "异世邪君" and q.author_zh == "风凌天下", (q.title_zh, q.author_zh)
+    assert q.status == "completed" and q.genres_zh == ["玄幻"], (q.status, q.genres_zh)
+    assert q.cover_url and "book_images" in q.cover_url
+
+    # ddxs KHÔNG lộ trạng thái → vẫn phải giữ 'ongoing', đừng để nhánh trên rò sang
+    a._get = lambda p: novel_html
+    assert a.fetch_novel_meta("niwen_2").status == "ongoing"
+
+    # fetch_latest: nhận slug có gạch ngang + tựa bọc <span> (2 nét riêng của quanben5)
+    a._get = lambda p: '<h3><a href="/n/duoai-shi_xin/"><span>多爱是心</span></a></h3>'
+    got = a.fetch_latest(limit=5)
+    assert [(x.source_novel_id, x.title_zh) for x in got] == [("duoai-shi_xin", "多爱是心")], got
+
     # mục lục: block "mới nhất" (đảo) ở trên + list đầy đủ dưới; dedupe GIỮ lần cuối
     # (lần trong list đầy đủ) → thứ tự 1→N đúng.
     list_html = (

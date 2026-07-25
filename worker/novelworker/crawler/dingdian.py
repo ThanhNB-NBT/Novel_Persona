@@ -76,7 +76,12 @@ class DingdianAdapter(SourceAdapter):
                 except Exception:
                     active.discard(base_path)
                     continue
-                found = re.findall(r'/n/([a-z0-9_]+)/"[^>]*>([^<]{2,40})<', html)
+                # 2 chỗ lệch giữa ddxs và quanben5, nhận cả hai để 1 khuôn phục vụ 2 nguồn:
+                #   slug có gạch ngang (quanben5 'duoai-shixin…', ddxs chỉ gạch dưới)
+                #   tựa bọc trong <span> (quanben5 <h3><a…><span>Tên</span>) — giống
+                #   fetch_chapter_list đã xử lý sẵn.
+                found = re.findall(
+                    r'/n/([a-z0-9_-]+)/"[^>]*>(?:<span[^>]*>)?([^<]{2,40})<', html)
                 if not found:
                     active.discard(base_path)
                     continue
@@ -90,6 +95,12 @@ class DingdianAdapter(SourceAdapter):
                         source_url=f"{self.base_url}{self._novel_url(slug)}",
                         title_zh=unescape(title).strip(),
                     ))
+                if not batch:
+                    # Trang có link nhưng KHÔNG có slug mới = nguồn bỏ qua tham số trang
+                    # và trả lại trang 1 mãi. Không loại path ở đây thì `found` luôn khác
+                    # rỗng → vòng while tăng số trang vô tận, treo crawler mà không báo lỗi.
+                    active.discard(base_path)
+                    continue
                 batches.append(batch)
                 time.sleep(0.5)  # lịch sự với nguồn
             for group in zip_longest(*batches):
@@ -105,9 +116,22 @@ class DingdianAdapter(SourceAdapter):
         html = self._get(self._novel_url(source_novel_id))
         # <title>《逆问》小洛儿 - 顶点小说网
         mt = re.search(r"<title>《([^》]+)》\s*([^\s<-]+)", html)
-        if not mt:
-            raise ValueError(f"Không parse được truyện {source_novel_id} ({self.name}) — đổi cấu trúc?")
-        title, author = mt.group(1).strip(), mt.group(2).strip()
+        status, genres = "ongoing", []
+        if mt:
+            title, author = mt.group(1).strip(), mt.group(2).strip()
+        else:
+            # quanben5 cùng khuôn URL nhưng trang truyện khác hẳn: tựa ở <h1>, tác giả
+            # /类别/状态 nằm trong <span> có nhãn — nguồn này CÓ lộ trạng thái, khác ddxs.
+            mh = re.search(r"<h1[^>]*>([^<]+)</h1>", html)
+            ma = re.search(r'<span class="author">([^<]+)</span>', html)
+            if not mh:
+                raise ValueError(
+                    f"Không parse được truyện {source_novel_id} ({self.name}) — đổi cấu trúc?")
+            title, author = mh.group(1).strip(), ma.group(1).strip() if ma else None
+            mg = re.search(r"类别:\s*<span>([^<]+)</span>", html)
+            genres = [mg.group(1).strip()] if mg else []
+            ms = re.search(r"状态:\s*<span>([^<]+)</span>", html)
+            status = "completed" if ms and ms.group(1).strip() in ("完结", "完本") else "ongoing"
         # <meta name="description" content="《X》作者:A,简介:...">; nội dung bị escape 2 lần
         # (&amp;lt;br /&amp;gt;) → unescape 2 lượt rồi bỏ tag còn lại.
         desc = None
@@ -126,8 +150,8 @@ class DingdianAdapter(SourceAdapter):
             author_zh=author,
             cover_url=mc.group(1) if mc else None,
             description_zh=desc,
-            genres_zh=[],
-            status="ongoing",  # ddxs không lộ trạng thái ở trang truyện
+            genres_zh=genres,
+            status=status,  # ddxs không lộ trạng thái ở trang truyện → giữ 'ongoing'
         )
 
     def fetch_chapter_list(self, source_novel_id: str) -> list[ChapterRef]:

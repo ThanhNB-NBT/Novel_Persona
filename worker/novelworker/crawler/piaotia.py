@@ -81,6 +81,10 @@ class PiaotiaAdapter(SourceAdapter):
         if not title:
             raise ValueError(f"Không parse được tên truyện {self.name} cho {source_novel_id}")
         ma = re.search(r"作\s*者[：:]\s*([^<\n,，]+)", html)
+        if not ma:
+            # trang thật không có nhãn "作者："; tác giả nằm trong <title> dạng
+            # "Tên最新章节,<Tác giả>作品选-飘天文学" (kiểm chứng live 2026-07-25).
+            ma = re.search(r"[,，]\s*([^,，<]+?)作品选", html)
         author = unescape(ma.group(1)).strip() if ma else None
         mc = re.search(r'<img[^>]+src="([^"]+/files/article/image/[^"]+)"', html)
         return NovelMeta(
@@ -121,13 +125,25 @@ class PiaotiaAdapter(SourceAdapter):
         book_id, _, cid = source_chapter_id.rpartition("/")
         html = self._get(self._chapter_url(book_id, cid))
         m = re.search(r'<div[^>]*id="content"[^>]*>(.*?)</div>', html, re.S)
-        if not m:
-            # piaotia thô: nội dung nằm ngay sau </h1>, trước footer/script/bảng.
-            m = re.search(r"</h1>(.*?)(?:<div|<script|<table|</body>)", html, re.S)
-        if not m:
-            raise ValueError(
-                f"Không thấy nội dung chương {source_chapter_id} ({self.name}) — đổi cấu trúc?")
-        raw = re.sub(r"</p\s*>|<br\s*/?>", "\n", m.group(1), flags=re.I)
+        if m:
+            seg = m.group(1)
+        else:
+            # piaotia thô: chữ nằm trần giữa </H1> và <div class="bottomlink">, KHÔNG có
+            # thẻ bọc. Chú ý 2 điểm chỉ lộ ra khi chạy live (2026-07-25):
+            #   * trang viết </H1> HOA → bắt buộc re.I
+            #   * ngay sau </H1> là khối điều hướng (div.toplink + table script chọn
+            #     màu nền) rồi mới tới chữ → cắt tới bottomlink rồi BÓC khối đó ra,
+            #     cắt ở '<div' đầu tiên thì chỉ nhặt được chuỗi rỗng.
+            mh = re.search(r"</h1>", html, re.I)
+            if not mh:
+                raise ValueError(
+                    f"Không thấy nội dung chương {source_chapter_id} ({self.name}) — đổi cấu trúc?")
+            mb = re.search(r'<div[^>]*class="bottomlink"', html, re.I)
+            seg = html[mh.end():mb.start() if mb else len(html)]
+            seg = re.sub(r"<script.*?</script>", "", seg, flags=re.S | re.I)
+            seg = re.sub(r"<table.*?</table>", "", seg, flags=re.S | re.I)
+            seg = re.sub(r'<div[^>]*class="toplink".*?</div>', "", seg, flags=re.S | re.I)
+        raw = re.sub(r"</p\s*>|<br\s*/?>", "\n", seg, flags=re.I)
         raw = re.sub(r"<[^>]+>", "", raw)
         markers = [k.lower() for k in self._ad_markers]
         lines = [ln.strip() for ln in unescape(raw).replace("\xa0", " ").split("\n")]
