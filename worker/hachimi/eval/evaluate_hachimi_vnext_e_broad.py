@@ -33,9 +33,8 @@ RESULT_JSONL = Path(__file__).with_name("hachimi_vnext_e_broad_eval.jsonl")
 REPORT_MD = Path(__file__).with_name("hachimi_vnext_e_broad_eval.md")
 DIAGNOSIS_MD = Path(__file__).with_name("hachimi_vnext_e_base_diagnosis.md")
 MODELS = {
-    "base": MODELS_DIR / "hachimi-base-download" / "ct2-int8_float32",
     "current": MODELS_DIR / "hachimi-ct2",
-    "teacher_v2": MODELS_DIR / "hachimi-teacher-v2",
+    "teacher_v4": MODELS_DIR / "hachimi-teacher-v4",
 }
 RISK_PATTERNS = {
     "dialogue": re.compile(r"[“”\"「」『』]"),

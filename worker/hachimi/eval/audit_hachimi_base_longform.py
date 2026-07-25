@@ -23,7 +23,9 @@ from novelworker.translator.worker import (
 )
 
 
-MODEL_DIR = str(Path(__file__).resolve().parents[2] / "models" / "hachimi-base-download" / "ct2-int8_float32")
+# Corpus longform đã cắt xong (hachimi_base_longform.jsonl) nên main() hiếm khi chạy lại;
+# bản base đã xoá sau khi chốt v4 → trỏ vào model đang chạy production nếu cần dựng lại.
+MODEL_DIR = str(Path(__file__).resolve().parents[2] / "models" / "hachimi-ct2")
 OUTPUT_JSONL = Path(__file__).with_name("hachimi_base_longform.jsonl")
 OUTPUT_MD = Path(__file__).with_name("hachimi_base_longform.md")
 CASES = [

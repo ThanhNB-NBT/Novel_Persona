@@ -20,11 +20,10 @@ from eval_common import EVAL, EVAL_GAME, MODELS_DIR, balanced_quotes, load_terms
 
 OUTPUT_JSONL = Path(__file__).with_name("hachimi_eval_locked.jsonl")
 OUTPUT_MD = Path(__file__).with_name("hachimi_eval_locked.md")
+# Sau khi chốt v4 (25/07) các bản cũ đã xoá; `hachimi-ct2` là bản đang mount trên VPS.
+# Thêm model mới thì tải về worker/models/<tên> rồi khai một dòng ở đây.
 MODELS = {
-    "base": MODELS_DIR / "hachimi-base-download" / "ct2-int8_float32",
     "current": MODELS_DIR / "hachimi-ct2",
-    "teacher_v2": MODELS_DIR / "hachimi-teacher-v2",
-    "teacher_v3": MODELS_DIR / "hachimi-teacher-v3",
     "teacher_v4": MODELS_DIR / "hachimi-teacher-v4",
 }
 KEYS = ("similarity", "sentences", "han", "modern_pronouns", "padding")

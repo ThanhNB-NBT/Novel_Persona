@@ -27,7 +27,6 @@ NOVELS = (32, 293, 282, 1382, 1380, 1320)
 CHAPTERS_PER_NOVEL = 2
 MODELS = {
     "current": MODELS_DIR / "hachimi-ct2",
-    "teacher_v3": MODELS_DIR / "hachimi-teacher-v3",
     "teacher_v4": MODELS_DIR / "hachimi-teacher-v4",
 }
 
