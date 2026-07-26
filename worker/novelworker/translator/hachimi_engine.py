@@ -233,7 +233,10 @@ def _self_check() -> None:
     assert _join_translations(["Hắn nhíu mày,", "Nền tảng lại kém."]) == "Hắn nhíu mày, nền tảng lại kém."
     assert _join_translations(["Hắn buông tay,", "Ngạo Thiên lùi lại."]) == "Hắn buông tay, Ngạo Thiên lùi lại."
     assert _join_translations(["Hắn quát:", "Đi thôi!"]) == "Hắn quát: Đi thôi!"
-    assert _join_translations(["Hắn hỏi,", "ZX001Q gật đầu."]) == "Hắn hỏi, ZX001Q gật đầu."
+    # Mã termguard phải sống qua _decap — lấy mã THẬT để đổi họ mã là test biết ngay.
+    from .termguard import _ALNUM_CODES
+    code = _ALNUM_CODES[1]
+    assert _join_translations(["Hắn hỏi,", f"{code} gật đầu."]) == f"Hắn hỏi, {code} gật đầu."
     dialogue = "“你不会吧？连这都问呀？”他说道！"
     assert _get()._split_source(dialogue) == [dialogue], "không được xé một lượt thoại"
     long_src = "少年握紧手中长剑。" * 30

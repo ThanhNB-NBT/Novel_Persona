@@ -39,3 +39,35 @@ def test_selfcheck(modname: str) -> None:
     rc = mod.main()
     # phần lớn main() trả None và tự assert; vài cái (e2e) trả mã thoát
     assert rc in (None, 0), f"{modname}.main() trả mã lỗi {rc}"
+
+
+def _module_selfchecks() -> list[str]:
+    """Self-check nằm TRONG module production (`_self_check()` dưới `__main__`).
+
+    Lỗ thứ hai, tìm ra 26/07: termguard có `_self_check` khá kỹ nhưng chỉ chạy khi gọi tay
+    `python -m ...`, nên bug mã placeholder rò ra bản dịch sống nhiều ngày với CI xanh.
+    Chỉ quét `novelworker/` — `hachimi/` là đồ finetune chạy tay, không nằm đường production.
+    """
+    pkg = _DIR.parent / "novelworker"
+    names = []
+    for f in sorted(pkg.rglob("*.py")):
+        src = f.read_text(encoding="utf-8", errors="ignore")
+        if "def _self_check(" in src or "def self_check(" in src:
+            names.append(".".join(f.relative_to(pkg.parent).with_suffix("").parts))
+    return names
+
+
+@pytest.mark.parametrize("modname", _module_selfchecks())
+def test_module_selfcheck(modname: str) -> None:
+    try:
+        mod = importlib.import_module(modname)
+    except ImportError as e:  # phụ thuộc nặng (ctranslate2…) không có ở máy chạy test
+        pytest.skip(f"{modname}: {e}")
+    check = getattr(mod, "_self_check", None) or getattr(mod, "self_check")
+    try:
+        check()
+    except (RuntimeError, OSError, FileNotFoundError) as e:
+        # vài self-check cần model CT2 thật; thiếu model thì bỏ qua, KHÔNG nuốt lỗi logic
+        if "HACHIMI" in str(e).upper() or "model" in str(e).lower():
+            pytest.skip(f"{modname} cần model thật: {e}")
+        raise
