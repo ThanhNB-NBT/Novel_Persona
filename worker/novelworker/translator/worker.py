@@ -519,12 +519,69 @@ def _term_dicts(value) -> list[dict]:
     return [item for item in value if isinstance(item, dict)] if isinstance(value, list) else []
 
 
-def _extract_names_bg(llm, chunk: str) -> tuple[list[dict], dict]:
-    """Bản chạy-nền của _analyze_names: tự reset sổ đếm TRONG luồng của mình (thread-local)
-    rồi trả kèm số liệu để luồng chính gộp vào sổ của chương."""
-    providers.reset_call_stats()
+def save_detected_names(novel_id: int, chapter_index: int, detected: list[dict],
+                        terms: list[dict], preexisting_zh: set[str]) -> int:
+    """Lưu tên riêng trích được làm term 'gợi ý' (approved=false, scope=novel).
+
+    get_glossary lấy cả gợi ý nên chương SAU dùng lại ngay, giữ phiên âm nhất quán.
+    Lỗi ở đây không được làm hỏng chương đã dịch — bản dịch và job đã commit rồi."""
+    inserted_zh: set[str] = set()
+    rows: list[dict] = []
+    for t in detected:
+        if not isinstance(t, dict) or not _prepare_suggested_term(t):
+            continue
+        zh, vi = t["zh"], t["vi"]
+        if zh not in preexisting_zh and zh not in inserted_zh:
+            inserted_zh.add(zh)
+            rows.append({
+                "novel_id": novel_id, "term_zh": zh.strip(), "correct_vi": vi.strip(),
+                "term_type": t["type"],
+                "note": t.get("note") or None,  # giới tính/vai vế → xưng hô đúng ở chương sau
+                "scope": "novel", "approved": False, "first_chapter": chapter_index,
+            })
+    try:
+        inserted = db.insert_glossary_suggestions(rows)
+        conflicts = _glossary_conflicts(terms, detected, chapter_index)
+        # row thua race ignore_duplicates: bản dịch của mình là ứng viên conflict với row thắng
+        have = {c["term_zh"] for c in conflicts}
+        conflicts += [
+            {"term_zh": r["term_zh"], "candidate_vi": r["correct_vi"],
+             "conflict_vi": f"{r['correct_vi']} (c{chapter_index})"}
+            for r in rows if r["term_zh"] not in inserted and r["term_zh"] not in have
+        ]
+        db.record_glossary_conflicts(novel_id, conflicts)
+    except Exception:
+        log.exception("Không lưu được %d glossary term (nv%s ch%s)", len(rows), novel_id, chapter_index)
+        return 0
+    return len(rows)
+
+
+# Trích tên chạy NỀN, chương không chờ. Số luồng phải theo kịp nhịp chương: chương xong
+# mỗi ~24s, mỗi call ăn tới llm_timeout_sec (90s) → cần ≥ 90/24 ≈ 4 luồng chỉ để hoà vốn.
+# Lấy 6 cho có biên; quá tải thì pool tự xếp hàng, tên về muộn chứ không mất.
+# Luồng không phải daemon: worker restart sẽ đợi call đang bay (docker stop giết sau 10s —
+# mất vài cái tên là chấp nhận được, chương đã lưu xong từ trước).
+_NAME_POOL = ThreadPoolExecutor(max_workers=6, thread_name_prefix="names")
+
+
+def _extract_names_bg(llm, chunk: str, novel_id: int, chapter_index: int,
+                      terms: list[dict], preexisting_zh: set[str]) -> None:
+    """Trích tên rồi TỰ lưu — chương đang dịch không chờ kết quả này.
+
+    Đo 26/07 trên VPS: một call LLM tốn 38-79s trong khi Hachimi dịch xong chương trong
+    ~24s, và 100% hàng đợi là chương ≤20 (đều gọi trích tên). Bắt chương chờ = nhân ba
+    thời gian dịch để đổi lấy việc cưỡng chế tên ngay trong chính chương đó — không đáng.
+    Tên vào glossary muộn vài chục giây, chương sau dùng ngay.
+
+    ponytail: token của call này KHÔNG vào sổ chương (hàng chapters đã ghi xong trước khi
+    nó về). Log giữ con số thật; muốn vào `cost` thì phải cộng ở tầng khác."""
+    providers.reset_call_stats()  # sổ là thread-local, reset trong chính luồng này
     names = _analyze_names(llm, chunk)
-    return names, providers.get_call_stats()
+    st = providers.get_call_stats()
+    saved = save_detected_names(novel_id, chapter_index, names, terms, preexisting_zh)
+    log.info("TÊN RIÊNG nv%s ch%s: %d tên mới · LLM %d call (%d lỗi) · %d+%d tok",
+             novel_id, chapter_index, saved, st["calls"], st["failures"],
+             st["prompt_tokens"], st["completion_tokens"])
 
 
 def _analyze_names(llm, chunk: str) -> list[dict]:
@@ -1004,25 +1061,13 @@ def _translate_hachimi(
     content = ch["content_zh"]
     detected: list[dict] = []
     prompt_tokens = completion_tokens = 0
-    # Trích tên chạy SONG SONG với dịch: nó là chờ mạng, không ăn CPU, nên để nó chặn
-    # luồng CT2 là phí trắng (đo 26/07: 2 call timeout = 300s chết cho 25s dịch thật).
-    # Đánh đổi: tên tìm thấy trong chương này KHÔNG kịp cưỡng chế vào chính chương này —
-    # nó được lưu làm gợi ý nên chương sau dùng ngay. Tựa chương thì vẫn kịp (dịch sau).
-    names_job = None
+    # Trích tên bắn sang luồng nền và KHÔNG chờ: nó chỉ chờ mạng (38-79s từ VPS) trong khi
+    # Hachimi xong chương trong ~24s. Nó tự lưu tên vào glossary → chương sau dùng ngay.
     if ch["chapter_index"] <= settings.hachimi_extract_max_chapter:
-        names_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="names")
-        names_job = names_pool.submit(_extract_names_bg, chapter_llm, content[:CHUNK_LIMIT])
-        names_pool.shutdown(wait=False)
+        _NAME_POOL.submit(_extract_names_bg, chapter_llm, content[:CHUNK_LIMIT],
+                          ch["novel_id"], ch["chapter_index"], list(terms), set(existing_zh))
 
     text = termguard.translate_text(content, terms, hachimi_engine.translate_text)
-
-    if names_job is not None:
-        # Gần như luôn xong trước bước dịch; timeout LLM tự bó phần chờ còn lại.
-        names, st = names_job.result()
-        detected += names
-        _merge_names(terms, existing_zh, names)
-        providers.add_call_stats(st)  # stats thread-local — không gộp thì log báo 0 call
-        prompt_tokens, completion_tokens = st["prompt_tokens"], st["completion_tokens"]
     # gộp nói lắp CT2 ("Cốc cốc cốc cốc" → "Cốc cốc") + dọn rác, DÙNG CHUNG với nhánh LLM.
     # Model 60M lắp cụm là chuyện thường; thiếu bước này thì nói lắp nằm luôn trong bản dịch.
     text = _clean_output(text)
@@ -1182,41 +1227,14 @@ def handle_chapter(job: dict, llm) -> None:
     except Exception:
         log.exception("Không lưu được lint_score chương %s", ch["id"])
 
-    # lưu tên riêng phát hiện được làm term "gợi ý" (approved=false, scope=novel)
-    # — get_glossary lấy cả gợi ý nên chương sau dùng lại ngay, giữ phiên âm nhất quán
-    inserted_zh: set[str] = set()
-    suggestion_rows: list[dict] = []
-    for t in detected:
-        if not isinstance(t, dict) or not _prepare_suggested_term(t):
-            continue
-        zh, vi = t["zh"], t["vi"]
-        if zh not in preexisting_zh and zh not in inserted_zh:
-            inserted_zh.add(zh)
-            suggestion_rows.append({
-                "novel_id": ch["novel_id"], "term_zh": zh.strip(), "correct_vi": vi.strip(),
-                "term_type": t["type"],
-                "note": t.get("note") or None,  # giới tính/vai vế → xưng hô đúng ở chương sau
-                "scope": "novel", "approved": False, "first_chapter": ch["chapter_index"],
-            })
+    save_detected_names(ch["novel_id"], ch["chapter_index"], detected, terms, preexisting_zh)
     try:
-        inserted = db.insert_glossary_suggestions(suggestion_rows)
-        conflicts = _glossary_conflicts(terms, detected, ch["chapter_index"])
-        # row thua race ignore_duplicates: bản dịch của mình là ứng viên conflict với row thắng
-        have = {c["term_zh"] for c in conflicts}
-        conflicts += [
-            {"term_zh": r["term_zh"], "candidate_vi": r["correct_vi"],
-             "conflict_vi": f"{r['correct_vi']} (c{ch['chapter_index']})"}
-            for r in suggestion_rows
-            if r["term_zh"] not in inserted and r["term_zh"] not in have
-        ]
-        db.record_glossary_conflicts(ch["novel_id"], conflicts)
         db.increment_glossary_hits(ch["novel_id"], [
             t["term_zh"] for t in terms
             if t.get("term_zh") and t["term_zh"] in ch["content_zh"]
         ])
     except Exception:
-        # Bản dịch và job đã commit; glossary phụ trợ lỗi không được khiến dịch lại cả chương.
-        log.exception("Không lưu được %d glossary term (chương %s)", len(suggestion_rows), ch["id"])
+        log.exception("Không cộng được hit glossary (chương %s)", ch["id"])
 
     st = providers.get_call_stats()
     # Một dòng đọc là hiểu: truyện nào, chương mấy, engine gì, tốn bao lâu. Bản cũ in
