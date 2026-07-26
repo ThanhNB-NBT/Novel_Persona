@@ -72,11 +72,13 @@ class Settings(BaseSettings):
     prio_idle: int = 75          # chương đọc thử + chương truyện không ai đọc — nền
     sample_chapters: int = 1     # số chương dịch sẵn "đọc thử" khi có truyện mới
     crawl_fetch_batch: int = 20  # số chương tải nguồn tối đa cho một novel mỗi tick
-    # Timeout 1 call LLM (giây). Hạ 150 → 40 (26/07): với engine Hachimi, LLM chỉ còn làm
-    # việc phụ (trích tên, vá Hán sót) — không đáng để một call treo 2,5 phút. Đo trên VPS:
-    # chương 2 call lỗi mất 324s trong khi dịch thật chỉ ~25s. LLM_PROVIDER giờ chỉ có
-    # nvidia nên hết timeout là hết đường, chờ lâu không mua thêm cơ hội nào.
-    llm_timeout_sec: int = 40
+    # Timeout 1 call LLM (giây). Hạ 150 → 90 (26/07). Neo vào thời gian dịch một chương:
+    # trích tên giờ chạy SONG SONG với Hachimi (65-96s/chương trên VPS 2 vCPU), nên mọi
+    # giá trị dưới mức đó là MIỄN PHÍ — call treo cũng không làm chương chậm thêm giây nào.
+    # Đừng hạ nữa: đo trong chính container lúc CT2 đang chạy, một call nhỏ mất 40-66s
+    # (cùng key ấy trên máy rảnh chỉ 1,6-4s). Đặt 40 là giết luôn phần lớn call ĐANG chạy
+    # được → glossary hết được đắp, tên riêng trôi lại.
+    llm_timeout_sec: int = 90
 
     # Engine dịch mặc định cho truyện CHƯA ghim provider (truyện mới). 'hachimi' = CT2
     # local (rẻ), đặt 'nvidia' nếu muốn truyện mới vẫn dùng LLM.
