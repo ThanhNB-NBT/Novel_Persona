@@ -59,6 +59,15 @@ def main() -> None:
     except Exception:
         pass
 
+    # JSON hỏng kiểu LLM: dấu " chưa escape giữa câu, xuống dòng thô, output cụt
+    assert _extract_json('{"d": "hắn gọi "Tiểu Sư Muội" rồi đi", "n": 2}') == \
+        {"d": 'hắn gọi "Tiểu Sư Muội" rồi đi', "n": 2}
+    assert _extract_json('{"d": "dòng 1\ndòng 2"}') == {"d": "dòng 1\ndòng 2"}
+    assert _extract_json('{"title_vi": "Tên", "description_vi": "mô tả bị cắt giữa') == \
+        {"title_vi": "Tên", "description_vi": "mô tả bị cắt giữa"}
+    assert _extract_json('{"title_vi": "Tên", "description_vi') == {"title_vi": "Tên"}
+    assert _extract_json('{"a": 1,}') == {"a": 1}
+
     # check_translation: phủ từng nhánh hỏng + ca đạt
     zh5 = "第一行\n第二行\n第三行\n第四行\n第五行\n第六行"
     assert check_translation("原文", "") == "nội dung dịch rỗng"

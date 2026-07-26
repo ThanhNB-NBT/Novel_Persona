@@ -549,11 +549,57 @@ def _split_chunks(text: str, limit: int = CHUNK_LIMIT) -> list[str]:
     return chunks
 
 
+_CTRL_ESC = {"\n": "\\n", "\r": "\\r", "\t": "\\t"}
+
+
+def _repair_json(text: str) -> str:
+    """Quét từ ngoặc mở tới ngoặc đóng cân bằng, vá luôn ba kiểu hỏng của LLM:
+    dấu " chưa escape giữa câu, xuống dòng thô trong chuỗi, và output cụt vì max_tokens
+    (chuỗi/ngoặc chưa đóng). Trả về chuỗi JSON đã cân ngoặc — chưa chắc parse được."""
+    out: list[str] = []
+    stack: list[str] = []
+    in_string = escaped = False
+    for i, ch in enumerate(text):
+        if escaped:
+            out.append(ch)
+            escaped = False
+            continue
+        if in_string:
+            if ch == "\\":
+                out.append(ch)
+                escaped = True
+            elif ch == '"':
+                # Dấu " chỉ đóng chuỗi khi tiếp theo là dấu ngắt JSON; giữa câu thì escape.
+                rest = text[i + 1:].lstrip()
+                if not rest or rest[0] in ",:}]":
+                    in_string = False
+                    out.append(ch)
+                else:
+                    out.append('\\"')
+            else:
+                out.append(_CTRL_ESC.get(ch, ch))
+            continue
+        out.append(ch)
+        if ch == '"':
+            in_string = True
+        elif ch in "{[":
+            stack.append("}" if ch == "{" else "]")
+        elif ch in "}]":
+            if stack:
+                stack.pop()
+            if not stack:
+                break   # hết object ngoài cùng — bỏ đuôi rác model nói thêm
+    if in_string:
+        out.append('"')
+    out.extend(reversed(stack))
+    return "".join(out)
+
+
 def _extract_json(text: str) -> dict | list:
     """LLM đôi khi bọc JSON trong ```json ...``` — bóc ra."""
     m = re.search(r"```(?:json)?\s*(.+?)\s*```", text, re.S)
     if m:
-        return json.loads(m.group(1).strip())
+        text = m.group(1)
     text = text.strip()
     try:
         return json.loads(text)
@@ -561,32 +607,15 @@ def _extract_json(text: str) -> dict | list:
         starts = [i for i in (text.find("{"), text.find("[")) if i >= 0]
         if not starts:
             raise
-        start = min(starts)
-        opener = text[start]
-        closer = "}" if opener == "{" else "]"
-        depth = 0
-        in_string = False
-        escaped = False
-        for i in range(start, len(text)):
-            ch = text[i]
-            if escaped:
-                escaped = False
-                continue
-            if ch == "\\":
-                escaped = True
-                continue
-            if ch == '"':
-                in_string = not in_string
-                continue
-            if in_string:
-                continue
-            if ch == opener:
-                depth += 1
-            elif ch == closer:
-                depth -= 1
-                if depth == 0:
-                    return json.loads(text[start:i + 1])
-        raise
+        cand = _repair_json(text[min(starts):])
+        try:
+            return json.loads(cand)
+        except json.JSONDecodeError:
+            # Cụt giữa một cặp key/value (hoặc thừa dấu phẩy cuối) → bỏ cặp dở, đóng lại.
+            cut = cand.rfind(",")
+            if cut < 0:
+                raise
+            return json.loads(_repair_json(cand[:cut]))
 
 
 def _apply_fixes(vi: str, fixes) -> tuple[str, int]:
