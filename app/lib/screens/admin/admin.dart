@@ -152,7 +152,10 @@ class _JobsTab extends ConsumerWidget {
                 j['source_unavailable'] != true)
             .length;
         final blocked = jobs.where((j) => j['source_unavailable'] == true).length;
-        final pending =
+        // "chờ dịch" lấy count THẬT từ DB: danh sách này chỉ là cửa sổ 120 job đầu hàng
+        // đợi, đếm độ dài nó ra đúng bằng .limit() nên trước đây luôn báo 120.
+        final pendingTotal = ref.watch(pendingJobCountProvider).value;
+        final pendingHere =
             jobs.where((j) => j['status'] == 'pending').length - crawling - blocked;
         final failed = jobs.where((j) => j['status'] == 'failed').length;
         // Gộp theo truyện: 1 dòng/truyện, bấm vào mới xem list chương (job) bên trong.
@@ -173,7 +176,8 @@ class _JobsTab extends ConsumerWidget {
               i == 0 ? const SizedBox.shrink() : const Divider(height: 1),
           itemBuilder: (_, i) => i == 0
               ? _JobStats(running: running, crawling: crawling,
-                  blocked: blocked, pending: pending, failed: failed)
+                  blocked: blocked, pending: pendingTotal ?? pendingHere,
+                  shown: jobs.length, failed: failed)
               : _NovelJobsRow(entries[i - 1].key, entries[i - 1].value, ref),
         );
       },
@@ -184,10 +188,11 @@ class _JobsTab extends ConsumerWidget {
 /// Thống kê nhanh hàng đợi worker + NHỊP TIM (crawler/translator điểm danh định kỳ
 /// vào worker_heartbeat — biết chắc sống hay treo, không phải đoán qua job).
 class _JobStats extends ConsumerWidget {
-  final int running, crawling, blocked, pending, failed;
+  final int running, crawling, blocked, pending, shown, failed;
   const _JobStats(
       {required this.running, required this.crawling,
-       required this.blocked, required this.pending, required this.failed});
+       required this.blocked, required this.pending, required this.shown,
+       required this.failed});
 
   /// crawler beat mỗi ~10s (mịn hơn khi đang tải chương), translator mỗi 60s.
   /// Quá 3 phút không điểm danh = coi như treo/tắt.
@@ -253,6 +258,12 @@ class _JobStats extends ConsumerWidget {
             const SizedBox(height: 10),
             Text('$blocked job thiếu bản gốc, nguồn đang tắt',
                 style: t.labelSmall?.copyWith(color: cs.error)),
+          ],
+          // Nói rõ danh sách bên dưới bị cắt — "đang crawl" cũng chỉ đếm trong cửa sổ này.
+          if (pending > shown) ...[
+            const SizedBox(height: 8),
+            Text('Danh sách hiển thị $shown job đầu hàng đợi',
+                style: t.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
           ],
           const SizedBox(height: 14),
           Padding(

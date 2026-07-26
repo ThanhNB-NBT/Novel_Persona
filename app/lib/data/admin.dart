@@ -66,6 +66,21 @@ final appStatsProvider = FutureProvider.autoDispose<Map<String, int>>((ref) asyn
   };
 });
 
+/// Số job tối đa tab Worker kéo về. Danh sách là CỬA SỔ đầu hàng đợi, không phải toàn bộ —
+/// ô đếm phải lấy từ [pendingJobCountProvider], đừng đếm độ dài danh sách này.
+const kAdminJobsWindow = 120;
+
+/// Tổng job pending THẬT (hàng đợi thường vài nghìn, danh sách hiển thị chỉ vài trăm).
+final pendingJobCountProvider = FutureProvider.autoDispose<int>((ref) async {
+  final res = await sb
+      .from('translation_jobs')
+      .select('id')
+      .eq('status', 'pending')
+      .neq('type', 'audit')
+      .count(CountOption.exact);
+  return res.count;
+});
+
 /// Job đáng chú ý: đang chạy / lỗi / chờ (bỏ done). Kèm tên truyện + số chương.
 final adminJobsProvider = FutureProvider.autoDispose<List<Rec>>((ref) async {
   final jobs = List<Rec>.from(
@@ -78,9 +93,12 @@ final adminJobsProvider = FutureProvider.autoDispose<List<Rec>>((ref) async {
         )
         .inFilter('status', ['running', 'failed', 'pending'])
         .neq('type', 'audit') // audit là job toàn cục (novel_id null) → không gộp theo truyện
+        // PHẢI khớp thứ tự claim của worker (`order by priority, created_at` trong
+        // claim_next_job) — trước đây created_at DESC nên tab này hiện 120 job chạy SAU
+        // CÙNG mà trình bày như đầu hàng đợi, lệch hẳn với màn Hàng đợi.
         .order('priority', ascending: true) // ưu tiên cao (pri nhỏ, truyện đang đọc) lên đầu
-        .order('created_at', ascending: false)
-        .limit(120),
+        .order('created_at', ascending: true)
+        .limit(kAdminJobsWindow),
   );
   // Job pending mà chương CHƯA có content_zh = crawler đang tải nguồn → gắn cờ
   // 'downloading' để tab Worker hiện "đang crawl" thay vì "chờ" chung chung.

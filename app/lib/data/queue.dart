@@ -2,11 +2,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core.dart';
 
+/// Số job pending tối đa kéo về. `active` là CỬA SỔ đầu hàng đợi, không phải toàn bộ:
+/// hàng đợi thật thường vài nghìn job, nên ô đếm phải dùng [QueueState.pendingTotal].
+const kQueueWindow = 200;
+
 class QueueState {
   final List<Rec> active; // translating / queued / downloading / source_unavailable
   final List<Rec> recentDone; // chương vừa dịch xong (để không "mất tích")
   final int doneLastHour; // thông lượng ~1h gần đây
-  QueueState(this.active, this.recentDone, this.doneLastHour);
+  final int pendingTotal; // tổng job chờ THẬT trong DB (≥ số dòng trong `active`)
+  QueueState(this.active, this.recentDone, this.doneLastHour, this.pendingTotal);
 }
 
 /// Nguồn crawl của job đã tắt? (dùng cho cả queue lẫn admin).
@@ -42,10 +47,18 @@ final translateQueueProvider = FutureProvider.autoDispose<QueueState>((
         .select(jobCols)
         .eq('type', 'chapter')
         .eq('status', 'pending')
+        // Khớp thứ tự claim của worker (`order by priority, created_at`).
         .order('priority', ascending: true) // nhỏ = ưu tiên cao → lên đầu
         .order('created_at', ascending: true)
-        .limit(200),
+        .limit(kQueueWindow),
   );
+  final pendingTotal = (await sb
+          .from('translation_jobs')
+          .select('id')
+          .eq('type', 'chapter')
+          .eq('status', 'pending')
+          .count(CountOption.exact))
+      .count;
   final jobs = [...running, ...pending];
   // Chương pending mà content_zh CHƯA tải về = crawler đang lấy nguồn → "đang tải".
   // Truy vấn nhẹ (chỉ id, content_zh null) trên đúng các chapter_id đang chờ.
@@ -97,7 +110,7 @@ final translateQueueProvider = FutureProvider.autoDispose<QueueState>((
         .order('translated_at', ascending: false)
         .limit(60),
   );
-  return QueueState(active, recentDone, recentDone.length);
+  return QueueState(active, recentDone, recentDone.length, pendingTotal);
 });
 
 /// Xoá "lịch sử vừa dịch xong" trên máy (chỉ ẩn hiển thị, không đụng dữ liệu dịch).
