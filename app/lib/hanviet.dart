@@ -7,12 +7,13 @@ import 'package:flutter/services.dart' show rootBundle;
 Map<String, List<String>>? _hv; // chữ Hán → các âm (âm đầu = mặc định)
 
 // TSV có cả CJK Extension; form sửa phải nhận cùng dải ký tự với bảng tra.
+// Trần U+323AF = hết Extension H — bảng đang dùng tới U+31339 (Extension G).
 final hanVietRun = RegExp(
-  r'[\u3400-\u4DBF\u4E00-\u9FFF\u{20000}-\u{2FA1F}]+',
+  r'[\u3400-\u4DBF\u4E00-\u9FFF\u{20000}-\u{323AF}]+',
   unicode: true,
 );
 final hanVietOnly = RegExp(
-  r'^[\u3400-\u4DBF\u4E00-\u9FFF\u{20000}-\u{2FA1F}]+$',
+  r'^[\u3400-\u4DBF\u4E00-\u9FFF\u{20000}-\u{323AF}]+$',
   unicode: true,
 );
 
