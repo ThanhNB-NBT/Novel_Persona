@@ -34,6 +34,15 @@ def reset_call_stats() -> None:
     _stats.prompt_tokens = _stats.completion_tokens = 0
 
 
+def add_call_stats(st: dict) -> None:
+    """Gộp số liệu của call chạy ở LUỒNG KHÁC vào sổ của luồng hiện tại.
+
+    `_stats` là thread-local nên call trích tên chạy nền không tự vào sổ của chương —
+    thiếu bước này thì dòng log 'LLM n call' và token/chương đều báo 0."""
+    for key in ("calls", "failures", "prompt_tokens", "completion_tokens"):
+        setattr(_stats, key, getattr(_stats, key, 0) + int(st.get(key) or 0))
+
+
 def get_call_stats() -> dict:
     return {"calls": getattr(_stats, "calls", 0),
             "failures": getattr(_stats, "failures", 0),

@@ -7,6 +7,7 @@ import re
 import signal
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 from .. import db
 from ..config import settings
@@ -518,6 +519,14 @@ def _term_dicts(value) -> list[dict]:
     return [item for item in value if isinstance(item, dict)] if isinstance(value, list) else []
 
 
+def _extract_names_bg(llm, chunk: str) -> tuple[list[dict], dict]:
+    """Bản chạy-nền của _analyze_names: tự reset sổ đếm TRONG luồng của mình (thread-local)
+    rồi trả kèm số liệu để luồng chính gộp vào sổ của chương."""
+    providers.reset_call_stats()
+    names = _analyze_names(llm, chunk)
+    return names, providers.get_call_stats()
+
+
 def _analyze_names(llm, chunk: str) -> list[dict]:
     """Pass 1: trích tên riêng / thuật ngữ để chốt phiên âm vào glossary TRƯỚC khi dịch.
     Lỗi thì [] — dịch vẫn chạy, chỉ thiếu gợi ý tên."""
@@ -995,14 +1004,25 @@ def _translate_hachimi(
     content = ch["content_zh"]
     detected: list[dict] = []
     prompt_tokens = completion_tokens = 0
+    # Trích tên chạy SONG SONG với dịch: nó là chờ mạng, không ăn CPU, nên để nó chặn
+    # luồng CT2 là phí trắng (đo 26/07: 2 call timeout = 300s chết cho 25s dịch thật).
+    # Đánh đổi: tên tìm thấy trong chương này KHÔNG kịp cưỡng chế vào chính chương này —
+    # nó được lưu làm gợi ý nên chương sau dùng ngay. Tựa chương thì vẫn kịp (dịch sau).
+    names_job = None
     if ch["chapter_index"] <= settings.hachimi_extract_max_chapter:
-        names = _analyze_names(chapter_llm, content[:CHUNK_LIMIT])
-        detected += names
-        _merge_names(terms, existing_zh, names)
-        st = providers.get_call_stats()
-        prompt_tokens, completion_tokens = st["prompt_tokens"], st["completion_tokens"]
+        names_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="names")
+        names_job = names_pool.submit(_extract_names_bg, chapter_llm, content[:CHUNK_LIMIT])
+        names_pool.shutdown(wait=False)
 
     text = termguard.translate_text(content, terms, hachimi_engine.translate_text)
+
+    if names_job is not None:
+        # Gần như luôn xong trước bước dịch; timeout LLM tự bó phần chờ còn lại.
+        names, st = names_job.result()
+        detected += names
+        _merge_names(terms, existing_zh, names)
+        providers.add_call_stats(st)  # stats thread-local — không gộp thì log báo 0 call
+        prompt_tokens, completion_tokens = st["prompt_tokens"], st["completion_tokens"]
     # gộp nói lắp CT2 ("Cốc cốc cốc cốc" → "Cốc cốc") + dọn rác, DÙNG CHUNG với nhánh LLM.
     # Model 60M lắp cụm là chuyện thường; thiếu bước này thì nói lắp nằm luôn trong bản dịch.
     text = _clean_output(text)
