@@ -33,27 +33,22 @@ Use the single-context domain-doc layout. See `docs/agents/domain.md`.
 5. Commit message tiếng Việt không dấu, ngắn, nói CÁI GÌ + VÌ SAO.
    **CHỈ commit message mới không dấu** — chat, docs, comment trong code viết
    tiếng Việt CÓ DẤU đầy đủ (file ghi UTF-8). Tên biến/hàm và log tiếng Anh.
-6. **Code tối giản:** diff ngắn nhất chạy được là đúng. Không abstraction/helper
-   khi chỉ có 1 chỗ dùng, không thêm dependency cho việc vài dòng làm được,
-   ưu tiên stdlib/tính năng có sẵn của Flutter/Postgres. Tái dùng widget/util
-   đã có trong repo thay vì viết mới.
+6. **Không thêm dependency mới** khi vài dòng hoặc thứ đã cài làm được.
 
 ## Trước khi làm việc với hệ Tu Tiên
 
 Đọc `docs/tu-tien.md` — thiết kế + công thức + các cặp mirror SQL↔Dart
 (sửa một đầu là PHẢI sửa đầu kia). Đổi thiết kế → cập nhật doc cùng commit.
 
-## Bản đồ repo (đọc thêm khi cần)
+## Gotcha của repo này
 
-- `app/` Flutter (Riverpod + go_router + Supabase). UI theo `app/lib/theme.dart`
-  + widget chung `app/lib/widgets.dart`; đừng hardcode màu, lấy từ ColorScheme.
-  Model = `Map` (`Rec`), KHÔNG thêm codegen/freezed.
-- `worker/` Python crawler+translator, chạy Docker trên VPS (deploy từ `main`).
-  Sửa worker → nhắc user rebuild VPS (git pull + compose build).
-- `supabase/migrations/` schema + RPC. RLS: client chỉ đọc dòng của mình,
-  mọi ghi qua RPC SECURITY DEFINER.
-- `docs/` thiết kế: `ke-hoach.md` (tổng), `crawl-multisource.md` (nguồn),
-  `tu-tien.md` (game Tu Tiên), `todo-handoff.md` (việc treo).
+- `app/`: model = `Map` (`Rec`), KHÔNG thêm codegen/freezed. Màu lấy từ
+  ColorScheme (`app/lib/theme.dart`), đừng hardcode.
+- `worker/` chạy Docker trên VPS, deploy từ `main` — sửa xong nhắc user
+  rebuild (git pull + compose build).
+- RLS: client chỉ đọc dòng của mình, mọi ghi qua RPC SECURITY DEFINER.
+- Doc thiết kế trong `docs/`: `ke-hoach.md`, `crawl-multisource.md`,
+  `tu-tien.md`, `todo-handoff.md` (việc treo).
 
 ## Build & thử
 
