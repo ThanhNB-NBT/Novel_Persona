@@ -17,8 +17,13 @@ _CODES = ["JW"] + [
     for code in ("".join(p) for p in itertools.product(_L, repeat=r))
     if code != "JW"
 ]
-_ALNUM_CODES = [f"ZX{i:03d}Q" for i in range(1000)]
-_BRACKET_CODES = [f"⟦{i:03d}⟧" for i in range(1000)]
+# Thân mã dùng CHỮ, không dùng số: term số (_line_terms ghim số để giữ nguyên) từng khớp
+# vào giữa mã đã chèn và ăn mất nó — '00' nuốt 'ZX000Q' thành 'ZX ZX001Q 0Q', mảnh 'ZX'/'0Q'
+# rơi thẳng ra bản dịch. Chữ số chỉ còn trong văn bản, không còn trong mã.
+_BODY = ["".join(p) for p in itertools.product("ABCDEFGHIJKLMNOPQRSTUVWXYZ", repeat=3)]
+_ALNUM_CODES = [f"ZX{body}Q" for body in _BODY[:1000]]
+_BRACKET_CODES = [f"⟦{body}⟧" for body in _BODY[:1000]]
+_UPPER = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 _NUMBER = re.compile(r"\d+(?:\.\d+)?%?")
 
 
@@ -46,15 +51,23 @@ def _protect_with_codes(
     zh: str, terms: list[dict], codes: list[str],
 ) -> tuple[str, dict[str, str]]:
     # Bỏ mã trùng với nội dung đã có sẵn trong nguồn để restore không đụng nhầm.
-    codes = [c for c in codes if c not in zh]
+    # Bỏ mã trùng với nội dung đã có sẵn trong nguồn để restore không đụng nhầm.
+    original, codes = zh, [c for c in codes if c not in zh]
     mapping: dict[str, str] = {}
+    expected: dict[str, int] = {}
     for term, code in zip(_eligible(terms, zh), codes):
         if term["term_zh"] not in zh:
             continue
         # Bọc space: nguồn Trung không có dấu cách nên 2 term sát nhau ('白银级BOSS')
         # thành 2 mã dính ('12741000'), CT2 fuse/rớt số → 'boss1111'. Space giữ mã tách rời.
+        expected[code] = zh.count(term["term_zh"])
         zh = zh.replace(term["term_zh"], f" {code} ")
         mapping[code] = term["correct_vi"]
+    if any(zh.count(code) != n for code, n in expected.items()):
+        # Một term đã ăn mất mã chèn trước đó. Restore không phát hiện được (nó đếm trên
+        # bản đã hỏng nên thấy 0 == 0) và mảnh mã sẽ lọt ra bản dịch. Bỏ họ mã này: dòng
+        # được dịch thường, term có thể lệch nhưng người đọc không thấy rác.
+        return original, {}
     return zh, mapping
 
 
@@ -149,17 +162,18 @@ def translate_text(
         needed_by_line.append(needed)
         if not numbers_preserved or needed:
             failed.append(index)
+    plain_lines = list(normal_lines)
     if not failed:
         return "\n".join(normal_lines)
 
     remaining = failed
     for codes, alphabet, approved_only in (
-        (_ALNUM_CODES, "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789", False),
+        (_ALNUM_CODES, _UPPER, False),
         (_CODES, _L, False),
-        (_BRACKET_CODES, "⟦0123456789⟧", False),
-        (_ALNUM_CODES, "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789", True),
+        (_BRACKET_CODES, f"⟦{_UPPER}⟧", False),
+        (_ALNUM_CODES, _UPPER, True),
         (_CODES, _L, True),
-        (_BRACKET_CODES, "⟦0123456789⟧", True),
+        (_BRACKET_CODES, f"⟦{_UPPER}⟧", True),
     ):
         attempted = [
             index for index in remaining
@@ -200,7 +214,25 @@ def translate_text(
         if not remaining:
             break
     # Mọi họ mã đều lỗi: giữ bản dịch thường để tên có thể lệch nhưng không mất câu.
-    return "\n".join(normal_lines)
+    return "\n".join(_drop_leaked(normal_lines, plain_lines))
+
+
+# Mảnh mã sót: 'ZX..Q' cụt và ngoặc ⟦⟧ lẻ — hai thứ này không có trong văn xuôi tiếng Việt
+# nên khớp là chắc chắn rác. KHÔNG bắt họ mã JWZF: 'WWW' (URL), 'JJ' đều là mã hợp lệ mà
+# cũng là chữ thật, quét sẽ báo oan. Họ đó dựa vào cổng đếm của _restore_complete.
+_LEAK = re.compile(r"ZX[A-Z0-9]{0,4}Q|⟦|⟧")
+
+
+def _drop_leaked(lines: list[str], plain: list[str]) -> list[str]:
+    """Lưới cuối: dòng cưỡng chế còn mảnh mã thì trả về bản dịch thường.
+
+    ponytail: đáng lẽ thừa sau khi `_protect_with_codes` chặn mã bị ăn, nhưng đúng lỗi này
+    đã ra tới người đọc mà không ai thấy suốt mấy ngày — rẻ hơn nhiều so với lần sau.
+    """
+    return [
+        good if _LEAK.search(bad) and not _LEAK.search(good) else bad
+        for bad, good in zip(lines, plain)
+    ]
 
 
 def _self_check() -> None:
@@ -240,8 +272,8 @@ def _self_check() -> None:
 
     def fake_translate(text: str) -> str:
         calls.append(text)
-        if "ZX000Q" in text:
-            return text.replace("ZX000Q", "ZX00Q")
+        if _ALNUM_CODES[0] in text:
+            return text.replace(_ALNUM_CODES[0], _ALNUM_CODES[0][:-2] + "Q")
         if "JW" in text:
             return text
         return text.replace("睚眦", "Xương Tí")
@@ -259,6 +291,17 @@ def _self_check() -> None:
         {"term_zh": "睚眦", "correct_vi": "Nhai Tý", "approved": True},
     ], _ALNUM_CODES)
     assert list(overlap_map.values()) == ["Nhai Tý"] and "必报" in overlap
+    # Term SỐ không được ăn mất mã đã chèn (bug 26/07: '00' nuốt 'ZX000Q' → bản dịch lòi
+    # mảnh 'ZX'/'0Q'). Model ngoan (trả nguyên bản) thì đầu ra phải sạch mã ở MỌI họ mã.
+    digits_zh = "丧尸001只，编号00。"
+    digits_terms = _line_terms(digits_zh, [{"term_zh": "丧尸", "correct_vi": "táng thi"}])
+    for family, alphabet in (
+        (_ALNUM_CODES, _UPPER), (_CODES, _L), (_BRACKET_CODES, f"⟦{_UPPER}⟧"),
+    ):
+        prot, digit_map = _protect_with_codes(digits_zh, digits_terms, family)
+        done = _restore_complete(prot, prot, digit_map, alphabet)
+        assert done is not None and "ZX" not in done and "⟦" not in done, (family[0], done)
+        assert "001" in done and "编号 00" in done, done
     print("termguard OK:", out)
 
 

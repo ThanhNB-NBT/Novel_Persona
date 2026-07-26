@@ -373,6 +373,7 @@ def run_quality(novel_id: int | None) -> None:
     """Chấm điểm chất lượng dịch (metric, KHÔNG tốn LLM) cho chương done → báo cáo.
     Bắt: còn tiếng Trung, tỉ lệ độ dài bất thường, mất đoạn, lặp từ, lệch glossary."""
     from collections import defaultdict
+    from .translator.termguard import _LEAK
     from .translator.worker import DUP_PHRASE, han_ratio
 
     gloss_cache: dict[int, list[dict]] = {}
@@ -396,7 +397,8 @@ def run_quality(novel_id: int | None) -> None:
             break
         frm += 300
 
-    agg: dict[str, list[float]] = defaultdict(lambda: [0, 0.0, 0.0, 0, 0, 0])  # n, sum_len, sum_adh, dup, no_para, han_bad
+    # n, sum_len, sum_adh, dup, no_para, han_bad, leak
+    agg: dict[str, list[float]] = defaultdict(lambda: [0, 0.0, 0.0, 0, 0, 0, 0])
     bad: list[tuple[float, str]] = []
     for c in rows:
         zh, vi = c.get("content_zh") or "", c.get("content_vi") or ""
@@ -406,17 +408,19 @@ def run_quality(novel_id: int | None) -> None:
         len_ratio = len(vi) / max(len(zh), 1)
         dup = len(DUP_PHRASE.findall(vi))
         lost_para = 1 if (zh.count("\n") >= 5 and vi.count("\n") == 0) else 0
+        # mảnh mã termguard lọt ra bản dịch — rác người đọc thấy tận mắt, luôn là lỗi nặng
+        leak = 1 if _LEAK.search(vi) else 0
         ok, appl = _glossary_adherence(zh, vi, gloss(c["novel_id"]))
         adh = ok / appl if appl else 1.0
 
         a = agg[c.get("model_used") or "(?)"]
         a[0] += 1; a[1] += len_ratio; a[2] += adh
-        a[3] += dup; a[4] += lost_para; a[5] += 1 if han > 0.02 else 0
+        a[3] += dup; a[4] += lost_para; a[5] += 1 if han > 0.02 else 0; a[6] += leak
 
         # điểm "tệ" gộp để xếp chương cần soi (cao = tệ). zh→vi tính KÝ TỰ nên ~2.5-3.5x
         # là BÌNH THƯỜNG; chỉ cờ khi <1.5x (cụt) hoặc >5x (phình/lặp).
         score = (han * 100) + max(0, 1.5 - len_ratio) * 20 + (len_ratio > 5.0) * 20 + \
-                (1 - adh) * 30 + dup * 10 + lost_para * 30
+                (1 - adh) * 30 + dup * 10 + lost_para * 30 + leak * 50
         if score >= 10:
             nv = c.get("novels") or {}
             title = nv.get("title_vi") or nv.get("title_zh") or f"#{c['novel_id']}"
@@ -427,16 +431,17 @@ def run_quality(novel_id: int | None) -> None:
             if adh < 1.0 and appl: reasons.append(f"glossary {adh:.0%}({ok}/{appl})")
             if dup: reasons.append(f"lặp cụm {dup}")
             if lost_para: reasons.append("mất đoạn")
+            if leak: reasons.append(f"mã sót '{_LEAK.search(vi).group(0)}'")
             bad.append((score, f"  nv{c['novel_id']} ch{c['chapter_index']} {title}: {', '.join(reasons)}"))
 
     print(f"Đã chấm {len(rows)} chương done.\n")
-    print(f"{'model':<40}{'chương':>7}{'len TB':>8}{'glossary':>9}{'lặp':>6}{'mất đoạn':>9}{'còn Hán':>8}")
-    print("-" * 87)
+    print(f"{'model':<40}{'chương':>7}{'len TB':>8}{'glossary':>9}{'lặp':>6}{'mất đoạn':>9}{'còn Hán':>8}{'mã sót':>8}")
+    print("-" * 95)
     for m, a in sorted(agg.items(), key=lambda kv: -kv[1][0]):
         n = int(a[0]) or 1
-        print(f"{m[:40]:<40}{int(a[0]):>7}{a[1]/n:>8.2f}{a[2]/n*100:>8.0f}%{int(a[3]):>6}{int(a[4]):>9}{int(a[5]):>8}")
+        print(f"{m[:40]:<40}{int(a[0]):>7}{a[1]/n:>8.2f}{a[2]/n*100:>8.0f}%{int(a[3]):>6}{int(a[4]):>9}{int(a[5]):>8}{int(a[6]):>8}")
     print("\nGhi chú: len TB ~2.5-3.5 là bình thường (zh→vi tính KÝ TỰ); "
-          "glossary nên ~100%; lặp cụm/mất đoạn/còn Hán nên 0.")
+          "glossary nên ~100%; lặp cụm/mất đoạn/còn Hán/mã sót nên 0.")
     bad.sort(reverse=True)
     if bad:
         print(f"\n{len(bad)} chương cần soi (tệ nhất trước):")
@@ -528,6 +533,46 @@ def run_redich(novel_id: int | None, engine: str = "hachimi",
           f"(priority nền 90). Theo dõi bảng chapters/translation_jobs trong Supabase.")
 
 
+def run_redich_leaked(priority: int = 70, dry: bool = True) -> None:
+    """Xếp dịch lại ĐÚNG những chương còn mảnh mã termguard (bug 26/07).
+
+    `redich --novel N` xếp cả truyện; lỗi này chỉ dính lác đác vài chương rải nhiều truyện
+    nên quét theo dấu vết rồi nhặt từng chương. Không đổi engine của truyện — lỗi nằm ở
+    termguard, không phải ở model."""
+    from .translator.termguard import _LEAK
+
+    dirty: list[dict] = []
+    frm = 0
+    while True:
+        rows = (db.sb().table("chapters")
+                .select("id, novel_id, chapter_index, content_vi")
+                .eq("translation_status", "done").not_.is_("content_vi", "null")
+                .range(frm, frm + 299).execute().data or [])
+        dirty += [r for r in rows if _LEAK.search(r["content_vi"] or "")]
+        if len(rows) < 300:
+            break
+        frm += 300
+        print(f"  ...đã quét {frm} chương, thấy {len(dirty)} dính", end="\r")
+
+    novels = {r["novel_id"] for r in dirty}
+    print(f"\n{len(dirty)} chương dính mã sót trên {len(novels)} truyện.")
+    for r in dirty[:20]:
+        sample = _LEAK.search(r["content_vi"]).group(0)
+        print(f"  nv{r['novel_id']} ch{r['chapter_index']}: {sample!r}")
+    if dry:
+        print("\nChạy thử — thêm --write để xếp hàng dịch lại.")
+        return
+    ids = [r["id"] for r in dirty]
+    for batch in _chunks(ids, 500):
+        db.sb().table("translation_jobs").delete().eq(
+            "type", "chapter").in_("chapter_id", batch).execute()
+        db.sb().table("chapters").update({"translation_status": "queued"}).in_("id", batch).execute()
+        db.sb().table("translation_jobs").insert(
+            [{"type": "chapter", "novel_id": r["novel_id"], "chapter_id": r["id"],
+              "priority": priority} for r in dirty if r["id"] in set(batch)]).execute()
+    print(f"Đã xếp lại {len(ids)} chương (priority {priority}).")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="novelworker")
     parser.add_argument("mode",
@@ -535,6 +580,9 @@ def main() -> None:
     parser.add_argument("--engine", default="hachimi", help="redich: engine dịch lại (mặc định hachimi)")
     parser.add_argument("--priority", type=int, default=70,
                         help="redich: priority job (nhỏ = dịch trước; 70 = trên chương đọc thử)")
+    parser.add_argument("--leaked", action="store_true",
+                        help="redich: chỉ nhặt chương còn mảnh mã termguard (mặc định chạy thử)")
+    parser.add_argument("--write", action="store_true", help="redich --leaked: ghi DB thật")
     parser.add_argument("--book-id", help="add: id truyện (số trong URL nguồn)")
     parser.add_argument("--source", default="shuhaige",
                         help="add: sources.name của nguồn crawl (mặc định shuhaige)")
@@ -568,7 +616,10 @@ def main() -> None:
         print(f"Đã thêm truyện #{novel['id']} ({args.source}): {novel['title_zh']} — "
               f"dùng `request --novel {novel['id']} --up-to N` để xếp hàng dịch.")
     elif args.mode == "redich":
-        run_redich(args.novel, args.engine, args.priority)  # bỏ --novel = tất cả truyện
+        if args.leaked:
+            run_redich_leaked(args.priority, dry=not args.write)
+        else:
+            run_redich(args.novel, args.engine, args.priority)  # bỏ --novel = tất cả truyện
     else:
         if args.novel is None:
             parser.error("request cần --novel <id>")
