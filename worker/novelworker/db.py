@@ -445,6 +445,13 @@ def _is_safe_pending_term(term: dict, canonical_vi: str | None) -> bool:
     return correct.isascii() and bool(_LATIN_NAME.match(correct))
 
 
+# ponytail: van chặn phình, KHÔNG phải để tiết kiệm prompt — termguard/prompts đều đã lọc
+# term theo sự hiện diện trong chữ Hán nên term thừa gần như miễn phí. Trần đặt trên mức
+# thực đo (26/07: median 21, p90 43, max 604) để hôm nay không cắt gì; nó chỉ chặn một
+# truyện kéo vô hạn row mỗi chương. Cắt theo hit_count giảm dần → phần rơi là term ít gặp nhất.
+PENDING_LIMIT = 1000
+
+
 def get_glossary(novel_id: int) -> tuple[list[dict], int]:
     """Trả về (terms, version). Gồm term đã duyệt (truyện + global) VÀ term gợi ý
     (approved=false) của truyện.
@@ -466,6 +473,7 @@ def get_glossary(novel_id: int) -> tuple[list[dict], int]:
         .select("id,novel_id,term_zh,wrong_vi,correct_vi,term_type,note,narrator_term,approved,first_chapter,hit_count,conflict_vi")
         .eq("approved", False).eq("novel_id", novel_id)
         .order("hit_count", desc=True).order("created_at")
+        .limit(PENDING_LIMIT)
         .execute()
     ).data or []
     # import muộn: db dùng được độc lập trong các tool không tải translator.

@@ -22,6 +22,13 @@ TERMS = [
     ("弟弟", "đệ đệ", "xưng hô cổ phong, không dùng 'em trai'"),
     ("冷却时间", "CD", "truyện võng du dùng CD, không dịch 'thời gian hồi chiêu'"),
     ("高校", "trường cao đẳng", "model hay ra 'Cao tá'/'Cao hiệu' — chữ vô nghĩa"),
+    # Đợt 26/07: đo trên glossary thật (term xuất hiện ở ≥5 truyện, xem bản dịch nào
+    # thắng phiếu). Năm cái dưới đây ĐA SỐ đang sai — bảng Hán-Việt của dự án là trọng tài.
+    ("筑基", "Trúc Cơ", "hanviet=Trúc Cơ; 82 truyện, bản thắng đang là 'chúc cơ' (sai âm)"),
+    ("元婴", "Nguyên Anh", "hanviet=Nguyên Anh; 57 truyện, tản mát ra 'nguyên doanh' (sai âm)"),
+    ("天赋", "thiên phú", "hanviet=Thiên Phú; 44 truyện, có nhánh 'thiên phúc' (sai âm)"),
+    ("异能", "dị năng", "46 truyện, model đẻ ra 'năng lực dị năng'/'năng lực dị' (lặp, cụt)"),
+    ("金手指", "kim thủ chỉ", "gu truyện chuyển ngữ; 'kim chỉ nam'/'kim chỉ' là sai nghĩa"),
 ]
 # ĐÃ THỬ VÀ BỎ: 高中 → "trường cấp ba". Model vốn dịch đúng 高中生 = "dáng vẻ học sinh
 # cấp ba"; ép term làm câu tệ đi ("trông như thật của trường cấp ba"). Chỉ ép những chỗ
