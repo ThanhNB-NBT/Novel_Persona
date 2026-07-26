@@ -48,7 +48,7 @@ Use the single-context domain-doc layout. See `docs/agents/domain.md`.
   rebuild (git pull + compose build).
 - RLS: client chỉ đọc dòng của mình, mọi ghi qua RPC SECURITY DEFINER.
 - Doc thiết kế trong `docs/`: `ke-hoach.md`, `crawl-multisource.md`,
-  `tu-tien.md`, `todo-handoff.md` (việc treo).
+  `tu-tien.md`.
 
 ## Build & thử
 
