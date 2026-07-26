@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import threading
 import time
 
@@ -26,7 +27,17 @@ from .crawler.registry import TEMPLATE_REGISTRY
 from .crawler import sync
 from .translator import worker as translator_worker
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+_LOG_FMT = "%(asctime)s %(levelname)s %(name)s: %(message)s"
+# LOG_FILE=<đường dẫn> → ghi thẳng ra file bằng UTF-8, KHÔNG đi qua console.
+# Lý do (26/07): trên Windows, `python ... *>> worker.log` để PowerShell 5.1 giải mã đầu ra
+# theo bảng mã console rồi mới ghi — dấu tiếng Việt hỏng ("NHß║¼N"), và cách hỏng đổi theo
+# chcp nên không có câu lệnh nào chữa cho chắc. Docker/Linux không đặt biến này, giữ nguyên
+# log ra stdout như cũ.
+_log_file = os.getenv("LOG_FILE", "").strip()
+logging.basicConfig(
+    level=logging.INFO, format=_LOG_FMT,
+    handlers=[logging.FileHandler(_log_file, encoding="utf-8")] if _log_file else None,
+)
 # httpx INFO log MỌI request Supabase (~10 dòng/10s/container) → log Docker phình
 # chiếm đĩa VPS; chỉ giữ cảnh báo/lỗi. Log nghiệp vụ của worker không bị ảnh hưởng.
 logging.getLogger("httpx").setLevel(logging.WARNING)
