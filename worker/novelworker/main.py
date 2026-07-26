@@ -483,13 +483,18 @@ def _chunks(seq: list, n: int):
         yield seq[i:i + n]
 
 
-def run_redich(novel_id: int | None, engine: str = "hachimi") -> None:
+def run_redich(novel_id: int | None, engine: str = "hachimi",
+               priority: int = 70) -> None:
     """Dịch LẠI chương đã done bằng engine khác (mặc định 'hachimi').
 
     Đổi translation_provider của truyện → engine (model=NULL để re-pin ở chương đầu),
-    xoá job chương cũ, đặt chương done → queued rồi enqueue lại với priority NỀN (90 —
-    không giành lượt với người đang đọc). `--novel <id>` để canary 1 truyện; bỏ trống =
-    TẤT CẢ truyện. Chương có content_zh NULL sẽ được crawler backfill trước khi dịch."""
+    xoá job chương cũ, đặt chương done → queued rồi enqueue lại. `--novel <id>` để canary
+    1 truyện; bỏ trống = TẤT CẢ truyện. Chương có content_zh NULL sẽ được crawler backfill
+    trước khi dịch.
+
+    priority mặc định 70: dưới người đang đọc (5) và tủ sách (30), TRÊN chương đọc thử
+    (75) — dịch lại kho là việc chính, không nên xếp sau hàng nghìn chương mẫu của truyện
+    chưa ai đọc. Đặt 90 nếu muốn nó chạy nền đúng nghĩa."""
     # nhiều chương trước: job cùng priority xếp theo thứ tự chèn, nên enqueue truyện
     # dày trước là nó được dịch trước.
     q = db.sb().table("novels").select("id, title_zh, title_vi") \
@@ -515,7 +520,7 @@ def run_redich(novel_id: int | None, engine: str = "hachimi") -> None:
             db.sb().table("chapters").update(
                 {"translation_status": "queued"}).in_("id", batch).execute()
             db.sb().table("translation_jobs").insert(
-                [{"type": "chapter", "novel_id": nid, "chapter_id": cid, "priority": 90}
+                [{"type": "chapter", "novel_id": nid, "chapter_id": cid, "priority": priority}
                  for cid in batch]).execute()
         total += len(ids)
         print(f"  nv{nid} {nv.get('title_vi') or nv.get('title_zh')}: {len(ids)} chương")
@@ -528,6 +533,8 @@ def main() -> None:
     parser.add_argument("mode",
                         choices=["crawl", "translate", "request", "add", "cost", "audit", "quality", "meta", "redich"])
     parser.add_argument("--engine", default="hachimi", help="redich: engine dịch lại (mặc định hachimi)")
+    parser.add_argument("--priority", type=int, default=70,
+                        help="redich: priority job (nhỏ = dịch trước; 70 = trên chương đọc thử)")
     parser.add_argument("--book-id", help="add: id truyện (số trong URL nguồn)")
     parser.add_argument("--source", default="shuhaige",
                         help="add: sources.name của nguồn crawl (mặc định shuhaige)")
@@ -561,7 +568,7 @@ def main() -> None:
         print(f"Đã thêm truyện #{novel['id']} ({args.source}): {novel['title_zh']} — "
               f"dùng `request --novel {novel['id']} --up-to N` để xếp hàng dịch.")
     elif args.mode == "redich":
-        run_redich(args.novel, args.engine)   # bỏ --novel = tất cả truyện
+        run_redich(args.novel, args.engine, args.priority)  # bỏ --novel = tất cả truyện
     else:
         if args.novel is None:
             parser.error("request cần --novel <id>")
