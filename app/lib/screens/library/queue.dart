@@ -57,6 +57,12 @@ class QueueScreen extends ConsumerWidget {
                       Expanded(
                           child: Text('Hàng đợi',
                               style: Theme.of(context).textTheme.titleMedium)),
+                      // Danh sách bị cắt ở kQueueWindow — nói rõ để "đang tải về" bên
+                      // dưới không bị đọc nhầm thành con số toàn kho.
+                      if (state.pendingTotal > kQueueWindow)
+                        Text('$kQueueWindow đầu / ${state.pendingTotal}',
+                            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                color: Theme.of(context).colorScheme.onSurfaceVariant)),
                     ]),
                   ),
                   for (final g in _groupByNovel(state.active)) _NovelQueueCard(g),
@@ -209,7 +215,9 @@ class _Summary extends StatelessWidget {
     final t = Theme.of(context).textTheme;
     final translating =
         s.active.where((c) => c['translation_status'] == 'translating').length;
-    final queued = s.active.length - translating;
+    // "đang chờ" = count THẬT từ DB. Đếm s.active ra đúng bằng kQueueWindow nên trước
+    // đây ô này luôn báo 200 dù hàng đợi có 2000 hay 20 job.
+    final queued = s.pendingTotal;
     final live = translating > 0;
 
     Widget cell(String v, String label, {Color? c}) => Expanded(

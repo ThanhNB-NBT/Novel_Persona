@@ -2,6 +2,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+/// Các file data khác chỉ import `core.dart`; re-export để chúng dùng được
+/// `.count(CountOption.exact)` mà không phải kéo thêm supabase_flutter.
+export 'package:supabase_flutter/supabase_flutter.dart' show CountOption;
+
 final sb = Supabase.instance.client;
 
 /// Gán trong main() trước runApp.
