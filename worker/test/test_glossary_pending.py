@@ -24,6 +24,21 @@ def test_khong_ghim_danh_tu_chung_bi_gan_nhan_person():
     assert not _is_safe_pending_term(term("Sư Phụ", term_zh="师父"), "Sư Phụ")
 
 
+def test_dia_danh_mon_phai_khong_duoc_huong_ngoai_le_latin():
+    """Bug 26/07: ngoại lệ tên-Tây cho cả place/sect → 1137 term tiếng Anh dịch nghĩa lọt
+    vào bản dịch (组织→"Organization", A基地→"A Base") rồi bị termguard cưỡng chế."""
+    assert not _is_safe_pending_term(term("Organization", "sect", "组织"), "Tổ Chức")
+    assert not _is_safe_pending_term(term("Youth League", "sect", "青年团"), "Thanh Niên Đoàn")
+    assert not _is_safe_pending_term(term("A Base", "place", "A基地"), None)
+    # nhưng địa danh KHỚP Hán-Việt vẫn qua (nhánh 1) — kể cả khi không có dấu
+    assert _is_safe_pending_term(term("Giang Nam", "place", "江南"), "Giang Nam")
+
+
+def test_ten_nguoi_qua_dai_la_cum_dich_nghia():
+    assert _is_safe_pending_term(term("Mary Ann"), "Mã Lệ An")       # 2 từ: tên thật
+    assert not _is_safe_pending_term(term("A City Central Hospital"), None)
+
+
 def test_khong_ghim_ban_dich_nghia_hay_sai_loai():
     assert not _is_safe_pending_term(term("Dây chuyền Thiền Định", "item"), "Minh Tưởng Hạng Liên")
     assert not _is_safe_pending_term(term("chủ gia tộc Hoa"), "Hoa Gia Chủ")

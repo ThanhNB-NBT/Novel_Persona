@@ -417,7 +417,9 @@ def heal_glossary_terms(terms: list[dict]) -> list[dict]:
 
 
 # Tên phương Tây giữ nguyên chữ Latin: "Maria", "Elton", "GG-Captain", "Simon Elton".
-_LATIN_NAME = re.compile(r"^[A-Z][A-Za-z]*(?:[ .'\-][A-Za-z]+)*$")
+# Tối đa 3 từ: tên người trong truyện Trung hiếm khi dài hơn, mà cụm dài gần như luôn là
+# LLM dịch NGHĨA sang tiếng Anh ("A City Central Hospital") chứ không phải phiên âm tên.
+_LATIN_NAME = re.compile(r"^[A-Z][A-Za-z]*(?:[ .'\-][A-Za-z]+){0,2}$")
 # Danh từ chung LLM hay gắn nhãn person: ghim lại thì mọi chỗ "cha" thành "Ba Ba".
 _NOT_A_NAME = {
     "爸爸", "妈妈", "父亲", "母亲", "爷爷", "奶奶", "外公", "外婆", "哥哥", "姐姐",
@@ -434,6 +436,11 @@ def _is_safe_pending_term(term: dict, canonical_vi: str | None) -> bool:
     2. Bản dịch là tên Latin thuần (tên Tây phiên qua tiếng Trung). Trước đây dạng này bị
        loại vì hanviet(玛利亚) = "Mã Lợi Á" ≠ "Maria" — đúng lớp tên mà model phiên loạn
        nhất (Malia/Marya/Mary/Mã Lợi Á trong cùng một chương) nên không ghim là hỏng nhất.
+
+    Ngoại lệ (2) CHỈ áp cho tên NGƯỜI. Đo 26/07: nó từng cho 1137 term place/sect lọt vào
+    bản dịch dưới dạng tiếng Anh dịch nghĩa — 组织→"Organization", 青年团→"Youth League",
+    A基地→"A Base" — rồi termguard cưỡng chế thẳng vào câu tiếng Việt. Địa danh/môn phái
+    không có lý do gì phải giữ chữ Latin: nếu đúng thì nó khớp Hán-Việt ở nhánh (1).
     """
     if term.get("term_type") not in {"person", "place", "sect"}:
         return False
@@ -442,6 +449,8 @@ def _is_safe_pending_term(term: dict, canonical_vi: str | None) -> bool:
         return False
     if canonical_vi and correct == canonical_vi:
         return True
+    if term.get("term_type") != "person":
+        return False
     return correct.isascii() and bool(_LATIN_NAME.match(correct))
 
 
