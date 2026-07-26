@@ -275,6 +275,16 @@ def reprioritize_chapters_by_reading(active_hours: int, prio_read: int, prio_idl
     return len(to_read) + len(to_idle)
 
 
+def queue_snapshot() -> dict[str, int]:
+    """Đếm job chờ / đang chạy — cho dòng nhịp tiến độ mỗi 60s trong log translator."""
+    def n(status: str) -> int:
+        return (
+            sb().table("translation_jobs").select("id", count="exact")
+            .eq("status", status).limit(1).execute()
+        ).count or 0
+    return {"pending": n("pending"), "running": n("running")}
+
+
 def count_chapters_translated_today() -> int:
     """Đếm chương dịch xong từ 00:00 UTC hôm nay — dùng cho cầu chì chi phí."""
     day_start = datetime.now(timezone.utc).replace(

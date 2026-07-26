@@ -1023,6 +1023,13 @@ def _translate_hachimi(
     return text, title_vi, detected, "hachimi", prompt_tokens, completion_tokens
 
 
+def _novel_tag(novel_id: int, nv: dict | None = None) -> str:
+    """'nv2322 «Trọng Sinh Chi Tuyệt Sắc Phong Lưu»' — id để tra, tên để người đọc log
+    biết đang chạy truyện nào. Cắt 40 ký tự cho khỏi tràn dòng."""
+    title = ((nv or {}).get("title_vi") or (nv or {}).get("title_zh") or "").strip()
+    return f"nv{novel_id} «{title[:40]}»" if title else f"nv{novel_id}"
+
+
 def handle_chapter(job: dict, llm) -> None:
     ch = db.sb().table("chapters").select("*").eq("id", job["chapter_id"]).single().execute().data
     if not ch.get("content_zh"):
@@ -1192,10 +1199,13 @@ def handle_chapter(job: dict, llm) -> None:
         log.exception("Không lưu được %d glossary term (chương %s)", len(suggestion_rows), ch["id"])
 
     st = providers.get_call_stats()
-    log.info("Đã dịch chương %s/%s (novel %s) — %d chunk, %d LLM request (%d lỗi/retry), "
-             "%d+%d tok, %.1fs",
-             ch["chapter_index"], ch["novel_id"], model, n_chunks, st["calls"],
-             st["failures"], st["prompt_tokens"], st["completion_tokens"], time.time() - t_start)
+    # Một dòng đọc là hiểu: truyện nào, chương mấy, engine gì, tốn bao lâu. Bản cũ in
+    # "chương 1/3590 (novel hachimi)" — người đọc log tưởng chương 1 trên 3590 chương,
+    # thật ra là chương/novel_id, còn "novel" lại là tên engine.
+    log.info("XONG %s ch.%s · %s %.1fs · %d chunk · LLM %d call (%d lỗi) · %d+%d tok",
+             _novel_tag(ch["novel_id"], nv), ch["chapter_index"], model,
+             time.time() - t_start, n_chunks, st["calls"], st["failures"],
+             st["prompt_tokens"], st["completion_tokens"])
 
 
 def _set_patch_result(job_id: int, note: str) -> None:
@@ -1304,7 +1314,8 @@ def _consume_loop(worker_id: str, slot: int, paused: threading.Event, poll_secon
                 idle_sleep = min(idle_sleep + poll_seconds, 15.0)
                 continue
             idle_sleep = poll_seconds
-            log.info("[%s] Nhận job #%s type=%s novel=%s", worker_id, job["id"], job["type"], job["novel_id"])
+            log.info("NHẬN [%s] job #%s %s nv%s (ưu tiên %s)", worker_id, job["id"],
+                     job["type"], job["novel_id"], job.get("priority"))
             lease_stop = threading.Event()
             lease_thread = threading.Thread(
                 target=_keep_job_lock,
@@ -1348,10 +1359,20 @@ def run_forever(poll_seconds: float = 3.0) -> None:
     - Cầu chì chi phí: dịch đủ MAX_CHAPTERS_PER_DAY chương trong ngày → tạm dừng
       mọi luồng tới 00:00 UTC hôm sau. Chống bug app spam request_translation.
     """
+    # Đọc worker_settings TRƯỚC khi in — trần chỉnh từ tab Crawl mới là trần thật, bản cũ
+    # in giá trị .env (1000) nên log mâu thuẫn với con số hiện trong app.
+    try:
+        rs0 = db.runtime_settings()
+        settings.max_chapters_per_day = db.runtime_int(
+            rs0, "max_chapters_per_day", settings.max_chapters_per_day)
+        settings.audit_interval_min = db.runtime_int(
+            rs0, "audit_interval_min", settings.audit_interval_min)
+    except Exception:
+        log.warning("Chưa đọc được worker_settings lúc khởi động — dùng giá trị .env")
     log.info(
-        "Translator '%s' bắt đầu: %d luồng, provider=%s, trần %d chương/ngày",
+        "KHỞI ĐỘNG translator '%s' · %d luồng · engine mặc định %s · trần %d chương/ngày",
         settings.worker_id, settings.translator_concurrency,
-        settings.llm_provider, settings.max_chapters_per_day,
+        settings.default_engine, settings.max_chapters_per_day,
     )
     _install_shutdown_handler()
     paused = threading.Event()
@@ -1374,10 +1395,14 @@ def run_forever(poll_seconds: float = 3.0) -> None:
             db.heartbeat("translator")  # điểm danh mỗi 60s
             # knob dịch chỉnh từ app (worker_settings) — ăn trong ≤60s, không cần restart
             rs = db.runtime_settings()
+            cap_before = settings.max_chapters_per_day
             settings.max_chapters_per_day = db.runtime_int(
                 rs, "max_chapters_per_day", settings.max_chapters_per_day)
             settings.audit_interval_min = db.runtime_int(
                 rs, "audit_interval_min", settings.audit_interval_min)
+            if settings.max_chapters_per_day != cap_before:
+                log.info("Trần dịch đổi từ app: %d → %d chương/ngày",
+                         cap_before, settings.max_chapters_per_day)
             db.requeue_stale_jobs(settings.stale_job_minutes)
             db.reset_orphan_chapters()  # dọn chương queued/translating không còn job (ghost Hàng đợi)
             # Style bible đã gỡ khỏi đường dịch (25/07) → không tái tạo nữa, khỏi tốn
@@ -1402,11 +1427,19 @@ def run_forever(poll_seconds: float = 3.0) -> None:
             db.reprioritize_chapters_by_reading(
                 settings.active_read_hours, settings.prio_read, settings.prio_idle)
             done_today = db.count_chapters_translated_today()
+            # Nhịp tiến độ mỗi 60s: nhìn 1 dòng là biết còn bao nhiêu, đang chạy mấy lane,
+            # hôm nay được bao nhiêu trên trần — khỏi phải mở app hay chạy script riêng.
+            try:
+                q = db.queue_snapshot()
+                log.info("HÀNG ĐỢI %d job chờ · %d đang chạy · hôm nay %d/%d chương",
+                         q["pending"], q["running"], done_today, settings.max_chapters_per_day)
+            except Exception as e:
+                log.warning("Không đọc được hàng đợi (bỏ qua): %s", e)
             if done_today >= settings.max_chapters_per_day:
                 if not paused.is_set():
                     log.warning(
-                        "Chạm trần %d chương/ngày — tạm dừng dịch tới 00:00 UTC. "
-                        "Nâng MAX_CHAPTERS_PER_DAY trong .env nếu chủ đích đọc nhiều.",
+                        "CHẠM TRẦN %d chương/ngày — nghỉ tới 00:00 UTC. Nâng ở tab Crawl "
+                        "trong app (worker_settings.max_chapters_per_day) nếu muốn chạy tiếp.",
                         settings.max_chapters_per_day,
                     )
                     paused.set()
