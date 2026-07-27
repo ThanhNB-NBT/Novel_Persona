@@ -894,7 +894,7 @@ def _init_style_bible(chapter_llm, nv: dict, novel_id: int, content_zh: str,
             # style sinh từ chương giữa truyện kém đại diện hơn chương 1 — ghi lại
             # nguồn để biết bản nào đáng tái tạo
             style["src_chapter"] = chapter_index
-        db.sb().table("novels").update({"translation_style": style}).eq("id", novel_id).execute()
+        db.sb().table("novels").update({"translation_style": style}, returning="minimal").eq("id", novel_id).execute()
         log.info("Novel %s: đã sinh style bible %s", novel_id, style)
         return style
     except Exception as e:
@@ -1042,7 +1042,7 @@ def handle_metadata(job: dict, llm) -> None:
         "genres": genres or novel.get("genres"),
         "meta_translated": True,
         "updated_at": db.utc_now(),
-    }).eq("id", novel["id"]).execute()
+    }, returning="minimal").eq("id", novel["id"]).execute()
     log.info("Đã dịch metadata truyện %s: %s", novel["id"], data.get("title_vi"))
 
 
@@ -1160,7 +1160,7 @@ def handle_chapter(job: dict, llm) -> None:
         if not nv.get("translation_model"):
             db.sb().table("novels").update({
                 "translation_provider": "hachimi", "translation_model": model,
-            }).eq("id", ch["novel_id"]).execute()
+            }, returning="minimal").eq("id", ch["novel_id"]).execute()
     else:
         chunks = _split_chunks(ch["content_zh"])
         n_chunks = len(chunks)
@@ -1183,7 +1183,7 @@ def handle_chapter(job: dict, llm) -> None:
                 db.sb().table("novels").update({
                     "translation_provider": res.provider,
                     "translation_model": res.model,
-                }).eq("id", ch["novel_id"]).execute()
+                }, returning="minimal").eq("id", ch["novel_id"]).execute()
                 nv["translation_provider"], nv["translation_model"] = res.provider, res.model
                 chapter_llm = llm.pin(res.provider, res.model)
             text = res.text
@@ -1257,7 +1257,7 @@ def _set_patch_result(job_id: int, note: str) -> None:
     Best-effort: migration 069 chưa chạy (thiếu cột result) thì patch vẫn coi như
     xong, chỉ chưa hiện kết quả — không được để việc vá fail vì cột trang trí."""
     try:
-        db.sb().table("translation_jobs").update({"result": note}).eq("id", job_id).execute()
+        db.sb().table("translation_jobs").update({"result": note}, returning="minimal").eq("id", job_id).execute()
     except Exception:
         log.debug("Không ghi được result cho job #%s (migration 069 chưa chạy?)", job_id)
 

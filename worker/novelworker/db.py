@@ -91,7 +91,7 @@ def claim_next_job(worker_id: str) -> dict | None:
 
 def refresh_job_lock(job_id: int, worker_id: str) -> None:
     """Gia hạn lease để reaper không lấy lại job LLM vẫn đang chạy."""
-    sb().table("translation_jobs").update({"locked_at": utc_now()}).eq(
+    sb().table("translation_jobs").update({"locked_at": utc_now()}, returning="minimal").eq(
         "id", job_id
     ).eq("status", "running").eq("locked_by", worker_id).execute()
 
@@ -99,14 +99,18 @@ def refresh_job_lock(job_id: int, worker_id: str) -> None:
 def finish_job(job_id: int, ok: bool, error: str | None = None) -> None:
     if ok:
         sb().table("translation_jobs").update(
-            {"status": "done", "done_at": utc_now(), "error": None, "locked_by": None, "locked_at": None}
+            {"status": "done", "done_at": utc_now(), "error": None,
+             "locked_by": None, "locked_at": None},
+            returning="minimal",
         ).eq("id", job_id).execute()
         return
     # thất bại: còn lượt thì trả về pending để retry, hết lượt thì failed
     job = sb().table("translation_jobs").select("attempts,max_attempts,chapter_id").eq("id", job_id).single().execute().data
     status = "pending" if job["attempts"] < job["max_attempts"] else "failed"
     sb().table("translation_jobs").update(
-        {"status": status, "error": (error or "")[:2000], "locked_by": None, "locked_at": None}
+        {"status": status, "error": (error or "")[:2000],
+         "locked_by": None, "locked_at": None},
+        returning="minimal",
     ).eq("id", job_id).execute()
     if job.get("chapter_id"):
         sb().table("chapters").update(
@@ -182,7 +186,9 @@ def record_glossary_conflicts(novel_id: int, rows: list[dict]) -> None:
 def enqueue(type_: str, novel_id: int, chapter_id: int | None = None, priority: int = 100) -> None:
     try:
         sb().table("translation_jobs").insert(
-            {"type": type_, "novel_id": novel_id, "chapter_id": chapter_id, "priority": priority}
+            {"type": type_, "novel_id": novel_id, "chapter_id": chapter_id,
+             "priority": priority},
+            returning="minimal",
         ).execute()
     except Exception as e:  # unique index chặn job trùng → bỏ qua
         if "duplicate" not in str(e).lower() and "unique" not in str(e).lower():
@@ -202,7 +208,7 @@ def requeue_stale_jobs(max_minutes: int = 10) -> int:
     dead = (
         sb().table("translation_jobs")
         .update({"status": "failed", "locked_by": None, "locked_at": None,
-                 "error": f"worker không phản hồi sau {max_minutes} phút, hết lượt retry"})
+                 "error": f"worker không phản hồi sau {max_minutes} phút, hết lượt retry"}, returning="minimal")
         .eq("status", "running").lt("locked_at", cutoff).gte("attempts", 3)
         .execute()
     ).data or []
@@ -211,7 +217,7 @@ def requeue_stale_jobs(max_minutes: int = 10) -> int:
     stale = (
         sb().table("translation_jobs")
         .update({"status": "pending", "locked_by": None, "locked_at": None,
-                 "error": f"requeue: worker không phản hồi sau {max_minutes} phút"})
+                 "error": f"requeue: worker không phản hồi sau {max_minutes} phút"}, returning="minimal")
         .eq("status", "running").lt("locked_at", cutoff)
         .execute()
     ).data or []
@@ -277,7 +283,7 @@ def reprioritize_chapters_by_reading(active_hours: int, prio_read: int, prio_idl
     # batch .in_() — backlog lớn (requeue hàng loạt) khiến list id quá dài → PostgREST 400.
     for ids, prio in ((to_read, prio_read), (to_idle, prio_idle)):
         for i in range(0, len(ids), 200):
-            sb().table("translation_jobs").update({"priority": prio}).in_("id", ids[i:i + 200]).execute()
+            sb().table("translation_jobs").update({"priority": prio}, returning="minimal").in_("id", ids[i:i + 200]).execute()
     return len(to_read) + len(to_idle)
 
 

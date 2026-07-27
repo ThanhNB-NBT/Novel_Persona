@@ -90,7 +90,7 @@ def recompute_canonical(key: str) -> None:
     for n in rows:
         want = n["id"] == winner_id
         if n["is_canonical"] != want:  # chỉ update khi đổi → khỏi ghi thừa
-            db.sb().table("novels").update({"is_canonical": want}).eq("id", n["id"]).execute()
+            db.sb().table("novels").update({"is_canonical": want}, returning="minimal").eq("id", n["id"]).execute()
 
 
 def _blacklist(sid: int) -> tuple[set[str], set[str]]:
@@ -122,7 +122,7 @@ def backfill_dedup_keys() -> int:
     keys = set()
     for n in rows:
         k = dedup_key(n.get("title_zh"), n.get("author_zh"))
-        db.sb().table("novels").update({"dedup_key": k}).eq("id", n["id"]).execute()
+        db.sb().table("novels").update({"dedup_key": k}, returning="minimal").eq("id", n["id"]).execute()
         keys.add(k)
     for k in keys:
         recompute_canonical(k)
@@ -179,7 +179,7 @@ def cache_cover(adapter: SourceAdapter, novel_id: int, external_url: str | None)
 def _cache_cover_and_update(adapter: SourceAdapter, novel_id: int, external_url: str | None) -> None:
     cached = cache_cover(adapter, novel_id, external_url)
     if cached and cached != external_url:
-        db.sb().table("novels").update({"cover_url": cached}).eq("id", novel_id).execute()
+        db.sb().table("novels").update({"cover_url": cached}, returning="minimal").eq("id", novel_id).execute()
 
 
 # Lọc thể loại lúc discovery: ưu tiên fantasy/tu tiên; romance được giữ nếu đi
@@ -260,7 +260,7 @@ def _queue_canonical_work(adapter: SourceAdapter, novel: dict, meta, prio_meta: 
                                      limit_stubs=settings.sample_chapters)
         source_status = getattr(adapter, "last_toc_status", None)
         if (source_status or meta.status) != "completed" and total < settings.discover_min_chapters:
-            db.sb().table("novels").update({"hidden": True}).eq("id", novel["id"]).execute()
+            db.sb().table("novels").update({"hidden": True}, returning="minimal").eq("id", novel["id"]).execute()
             log.info("Bỏ qua truyện mỏng %s (%s): %d chương < %d",
                      novel["id"], meta.title_zh, total, settings.discover_min_chapters)
             return False
@@ -464,7 +464,7 @@ def discover_ranking(adapter: SourceAdapter, max_new: int = 30) -> None:
             # ranking /allvisit/ = lượt đọc tổng → thứ hạng gần như bất động giữa các
             # chu kỳ; chỉ UPDATE khi rank ĐỔI thật, khỏi bắn trăm round-trip no-op.
             if known[source_novel_id].get("source_rank") != rank:
-                db.sb().table("novels").update({"source_rank": rank}).eq(
+                db.sb().table("novels").update({"source_rank": rank}, returning="minimal").eq(
                     "id", known[source_novel_id]["id"]).execute()
             skipped += 1
             continue
@@ -772,7 +772,7 @@ def sync_chapter_list(
         log.info("Truyện %s đổi trạng thái %s → %s (theo nguồn)",
                  novel_id, row.get("status"), src_status)
     if fields:
-        db.sb().table("novels").update(fields).eq("id", novel_id).execute()
+        db.sb().table("novels").update(fields, returning="minimal").eq("id", novel_id).execute()
     return total, added
 
 
@@ -801,7 +801,7 @@ def sync_followed_novels(adapter: SourceAdapter) -> None:
                 if queued:
                     log.info("Tủ sách: tự dịch đón %d chương mới truyện %s", queued, nv["id"])
             db.sb().table("novels").update(
-                {"last_checked_at": db.utc_now()}).eq("id", nv["id"]).execute()
+                {"last_checked_at": db.utc_now()}, returning="minimal").eq("id", nv["id"]).execute()
         except Exception:
             log.exception("Lỗi sync truyện %s", nv["id"])
         time.sleep(2.0)
@@ -906,7 +906,7 @@ def refresh_canonical_updates(adapter: SourceAdapter, limit: int) -> None:
         # Chỉ đánh dấu đã soi khi parse thành công; lỗi tạm phải được retry sớm.
         if synced:
             db.sb().table("novels").update(
-                {"last_checked_at": db.utc_now()}).eq("id", nv["id"]).execute()
+                {"last_checked_at": db.utc_now()}, returning="minimal").eq("id", nv["id"]).execute()
         time.sleep(2.0)
 
 
@@ -923,7 +923,7 @@ def _maybe_unhide_grown(nv: dict) -> None:
     count = row.get("chapter_count_source") or 0
     if row.get("status") != "completed" and count < settings.discover_min_chapters:
         return
-    db.sb().table("novels").update({"hidden": False}).eq("id", nv["id"]).execute()
+    db.sb().table("novels").update({"hidden": False}, returning="minimal").eq("id", nv["id"]).execute()
     db.enqueue("metadata", nv["id"], priority=10)
     queue_sample_chapters(nv["id"], settings.sample_chapters, settings.prio_idle)
     log.info("Truyện %s đủ %d chương — tự hiện lại + dịch metadata", nv["id"], count)
@@ -939,8 +939,7 @@ def _fail_chapter(ch: dict, msg: str) -> None:
     db.sb().table("chapters").update(
         {"translation_status": "failed"}, returning="minimal").eq("id", ch["id"]).execute()
     db.sb().table("translation_jobs").update(
-        {"status": "failed", "error": msg[:500]}
-    ).eq("chapter_id", ch["id"]).eq("status", "pending").execute()
+        {"status": "failed", "error": msg[:500]}, returning="minimal").eq("chapter_id", ch["id"]).eq("status", "pending").execute()
 
 
 def _refresh_chapter_ids(novel_id: int, refs: list) -> int:
@@ -1044,7 +1043,6 @@ def ensure_chapters_fetched(adapter: SourceAdapter, novel_id: int) -> None:
             # Job dịch kèm chương cũng phải failed — để pending là job "kẹt" mãi:
             # translator không claim (thiếu content_zh), admin retry lại chỉ reset job failed.
             db.sb().table("translation_jobs").update(
-                {"status": "failed", "error": f"crawl: {e}"[:500]}
-            ).eq("chapter_id", ch["id"]).eq("status", "pending").execute()
+                {"status": "failed", "error": f"crawl: {e}"[:500]}, returning="minimal").eq("chapter_id", ch["id"]).eq("status", "pending").execute()
             log.exception("Lỗi tải chương %s → failed", ch["id"])
         time.sleep(1.5)

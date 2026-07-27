@@ -182,7 +182,7 @@ def _source_tick(adapter: SourceAdapter, pending_fetch: list[dict], due: bool,
             log.info("TOC lười: novel %s đủ mục lục (%d chương, +%d stub)", nv["id"], total, n)
         except Exception:
             # gỡ cờ xin để không hammer mỗi tick; user mở lại truyện sẽ xin lại
-            db.sb().table("novels").update({"toc_requested_at": None}).eq("id", nv["id"]).execute()
+            db.sb().table("novels").update({"toc_requested_at": None}, returning="minimal").eq("id", nv["id"]).execute()
             log.exception("TOC lười: lỗi novel %s — gỡ cờ chờ xin lại", nv["id"])
     # 1) tải nội dung chương đang chờ dịch — NGƯỜI ĐỌC TRƯỚC. Discovery (bước 2, có thể
     # cả tiếng) tự nhường giữa chừng khi có chương ưu tiên cao chờ (sync.reader_fetch_waiting).
@@ -525,7 +525,7 @@ def run_redich(novel_id: int | None, engine: str = "hachimi",
     for nv in novels:
         nid = nv["id"]
         db.sb().table("novels").update(
-            {"translation_provider": engine, "translation_model": None}).eq("id", nid).execute()
+            {"translation_provider": engine, "translation_model": None}, returning="minimal").eq("id", nid).execute()
         ids = [c["id"] for c in (
             db.sb().table("chapters").select("id")
             .eq("novel_id", nid).eq("translation_status", "done").execute()
@@ -537,7 +537,7 @@ def run_redich(novel_id: int | None, engine: str = "hachimi",
                 {"translation_status": "queued"}, returning="minimal").in_("id", batch).execute()
             db.sb().table("translation_jobs").insert(
                 [{"type": "chapter", "novel_id": nid, "chapter_id": cid, "priority": priority}
-                 for cid in batch]).execute()
+                 for cid in batch], returning="minimal").execute()
         total += len(ids)
         print(f"  nv{nid} {nv.get('title_vi') or nv.get('title_zh')}: {len(ids)} chương")
     print(f"\nĐã xếp {total} chương của {len(novels)} truyện dịch lại bằng '{engine}' "
@@ -580,7 +580,7 @@ def run_redich_leaked(priority: int = 70, dry: bool = True) -> None:
         db.sb().table("chapters").update({"translation_status": "queued"}, returning="minimal").in_("id", batch).execute()
         db.sb().table("translation_jobs").insert(
             [{"type": "chapter", "novel_id": r["novel_id"], "chapter_id": r["id"],
-              "priority": priority} for r in dirty if r["id"] in set(batch)]).execute()
+              "priority": priority} for r in dirty if r["id"] in set(batch)], returning="minimal").execute()
     print(f"Đã xếp lại {len(ids)} chương (priority {priority}).")
 
 
