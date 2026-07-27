@@ -870,6 +870,10 @@ def refresh_canonical_updates(adapter: SourceAdapter, limit: int) -> None:
         .order("last_checked_at", desc=False, nullsfirst=True)
         .limit(max(1, limit // 10)).execute()
     ).data or []
+    # Nguồn sập (ddxs 2026-07-27: Cloudflare 521) làm MỌI truyện fail, mà fail thì không
+    # ghi last_checked_at → vòng sau lấy lại đúng nhóm đó, kẹt mãi một chỗ và đốt 2s
+    # sleep/truyện. 5 lỗi liên tiếp coi như nguồn chết, bỏ vòng cho nguồn khác chạy.
+    fail_streak = 0
     for i, nv in enumerate(rows):
         if reader_fetch_waiting():
             log.info("Refresh %s: nhường chỗ tải chương người đọc (đã soi %d/%d)",
@@ -887,8 +891,18 @@ def refresh_canonical_updates(adapter: SourceAdapter, limit: int) -> None:
             if n or total:
                 _maybe_unhide_grown(nv)
             synced = True
-        except Exception:
-            log.exception("Lỗi refresh truyện %s", nv["id"])
+            fail_streak = 0
+        except Exception as e:
+            fail_streak += 1
+            # traceback 1 lần là đủ hiểu; nguồn sập thì 45 traceback giống hệt chỉ làm rác log
+            if fail_streak == 1:
+                log.exception("Lỗi refresh truyện %s", nv["id"])
+            else:
+                log.warning("Lỗi refresh truyện %s: %s", nv["id"], e)
+            if fail_streak >= 5:
+                log.error("Nguồn %s lỗi %d truyện liên tiếp — bỏ vòng refresh này",
+                          adapter.name, fail_streak)
+                break
         # Chỉ đánh dấu đã soi khi parse thành công; lỗi tạm phải được retry sớm.
         if synced:
             db.sb().table("novels").update(

@@ -1096,7 +1096,12 @@ def _novel_tag(novel_id: int, nv: dict | None = None) -> str:
 
 
 def handle_chapter(job: dict, llm) -> None:
-    ch = db.sb().table("chapters").select("*").eq("id", job["chapter_id"]).single().execute().data
+    # Cột cụ thể, KHÔNG select("*"): dịch lại chương đã có bản Việt thì "*" kéo thêm cả
+    # content_vi cũ (~10KB) về rồi vứt — egress Supabase Free có 5GB/tháng.
+    ch = (
+        db.sb().table("chapters").select("id, novel_id, chapter_index, title_zh, content_zh")
+        .eq("id", job["chapter_id"]).single().execute()
+    ).data
     if not ch.get("content_zh"):
         raise MissingContentError(f"Chương {ch['id']} chưa có content_zh — crawler chưa tải xong")
     # Chương mới đã sạch từ crawler; chạy lại ở biên dịch để cứu dữ liệu cũ trong DB
