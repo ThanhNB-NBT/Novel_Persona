@@ -1348,6 +1348,10 @@ def _consume_loop(worker_id: str, slot: int, paused: threading.Event, poll_secon
     """Vòng lặp 1 luồng dịch. `slot` chọn key nvidia (2 key → 2 lane song song).
     `paused` set = đã chạm trần chi phí ngày → nghỉ."""
     llm = build_chain(slot)  # ghim 1 key nvidia cho luồng này, tái dùng suốt vòng đời
+    # Luồng 0 làm mọi loại như cũ; luồng 1 trở đi CHỈ dịch chương. Metadata ưu tiên cao
+    # hơn chương nên nếu luồng nào cũng được bốc nó thì Hachimi đứng im (CPU 0%) suốt
+    # lúc chờ LLM, dù hàng đợi còn cả nghìn chương — mà chương đâu cần LLM.
+    job_types = None if slot == 0 else ["chapter"]
     idle_sleep = poll_seconds
     next_rs_check = 0.0
     while not _shutdown.is_set():  # thoát GIỮA các job khi có tín hiệu dừng
@@ -1374,7 +1378,7 @@ def _consume_loop(worker_id: str, slot: int, paused: threading.Event, poll_secon
         # disconnected") ở claim/finish_job từng giết chết thread âm thầm, worker
         # nhìn như chạy mà không dịch gì. Job dở dang thì reaper trả lại sau.
         try:
-            job = db.claim_next_job(worker_id)
+            job = db.claim_next_job(worker_id, job_types)
             if not job:
                 # hàng đợi trống → giãn dần poll tới 15s (đỡ ~50k RPC/ngày lúc rảnh);
                 # có job lại về poll_seconds ngay — người đọc không phải chờ thêm
@@ -1438,8 +1442,10 @@ def run_forever(poll_seconds: float = 3.0) -> None:
     except Exception:
         log.warning("Chưa đọc được worker_settings lúc khởi động — dùng giá trị .env")
     log.info(
-        "KHỞI ĐỘNG translator '%s' · %d luồng · engine mặc định %s · trần %d chương/ngày",
+        "KHỞI ĐỘNG translator '%s' · %d luồng (%d chuyên chương) · engine mặc định %s"
+        " · trần %d chương/ngày",
         settings.worker_id, settings.translator_concurrency,
+        max(0, settings.translator_concurrency - 1),
         settings.default_engine, settings.max_chapters_per_day,
     )
     _install_shutdown_handler()

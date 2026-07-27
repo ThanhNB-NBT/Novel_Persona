@@ -84,8 +84,12 @@ def finalize_chapter_job(
 
 # ---------- jobs ----------
 
-def claim_next_job(worker_id: str) -> dict | None:
-    res = sb().rpc("claim_next_job", {"worker_id": worker_id}).execute()
+def claim_next_job(worker_id: str, types: list[str] | None = None) -> dict | None:
+    """`types` = None → mọi loại job; ["chapter"] → luồng chuyên dịch chương."""
+    args: dict[str, Any] = {"worker_id": worker_id}
+    if types:
+        args["p_types"] = types
+    res = sb().rpc("claim_next_job", args).execute()
     return res.data[0] if res.data else None
 
 
