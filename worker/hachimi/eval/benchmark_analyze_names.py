@@ -25,12 +25,12 @@ from novelworker.translator.worker import CHUNK_LIMIT, _extract_json
 BASE_URL = "https://integrate.api.nvidia.com/v1"
 CORPUS = Path(__file__).with_name("hachimi_base_longform.jsonl")
 OUTPUT_MD = Path(__file__).with_name("benchmark_analyze_names.md")
+# 2026-07-27: NVIDIA gỡ qwen3-next + mistral-small-4 (410 end-of-life), phải chọn lại.
 CANDIDATES = [
-    "mistralai/mistral-small-4-119b-2603",   # đang dùng, làm mốc
-    "qwen/qwen3-next-80b-a3b-instruct",
-    "meta/llama-4-maverick-17b-128e-instruct",
-    "google/gemma-4-31b-it",
-    "nvidia/nemotron-3-super-120b-a12b",
+    "z-ai/glm-5.2",                # đang dùng tạm, làm mốc
+    "openai/gpt-oss-120b",
+    "mistralai/mistral-medium-3.5-128b",
+    "minimaxai/minimax-m3",
 ]
 # Đáp án đã biết (đối chiếu tay từ glossary đã duyệt + gu đã chốt).
 EXPECTED = {
