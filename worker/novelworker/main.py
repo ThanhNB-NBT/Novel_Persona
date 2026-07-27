@@ -60,18 +60,6 @@ def build_adapters() -> dict[str, SourceAdapter]:
     return out
 
 
-def _ordered_novel_ids(jobs: list[dict], missing_chapter_ids: set[int]) -> list[int]:
-    """Giữ thứ tự priority/created_at của job, nhưng mỗi novel chỉ xuất hiện một lần."""
-    out: list[int] = []
-    seen: set[int] = set()
-    for job in jobs:
-        novel_id = job.get("novel_id")
-        if job.get("chapter_id") in missing_chapter_ids and novel_id not in seen:
-            seen.add(novel_id)
-            out.append(novel_id)
-    return out
-
-
 def _reconcile_adapters(adapters: dict[str, SourceAdapter]) -> None:
     """Ăn trạng thái bật/tắt nguồn từ DB mà không cần restart crawler.
 
@@ -97,33 +85,17 @@ def _reconcile_adapters(adapters: dict[str, SourceAdapter]) -> None:
 
 
 def _novels_needing_fetch(enabled_source_ids: set[int]) -> list[dict]:
-    """Novel cần tải bản gốc, đúng thứ tự ưu tiên của hàng dịch và chỉ từ nguồn đang bật."""
-    if not enabled_source_ids:
-        return []
-    jobs = (
-        db.sb().table("translation_jobs")
-        .select("novel_id,chapter_id,priority,created_at")
-        .eq("type", "chapter").eq("status", "pending")
-        .not_.is_("chapter_id", "null")
-        .order("priority").order("created_at").limit(200).execute()
-    ).data or []
-    chapter_ids = [j["chapter_id"] for j in jobs]
-    if not chapter_ids:
-        return []
-    missing = (
-        db.sb().table("chapters").select("id")
-        .in_("id", chapter_ids).eq("translation_status", "queued")
-        .is_("content_zh", "null").execute()
-    ).data or []
-    ids = _ordered_novel_ids(jobs, {r["id"] for r in missing})
-    if not ids:
-        return []
-    rows = (
-        db.sb().table("novels").select("id, source_id, source_novel_id")
-        .in_("id", ids).in_("source_id", list(enabled_source_ids)).execute()
-    ).data or []
-    by_id = {r["id"]: r for r in rows}
-    return [by_id[novel_id] for novel_id in ids if novel_id in by_id]
+    """Novel cần tải bản gốc, đúng thứ tự ưu tiên của hàng dịch và chỉ từ nguồn đang bật.
+
+    Lọc nằm trong RPC (migration 087), KHÔNG kéo job về Python rồi lọc: bản cũ lấy 200
+    job đầu rồi mới bỏ những job có chương không ở 'queued', mà 587 job đầu hàng đợi đều
+    như vậy — crawler thấy rỗng và ngừng tải suốt, dù 1377 chương đang chờ nội dung.
+    """
+    out: list[dict] = []
+    for sid in enabled_source_ids:
+        rows = db.sb().rpc("novels_needing_fetch", {"p_source_id": sid}).execute().data or []
+        out += rows
+    return out
 
 
 def _eval_source_health(adapter: SourceAdapter) -> bool:

@@ -8,7 +8,6 @@ os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "test")
 from novelworker.crawler import sync
 from novelworker.crawler.base import NovelMeta
 from novelworker.crawler.sync import _chapter_sync_fields, _frontier_step
-from novelworker.main import _ordered_novel_ids
 
 
 def main() -> None:
@@ -16,15 +15,6 @@ def main() -> None:
     assert _frontier_step(0, 1) == (1, 1, False)
     assert _frontier_step(1, 2) == (2, 1, True)
     assert _frontier_step(2, 2) == (3, 2, False)
-
-    # Crawler phải tải theo priority/created_at của job, không theo thứ tự row chapters.
-    jobs = [
-        {"novel_id": 20, "chapter_id": 2},
-        {"novel_id": 10, "chapter_id": 1},
-        {"novel_id": 20, "chapter_id": 3},
-        {"novel_id": 30, "chapter_id": 4},
-    ]
-    assert _ordered_novel_ids(jobs, {1, 2, 3}) == [20, 10]
 
     fields = _chapter_sync_fields(
         old_count=10, old_status="ongoing", source_status="completed",
