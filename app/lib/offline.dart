@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
@@ -39,19 +40,37 @@ class OfflineStore {
   Future<int> downloadNovel(Rec novel) async {
     final id = novel['id'] as int;
     const chunk = 1000;
-    final rows = <Rec>[];
+    final db = await _database;
+    // Hỏi index trước, nội dung sau: bấm tải lại truyện 3000 chương từng kéo về nguyên
+    // ~24MB content_vi dù máy đã có đủ. Danh sách index chỉ vài chục KB, phần thân chỉ
+    // tải cho chương còn thiếu (chương chen giữa mới dịch xong cũng bắt được).
+    final serverIdx = <int>[];
     for (var from = 0;; from += chunk) {
       final page = List<Rec>.from(await sb
           .from('chapters')
-          .select('chapter_index, title_vi, content_vi')
+          .select('chapter_index')
           .eq('novel_id', id)
           .eq('translation_status', 'done')
           .order('chapter_index')
           .range(from, from + chunk - 1));
-      rows.addAll(page);
+      serverIdx.addAll(page.map((r) => r['chapter_index'] as int));
       if (page.length < chunk) break;
     }
-    final db = await _database;
+    final localIdx = {
+      for (final r in await db.query('chapters',
+          columns: ['chapter_index'], where: 'novel_id = ?', whereArgs: [id]))
+        r['chapter_index'] as int
+    };
+    final missing = serverIdx.where((i) => !localIdx.contains(i)).toList();
+    final rows = <Rec>[];
+    for (var i = 0; i < missing.length; i += 200) {
+      final batchIdx = missing.sublist(i, min(i + 200, missing.length));
+      rows.addAll(List<Rec>.from(await sb
+          .from('chapters')
+          .select('chapter_index, title_vi, content_vi')
+          .eq('novel_id', id)
+          .inFilter('chapter_index', batchIdx)));
+    }
     final batch = db.batch();
     for (final r in rows) {
       batch.insert(
@@ -72,13 +91,15 @@ class OfflineStore {
         'title': novel['title_vi'] ?? novel['title_zh'],
         'author': novel['author_vi'] ?? novel['author_zh'],
         'cover_url': novel['cover_url'],
-        'total': rows.length,
+        'total': serverIdx.length,
         'downloaded_at': DateTime.now().toUtc().toIso8601String(),
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
     await batch.commit(noResult: true);
-    return rows.length;
+    // Tổng chương đang có offline, không phải số vừa tải: bấm lại lần 2 mà chỉ thiếu 0
+    // chương vẫn phải báo "đã tải 3000 chương", không phải "chưa có chương nào".
+    return serverIdx.length;
   }
 
   /// 1 chương local — trả dạng khớp chapterProvider (title_vi/content_vi/status).
