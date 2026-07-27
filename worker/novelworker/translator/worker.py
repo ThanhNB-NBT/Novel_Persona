@@ -307,7 +307,7 @@ def requeue_bad(bad: list[tuple[dict, str]]) -> None:
     for c, _ in bad:
         db.sb().table("translation_jobs").delete().eq("chapter_id", c["id"]).in_(
             "status", ["failed", "done"]).execute()
-        db.sb().table("chapters").update({"translation_status": "queued"}).eq("id", c["id"]).execute()
+        db.sb().table("chapters").update({"translation_status": "queued"}, returning="minimal").eq("id", c["id"]).execute()
         db.enqueue("chapter", c["novel_id"], chapter_id=c["id"], priority=40)
 
 
@@ -1110,7 +1110,7 @@ def handle_chapter(job: dict, llm) -> None:
     if not ch["content_zh"]:
         raise MissingContentError(f"Chương {ch['id']} rỗng sau khi làm sạch nguồn")
 
-    db.sb().table("chapters").update({"translation_status": "translating"}).eq("id", ch["id"]).execute()
+    db.sb().table("chapters").update({"translation_status": "translating"}, returning="minimal").eq("id", ch["id"]).execute()
 
     providers.reset_call_stats()  # đếm request/retry/token thật cả chương (analyze + dịch + repair)
     t_start = time.time()
@@ -1228,7 +1228,7 @@ def handle_chapter(job: dict, llm) -> None:
     try:
         db.sb().table("chapters").update({
             "lint_score": lint.lint_score(ch.get("content_zh"), text),
-        }).eq("id", ch["id"]).execute()
+        }, returning="minimal").eq("id", ch["id"]).execute()
     except Exception:
         log.exception("Không lưu được lint_score chương %s", ch["id"])
 
@@ -1303,7 +1303,7 @@ def handle_patch(job: dict, llm=None) -> None:
         if (new_title, new_content) != (title, content):
             db.sb().table("chapters").update({
                 "title_vi": new_title or None, "content_vi": new_content,
-            }).eq("id", ch["id"]).execute()
+            }, returning="minimal").eq("id", ch["id"]).execute()
             patched += 1
     _set_patch_result(job["id"], f"{patched}/{len(chapters)} chương")
     log.info("Patch novel %s: vá %d/%d chương, %d term", job["novel_id"], patched, len(chapters), len(repls))

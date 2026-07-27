@@ -677,7 +677,7 @@ def queue_sample_chapters(novel_id: int, count: int, priority: int) -> int:
     ).data or []
     if not rows:
         return 0
-    db.sb().table("chapters").update({"translation_status": "queued"}).in_(
+    db.sb().table("chapters").update({"translation_status": "queued"}, returning="minimal").in_(
         "id", [r["id"] for r in rows]).execute()
     for r in rows:
         db.enqueue("chapter", novel_id, chapter_id=r["id"], priority=priority)
@@ -831,7 +831,7 @@ def queue_followed_new_chapters(novel_id: int, total: int, n_new: int) -> int:
     ).data or []
     if not rows:
         return 0
-    db.sb().table("chapters").update({"translation_status": "queued"}).in_(
+    db.sb().table("chapters").update({"translation_status": "queued"}, returning="minimal").in_(
         "id", [r["id"] for r in rows]).execute()
     for r in rows:
         db.enqueue("chapter", novel_id, chapter_id=r["id"], priority=settings.prio_follow)
@@ -937,7 +937,7 @@ NOT_READY_GIVE_UP = 10
 
 def _fail_chapter(ch: dict, msg: str) -> None:
     db.sb().table("chapters").update(
-        {"translation_status": "failed"}).eq("id", ch["id"]).execute()
+        {"translation_status": "failed"}, returning="minimal").eq("id", ch["id"]).execute()
     db.sb().table("translation_jobs").update(
         {"status": "failed", "error": msg[:500]}
     ).eq("chapter_id", ch["id"]).eq("status", "pending").execute()
@@ -958,7 +958,7 @@ def _refresh_chapter_ids(novel_id: int, refs: list) -> int:
             ref = by_index.get(row["chapter_index"])
             if ref and ref.source_chapter_id != row["source_chapter_id"]:
                 db.sb().table("chapters").update(
-                    {"source_chapter_id": ref.source_chapter_id}).eq("id", row["id"]).execute()
+                    {"source_chapter_id": ref.source_chapter_id}, returning="minimal").eq("id", row["id"]).execute()
                 updated += 1
         if len(rows) < 1000:
             break
@@ -1040,7 +1040,7 @@ def ensure_chapters_fetched(adapter: SourceAdapter, novel_id: int) -> None:
         except Exception as e:
             # Lỗi tải (đổi cấu trúc/mạng): đánh dấu failed để thôi retry mỗi vòng crawl.
             db.sb().table("chapters").update(
-                {"translation_status": "failed"}).eq("id", ch["id"]).execute()
+                {"translation_status": "failed"}, returning="minimal").eq("id", ch["id"]).execute()
             # Job dịch kèm chương cũng phải failed — để pending là job "kẹt" mãi:
             # translator không claim (thiếu content_zh), admin retry lại chỉ reset job failed.
             db.sb().table("translation_jobs").update(

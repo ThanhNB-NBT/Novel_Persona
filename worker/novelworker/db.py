@@ -50,12 +50,12 @@ def upsert_chapter_stubs(rows: list[dict]) -> None:
     1 request/chương. Chunk 500 để tránh payload quá lớn."""
     for i in range(0, len(rows), 500):
         sb().table("chapters").upsert(
-            rows[i:i + 500], on_conflict="novel_id,chapter_index"
+            rows[i:i + 500], on_conflict="novel_id,chapter_index", returning="minimal"
         ).execute()
 
 
 def save_chapter_raw(chapter_id: int, content_zh: str) -> None:
-    sb().table("chapters").update({"content_zh": content_zh}).eq("id", chapter_id).execute()
+    sb().table("chapters").update({"content_zh": content_zh}, returning="minimal").eq("id", chapter_id).execute()
 
 
 def finalize_chapter_job(
@@ -110,7 +110,8 @@ def finish_job(job_id: int, ok: bool, error: str | None = None) -> None:
     ).eq("id", job_id).execute()
     if job.get("chapter_id"):
         sb().table("chapters").update(
-            {"translation_status": "failed" if status == "failed" else "queued"}
+            {"translation_status": "failed" if status == "failed" else "queued"},
+            returning="minimal",
         ).eq("id", job["chapter_id"]).execute()
 
 
@@ -219,9 +220,9 @@ def requeue_stale_jobs(max_minutes: int = 10) -> int:
     failed_ch = [j["chapter_id"] for j in dead if j.get("chapter_id")]
     requeued_ch = [j["chapter_id"] for j in stale if j.get("chapter_id")]
     if failed_ch:
-        sb().table("chapters").update({"translation_status": "failed"}).in_("id", failed_ch).execute()
+        sb().table("chapters").update({"translation_status": "failed"}, returning="minimal").in_("id", failed_ch).execute()
     if requeued_ch:
-        sb().table("chapters").update({"translation_status": "queued"}).in_("id", requeued_ch).execute()
+        sb().table("chapters").update({"translation_status": "queued"}, returning="minimal").in_("id", requeued_ch).execute()
 
     n = len(dead) + len(stale)
     if n:

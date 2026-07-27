@@ -487,7 +487,7 @@ def run_request(novel_id: int, up_to: int) -> None:
         .order("chapter_index").execute()
     ).data or []
     for r in rows:
-        db.sb().table("chapters").update({"translation_status": "queued"}).eq("id", r["id"]).execute()
+        db.sb().table("chapters").update({"translation_status": "queued"}, returning="minimal").eq("id", r["id"]).execute()
         db.enqueue("chapter", novel_id, chapter_id=r["id"], priority=50)
     print(f"Đã xếp hàng {len(rows)} chương (novel {novel_id}, tới chương {up_to}).")
     print("Chạy `python -m novelworker.main crawl` để tải nội dung gốc"
@@ -534,7 +534,7 @@ def run_redich(novel_id: int | None, engine: str = "hachimi",
             db.sb().table("translation_jobs").delete().eq(
                 "novel_id", nid).eq("type", "chapter").in_("chapter_id", batch).execute()
             db.sb().table("chapters").update(
-                {"translation_status": "queued"}).in_("id", batch).execute()
+                {"translation_status": "queued"}, returning="minimal").in_("id", batch).execute()
             db.sb().table("translation_jobs").insert(
                 [{"type": "chapter", "novel_id": nid, "chapter_id": cid, "priority": priority}
                  for cid in batch]).execute()
@@ -577,7 +577,7 @@ def run_redich_leaked(priority: int = 70, dry: bool = True) -> None:
     for batch in _chunks(ids, 500):
         db.sb().table("translation_jobs").delete().eq(
             "type", "chapter").in_("chapter_id", batch).execute()
-        db.sb().table("chapters").update({"translation_status": "queued"}).in_("id", batch).execute()
+        db.sb().table("chapters").update({"translation_status": "queued"}, returning="minimal").in_("id", batch).execute()
         db.sb().table("translation_jobs").insert(
             [{"type": "chapter", "novel_id": r["novel_id"], "chapter_id": r["id"],
               "priority": priority} for r in dirty if r["id"] in set(batch)]).execute()
