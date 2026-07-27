@@ -56,7 +56,7 @@ def analyze(client: OpenAI, model: str, chunk: str) -> tuple[list[dict], float, 
     return [], seconds, False
 
 
-def main(chapter_count: int) -> None:
+def main(chapter_count: int, models: list[str]) -> None:
     corpus = [json.loads(line) for line in CORPUS.read_text(encoding="utf-8").splitlines() if line.strip()]
     # Truyện 32 có cả tên Trung lẫn tên Tây → đúng chỗ cần phân biệt.
     chapters = [row for row in corpus if row["novel_id"] == 32][:chapter_count]
@@ -64,7 +64,7 @@ def main(chapter_count: int) -> None:
     client = OpenAI(base_url=BASE_URL, api_key=settings.nvidia_keys[-1], timeout=180, max_retries=1)
     summary: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
     found: dict[str, dict[str, str]] = defaultdict(dict)
-    for model in CANDIDATES:
+    for model in models:
         for index, chunk in enumerate(chunks, start=1):
             try:
                 terms, seconds, ok = analyze(client, model, chunk)
@@ -88,7 +88,7 @@ def main(chapter_count: int) -> None:
         "| Model | JSON hợp lệ | Term/chương | Đúng đáp án | Giây/chương | Hỏng |",
         "|---|---:|---:|---:|---:|---:|",
     ]
-    for model in CANDIDATES:
+    for model in models:
         item = summary[model]
         done = int(item["done"]) or 1
         hits = sum(1 for zh, vi in found[model].items() if vi.strip().lower() == EXPECTED[zh].lower())
@@ -96,10 +96,10 @@ def main(chapter_count: int) -> None:
             f"| `{model}` | {int(item['json_ok'])}/{done} | {item['terms'] / done:.0f} | "
             f"{hits}/{len(EXPECTED)} | {item['seconds'] / done:.1f} | {int(item['fail'])} |"
         )
-    lines += ["", "## Từng đáp án", "", "| Chữ Trung | Mong đợi | " + " | ".join(m.split("/")[-1] for m in CANDIDATES) + " |",
-              "|---|---|" + "---|" * len(CANDIDATES)]
+    lines += ["", "## Từng đáp án", "", "| Chữ Trung | Mong đợi | " + " | ".join(m.split("/")[-1] for m in models) + " |",
+              "|---|---|" + "---|" * len(models)]
     for zh, expect in EXPECTED.items():
-        cells = [found[model].get(zh, "—") for model in CANDIDATES]
+        cells = [found[model].get(zh, "—") for model in models]
         lines.append(f"| {zh} | {expect} | " + " | ".join(cells) + " |")
     OUTPUT_MD.write_text("\n".join(lines) + "\n", encoding="utf-8")
     print("\n".join(lines))
@@ -109,4 +109,9 @@ def main(chapter_count: int) -> None:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--chapters", type=int, default=6)
-    main(parser.parse_args().chapters)
+    # NVIDIA khai tử model không báo trước → phải thử con mới mà không sửa file này:
+    #   python benchmark_analyze_names.py --models z-ai/glm-5.2,openai/gpt-oss-120b
+    parser.add_argument("--models", default=",".join(CANDIDATES),
+                        help="danh sách model phân cách bằng dấu phẩy")
+    args = parser.parse_args()
+    main(args.chapters, [m.strip() for m in args.models.split(",") if m.strip()])

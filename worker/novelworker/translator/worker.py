@@ -1349,10 +1349,27 @@ def _consume_loop(worker_id: str, slot: int, paused: threading.Event, poll_secon
     `paused` set = đã chạm trần chi phí ngày → nghỉ."""
     llm = build_chain(slot)  # ghim 1 key nvidia cho luồng này, tái dùng suốt vòng đời
     idle_sleep = poll_seconds
+    next_rs_check = 0.0
     while not _shutdown.is_set():  # thoát GIỮA các job khi có tín hiệu dừng
         if paused.is_set():
             _shutdown.wait(30)
             continue
+        # Đổi model LLM ngay từ tab Crawl, khỏi sửa .env + build + deploy: NVIDIA khai tử
+        # model không báo trước (qwen3-next 27/07) nên phải thử con khác được trong vài
+        # giây. Soi mỗi 60s — 1 query nhỏ/phút, rẻ hơn nhiều so với một lần deploy.
+        if time.time() >= next_rs_check:
+            next_rs_check = time.time() + 60
+            try:
+                rs = db.runtime_settings()
+                model = db.runtime_str(rs, "llm_model", settings.nvidia_model)
+                timeout = db.runtime_int(rs, "llm_timeout_sec", settings.llm_timeout_sec)
+                if (model, timeout) != (settings.nvidia_model, settings.llm_timeout_sec):
+                    log.info("Đổi LLM: %s (%ds) → %s (%ds)", settings.nvidia_model,
+                             settings.llm_timeout_sec, model, timeout)
+                    settings.nvidia_model, settings.llm_timeout_sec = model, timeout
+                    llm = build_chain(slot)
+            except Exception:
+                log.warning("Không đọc được worker_settings — giữ model hiện tại")
         # TOÀN BỘ thân vòng lặp trong try — lỗi mạng tạm thời (Supabase "Server
         # disconnected") ở claim/finish_job từng giết chết thread âm thầm, worker
         # nhìn như chạy mà không dịch gì. Job dở dang thì reaper trả lại sau.

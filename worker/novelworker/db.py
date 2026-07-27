@@ -369,6 +369,11 @@ def runtime_int(rs: dict, key: str, cur: int, lo: int = 1) -> int:
         return cur
 
 
+def runtime_str(rs: dict, key: str, cur: str) -> str:
+    """Như runtime_int nhưng cho chuỗi (tên model LLM). Rỗng/thiếu → giữ giá trị hiện tại."""
+    return str(rs.get(key) or "").strip() or cur
+
+
 # ---------- cache bìa (Supabase Storage) ----------
 
 def upload_cover(path: str, data: bytes, content_type: str) -> None:
