@@ -28,9 +28,7 @@ OUTPUT_MD = Path(__file__).with_name("benchmark_analyze_names.md")
 # 2026-07-27: NVIDIA gỡ qwen3-next + mistral-small-4 (410 end-of-life), phải chọn lại.
 CANDIDATES = [
     "z-ai/glm-5.2",                # đang dùng tạm, làm mốc
-    "openai/gpt-oss-120b",
     "mistralai/mistral-medium-3.5-128b",
-    "minimaxai/minimax-m3",
 ]
 # Đáp án đã biết (đối chiếu tay từ glossary đã duyệt + gu đã chốt).
 EXPECTED = {
