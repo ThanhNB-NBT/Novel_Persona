@@ -39,3 +39,16 @@ def test_transient_db_error_classifier():
     assert db.is_transient_error(RemoteProtocolError("ConnectionTerminated"))
     assert db.is_transient_error(RuntimeError("Cloudflare gateway timeout"))
     assert not db.is_transient_error(RuntimeError("không sửa hết ký tự Hán sót"))
+
+    # 410 model end-of-life: SDK openai bọc lỗi trong httpx nên trước đây bị coi là
+    # tạm thời và job retry vô hạn. 429 vẫn phải là tạm thời.
+    def api_error(code: int) -> Exception:
+        exc = type("APIStatusError", (RuntimeError,), {"__module__": "httpx"})(
+            f"Error code: {code}")
+        exc.response = type("R", (), {"status_code": code})()
+        return exc
+
+    assert not db.is_transient_error(api_error(410))
+    assert not db.is_transient_error(api_error(401))
+    assert db.is_transient_error(api_error(429))
+    assert db.is_transient_error(api_error(503))

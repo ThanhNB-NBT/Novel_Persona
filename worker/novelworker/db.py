@@ -137,6 +137,11 @@ def is_transient_error(exc: Exception) -> bool:
         code = str(getattr(current, "code", "")).upper()
         response = getattr(current, "response", None)
         status = getattr(response, "status_code", None)
+        # 4xx (trừ 408/425/429) là lỗi vĩnh viễn: model gỡ (410), key sai (401),
+        # payload hỏng (400). Chặn ở đây vì SDK openai bọc trong httpx nên nhánh
+        # module.startswith("httpx") bên dưới sẽ nuốt tất và retry vô hạn.
+        if isinstance(status, int) and 400 <= status < 500 and status not in (408, 425, 429):
+            return False
         if (
             module.startswith(("httpx", "httpcore"))
             or any(k in name for k in ("timeout", "connection", "protocol", "network"))

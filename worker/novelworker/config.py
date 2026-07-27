@@ -26,7 +26,10 @@ class Settings(BaseSettings):
     # hanviet.reconcile vì đó mới là thứ vào glossary: qwen3-next 5/5, mistral-small 4/5
     # (nó viết "Erlton" — chữ Latin nên bảng tra không sửa được, sai là sai luôn),
     # gemma-4-31b 4/5 và chậm hơn, llama-4-maverick chỉ trích 4 term/chương nên sót nhiều.
-    nvidia_model: str = "qwen/qwen3-next-80b-a3b-instruct"
+    # 2026-07-27: NVIDIA gỡ toàn bộ dòng qwen (410 end-of-life). Thay bằng glm-5.2 —
+    # ứng viên duy nhất còn chạy được: deepseek-v4-flash 503/timeout, minimax-m3 sai
+    # Hán-Việt ("Tu chinh tiểu hoành thượng"), nemotron-nano trả reasoning thay JSON.
+    nvidia_model: str = "z-ai/glm-5.2"
     # Pacing theo từng API key, thấp hơn trần NVIDIA 40 RPM để chừa biên đồng hồ/retry.
     nvidia_rpm_limit: int = Field(default=30, ge=1, le=39)
 
