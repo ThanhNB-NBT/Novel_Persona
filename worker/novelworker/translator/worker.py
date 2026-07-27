@@ -662,8 +662,11 @@ def _repair_json(text: str) -> str:
 
 
 def _extract_json(text: str) -> dict | list:
-    """LLM đôi khi bọc JSON trong ```json ...``` — bóc ra."""
-    m = re.search(r"```(?:json)?\s*(.+?)\s*```", text, re.S)
+    """LLM đôi khi bọc JSON trong ```json ...``` — bóc ra.
+
+    Fence đóng là trường hợp đẹp; câu trả lời bị cắt ngang (glm-5.2 chạy cả trăm giây,
+    dễ chạm max_tokens) chỉ có fence MỞ, nên `$` cũng tính là hết khối."""
+    m = re.search(r"```(?:json)?\s*(.+?)(?:\s*```|$)", text, re.S)
     if m:
         text = m.group(1)
     text = text.strip()
@@ -680,8 +683,13 @@ def _extract_json(text: str) -> dict | list:
             # Cụt giữa một cặp key/value (hoặc thừa dấu phẩy cuối) → bỏ cặp dở, đóng lại.
             cut = cand.rfind(",")
             if cut < 0:
-                raise
-            return json.loads(_repair_json(cand[:cut]))
+                raise ValueError(f"LLM trả không phải JSON: {text[:200]!r}")
+            try:
+                return json.loads(_repair_json(cand[:cut]))
+            except json.JSONDecodeError as e:
+                # Kèm nguyên văn vào lỗi: JSONDecodeError trần chỉ nói "column 52",
+                # không cho biết model đã trả cái gì để mà sửa prompt/parser.
+                raise ValueError(f"LLM trả không phải JSON: {text[:200]!r}") from e
 
 
 def _apply_fixes(vi: str, fixes) -> tuple[str, int]:

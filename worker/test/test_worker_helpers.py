@@ -47,6 +47,10 @@ def main() -> None:
 
     data = _extract_json('metadata:\n```json\n{"title_vi":"Tên truyện"}\n```')
     assert data["title_vi"] == "Tên truyện"
+    # Fence MỞ: câu trả lời bị cắt trước khi model đóng ``` (glm-5.2 chạy cả trăm giây
+    # nên chạm max_tokens khá thường) — trước đây regex đòi fence đóng nên vỡ nguyên job.
+    assert _extract_json('```json\n{"title_vi":"Tên"}')["title_vi"] == "Tên"
+    assert _extract_json('```\n{"title_vi":"Tên", "description_vi": "mô tả bị cắt')["title_vi"] == "Tên"
 
     # _extract_json: JSON trơn, JSON lẫn chữ thừa 2 đầu, ngoặc/quote lồng trong string
     assert _extract_json('{"a": 1}') == {"a": 1}
@@ -58,6 +62,13 @@ def main() -> None:
         raise AssertionError("phải raise khi không có JSON")
     except Exception:
         pass
+    # Lỗi phải kèm nguyên văn model trả về: JSONDecodeError trần chỉ nói "column 52",
+    # không đủ để biết phải sửa prompt hay parser.
+    try:
+        _extract_json('{"a": rác không cứu nổi, "b": vẫn rác}')
+        raise AssertionError("phải raise khi JSON hỏng")
+    except ValueError as e:
+        assert "rác không cứu nổi" in str(e), e
 
     # JSON hỏng kiểu LLM: dấu " chưa escape giữa câu, xuống dòng thô, output cụt
     assert _extract_json('{"d": "hắn gọi "Tiểu Sư Muội" rồi đi", "n": 2}') == \
