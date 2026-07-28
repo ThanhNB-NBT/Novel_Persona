@@ -28,7 +28,9 @@ begin
   select j.* into candidate
   from translation_jobs j
   where j.status = 'pending'
-    and (p_types is null or j.type = any(p_types))
+    -- j.type là enum job_type nên phải ::text; so trực tiếp với text[] cho
+    -- 42883 "operator does not exist: job_type = text".
+    and (p_types is null or j.type::text = any(p_types))
     and not exists (
       select 1
       from translation_jobs running
