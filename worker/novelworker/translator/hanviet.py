@@ -98,6 +98,45 @@ def han_viet(zh: str) -> str | None:
     return " ".join(parts)
 
 
+_LATIN_PERSON = re.compile(r"^[A-Z][A-Za-z]*(?:[ .'\-][A-Za-z]+){0,2}$")
+_syllables: set[str] | None = None
+
+
+def _vi_syllables() -> set[str]:
+    """Mọi âm Hán-Việt trong bảng, bỏ dấu — dùng để nhận ra một cụm ASCII là tiếng Việt
+    không dấu ("Long gia", "Vong Linh") hay là tiếng Anh ("Awakening Stone")."""
+    global _syllables
+    if _syllables is None:
+        strip = str.maketrans("àáảãạằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợ"
+                              "ùúủũụưừứửữựỳýỷỹỵđ",
+                              "aaaaaaaaaaaaaaaaeeeeeeeeeeeiiiiiooooooooooooooooo"
+                              "uuuuuuuuuuuyyyyyd")
+        _syllables = {r.lower().translate(strip) for rs in _load().values() for r in rs}
+    return _syllables
+
+
+def english_meaning(zh: str | None, vi: str | None, term_type: str | None) -> bool:
+    """True khi `vi` là cụm TIẾNG ANH dịch nghĩa, không phải bản dịch tiếng Việt.
+
+    Model trích tên xấu (qwen3-next-80b, 25-26/07/2026) trả 觉醒石 → "Awakening Stone",
+    七班 → "Class 7": chúng không bao giờ dùng được (cổng `_is_safe_pending_term` chặn)
+    mà vẫn ngập màn Thuật ngữ. Nhận diện: cụm ASCII NHIỀU TỪ có ít nhất một từ không
+    phải âm Hán-Việt. Giữ lại có chủ đích:
+      * một từ ASCII (goblin, slime, Anna) — đúng luật prompt, reconcile() cũng giữ;
+      * tên người Latin ≤3 từ (Tony Stark) — ngoại lệ tên Tây đã có sẵn;
+      * cụm ASCII toàn âm Hán-Việt ("Long Gia", "Vong Linh") — tiếng Việt không dấu.
+    Đánh đổi đã biết: 纽约 → "New York" cũng bị coi là tiếng Anh. Chấp nhận được vì
+    term chưa duyệt loại này KHÔNG vào prompt dịch, mất nó chỉ mất một dòng gợi ý."""
+    s = (vi or "").strip()
+    if not s.isascii() or " " not in s:
+        return False
+    if term_type == "person" and _LATIN_PERSON.match(s):
+        return False
+    syl = _vi_syllables()
+    toks = re.findall(r"[A-Za-z]+", s)
+    return bool(toks) and any(t.lower() not in syl for t in toks)
+
+
 def transliteration_suspect(zh: str | None, vi: str | None, term_type: str | None) -> bool:
     """Tên riêng không phải phiên âm/ngoại danh hợp lệ thì đánh dấu để chờ duyệt."""
     if not zh or not vi or term_type not in _HV_TYPES:

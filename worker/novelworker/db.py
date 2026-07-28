@@ -195,7 +195,25 @@ def is_transient_error(exc: Exception) -> bool:
 
 def insert_glossary_suggestions(rows: list[dict]) -> set[str]:
     """Ghi cả batch; unique (novel_id, term_zh) giữ cách dịch xuất hiện đầu tiên.
-    Trả set term_zh thật sự được chèn — row thua race bị bỏ qua để caller lộ conflict."""
+    Trả set term_zh thật sự được chèn — row thua race bị bỏ qua để caller lộ conflict.
+
+    Cụm tiếng Anh dịch nghĩa bị CHẶN NGAY, không chờ dọn sau: model trích tên đổi là
+    chất lượng đổi (25-26/07/2026: 47% gợi ý ra tiếng Anh), mà thứ đó không dùng được
+    ở bất kỳ đâu. Tỉ lệ chặn cao = model đang hỏng → log WARNING để lộ ra ở log thay vì
+    phải tự đi soi bảng glossary."""
+    if not rows:
+        return set()
+    from .translator import hanviet  # import muộn: db dùng được khi không tải translator
+
+    good, bad = [], []
+    for r in rows:
+        (bad if hanviet.english_meaning(
+            r.get("term_zh"), r.get("correct_vi"), r.get("term_type")) else good).append(r)
+    if bad:
+        say = log.warning if len(bad) * 2 >= len(rows) else log.info
+        say("Glossary: bỏ %d/%d gợi ý tiếng Anh (vd %s) — tỉ lệ cao thì soi lại model trích tên",
+            len(bad), len(rows), bad[0].get("correct_vi"))
+        rows = good
     if not rows:
         return set()
     res = sb().table("glossary_terms").upsert(

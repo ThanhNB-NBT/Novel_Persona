@@ -15,6 +15,7 @@ Lệnh vận hành:
 from __future__ import annotations
 
 import argparse
+import collections
 import logging
 import os
 import threading
@@ -535,6 +536,38 @@ def run_backfill(source: str, dry: bool = True, limit: int | None = None) -> Non
           f"{n_err} lỗi tải." + ("  Thêm --write để ghi thật." if dry else ""))
 
 
+def run_gclean(dry: bool = True) -> None:
+    """Xoá gợi ý glossary là cụm tiếng Anh dịch nghĩa (rác model trích tên 25-26/07/2026).
+    Chỉ đụng term CHƯA DUYỆT — term user đã duyệt là chủ đích, không tự ý xoá."""
+    from .translator import hanviet
+    rows, off, step = [], 0, 1000
+    while True:
+        page = (db.sb().table("glossary_terms")
+                .select("id, novel_id, term_zh, correct_vi, term_type")
+                .eq("approved", False).order("id").range(off, off + step - 1).execute()).data or []
+        rows += page
+        if len(page) < step:
+            break
+        off += step
+    bad = [t for t in rows
+           if hanviet.english_meaning(t["term_zh"], t["correct_vi"], t["term_type"])]
+    per = collections.Counter(t["novel_id"] for t in bad)
+    print(f"{len(rows)} gợi ý chưa duyệt → {len(bad)} là cụm tiếng Anh"
+          + (" (CHẠY THỬ)" if dry else ""))
+    for t in bad[:15]:
+        print(f"  {t['term_zh']} -> {t['correct_vi']} | {t['term_type']}")
+    print("  ..." if len(bad) > 15 else "")
+    print("Truyện dính nhiều nhất:", ", ".join(f"#{n}={c}" for n, c in per.most_common(8)))
+    if dry:
+        print("Thêm --write để xoá thật.")
+        return
+    ids = [t["id"] for t in bad]
+    for i in range(0, len(ids), 200):   # chia lô: URL của .in_() có giới hạn độ dài
+        db.sb().table("glossary_terms").delete(returning="minimal").in_(
+            "id", ids[i:i + 200]).execute()
+    print(f"Đã xoá {len(ids)} gợi ý.")
+
+
 def run_request(novel_id: int, up_to: int) -> None:
     """Bản service-role của RPC request_translation — test không cần app/đăng nhập."""
     rows = (
@@ -645,7 +678,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(prog="novelworker")
     parser.add_argument("mode",
                         choices=["crawl", "translate", "request", "add", "cost", "audit", "quality",
-                                 "meta", "redich", "backfill"])
+                                 "meta", "redich", "backfill", "gclean"])
     parser.add_argument("--engine", default="hachimi", help="redich: engine dịch lại (mặc định hachimi)")
     parser.add_argument("--priority", type=int, default=70,
                         help="redich: priority job (nhỏ = dịch trước; 70 = trên chương đọc thử)")
@@ -672,6 +705,8 @@ def main() -> None:
         if args.novel is None:
             parser.error("meta cần --novel <id>")
         run_meta(args.novel)
+    elif args.mode == "gclean":
+        run_gclean(dry=not args.write)
     elif args.mode == "backfill":
         run_backfill(args.source, dry=not args.write, limit=args.limit)
     elif args.mode == "crawl":

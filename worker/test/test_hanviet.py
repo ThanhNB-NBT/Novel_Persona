@@ -9,7 +9,8 @@ sys.path.insert(0, str(_WORKER))
 os.environ.setdefault("SUPABASE_URL", "https://example.supabase.co")
 os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "test")
 
-from novelworker.translator.hanviet import han_viet, reconcile, transliteration_suspect
+from novelworker.translator.hanviet import (
+    english_meaning, han_viet, reconcile, transliteration_suspect)
 
 
 def main() -> None:
@@ -55,6 +56,21 @@ def main() -> None:
     assert not transliteration_suspect("安娜", "Anna", "person")
     assert not transliteration_suspect("罗森", "La Sâm", "person")
     assert transliteration_suspect("白衣少女", "cô gái áo trắng", "person")
+
+    # cụm tiếng Anh dịch nghĩa (rác model trích tên) → chặn
+    assert english_meaning("觉醒石", "Awakening Stone", "item")
+    assert english_meaning("七班", "Class 7", "sect")
+    assert english_meaning("魔法高中", "Magic High School", "place")
+    assert english_meaning("浸泡过丧尸病毒的生肉", "Raw Meat Soaked in Zombie Virus", "item")
+    # tiếng Việt (có dấu hoặc Hán-Việt không dấu) → giữ
+    assert not english_meaning("觉醒石", "Giác Tỉnh Thạch", "item")
+    assert not english_meaning("龙家", "Long gia", "sect")
+    assert not english_meaning("派出所", "đồn cảnh sát", "place")
+    # một từ ASCII (từ mượn / tên ngoại) và tên người Latin ≤3 từ → giữ
+    assert not english_meaning("哥布林", "goblin", "other")
+    assert not english_meaning("安娜", "Anna", "person")
+    assert not english_meaning("托尼·斯塔克", "Tony Stark", "person")
+    assert not english_meaning(None, None, None)
 
 
 if __name__ == "__main__":
