@@ -536,26 +536,33 @@ def run_backfill(source: str, dry: bool = True, limit: int | None = None) -> Non
           f"{n_err} lỗi tải." + ("  Thêm --write để ghi thật." if dry else ""))
 
 
-def run_gclean(dry: bool = True) -> None:
+def run_gclean(dry: bool = True, approved_too: bool = False) -> None:
     """Xoá gợi ý glossary là cụm tiếng Anh dịch nghĩa (rác model trích tên 25-26/07/2026).
-    Chỉ đụng term CHƯA DUYỆT — term user đã duyệt là chủ đích, không tự ý xoá."""
+
+    Mặc định chỉ đụng term CHƯA DUYỆT. `--approved` mở sang cả term đã duyệt (phần lớn
+    là LLM tự duyệt chứ không phải user bấm) — nhưng LUÔN chừa term có `created_by`,
+    tức do user thêm tay trong app: cái đó là chủ đích, không đoán thay."""
     from .translator import hanviet
     rows, off, step = [], 0, 1000
     while True:
-        page = (db.sb().table("glossary_terms")
-                .select("id, novel_id, term_zh, correct_vi, term_type")
-                .eq("approved", False).order("id").range(off, off + step - 1).execute()).data or []
+        q = (db.sb().table("glossary_terms")
+             .select("id, novel_id, term_zh, correct_vi, term_type, approved, created_by"))
+        if not approved_too:
+            q = q.eq("approved", False)
+        page = (q.order("id").range(off, off + step - 1).execute()).data or []
         rows += page
         if len(page) < step:
             break
         off += step
     bad = [t for t in rows
-           if hanviet.english_meaning(t["term_zh"], t["correct_vi"], t["term_type"])]
+           if not t.get("created_by")
+           and hanviet.english_meaning(t["term_zh"], t["correct_vi"], t["term_type"])]
     per = collections.Counter(t["novel_id"] for t in bad)
-    print(f"{len(rows)} gợi ý chưa duyệt → {len(bad)} là cụm tiếng Anh"
-          + (" (CHẠY THỬ)" if dry else ""))
+    print(f"{len(rows)} term ({'cả đã duyệt' if approved_too else 'chưa duyệt'})"
+          f" → {len(bad)} là cụm tiếng Anh" + (" (CHẠY THỬ)" if dry else ""))
     for t in bad[:15]:
-        print(f"  {t['term_zh']} -> {t['correct_vi']} | {t['term_type']}")
+        print(f"  {t['term_zh']} -> {t['correct_vi']} | {t['term_type']}"
+              + ("  [ĐÃ DUYỆT]" if t.get("approved") else ""))
     print("  ..." if len(bad) > 15 else "")
     print("Truyện dính nhiều nhất:", ", ".join(f"#{n}={c}" for n, c in per.most_common(8)))
     if dry:
@@ -687,6 +694,8 @@ def main() -> None:
     parser.add_argument("--write", action="store_true",
                         help="redich --leaked / backfill: ghi DB thật (mặc định chạy thử)")
     parser.add_argument("--limit", type=int, help="backfill: chỉ xử lý N truyện đầu")
+    parser.add_argument("--approved", action="store_true",
+                        help="gclean: dọn cả term đã duyệt (vẫn chừa term user thêm tay)")
     parser.add_argument("--book-id", help="add: id truyện (số trong URL nguồn)")
     parser.add_argument("--source", default="shuhaige",
                         help="add/backfill: sources.name của nguồn (mặc định shuhaige)")
@@ -706,7 +715,7 @@ def main() -> None:
             parser.error("meta cần --novel <id>")
         run_meta(args.novel)
     elif args.mode == "gclean":
-        run_gclean(dry=not args.write)
+        run_gclean(dry=not args.write, approved_too=args.approved)
     elif args.mode == "backfill":
         run_backfill(args.source, dry=not args.write, limit=args.limit)
     elif args.mode == "crawl":
