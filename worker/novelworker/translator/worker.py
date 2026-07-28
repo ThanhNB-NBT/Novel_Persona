@@ -1495,11 +1495,24 @@ def run_forever(poll_seconds: float = 3.0) -> None:
             # không phải đợi vào đọc mới biết. Fuse đã chặn chương mới nên đây chủ yếu dọn nợ cũ.
             if time.time() - last_audit > settings.audit_interval_min * 60:
                 next_since = db.utc_now()
+                prev_since = audit_since       # mốc lần rà trước — glossary sweep dùng lại
                 bad = scan_bad_chapters(since=audit_since)
                 audit_since = next_since
                 if bad:
                     log.warning("Audit định kỳ: %d chương hỏng → xếp lại dịch", len(bad))
                     requeue_bad(bad)
+                # Rà glossary cùng nhịp: cổng lúc ghi đã chặn phần lớn, đây là lưới thứ hai
+                # cho term lọt vào bằng đường khác. Chỉ đọc term mới từ lần rà trước nên
+                # gần như không tốn egress. Sửa luật xong thì chạy tay `gfix`/`gclean` để
+                # áp lại lên toàn kho — vòng này không quét lại phần cũ.
+                try:
+                    gfixed, gdropped = db.sweep_glossary(since=prev_since)
+                    if gfixed or gdropped:
+                        log.warning("Glossary: sửa %d term pinyin, xoá %d cụm tiếng Anh "
+                                    "(vd %s)", len(gfixed), len(gdropped),
+                                    (gfixed or gdropped)[0].get("correct_vi"))
+                except Exception as e:
+                    log.warning("Rà glossary lỗi (bỏ qua): %s", e)
                 try:
                     for row in db.lint_drift_novels():
                         log.warning("Truyện %s đang trượt lint: bucket đầu %.1f → bucket mới %.1f",

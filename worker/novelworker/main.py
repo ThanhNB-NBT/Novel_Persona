@@ -541,6 +541,7 @@ def run_backfill(source: str, dry: bool = True, limit: int | None = None) -> Non
 
 def run_gclean(dry: bool = True) -> None:
     """Xoá gợi ý glossary là cụm tiếng Anh dịch nghĩa (rác model trích tên 25-26/07/2026).
+    Worker đã tự rà term MỚI mỗi chu kỳ audit; lệnh này quét CẢ KHO, dùng sau khi sửa luật.
 
     CHỈ đụng term chưa duyệt, và đây là ranh giới cứng — không mở cờ cho term đã duyệt.
     Đo 28/07/2026: cả kho chỉ có 520 term approved (70 do user tạo tay), KHÔNG có đợt
@@ -548,68 +549,30 @@ def run_gclean(dry: bool = True) -> None:
     curated ("Goblin da xanh", "Virus zombie", "First Blood") rồi phải khôi phục tay.
     Term đã duyệt = đã có người chốt, và nó ĐANG nằm trong prompt dịch — heuristic
     không được quyền đụng."""
-    from .translator import hanviet
-    rows, off, step = [], 0, 1000
-    while True:
-        page = (db.sb().table("glossary_terms")
-                .select("id, novel_id, term_zh, correct_vi, term_type, created_by")
-                .eq("approved", False)
-                .order("id").range(off, off + step - 1).execute()).data or []
-        rows += page
-        if len(page) < step:
-            break
-        off += step
-    bad = [t for t in rows
-           if not t.get("created_by")
-           and hanviet.english_meaning(t["term_zh"], t["correct_vi"], t["term_type"])]
+    _, bad = db.sweep_glossary(dry=dry, fix=False)
     per = collections.Counter(t["novel_id"] for t in bad)
-    print(f"{len(rows)} gợi ý chưa duyệt → {len(bad)} là cụm tiếng Anh"
-          + (" (CHẠY THỬ)" if dry else ""))
+    print(f"{len(bad)} gợi ý là cụm tiếng Anh" + (" (CHẠY THỬ)" if dry else ""))
     for t in bad[:15]:
         print(f"  {t['term_zh']} -> {t['correct_vi']} | {t['term_type']}")
-    print("  ..." if len(bad) > 15 else "")
-    print("Truyện dính nhiều nhất:", ", ".join(f"#{n}={c}" for n, c in per.most_common(8)))
-    if dry:
-        print("Thêm --write để xoá thật.")
-        return
-    ids = [t["id"] for t in bad]
-    for i in range(0, len(ids), 200):   # chia lô: URL của .in_() có giới hạn độ dài
-        db.sb().table("glossary_terms").delete(returning="minimal").in_(
-            "id", ids[i:i + 200]).execute()
-    print(f"Đã xoá {len(ids)} gợi ý.")
+    if len(bad) > 15:
+        print(f"  ... còn {len(bad) - 15} dòng")
+    if per:
+        print("Truyện dính nhiều nhất:", ", ".join(f"#{n}={c}" for n, c in per.most_common(8)))
+    print("Thêm --write để xoá thật." if dry else f"Đã xoá {len(bad)} gợi ý.")
 
 
 def run_gfix(dry: bool = True) -> None:
     """Term đang bị viết bằng PINYIN → đổi về Hán-Việt (仓库 "Cangku" → "Thương Khố").
-    Sửa tại chỗ, KHÔNG xoá — dữ liệu vẫn còn, chỉ viết lại cho đúng. Chỉ đụng term chưa
-    duyệt; bản cũ ghi vào `wrong_vi` để prompt biết mà tránh và job patch vá được chương
-    đã dịch."""
-    from .translator import hanviet
-    rows, off, step = [], 0, 1000
-    while True:
-        page = (db.sb().table("glossary_terms")
-                .select("id, novel_id, term_zh, correct_vi, term_type, wrong_vi")
-                .eq("approved", False).order("id").range(off, off + step - 1).execute()).data or []
-        rows += page
-        if len(page) < step:
-            break
-        off += step
-    fix = [(t, hv) for t in rows
-           if (hv := hanviet.pinyin_written(t["term_zh"], t["correct_vi"], t["term_type"]))]
-    print(f"{len(rows)} gợi ý chưa duyệt → {len(fix)} đang viết bằng pinyin"
-          + (" (CHẠY THỬ)" if dry else ""))
-    for t, hv in fix[:20]:
-        print(f"  {t['term_zh']} : {t['correct_vi']} → {hv}   ({t['term_type']})")
-    if len(fix) > 20:
-        print(f"  ... còn {len(fix) - 20} dòng")
-    if dry:
-        print("Thêm --write để sửa thật.")
-        return
-    for t, hv in fix:
-        db.sb().table("glossary_terms").update(
-            {"correct_vi": hv, "wrong_vi": t.get("wrong_vi") or t["correct_vi"]},
-            returning="minimal").eq("id", t["id"]).execute()
-    print(f"Đã sửa {len(fix)} term.")
+    Sửa tại chỗ, KHÔNG xoá — bản cũ ghi vào `wrong_vi` để prompt biết mà tránh và job
+    patch vá được chương đã dịch. Worker đã tự rà term MỚI mỗi chu kỳ audit; lệnh này
+    quét CẢ KHO, dùng sau khi sửa luật để áp lại lên dữ liệu cũ."""
+    fixed, _ = db.sweep_glossary(dry=dry, clean=False)
+    print(f"{len(fixed)} term đang viết bằng pinyin" + (" (CHẠY THỬ)" if dry else ""))
+    for t in fixed[:20]:
+        print(f"  {t['term_zh']} : {t['correct_vi']} → {t['new_vi']}   ({t['term_type']})")
+    if len(fixed) > 20:
+        print(f"  ... còn {len(fixed) - 20} dòng")
+    print("Thêm --write để sửa thật." if dry else f"Đã sửa {len(fixed)} term.")
 
 
 def run_request(novel_id: int, up_to: int) -> None:

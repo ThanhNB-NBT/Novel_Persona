@@ -222,6 +222,53 @@ def insert_glossary_suggestions(rows: list[dict]) -> set[str]:
     return {r.get("term_zh") for r in (res.data or [])}
 
 
+def sweep_glossary(since: str | None = None, dry: bool = False,
+                   fix: bool = True, clean: bool = True) -> tuple[list[dict], list[dict]]:
+    """Rà gợi ý CHƯA DUYỆT: viết bằng pinyin → sửa về Hán-Việt; cụm tiếng Anh → xoá.
+    Trả (đã sửa, đã xoá).
+
+    Cùng một hàm cho hai đường gọi, để luật chỉ tồn tại ở MỘT chỗ:
+      * worker gọi mỗi chu kỳ audit với `since` = mốc lần rà trước → chỉ đọc term mới,
+        egress không đáng kể, và không cần ai nhớ chạy tay;
+      * lệnh `gfix`/`gclean` gọi với since=None → rà cả kho, dùng sau khi SỬA LUẬT
+        (luật mới phải được áp lại lên dữ liệu cũ).
+    Term đã duyệt không bao giờ bị đụng — xem docstring run_gclean."""
+    from .translator import hanviet
+
+    rows, off, step = [], 0, 1000
+    while True:
+        q = (sb().table("glossary_terms")
+             .select("id, novel_id, term_zh, correct_vi, term_type, wrong_vi, created_by")
+             .eq("approved", False))
+        if since:
+            q = q.gte("created_at", since)
+        page = (q.order("id").range(off, off + step - 1).execute()).data or []
+        rows += page
+        if len(page) < step:
+            break
+        off += step
+    fixed, dropped = [], []
+    for t in rows:
+        if t.get("created_by"):        # user thêm tay → chủ đích, không đoán thay
+            continue
+        hv = hanviet.pinyin_written(t["term_zh"], t["correct_vi"], t["term_type"]) if fix else None
+        if hv:
+            fixed.append({**t, "new_vi": hv})
+        elif clean and hanviet.english_meaning(t["term_zh"], t["correct_vi"], t["term_type"]):
+            dropped.append(t)
+    if dry:
+        return fixed, dropped
+    for t in fixed:
+        sb().table("glossary_terms").update(
+            {"correct_vi": t["new_vi"], "wrong_vi": t.get("wrong_vi") or t["correct_vi"]},
+            returning="minimal").eq("id", t["id"]).execute()
+    ids = [t["id"] for t in dropped]
+    for i in range(0, len(ids), 200):   # chia lô: URL của .in_() có giới hạn độ dài
+        sb().table("glossary_terms").delete(returning="minimal").in_(
+            "id", ids[i:i + 200]).execute()
+    return fixed, dropped
+
+
 def record_glossary_conflicts(novel_id: int, rows: list[dict]) -> None:
     """Ghi cách dịch mâu thuẫn đầu tiên lên row local, không đụng correct_vi/approved."""
     for row in rows:
