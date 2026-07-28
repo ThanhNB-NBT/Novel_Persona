@@ -115,6 +115,34 @@ def _vi_syllables() -> set[str]:
     return _syllables
 
 
+# Từ MỘT TIẾNG bị chặn. Không có luật nào tách được "orc/goblin/slime" (giữ — tiếng Việt
+# không có từ tương đương) khỏi "robot/computer/dagger" (rác — có từ Việt hiển nhiên), nên
+# đây là DANH SÁCH, gom từ 309 từ một-tiếng thật trong glossary ngày 28/07/2026.
+# Cố ý KHÔNG chặn: chủng loài/thuật ngữ game-net đã quen (goblin, orc, elf, dwarf, troll,
+# ogre, slime, npc, boss, buff, debuff, guild, mod, instance, respawn, cosplay, anime, idol),
+# từ mượn đã Việt hoá (kimono, ninja, karate, sake, cola, macaron), thuật ngữ khoa học
+# (proton, electron, adrenaline, methanol, palladium) và tên riêng viết hoa.
+# Gặp từ rác mới thì THÊM VÀO ĐÂY — đừng đổi sang luật đoán, đã thử và nó cắt nhầm.
+_ENGLISH_COMMON = frozenset("""
+acceleration acupoint agency agility alarm angel antelope apple archer armor aunt badge
+bandage basketball bass battery battlecruiser battleship battlestar block book boy branch
+bride bus camera candle card carrier case chainmail character charge cleric clubhouse
+cocktail coder coffee computer container cruiser crystal dagger demon destroyer device
+dollar domain dragon dreadnought dungeon endurance energy engine envelope euro experience
+fierce fireball fireman football forest game ghost girl gold goodbye grape gun headset
+hello helmet hotel human inn intelligence jail knife knight lake level library lifeboat
+lightning lock longsword mama manor meridian meridians meteor mine moto mountain mountains
+mud nightclub nurse outpost pager palanquin palette parchment party pharmacy phone pickup
+pie pizza player playground poker puppet radio rapier rice rickshaw robot robots roulette
+safehouse scanner shameless shark shortbow shutup skeleton slum smartphone snacks sniper
+snow soap spacesuit spearman staff stamp starship stone strawberry strength strong suit
+suitcase supercomputer superpower syringe system tank taxi terminal tiger toothpaste torch
+umbrella unit vaccine vendor video wand warlock warship waterfall waves website wine wood
+wristband
+babaishui dantian fabao gohuo jiaosuo kimshouchi lazhu luoli mingwen neigong niepan xiuxian
+""".split())
+
+
 def english_meaning(zh: str | None, vi: str | None, term_type: str | None) -> bool:
     """True khi `vi` là cụm TIẾNG ANH dịch nghĩa, không phải bản dịch tiếng Việt.
 
@@ -126,10 +154,15 @@ def english_meaning(zh: str | None, vi: str | None, term_type: str | None) -> bo
       * tên người Latin ≤3 từ (Tony Stark) — ngoại lệ tên Tây đã có sẵn;
       * cụm ASCII toàn âm Hán-Việt ("Long Gia", "Vong Linh") — tiếng Việt không dấu.
     Đánh đổi đã biết: 纽约 → "New York" cũng bị coi là tiếng Anh. Chấp nhận được vì
-    term chưa duyệt loại này KHÔNG vào prompt dịch, mất nó chỉ mất một dòng gợi ý."""
+    term chưa duyệt loại này KHÔNG vào prompt dịch, mất nó chỉ mất một dòng gợi ý.
+
+    Từ MỘT tiếng thì tra `_ENGLISH_COMMON` — trừ khi chữ Hán gốc đúng là phiên âm tên
+    ngoại (德鲁依 → druid giữ, dù 'druid' có nằm trong danh sách hay không)."""
     s = (vi or "").strip()
-    if not s.isascii() or " " not in s:
+    if not s.isascii():
         return False
+    if " " not in s:
+        return (s.lower() in _ENGLISH_COMMON) and not looks_western(zh)
     if term_type == "person" and _LATIN_PERSON.match(s):
         return False
     syl = _vi_syllables()

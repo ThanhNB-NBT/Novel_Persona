@@ -71,6 +71,14 @@ def main() -> None:
     assert not english_meaning("安娜", "Anna", "person")
     assert not english_meaning("托尼·斯塔克", "Tony Stark", "person")
     assert not english_meaning(None, None, None)
+    # từ MỘT tiếng: tra danh sách — rác thì chặn, từ mượn/chủng loài/tên riêng thì giữ
+    assert english_meaning("游戏", "game", "other")
+    assert english_meaning("电脑", "computer", "item")
+    assert english_meaning("内功", "neigong", "skill")      # pinyin, phải là "nội công"
+    assert not english_meaning("哥布林", "goblin", "other")
+    assert not english_meaning("兽人", "orc", "other")
+    assert not english_meaning("德鲁依", "druid", "other")  # zh là phiên âm tên ngoại
+    assert not english_meaning("凯瑞甘", "Kerrigan", "person")
 
 
 if __name__ == "__main__":
