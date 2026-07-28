@@ -470,6 +470,9 @@ def _prepare_suggested_term(term: dict) -> bool:
             and not set(hv.lower().split()).intersection(vi.lower().split())):
         return False
     vi = hanviet.reconcile(zh, vi, term_type) or vi
+    # reconcile() cho qua mọi chuỗi ASCII một từ (coi là tên ngoại kiểu "Anna"), nên
+    # pinyin ghép liền — "Cangku", "Tiyuguan" — lọt lưới. Đổi về Hán-Việt thay vì bỏ.
+    vi = hanviet.pinyin_written(zh, vi, term_type) or vi
     term["zh"], term["vi"], term["type"] = zh, vi, term_type
     if hanviet.transliteration_suspect(zh, vi, term_type):
         term["note"] = "nghi sai"

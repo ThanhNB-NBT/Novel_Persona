@@ -235,6 +235,35 @@ def english_meaning(zh: str | None, vi: str | None, term_type: str | None) -> bo
     return not any(len(t) > 1 and (t in syl or t in _LOANWORDS) for t in toks)
 
 
+_ALL_HAN = re.compile(r"^[一-鿿]+$")
+
+
+def pinyin_written(zh: str | None, vi: str | None, term_type: str | None) -> str | None:
+    """`vi` đang là PINYIN của chính chữ Hán đó → trả bản Hán-Việt để thay; None nếu không.
+
+    仓库 → "Cangku" phải thành "Thương Khố". Nhưng 安娜 → "Anna" cũng khớp pinyin y hệt,
+    vì phiên âm tên nước ngoài vốn được chọn chữ theo ÂM — không có luật ngữ âm nào tách
+    được hai ca này. Tách bằng CHỮ dùng để viết: tên ngoại được viết toàn bằng chữ chuyên
+    phiên âm (安娜, 米兰, 琳达 — `_TRANSLIT_CHARS`), từ Trung thật thì không (仓库, 迅雷).
+
+    Bỏ qua `person`: đó là chỗ tên nước ngoài dồn vào, mà cụm tên nhiều chữ đã có
+    reconcile() lo. Đo 28/07/2026 trên 102k term: nhóm không-phải-person cho 68 ca,
+    đúng ~90% (Xunlei→Tấn Lôi, Baidu→Bách Độ, Tiyuguan→Thể Dục Quán); nhóm person cho
+    32 ca nhưng lẫn nhiều tên Tây (Hansen, Wensidun) nên không đụng."""
+    zh, s = (zh or "").strip(), (vi or "").strip()
+    if term_type == "person" or not zh or not s.isascii() or not _ALL_HAN.match(zh):
+        return None
+    if all(c in _TRANSLIT_CHARS for c in zh):
+        return None                                   # tên ngoại phiên qua chữ Hán → giữ
+    hv = han_viet(zh)
+    if not hv or s.lower() == hv.lower():
+        return None
+    from pypinyin import lazy_pinyin                  # import muộn: chỉ tốn khi thật sự cần
+    if re.sub(r"[^a-z]", "", s.lower()) != "".join(lazy_pinyin(zh)).lower():
+        return None
+    return hv
+
+
 def transliteration_suspect(zh: str | None, vi: str | None, term_type: str | None) -> bool:
     """Tên riêng không phải phiên âm/ngoại danh hợp lệ thì đánh dấu để chờ duyệt."""
     if not zh or not vi or term_type not in _HV_TYPES:

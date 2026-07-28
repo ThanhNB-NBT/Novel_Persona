@@ -10,7 +10,7 @@ os.environ.setdefault("SUPABASE_URL", "https://example.supabase.co")
 os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "test")
 
 from novelworker.translator.hanviet import (
-    english_meaning, han_viet, reconcile, transliteration_suspect)
+    english_meaning, han_viet, pinyin_written, reconcile, transliteration_suspect)
 
 
 def main() -> None:
@@ -105,6 +105,21 @@ def main() -> None:
     # và cụm có từ trùng âm tiết Việt ("man"). Đừng siết luật để bắt hai ca này.
     assert not english_meaning("星尘", "Stardust", "item")
     assert not english_meaning("假面超人", "Cape Man", "other")
+
+    # term bị viết bằng pinyin → đổi về Hán-Việt (KHÔNG xoá)
+    assert pinyin_written("仓库", "Cangku", "place") == "Thương Khố"
+    assert pinyin_written("体育馆", "Tiyuguan", "place") == "Thể Dục Quán"
+    assert pinyin_written("迅雷", "Xunlei", "other") == "Tấn Lôi"
+    assert pinyin_written("幻化", "Huan Hua", "skill") == "Huyễn Hoa"
+    # tên nước ngoài phiên qua chữ Hán cũng khớp pinyin y hệt — nhận ra bằng CHỮ dùng
+    # để viết (toàn chữ chuyên phiên âm) chứ không bằng âm
+    assert pinyin_written("安娜", "Anna", "other") is None
+    assert pinyin_written("米兰", "Milan", "other") is None
+    # person là chỗ tên Tây dồn vào → không đụng, để reconcile() lo
+    assert pinyin_written("汉森", "Hansen", "person") is None
+    # đã là Hán-Việt / không phải pinyin của chữ đó → không đụng
+    assert pinyin_written("仓库", "Thương Khố", "place") is None
+    assert pinyin_written("芝加哥", "Chicago", "place") is None
 
 
 if __name__ == "__main__":

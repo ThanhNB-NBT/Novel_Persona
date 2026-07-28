@@ -13,6 +13,7 @@ Lệnh vận hành:
     python -m novelworker.main meta --novel <id>             # dịch lại metadata (tên/mô tả/thể loại) 1 truyện — sau khi sửa prompt tên
     python -m novelworker.main backfill --source ptwxz       # tải lại metadata truyện đã có (sau khi vá adapter)
     python -m novelworker.main gclean [--write]              # dọn gợi ý glossary là cụm tiếng Anh (chưa duyệt)
+    python -m novelworker.main gfix [--write]                # term viết bằng pinyin → đổi về Hán-Việt
 """
 from __future__ import annotations
 
@@ -578,6 +579,39 @@ def run_gclean(dry: bool = True) -> None:
     print(f"Đã xoá {len(ids)} gợi ý.")
 
 
+def run_gfix(dry: bool = True) -> None:
+    """Term đang bị viết bằng PINYIN → đổi về Hán-Việt (仓库 "Cangku" → "Thương Khố").
+    Sửa tại chỗ, KHÔNG xoá — dữ liệu vẫn còn, chỉ viết lại cho đúng. Chỉ đụng term chưa
+    duyệt; bản cũ ghi vào `wrong_vi` để prompt biết mà tránh và job patch vá được chương
+    đã dịch."""
+    from .translator import hanviet
+    rows, off, step = [], 0, 1000
+    while True:
+        page = (db.sb().table("glossary_terms")
+                .select("id, novel_id, term_zh, correct_vi, term_type, wrong_vi")
+                .eq("approved", False).order("id").range(off, off + step - 1).execute()).data or []
+        rows += page
+        if len(page) < step:
+            break
+        off += step
+    fix = [(t, hv) for t in rows
+           if (hv := hanviet.pinyin_written(t["term_zh"], t["correct_vi"], t["term_type"]))]
+    print(f"{len(rows)} gợi ý chưa duyệt → {len(fix)} đang viết bằng pinyin"
+          + (" (CHẠY THỬ)" if dry else ""))
+    for t, hv in fix[:20]:
+        print(f"  {t['term_zh']} : {t['correct_vi']} → {hv}   ({t['term_type']})")
+    if len(fix) > 20:
+        print(f"  ... còn {len(fix) - 20} dòng")
+    if dry:
+        print("Thêm --write để sửa thật.")
+        return
+    for t, hv in fix:
+        db.sb().table("glossary_terms").update(
+            {"correct_vi": hv, "wrong_vi": t.get("wrong_vi") or t["correct_vi"]},
+            returning="minimal").eq("id", t["id"]).execute()
+    print(f"Đã sửa {len(fix)} term.")
+
+
 def run_request(novel_id: int, up_to: int) -> None:
     """Bản service-role của RPC request_translation — test không cần app/đăng nhập."""
     rows = (
@@ -688,7 +722,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(prog="novelworker")
     parser.add_argument("mode",
                         choices=["crawl", "translate", "request", "add", "cost", "audit", "quality",
-                                 "meta", "redich", "backfill", "gclean"])
+                                 "meta", "redich", "backfill", "gclean", "gfix"])
     parser.add_argument("--engine", default="hachimi", help="redich: engine dịch lại (mặc định hachimi)")
     parser.add_argument("--priority", type=int, default=70,
                         help="redich: priority job (nhỏ = dịch trước; 70 = trên chương đọc thử)")
@@ -715,6 +749,8 @@ def main() -> None:
         if args.novel is None:
             parser.error("meta cần --novel <id>")
         run_meta(args.novel)
+    elif args.mode == "gfix":
+        run_gfix(dry=not args.write)
     elif args.mode == "gclean":
         run_gclean(dry=not args.write)
     elif args.mode == "backfill":
