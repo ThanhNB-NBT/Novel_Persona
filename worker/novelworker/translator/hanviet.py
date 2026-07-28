@@ -150,6 +150,8 @@ origin orphanage perception petrification points portal possession priest prophe
 reflex resurrection rogue sergeant server shopkeeper skill smelting sorceress soul
 spaceship speed spell spirit stamina stealth talent tavern vagrant vehicle warehouse
 warrior woman zone zones
+alliance blue borderline chip constitution dad ding earth epic grandfather green hell
+hypnosis magic papa pasta qi wolfman
 """.split())
 
 # Dấu thanh CHỈ có trong pinyin, không có trong tiếng Việt (macron ā, caron ǎ, ü có dấu).
