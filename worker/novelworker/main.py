@@ -465,8 +465,12 @@ def run_backfill(source: str, dry: bool = True, limit: int | None = None) -> Non
     bộ lọc thể loại chưa từng chặn được truyện nào của nguồn này).
 
     Chỉ ghi đè trường đang RỖNG, trừ `status` (adapter cũ hardcode 'ongoing' nên giá trị cũ
-    không đáng tin). Truyện dính thể loại cấm → ẩn. Truyện đã dịch meta mà giờ mới có mô tả/
-    thể loại → xếp lại job metadata để dịch phần vừa bổ sung.
+    không đáng tin). Hai mức xử lý truyện lọt lưới:
+      * VI PHẠM thể loại cấm → XOÁ; trigger novels_delete_blacklist ghi crawl_blacklist
+        nên discovery không crawl lại (migration 032).
+      * KHÔNG ĐẠT (đang ra, dưới `discover_min_chapters`) → chỉ ẩn, chờ đủ chương thì
+        _maybe_unhide_grown tự hiện lại.
+    Truyện đã dịch meta mà giờ mới có mô tả/thể loại → xếp lại job metadata để dịch bổ sung.
     ponytail: chạy tuần tự + sleep 1s, vài trăm truyện là đủ; cần nhanh hơn thì mới song song."""
     adapter = build_adapters().get(source)
     if not adapter:
@@ -474,11 +478,12 @@ def run_backfill(source: str, dry: bool = True, limit: int | None = None) -> Non
         return
     sid = adapter.source_row["id"]
     q = (db.sb().table("novels")
-         .select("id, source_novel_id, genres, description_zh, status, author_zh, hidden, meta_translated")
+         .select("id, source_novel_id, genres, description_zh, status, author_zh, hidden, "
+                 "meta_translated, chapter_count_source, title_zh")
          .eq("source_id", sid).order("id"))
     rows = (q.limit(limit).execute() if limit else q.execute()).data or []
     print(f"{source}: {len(rows)} truyện" + (" — CHẠY THỬ, không ghi DB" if dry else ""))
-    n_fix = n_hide = n_err = 0
+    n_fix = n_hide = n_del = n_err = 0
     for i, nv in enumerate(rows, 1):
         try:
             meta = adapter.fetch_novel_meta(nv["source_novel_id"])
@@ -487,7 +492,21 @@ def run_backfill(source: str, dry: bool = True, limit: int | None = None) -> Non
             print(f"  [{i}] #{nv['id']} LỖI: {e}")
             continue
         blocked = sync.genre_blocked(meta)
+        if blocked:
+            # VI PHẠM → xoá hẳn. Trigger tự blacklist theo source_novel_id + dedup_key.
+            n_del += 1
+            print(f"  [{i}] #{nv['id']} {meta.title_zh}: XOÁ — thể loại cấm '{blocked}'")
+            if not dry:
+                db.sb().table("novels").delete(returning="minimal").eq("id", nv["id"]).execute()
+                time.sleep(1.0)
+            continue
         patch: dict = {}
+        # KHÔNG ĐẠT: đang ra mà chưa đủ chương → ẩn (cùng ngưỡng với lọc discovery)
+        thin = (meta.status != "completed"
+                and (meta.chapter_count or nv.get("chapter_count_source") or 0)
+                < settings.discover_min_chapters)
+        if thin and not nv.get("hidden"):
+            patch["hidden"] = True
         if meta.genres_zh and not nv.get("genres"):
             patch["genres"] = meta.genres_zh
         if meta.description_zh and not nv.get("description_zh"):
@@ -496,26 +515,24 @@ def run_backfill(source: str, dry: bool = True, limit: int | None = None) -> Non
             patch["author_zh"] = meta.author_zh
         if meta.status != nv.get("status"):
             patch["status"] = meta.status
-        if blocked and not nv.get("hidden"):
-            patch["hidden"] = True
         if not patch:
             continue
         n_fix += 1
         n_hide += bool(patch.get("hidden"))
-        print(f"  [{i}] #{nv['id']} {meta.title_zh}: {patch}" + (f"  ← CẤM '{blocked}'" if blocked else ""))
+        print(f"  [{i}] #{nv['id']} {meta.title_zh}: {patch}" + ("  ← ẨN: chưa đủ chương" if thin else ""))
         if dry:
             continue
         patch["updated_at"] = db.utc_now()
         db.sb().table("novels").update(patch, returning="minimal").eq("id", nv["id"]).execute()
         # đã dịch meta từ trước + vừa có thêm mô tả/thể loại zh → dịch lại cho khớp
-        if nv.get("meta_translated") and not blocked and (
+        if nv.get("meta_translated") and (
                 "description_zh" in patch or "genres" in patch):
             db.sb().table("translation_jobs").delete().eq(
                 "novel_id", nv["id"]).eq("type", "metadata").execute()
             db.enqueue("metadata", nv["id"], priority=20)
         time.sleep(1.0)  # lịch sự với nguồn
-    print(f"Xong: {n_fix} truyện cần sửa ({n_hide} bị ẩn vì thể loại cấm), {n_err} lỗi tải."
-          + ("  Thêm --write để ghi thật." if dry else ""))
+    print(f"Xong: {n_del} XOÁ (thể loại cấm), {n_fix} sửa metadata ({n_hide} ẩn vì thiếu chương), "
+          f"{n_err} lỗi tải." + ("  Thêm --write để ghi thật." if dry else ""))
 
 
 def run_request(novel_id: int, up_to: int) -> None:
