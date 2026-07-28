@@ -255,6 +255,14 @@ def reset_orphan_chapters() -> int:
     return n
 
 
+def cleanup_orphan_translation_jobs() -> int:
+    """Xoá job chapter pending khi chapter không còn queued/translating."""
+    n = sb().rpc("cleanup_orphan_translation_jobs").execute().data or 0
+    if n:
+        log.warning("Reaper: xoá %d job pending lệch trạng thái chapter", n)
+    return n
+
+
 def reprioritize_chapters_by_reading(active_hours: int, prio_read: int, prio_idle: int) -> int:
     """Bám hoạt động đọc thật: chương pending của truyện có reader trong `active_hours`
     giờ qua → ưu tiên cao (prio_read); truyện không ai đọc → đẩy ra sau (prio_idle).
@@ -363,6 +371,17 @@ def runtime_settings() -> dict[str, str]:
     except Exception:
         log.warning("Không đọc được worker_settings — dùng default trong config.py")
         return {}
+
+
+def last_discovery_at(source_id: int) -> float:
+    """Mốc discovery mới nhất của nguồn, lưu bền qua restart worker."""
+    rows = (
+        sb().table("crawl_discovery_frontier").select("updated_at")
+        .eq("source_id", source_id).order("updated_at", desc=True).limit(1).execute()
+    ).data or []
+    if not rows:
+        return 0.0  # nguồn mới chưa có frontier → discovery ngay
+    return datetime.fromisoformat(rows[0]["updated_at"].replace("Z", "+00:00")).timestamp()
 
 
 def runtime_int(rs: dict, key: str, cur: int, lo: int = 1) -> int:

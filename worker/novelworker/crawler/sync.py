@@ -10,7 +10,7 @@ from datetime import datetime, timedelta, timezone
 from .. import db
 from ..config import settings
 from ..translator.text_clean import clean_source
-from .base import ChapterNotReady, SourceAdapter, SourceBlocked
+from .base import ChapterNotReady, SourceAdapter, SourceBlocked, SourceTransient
 
 log = logging.getLogger(__name__)
 
@@ -1024,6 +1024,10 @@ def ensure_chapters_fetched(adapter: SourceAdapter, novel_id: int) -> None:
             log.info("Đã tải chương %s (novel %s)", ch["chapter_index"], novel_id)
         except SourceBlocked as e:
             log.warning("Nguồn %s đang chặn IP (%s) — dừng tải chương chu kỳ này",
+                        adapter.name, e)
+            return
+        except SourceTransient as e:
+            log.warning("Nguồn %s lỗi tạm thời (%s) — giữ chương queued, thử lại chu kỳ sau",
                         adapter.name, e)
             return
         except ChapterNotReady as e:

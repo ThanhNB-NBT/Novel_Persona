@@ -7,6 +7,7 @@ os.environ.setdefault("SUPABASE_URL", "https://example.supabase.co")
 os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "test")
 
 from novelworker.crawler.biquge import BiqugeAdapter
+from novelworker.crawler.base import SourceTransient
 
 
 class _Resp:
@@ -34,7 +35,7 @@ def main() -> None:
         try:
             a._get("/dead/")
             assert False, "phải ném lỗi"
-        except RuntimeError:
+        except SourceTransient:
             pass
     assert a.fetch_ok == 2 and a.fetch_err == 3
 

@@ -52,3 +52,20 @@ def test_transient_db_error_classifier():
     assert not db.is_transient_error(api_error(401))
     assert db.is_transient_error(api_error(429))
     assert db.is_transient_error(api_error(503))
+
+
+def test_cleanup_orphan_translation_jobs_calls_rpc(monkeypatch):
+    from novelworker import db
+
+    class Query:
+        data = 12
+
+        def rpc(self, name):
+            assert name == "cleanup_orphan_translation_jobs"
+            return self
+
+        def execute(self):
+            return self
+
+    monkeypatch.setattr(db, "sb", Query)
+    assert db.cleanup_orphan_translation_jobs() == 12

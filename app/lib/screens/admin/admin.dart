@@ -691,7 +691,7 @@ class _CrawlTabState extends ConsumerState<_CrawlTab> {
               ref.invalidate(crawlSourcesProvider);
               messenger.showSnackBar(SnackBar(
                   content: Text(v
-                      ? 'Đã bật ${s['name']} — restart crawler để nhận nguồn mới'
+                      ? 'Đã bật ${s['name']} — crawler sẽ tự nhận trong khoảng 10 giây'
                       : 'Đã tắt ${s['name']}')));
             },
           ),

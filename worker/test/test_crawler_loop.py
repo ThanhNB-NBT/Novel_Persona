@@ -2,6 +2,7 @@
 khi tới chu kỳ (due), còn tải chương người đọc chạy mỗi tick."""
 import os
 import sys
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
@@ -59,3 +60,21 @@ def test_source_tick_skips_other_source(monkeypatch):
     pending = [{"source_id": 999, "id": 100}]   # nguồn khác → không đụng
     m._source_tick(_adapter(), pending, due=False, max_new=5, refresh_n=10)
     assert calls["ensure"] == 0
+
+
+def test_last_discovery_at_survives_restart(monkeypatch):
+    value = "2026-07-27T04:43:37+00:00"
+
+    class Query(_FakeQuery):
+        def __getattr__(self, name):
+            if name == "execute":
+                return lambda *a, **k: SimpleNamespace(data=[{"updated_at": value}], count=1)
+            return self
+
+    monkeypatch.setattr(m.db, "sb", lambda: Query())
+    assert m.db.last_discovery_at(7) == datetime.fromisoformat(value).timestamp()
+
+
+def test_new_source_is_due_immediately(monkeypatch):
+    monkeypatch.setattr(m.db, "sb", lambda: _FakeQuery())
+    assert m.db.last_discovery_at(7) == 0.0

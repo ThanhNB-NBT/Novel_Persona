@@ -1,6 +1,6 @@
 """Parser Retry-After (P3) + gom latency (P2b-0) — nhánh nhỏ chi phối backoff/đo, giữ check."""
 from novelworker.crawler import base
-from novelworker.crawler.base import _record_fetch, _retry_after_seconds
+from novelworker.crawler.base import _is_transient_status, _record_fetch, _retry_after_seconds
 
 
 class _Resp:
@@ -15,6 +15,14 @@ def test_retry_after_seconds():
     assert _retry_after_seconds(_Resp({})) == 0.0                       # không có header
     assert _retry_after_seconds(_Resp({"Retry-After": "Wed, 21 Oct"})) == 0.0  # HTTP-date → bỏ
     assert _retry_after_seconds(None) == 0.0
+
+
+def test_transient_http_status():
+    assert _is_transient_status(None)       # lỗi mạng/timeout
+    assert _is_transient_status(403)        # chặn IP
+    assert _is_transient_status(429)        # rate-limit
+    assert _is_transient_status(503)
+    assert not _is_transient_status(404)    # URL chương thật sự không tồn tại
 
 
 def test_record_fetch_accumulates_then_resets(monkeypatch):

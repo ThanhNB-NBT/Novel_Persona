@@ -1478,6 +1478,7 @@ def run_forever(poll_seconds: float = 3.0) -> None:
                 log.info("Trần dịch đổi từ app: %d → %d chương/ngày",
                          cap_before, settings.max_chapters_per_day)
             db.requeue_stale_jobs(settings.stale_job_minutes)
+            db.cleanup_orphan_translation_jobs()
             db.reset_orphan_chapters()  # dọn chương queued/translating không còn job (ghost Hàng đợi)
             # Style bible đã gỡ khỏi đường dịch (25/07) → không tái tạo nữa, khỏi tốn
             # một lượt LLM mỗi chu kỳ cho thứ không ai đọc.

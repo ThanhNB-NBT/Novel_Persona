@@ -67,6 +67,14 @@ class ChapterNotReady(Exception):
     (redirect về trang truyện) — lỗi tạm, giữ hàng đợi thử lại, đừng đánh failed."""
 
 
+class SourceTransient(Exception):
+    """Mạng/rate-limit/5xx vẫn có thể hồi phục — giữ chương queued cho chu kỳ sau."""
+
+
+def _is_transient_status(status: int | None) -> bool:
+    return status is None or status in {401, 403, 429} or status >= 500
+
+
 @dataclass
 class NovelMeta:
     source_novel_id: str
@@ -169,6 +177,8 @@ class SourceAdapter(ABC):
                     break  # lỗi cứng (URL sai / bị cấm) — retry vô ích
                 retry_after = _retry_after_seconds(resp)  # 429/503: nguồn báo chờ bao lâu
         self.fetch_err += 1
+        if _is_transient_status(status):
+            raise SourceTransient(str(last)) from last
         raise last  # type: ignore[misc]
 
     def search(self, keyword: str) -> list[tuple[str, str]]:

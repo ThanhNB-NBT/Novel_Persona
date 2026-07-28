@@ -188,9 +188,14 @@ def _source_loop(adapter: SourceAdapter, stop: threading.Event, cfg: dict) -> No
     """Luồng crawl riêng một nguồn: tự cadence discovery, tự đo sức khoẻ. Tự tắt nguồn
     (toàn fetch fail nhiều chu kỳ) → thoát luồng; coordinator reconcile sẽ gỡ khỏi vòng."""
     sid = adapter.source_row.get("id")
-    # Mốc = lúc luồng bắt đầu, KHÔNG phải 0: nếu 0 thì tick đầu sau restart luôn "due"
-    # → discovery chạy ngay bất chấp interval_min (interval to cỡ nào cũng bị cào 1 đợt).
-    last_discovery = time.time()
+    # Lấy mốc bền từ frontier: restart không làm chu kỳ dài đếm lại từ đầu. Nguồn mới
+    # chưa có frontier trả 0 → discovery ngay; lỗi đọc DB thì giữ hành vi an toàn cũ.
+    try:
+        last_discovery = db.last_discovery_at(sid) if sid is not None else time.time()
+    except Exception:
+        last_discovery = time.time()
+        log.warning("Không đọc được mốc discovery nguồn %s — tính chu kỳ từ lúc khởi động",
+                    adapter.name)
     while not stop.is_set():
         started = time.time()
         db.heartbeat("crawler")  # nguồn nào còn sống cũng điểm danh — app thấy crawler sống

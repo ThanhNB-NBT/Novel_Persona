@@ -16,6 +16,8 @@ import sys
 import time
 
 sys.path.insert(0, os.path.dirname(__file__))
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
 
 HAN = re.compile(r"[一-鿿]")
 # Rác tuyệt đối không được có trong text đã bóc.
