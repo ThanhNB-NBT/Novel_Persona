@@ -140,7 +140,21 @@ suitcase supercomputer superpower syringe system tank taxi terminal tiger toothp
 umbrella unit vaccine vendor video wand warlock warship waterfall waves website wine wood
 wristband
 babaishui dantian fabao gohuo jiaosuo kimshouchi lazhu luoli mingwen neigong niepan xiuxian
+abilities advanced alchemist armory assassin attack awakening awoke beast captain champion
+cleaner common construction cultivator daoist damage defend defense dexterity dimensional
+elder elite emperor equipment explosion foundry freshman gate general grain guards hangar
+headquarters heir hollow hope hospital instinct intermediate inventory junior legend
+legendary light loading luck mage magician mailman marketplace mechanic meditation
+mentality mercenaries military mimicry miracle mirror mortal move mythic officer ordinary
+origin orphanage perception petrification points portal possession priest prophet rare
+reflex resurrection rogue sergeant server shopkeeper skill smelting sorceress soul
+spaceship speed spell spirit stamina stealth talent tavern vagrant vehicle warehouse
+warrior woman zone zones
 """.split())
+
+# Dấu thanh CHỈ có trong pinyin, không có trong tiếng Việt (macron ā, caron ǎ, ü có dấu).
+# Không dùng á à í ì — tiếng Việt dùng chung, quét bằng chúng là bắt nhầm 31k dòng đúng.
+_PINYIN_TONE = re.compile(r"[āēīōūǖǎěǐǒǔǚǘǜǹ]")
 
 
 def english_meaning(zh: str | None, vi: str | None, term_type: str | None) -> bool:
@@ -159,6 +173,8 @@ def english_meaning(zh: str | None, vi: str | None, term_type: str | None) -> bo
     Từ MỘT tiếng thì tra `_ENGLISH_COMMON` — trừ khi chữ Hán gốc đúng là phiên âm tên
     ngoại (德鲁依 → druid giữ, dù 'druid' có nằm trong danh sách hay không)."""
     s = (vi or "").strip()
+    if _PINYIN_TONE.search(s):
+        return True      # "Bèi Sàngshī Bìngdú" — pinyin thô, chưa dịch gì
     if not s.isascii():
         return False
     if " " not in s:

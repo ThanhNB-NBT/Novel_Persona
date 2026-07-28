@@ -79,6 +79,11 @@ def main() -> None:
     assert not english_meaning("兽人", "orc", "other")
     assert not english_meaning("德鲁依", "druid", "other")  # zh là phiên âm tên ngoại
     assert not english_meaning("凯瑞甘", "Kerrigan", "person")
+    assert english_meaning("中阶", "Intermediate", "other")
+    # pinyin thô: chỉ bắt bằng dấu RIÊNG của pinyin, không bắt bằng dấu tiếng Việt
+    assert english_meaning("生肉", "Shēngròu", "item")
+    assert not english_meaning("孟婆汤", "canh Mạnh Bà", "item")
+    assert not english_meaning("倾国倾城", "khuynh quốc khuynh thành", "other")
 
 
 if __name__ == "__main__":
