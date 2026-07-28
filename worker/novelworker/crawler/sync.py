@@ -297,7 +297,12 @@ def _queue_canonical_work(adapter: SourceAdapter, novel: dict, meta, prio_meta: 
         log.info("Discovery: ẩn novel %s vì %s", novel["id"], exc)
         return False
     except Exception:
-        log.exception("Discovery: lỗi xếp việc cho novel %s", novel["id"])
+        # Lỗi tạm (nguồn timeout) giữa chừng → truyện mồ côi: hiện trên kệ, tên Trung,
+        # 0 chương, không job nào xếp lại. Ẩn đi để refresh sau lấy được mục lục thì
+        # _maybe_unhide_grown tự hiện lại + xếp metadata.
+        db.sb().table("novels").update(
+            {"hidden": True}, returning="minimal").eq("id", novel["id"]).execute()
+        log.exception("Discovery: lỗi xếp việc cho novel %s — ẩn tạm chờ refresh", novel["id"])
         return False
 
 

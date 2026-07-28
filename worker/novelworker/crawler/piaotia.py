@@ -80,20 +80,36 @@ class PiaotiaAdapter(SourceAdapter):
                 title = re.split(r"最新章节|_|-|,|，", unescape(mt.group(1)).strip())[0].strip()
         if not title:
             raise ValueError(f"Không parse được tên truyện {self.name} cho {source_novel_id}")
-        ma = re.search(r"作\s*者[：:]\s*([^<\n,，]+)", html)
+        # Bảng info của bookinfo giãn nhãn bằng &nbsp; ("类&nbsp;&nbsp;&nbsp; 别：") nên
+        # \s không khớp — phải cho phép cả entity giữa các chữ.
+        _gap = r"(?:&nbsp;|\s)*"
+        ma = re.search(rf"作{_gap}者{_gap}[：:]{_gap}([^<\n,，]+)", html)
         if not ma:
             # trang thật không có nhãn "作者："; tác giả nằm trong <title> dạng
             # "Tên最新章节,<Tác giả>作品选-飘天文学" (kiểm chứng live 2026-07-25).
             ma = re.search(r"[,，]\s*([^,，<]+?)作品选", html)
         author = unescape(ma.group(1)).strip() if ma else None
         mc = re.search(r'<img[^>]+src="([^"]+/files/article/image/[^"]+)"', html)
+        mg = re.search(rf"类{_gap}别{_gap}[：:]{_gap}([^<]+)", html)
+        genres = [g] if mg and (g := unescape(mg.group(1)).strip()) else []
+        ms = re.search(rf"文章状态{_gap}[：:]{_gap}([^<]+)", html)
+        st = unescape(ms.group(1)).strip() if ms else ""
+        # 内容简介：<br />ND<br /><br /> ... </td> — cắt tới </td> rồi bóc tag.
+        desc = None
+        md = re.search(r"内容简介[：:]\s*</span>(.*?)</td>", html, re.S)
+        if md:
+            d = re.sub(r"</p\s*>|<br\s*/?>", "\n", md.group(1), flags=re.I)
+            d = re.sub(r"<[^>]+>", "", unescape(d)).replace("　", " ")
+            desc = "\n".join(ln.strip() for ln in d.split("\n") if ln.strip()) or None
         return NovelMeta(
             source_novel_id=source_novel_id,
             source_url=f"{self.base_url}{self._novel_url(source_novel_id)}",
             title_zh=title,
             author_zh=author,
             cover_url=mc.group(1) if mc else None,
-            status="ongoing",
+            description_zh=desc,
+            genres_zh=genres,
+            status="completed" if st in ("已完成", "完本", "完结") else "ongoing",
         )
 
     def fetch_chapter_list(self, source_novel_id: str) -> list[ChapterRef]:

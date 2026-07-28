@@ -459,6 +459,65 @@ def run_meta(novel_id: int) -> None:
     print("Translator đang chạy sẽ dịch lại trong vài giây; kiểm tra lại title_vi trong app/Supabase.")
 
 
+def run_backfill(source: str, dry: bool = True, limit: int | None = None) -> None:
+    """Tải lại metadata từ nguồn cho truyện ĐÃ có trong kho — dùng khi adapter được vá và
+    các trường trước đó bị bỏ trống (ptwxz 2026-07-28: thiếu genres/description/status nên
+    bộ lọc thể loại chưa từng chặn được truyện nào của nguồn này).
+
+    Chỉ ghi đè trường đang RỖNG, trừ `status` (adapter cũ hardcode 'ongoing' nên giá trị cũ
+    không đáng tin). Truyện dính thể loại cấm → ẩn. Truyện đã dịch meta mà giờ mới có mô tả/
+    thể loại → xếp lại job metadata để dịch phần vừa bổ sung.
+    ponytail: chạy tuần tự + sleep 1s, vài trăm truyện là đủ; cần nhanh hơn thì mới song song."""
+    adapter = build_adapters().get(source)
+    if not adapter:
+        print(f"Nguồn '{source}' không enabled hoặc không có adapter.")
+        return
+    sid = adapter.source_row["id"]
+    q = (db.sb().table("novels")
+         .select("id, source_novel_id, genres, description_zh, status, author_zh, hidden, meta_translated")
+         .eq("source_id", sid).order("id"))
+    rows = (q.limit(limit).execute() if limit else q.execute()).data or []
+    print(f"{source}: {len(rows)} truyện" + (" — CHẠY THỬ, không ghi DB" if dry else ""))
+    n_fix = n_hide = n_err = 0
+    for i, nv in enumerate(rows, 1):
+        try:
+            meta = adapter.fetch_novel_meta(nv["source_novel_id"])
+        except Exception as e:
+            n_err += 1
+            print(f"  [{i}] #{nv['id']} LỖI: {e}")
+            continue
+        blocked = sync.genre_blocked(meta)
+        patch: dict = {}
+        if meta.genres_zh and not nv.get("genres"):
+            patch["genres"] = meta.genres_zh
+        if meta.description_zh and not nv.get("description_zh"):
+            patch["description_zh"] = meta.description_zh
+        if meta.author_zh and not nv.get("author_zh"):
+            patch["author_zh"] = meta.author_zh
+        if meta.status != nv.get("status"):
+            patch["status"] = meta.status
+        if blocked and not nv.get("hidden"):
+            patch["hidden"] = True
+        if not patch:
+            continue
+        n_fix += 1
+        n_hide += bool(patch.get("hidden"))
+        print(f"  [{i}] #{nv['id']} {meta.title_zh}: {patch}" + (f"  ← CẤM '{blocked}'" if blocked else ""))
+        if dry:
+            continue
+        patch["updated_at"] = db.utc_now()
+        db.sb().table("novels").update(patch, returning="minimal").eq("id", nv["id"]).execute()
+        # đã dịch meta từ trước + vừa có thêm mô tả/thể loại zh → dịch lại cho khớp
+        if nv.get("meta_translated") and not blocked and (
+                "description_zh" in patch or "genres" in patch):
+            db.sb().table("translation_jobs").delete().eq(
+                "novel_id", nv["id"]).eq("type", "metadata").execute()
+            db.enqueue("metadata", nv["id"], priority=20)
+        time.sleep(1.0)  # lịch sự với nguồn
+    print(f"Xong: {n_fix} truyện cần sửa ({n_hide} bị ẩn vì thể loại cấm), {n_err} lỗi tải."
+          + ("  Thêm --write để ghi thật." if dry else ""))
+
+
 def run_request(novel_id: int, up_to: int) -> None:
     """Bản service-role của RPC request_translation — test không cần app/đăng nhập."""
     rows = (
@@ -568,16 +627,19 @@ def run_redich_leaked(priority: int = 70, dry: bool = True) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(prog="novelworker")
     parser.add_argument("mode",
-                        choices=["crawl", "translate", "request", "add", "cost", "audit", "quality", "meta", "redich"])
+                        choices=["crawl", "translate", "request", "add", "cost", "audit", "quality",
+                                 "meta", "redich", "backfill"])
     parser.add_argument("--engine", default="hachimi", help="redich: engine dịch lại (mặc định hachimi)")
     parser.add_argument("--priority", type=int, default=70,
                         help="redich: priority job (nhỏ = dịch trước; 70 = trên chương đọc thử)")
     parser.add_argument("--leaked", action="store_true",
                         help="redich: chỉ nhặt chương còn mảnh mã termguard (mặc định chạy thử)")
-    parser.add_argument("--write", action="store_true", help="redich --leaked: ghi DB thật")
+    parser.add_argument("--write", action="store_true",
+                        help="redich --leaked / backfill: ghi DB thật (mặc định chạy thử)")
+    parser.add_argument("--limit", type=int, help="backfill: chỉ xử lý N truyện đầu")
     parser.add_argument("--book-id", help="add: id truyện (số trong URL nguồn)")
     parser.add_argument("--source", default="shuhaige",
-                        help="add: sources.name của nguồn crawl (mặc định shuhaige)")
+                        help="add/backfill: sources.name của nguồn (mặc định shuhaige)")
     parser.add_argument("--novel", type=int, help="request: novels.id trong DB")
     parser.add_argument("--up-to", type=int, default=10, help="request: dịch tới chương N")
     parser.add_argument("--fix", action="store_true",
@@ -593,6 +655,8 @@ def main() -> None:
         if args.novel is None:
             parser.error("meta cần --novel <id>")
         run_meta(args.novel)
+    elif args.mode == "backfill":
+        run_backfill(args.source, dry=not args.write, limit=args.limit)
     elif args.mode == "crawl":
         run_crawler()
     elif args.mode == "translate":

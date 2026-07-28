@@ -31,6 +31,20 @@ def main() -> None:
     assert m.cover_url and "files/article/image" in m.cover_url
     assert m.source_url == "https://www.piaotia.com/bookinfo/1/2.html"
 
+    # bảng info thật: nhãn giãn bằng &nbsp; → vẫn ra thể loại/trạng thái/giới thiệu
+    a._get = lambda p: (
+        "<h1>重生之大涅磐</h1>"
+        "<td>类&nbsp;&nbsp;&nbsp; 别：都市言情</td>"
+        "<td>作&nbsp;&nbsp;&nbsp; 者：奥尔良烤鲟鱼堡</td>"
+        "<td>文章状态：已完成</td>"
+        '<td><span class="hottext">内容简介：</span><br />　　苏灿回到了夏天。<br /><br /></td>'
+    )
+    m = a.fetch_novel_meta("1/2")
+    assert m.genres_zh == ["都市言情"], m.genres_zh
+    assert m.status == "completed", m.status
+    assert m.author_zh == "奥尔良烤鲟鱼堡", m.author_zh
+    assert m.description_zh == "苏灿回到了夏天。", repr(m.description_zh)
+
     # tên fallback từ <title> khi thiếu <h1> (cắt token đầu theo 最新章节/_/-)
     a._get = lambda p: "<title>武动乾坤最新章节_天蚕土豆</title>"
     assert a.fetch_novel_meta("1/2").title_zh == "武动乾坤"
