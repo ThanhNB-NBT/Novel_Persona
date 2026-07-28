@@ -238,7 +238,7 @@ def sweep_glossary(since: str | None = None, dry: bool = False,
     rows, off, step = [], 0, 1000
     while True:
         q = (sb().table("glossary_terms")
-             .select("id, novel_id, term_zh, correct_vi, term_type, wrong_vi, created_by")
+             .select("id, novel_id, term_zh, correct_vi, term_type, wrong_vi, created_by, note")
              .eq("approved", False))
         if since:
             q = q.gte("created_at", since)
