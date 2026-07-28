@@ -10,7 +10,14 @@ from datetime import datetime, timedelta, timezone
 from .. import db
 from ..config import settings
 from ..translator.text_clean import clean_source
-from .base import ChapterNotReady, ChapterRef, SourceAdapter, SourceBlocked, SourceTransient
+from .base import (
+    ChapterNotReady,
+    ChapterRef,
+    EmptyChapterList,
+    SourceAdapter,
+    SourceBlocked,
+    SourceTransient,
+)
 
 log = logging.getLogger(__name__)
 
@@ -268,7 +275,7 @@ def _queue_canonical_work(adapter: SourceAdapter, novel: dict, meta, prio_meta: 
     """Sau upsert truyện mới: LỌC CHẤT LƯỢNG rồi mới đốt token.
     Sync mục lục trước → truyện đang-ra dưới `discover_min_chapters` chương = truyện mỏng
     chưa kiểm chứng → ẩn luôn, không dịch metadata/chương mẫu (hoàn thành thì không lọc).
-    Truyện đạt → dịch metadata + `sample_chapters` chương đọc thử ưu tiên thấp."""
+    Truyện đạt → dịch metadata; worker chỉ xếp `sample_chapters` sau khi metadata xong."""
     if not (novel.get("is_canonical") and not novel.get("meta_translated")):
         return False
     try:
@@ -283,8 +290,12 @@ def _queue_canonical_work(adapter: SourceAdapter, novel: dict, meta, prio_meta: 
                      novel["id"], meta.title_zh, total, settings.discover_min_chapters)
             return False
         db.enqueue("metadata", novel["id"], priority=prio_meta)
-        queue_sample_chapters(novel["id"], settings.sample_chapters, settings.prio_idle)
         return True
+    except EmptyChapterList as exc:
+        db.sb().table("novels").update(
+            {"hidden": True}, returning="minimal").eq("id", novel["id"]).execute()
+        log.info("Discovery: ẩn novel %s vì %s", novel["id"], exc)
+        return False
     except Exception:
         log.exception("Discovery: lỗi xếp việc cho novel %s", novel["id"])
         return False
@@ -820,6 +831,11 @@ def sync_followed_novels(adapter: SourceAdapter) -> None:
                     log.info("Tủ sách: tự dịch đón %d chương mới truyện %s", queued, nv["id"])
             db.sb().table("novels").update(
                 {"last_checked_at": db.utc_now()}, returning="minimal").eq("id", nv["id"]).execute()
+        except EmptyChapterList as exc:
+            db.sb().table("novels").update(
+                {"hidden": True, "last_checked_at": db.utc_now()},
+                returning="minimal").eq("id", nv["id"]).execute()
+            log.info("Sync tủ sách: ẩn truyện %s vì %s", nv["id"], exc)
         except Exception:
             log.exception("Lỗi sync truyện %s", nv["id"])
         time.sleep(2.0)
@@ -910,6 +926,13 @@ def refresh_canonical_updates(adapter: SourceAdapter, limit: int) -> None:
                 _maybe_unhide_grown(nv)
             synced = True
             fail_streak = 0
+        except EmptyChapterList as e:
+            # Truyện ma của riêng nguồn, không được tính thành lỗi toàn nguồn.
+            synced = True
+            fail_streak = 0
+            db.sb().table("novels").update(
+                {"hidden": True}, returning="minimal").eq("id", nv["id"]).execute()
+            log.info("Refresh: ẩn truyện %s vì %s", nv["id"], e)
         except Exception as e:
             fail_streak += 1
             # traceback 1 lần là đủ hiểu; nguồn sập thì 45 traceback giống hệt chỉ làm rác log

@@ -1041,6 +1041,12 @@ def handle_metadata(job: dict, llm) -> None:
     desc = clean(data.get("description_vi"))
     description_vi = _fix_register(desc).strip() if desc else novel.get("description_vi")
     genres = _map_genres(novel.get("genres")) or novel.get("genres")
+    if not novel.get("meta_translated"):
+        # Chỉ tạo job chương mẫu sau khi metadata đã dịch xong. Migration claim giữ các
+        # job vừa tạo đứng yên tới khi update meta_translated bên dưới thành công.
+        from ..crawler.sync import queue_sample_chapters
+        queue_sample_chapters(
+            novel["id"], settings.sample_chapters, settings.prio_idle)
     # JSON parse được nhưng thiếu field → GIỮ giá trị cũ, không ghi đè None (meta_translated
     # set True ngay dưới nên không tự dịch lại — ghi None là mất trắng tên đang có)
     db.sb().table("novels").update({

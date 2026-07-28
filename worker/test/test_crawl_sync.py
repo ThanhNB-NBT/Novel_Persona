@@ -72,7 +72,8 @@ def main() -> None:
         assert sync._queue_canonical_work(
             adapter, {"id": 3, "is_canonical": True, "meta_translated": False},
             meta, 10) is True
-        assert len(queued) == 4
+        # Chương mẫu chỉ được xếp sau khi metadata dịch thành công.
+        assert len(queued) == 2
     finally:
         sync.sync_chapter_list = original_sync
         sync.db.enqueue = original_enqueue

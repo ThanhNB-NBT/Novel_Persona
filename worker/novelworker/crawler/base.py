@@ -67,6 +67,10 @@ class ChapterNotReady(Exception):
     (redirect về trang truyện) — lỗi tạm, giữ hàng đợi thử lại, đừng đánh failed."""
 
 
+class EmptyChapterList(ValueError):
+    """Trang truyện hợp lệ nhưng chính nguồn công bố mục lục rỗng."""
+
+
 class SourceTransient(Exception):
     """Mạng/rate-limit/5xx vẫn có thể hồi phục — giữ chương queued cho chu kỳ sau."""
 

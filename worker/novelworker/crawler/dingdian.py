@@ -18,7 +18,7 @@ import time
 from html import unescape
 from itertools import zip_longest
 
-from .base import ChapterRef, NovelMeta, SourceAdapter
+from .base import ChapterRef, EmptyChapterList, NovelMeta, SourceAdapter
 
 log = logging.getLogger(__name__)
 
@@ -172,6 +172,10 @@ class DingdianAdapter(SourceAdapter):
             for i, (cid, (_, title)) in enumerate(ordered)
         ]
         if not refs:
+            if re.search(
+                    r'<ul[^>]*\bclass="[^"]*\blist\b[^"]*"[^>]*>\s*</ul>', html, re.S):
+                raise EmptyChapterList(
+                    f"Mục lục {self.name} của {source_novel_id} đang rỗng trên nguồn")
             raise ValueError(f"Không lấy được mục lục {self.name} cho {source_novel_id}")
         # DDXS không có trang/trường trạng thái riêng; tiêu đề cuối là tín hiệu duy nhất.
         self.last_toc_status = (

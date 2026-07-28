@@ -6,6 +6,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 os.environ.setdefault("SUPABASE_URL", "https://example.supabase.co")
 os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "test")
 
+from novelworker.crawler.base import EmptyChapterList
 from novelworker.crawler.dingdian import DingdianAdapter
 from novelworker.crawler.registry import TEMPLATE_REGISTRY
 
@@ -67,6 +68,18 @@ def main() -> None:
     refs = a.fetch_chapter_list("niwen_2")
     assert [(r.index, r.source_chapter_id) for r in refs] == [(1, "niwen_2/9296"), (2, "niwen_2/9297")]
     assert refs[1].title_zh == "第二章 无情子"  # bản trong list đầy đủ (lần cuối) thắng
+
+    # Trang truyện còn sống nhưng nguồn để mục lục rỗng: đây là truyện ma, không phải
+    # parser hỏng hay cả nguồn DDXS đang chết.
+    a._get = lambda p: (
+        '<title>谜雾追真 章节列表 - 顶点小说网</title>'
+        '<ul class="list" itemscope="itemscope"></ul>')
+    try:
+        a.fetch_chapter_list("meiwuduizhen")
+    except EmptyChapterList:
+        pass
+    else:
+        raise AssertionError("Mục lục rỗng hợp lệ phải được phân loại riêng")
 
     a._get = lambda p: (
         '<a href="/n/niwen_2/1.html">第一章</a>'
