@@ -102,16 +102,36 @@ _LATIN_PERSON = re.compile(r"^[A-Z][A-Za-z]*(?:[ .'\-][A-Za-z]+){0,2}$")
 _syllables: set[str] | None = None
 
 
+# Ngữ âm tiếng Việt: MỌI âm tiết = phụ âm đầu (có thể rỗng) + vần. Sinh trọn bộ từ hai
+# bảng này thay vì liệt kê từng từ — bảng hanviet.tsv chỉ có âm HÁN-Việt nên không biết
+# "xanh", "trai", "gái" là tiếng Việt, và đó chính là chỗ đã xoá nhầm "Goblin da xanh".
+# Viết ở dạng ĐÃ BỎ DẤU vì chuỗi cần kiểm luôn là ASCII (â/ă→a, ê→e, ô/ơ→o, ư→u, đ→d),
+# nên tập này rộng hơn tiếng Việt thật một chút — lệch về phía GIỮ, đúng hướng an toàn.
+_ONSETS = ["", *"b c ch d g gh gi h k kh l m n ng ngh nh p ph qu r s t th tr v x".split()]
+_RHYMES = frozenset("""
+a ac ach ai am an ang anh ao ap at au ay
+e ec ech em en eng enh eo ep et eu
+i ia ich iec iem ien ieng iep iet ieu in inh ip it iu
+o oa oac oach oai oam oan oang oanh oao oap oat oay oc oe oen oeo oet oi om on ong ooc
+oong op ot
+u ua uac uach uai uan uang uanh uao uat uay uc ue uech uen uenh uet ui um un ung uoc uoi
+uom uon uong uop uot uou up ut uu uy uya uych uyen uyet uynh uyp uyt uyu
+y yen yet yeu ynh
+""".split())
+
+
 def _vi_syllables() -> set[str]:
-    """Mọi âm Hán-Việt trong bảng, bỏ dấu — dùng để nhận ra một cụm ASCII là tiếng Việt
-    không dấu ("Long gia", "Vong Linh") hay là tiếng Anh ("Awakening Stone")."""
+    """Mọi âm tiết tiếng Việt hợp lệ (đã bỏ dấu) — phụ âm đầu × vần, hợp thêm bảng âm
+    Hán-Việt để không sót âm hiếm. Dùng để phân biệt cụm ASCII là tiếng Việt không dấu
+    ("Long gia", "Goblin da xanh") với tiếng Anh ("Awakening Stone")."""
     global _syllables
     if _syllables is None:
         strip = str.maketrans("àáảãạằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợ"
                               "ùúủũụưừứửữựỳýỷỹỵđ",
                               "aaaaaaaaaaaaaaaaeeeeeeeeeeeiiiiiooooooooooooooooo"
                               "uuuuuuuuuuuyyyyyd")
-        _syllables = {r.lower().translate(strip) for rs in _load().values() for r in rs}
+        _syllables = {o + r for o in _ONSETS for r in _RHYMES}
+        _syllables |= {r.lower().translate(strip) for rs in _load().values() for r in rs}
     return _syllables
 
 
@@ -210,7 +230,9 @@ def english_meaning(zh: str | None, vi: str | None, term_type: str | None) -> bo
         return False
     if any(t in _ENGLISH_COMMON or t in _ENGLISH_STOP for t in toks):
         return True
-    return all(t not in syl and t not in _LOANWORDS for t in toks)
+    # Bằng chứng "cụm này là tiếng Việt" phải dài ≥2 chữ cái: "a", "e", "y" tuy là âm tiết
+    # hợp lệ nhưng cũng là mạo từ/chữ rời tiếng Anh ("One Against a Hundred" từng lọt vì "a").
+    return not any(len(t) > 1 and (t in syl or t in _LOANWORDS) for t in toks)
 
 
 def transliteration_suspect(zh: str | None, vi: str | None, term_type: str | None) -> bool:

@@ -94,6 +94,17 @@ def main() -> None:
     # "First Blood" ĐÚNG là tiếng Anh — nó sống được vì đã duyệt, mà gclean không đụng
     # term đã duyệt; đừng "sửa" luật để nó thành False.
     assert english_meaning("第一滴血", "First Blood", "other")
+    # âm tiết tiếng Việt sinh theo ngữ âm (phụ âm đầu × vần), KHÔNG phải bảng Hán-Việt:
+    # "xanh"/"trai"/"gái" không có trong hanviet.tsv nhưng vẫn phải nhận là tiếng Việt
+    assert not english_meaning("哥哥", "anh trai", "person")
+    assert not english_meaning("伽马射线", "tia gamma", "other")
+    assert not english_meaning("清虚山", "núi Thanh Hư", "place")
+    # bằng chứng "là tiếng Việt" phải dài ≥2 chữ: "a" đơn lẻ không tính
+    assert english_meaning("以一当百", "One Against a Hundred", "skill")
+    # sót đã biết, cố ý chấp nhận (lệch về phía GIỮ): một từ viết hoa dạng danh từ riêng,
+    # và cụm có từ trùng âm tiết Việt ("man"). Đừng siết luật để bắt hai ca này.
+    assert not english_meaning("星尘", "Stardust", "item")
+    assert not english_meaning("假面超人", "Cape Man", "other")
 
 
 if __name__ == "__main__":
