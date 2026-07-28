@@ -154,6 +154,21 @@ alliance blue borderline chip constitution dad ding earth epic grandfather green
 hypnosis magic papa pasta qi wolfman
 """.split())
 
+# Từ mượn người Việt DÙNG THẬT: trong một cụm, chúng tính là tiếng Việt. Thiếu set này
+# thì "Virus zombie" (hai từ mượn ghép kiểu Việt) bị coi là tiếng Anh — đã xoá nhầm
+# một term đã duyệt vì lẽ đó 28/07/2026.
+_LOANWORDS = frozenset("""
+anime app boss buff bug cosplay debuff dwarf elf goblin guild idol instance karate kimono
+mod ninja npc ogre orc respawn sake slime troll virus vodka whisky zombie
+""".split())
+
+# Hư từ tiếng Anh: tiếng Việt không có từ nào viết y hệt, nên chỉ cần thấy MỘT từ trong
+# đây là chắc chắn cả cụm là tiếng Anh ("Raw Meat Soaked in Zombie Virus" — cụm này lọt
+# lưới "có từ mượn thì giữ" vì có sẵn zombie/virus). Cố ý không thêm "to", "a": tiếng Việt
+# có "to" (lớn) và "a", thêm vào là cắt nhầm.
+_ENGLISH_STOP = frozenset(
+    "and at by for from in into of on or over the under with".split())
+
 # Dấu thanh CHỈ có trong pinyin, không có trong tiếng Việt (macron ā, caron ǎ, ü có dấu).
 # Không dùng á à í ì — tiếng Việt dùng chung, quét bằng chúng là bắt nhầm 31k dòng đúng.
 _PINYIN_TONE = re.compile(r"[āēīōūǖǎěǐǒǔǚǘǜǹ]")
@@ -164,8 +179,14 @@ def english_meaning(zh: str | None, vi: str | None, term_type: str | None) -> bo
 
     Model trích tên xấu (qwen3-next-80b, 25-26/07/2026) trả 觉醒石 → "Awakening Stone",
     七班 → "Class 7": chúng không bao giờ dùng được (cổng `_is_safe_pending_term` chặn)
-    mà vẫn ngập màn Thuật ngữ. Nhận diện: cụm ASCII NHIỀU TỪ có ít nhất một từ không
-    phải âm Hán-Việt. Giữ lại có chủ đích:
+    mà vẫn ngập màn Thuật ngữ. Cụm NHIỀU TỪ bị coi là tiếng Anh khi:
+      * có một từ nằm trong `_ENGLISH_COMMON` ("Level 1 Zombie", "Magic High School"), HOẶC
+      * KHÔNG từ nào là tiếng Việt — không phải âm Hán-Việt, cũng không phải từ mượn
+        đã dùng thật ("Class 7", "Awakening Stone").
+    Chỉ cần MỘT từ tiếng Việt là cả cụm được giữ: "Goblin da xanh" ("da"), "Virus zombie"
+    ("virus"/"zombie" trong `_LOANWORDS`). Luật cũ chỉ hỏi "có từ nào lạ không" nên đã xoá
+    nhầm đúng hai cụm đó — người Việt ghép từ mượn kiểu này là bình thường.
+    Giữ lại có chủ đích:
       * một từ ASCII (goblin, slime, Anna) — đúng luật prompt, reconcile() cũng giữ;
       * tên người Latin ≤3 từ (Tony Stark) — ngoại lệ tên Tây đã có sẵn;
       * cụm ASCII toàn âm Hán-Việt ("Long Gia", "Vong Linh") — tiếng Việt không dấu.
@@ -184,8 +205,12 @@ def english_meaning(zh: str | None, vi: str | None, term_type: str | None) -> bo
     if term_type == "person" and _LATIN_PERSON.match(s):
         return False
     syl = _vi_syllables()
-    toks = re.findall(r"[A-Za-z]+", s)
-    return bool(toks) and any(t.lower() not in syl for t in toks)
+    toks = [t.lower() for t in re.findall(r"[A-Za-z]+", s)]
+    if not toks:
+        return False
+    if any(t in _ENGLISH_COMMON or t in _ENGLISH_STOP for t in toks):
+        return True
+    return all(t not in syl and t not in _LOANWORDS for t in toks)
 
 
 def transliteration_suspect(zh: str | None, vi: str | None, term_type: str | None) -> bool:

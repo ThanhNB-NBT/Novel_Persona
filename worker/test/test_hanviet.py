@@ -84,6 +84,16 @@ def main() -> None:
     assert english_meaning("生肉", "Shēngròu", "item")
     assert not english_meaning("孟婆汤", "canh Mạnh Bà", "item")
     assert not english_meaning("倾国倾城", "khuynh quốc khuynh thành", "other")
+    # chỉ cần MỘT từ tiếng Việt (âm Hán-Việt hoặc từ mượn dùng thật) là giữ cả cụm —
+    # từng xoá nhầm hai cụm này vì luật cũ chỉ hỏi "có từ nào lạ không"
+    assert not english_meaning("哥布林", "Goblin da xanh", "other")     # "da"
+    assert not english_meaning("丧尸病毒", "Virus zombie", "other")      # từ mượn
+    assert english_meaning("1级丧尸", "Level 1 Zombie", "other")        # "level" là từ rác
+    # hư từ tiếng Anh: đủ để kết luận, kể cả khi cụm có sẵn từ mượn
+    assert english_meaning("浸泡过丧尸病毒的生肉", "Raw Meat Soaked in Zombie Virus", "item")
+    # "First Blood" ĐÚNG là tiếng Anh — nó sống được vì đã duyệt, mà gclean không đụng
+    # term đã duyệt; đừng "sửa" luật để nó thành False.
+    assert english_meaning("第一滴血", "First Blood", "other")
 
 
 if __name__ == "__main__":
