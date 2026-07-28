@@ -19,6 +19,7 @@ import logging
 import os
 import threading
 import time
+from datetime import datetime, timedelta, timezone
 
 from . import db
 from .config import settings
@@ -146,6 +147,7 @@ def _source_tick(adapter: SourceAdapter, pending_fetch: list[dict], due: bool,
         db.sb().table("novels").select("id, source_id, source_novel_id")
         .eq("source_id", sid).is_("toc_synced_at", "null")
         .not_.is_("toc_requested_at", "null")
+        .lte("toc_requested_at", db.utc_now())
         .order("toc_requested_at").limit(3).execute()
     ).data or []
     for nv in toc_reqs:
@@ -153,9 +155,11 @@ def _source_tick(adapter: SourceAdapter, pending_fetch: list[dict], due: bool,
             total, n = sync.sync_chapter_list(adapter, nv["id"], nv["source_novel_id"])
             log.info("TOC lười: novel %s đủ mục lục (%d chương, +%d stub)", nv["id"], total, n)
         except Exception:
-            # gỡ cờ xin để không hammer mỗi tick; user mở lại truyện sẽ xin lại
-            db.sb().table("novels").update({"toc_requested_at": None}, returning="minimal").eq("id", nv["id"]).execute()
-            log.exception("TOC lười: lỗi novel %s — gỡ cờ chờ xin lại", nv["id"])
+            # Giữ yêu cầu qua lỗi tạm; dùng chính timestamp làm mốc retry để không thêm cột.
+            retry_at = (datetime.now(timezone.utc) + timedelta(minutes=1)).isoformat()
+            db.sb().table("novels").update(
+                {"toc_requested_at": retry_at}, returning="minimal").eq("id", nv["id"]).execute()
+            log.exception("TOC lười: lỗi novel %s — hẹn thử lại sau 1 phút", nv["id"])
     # 1) tải nội dung chương đang chờ dịch — NGƯỜI ĐỌC TRƯỚC. Discovery (bước 2, có thể
     # cả tiếng) tự nhường giữa chừng khi có chương ưu tiên cao chờ (sync.reader_fetch_waiting).
     for nv in pending_fetch:

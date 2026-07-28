@@ -78,3 +78,35 @@ def test_last_discovery_at_survives_restart(monkeypatch):
 def test_new_source_is_due_immediately(monkeypatch):
     monkeypatch.setattr(m.db, "sb", lambda: _FakeQuery())
     assert m.db.last_discovery_at(7) == 0.0
+
+
+def test_failed_toc_request_is_retried(monkeypatch):
+    updates = []
+
+    class Query(_FakeQuery):
+        mode = "read"
+
+        def select(self, *a, **k):
+            self.mode = "read"
+            return self
+
+        def update(self, payload, *a, **k):
+            updates.append(payload)
+            self.mode = "write"
+            return self
+
+        def __getattr__(self, name):
+            if name == "execute":
+                return lambda *a, **k: SimpleNamespace(
+                    data=[{"id": 42, "source_id": 7, "source_novel_id": "book"}]
+                    if self.mode == "read" else [], count=0)
+            return self
+
+    monkeypatch.setattr(m.db, "sb", lambda: Query())
+    monkeypatch.setattr(m.sync, "sync_chapter_list",
+                        lambda *a, **k: (_ for _ in ()).throw(RuntimeError("timeout")))
+
+    m._source_tick(_adapter(), [], due=False, max_new=5, refresh_n=10)
+
+    retry_at = datetime.fromisoformat(updates[0]["toc_requested_at"])
+    assert retry_at > datetime.now(timezone.utc)

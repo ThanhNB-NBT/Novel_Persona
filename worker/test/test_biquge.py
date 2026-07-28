@@ -51,6 +51,22 @@ def main() -> None:
     assert [(r.index, r.source_chapter_id) for r in refs] == [(1, "59979/1"), (2, "59979/2")]
     assert refs[1].title_zh == "第二章 continued"  # bản xuất hiện cuối thắng
 
+    # Shuhaige hoàn thành: "结局" ở đầu xếp giảm dần, "正文" phía sau xếp tăng dần.
+    # Phải ghép正文 trước rồi đảo结局, không được biến chương cuối thành chương 1.
+    a._get = lambda p: (
+        '<div id="list"><dl><dt>《测试小说》的结局</dt>'
+        '<dd><a href="/59979/4.html">第4章</a></dd>'
+        '<dd><a href="/59979/3.html">第3章</a></dd>'
+        '<dt><b>《测试小说》正文</b></dt>'
+        '<dd><a href="/59979/1.html">第1章</a></dd>'
+        '<dd><a href="/59979/2.html">第2章</a></dd>'
+        '</dl></div>'
+    )
+    refs = a.fetch_chapter_list("59979")
+    assert [r.source_chapter_id for r in refs] == [
+        "59979/1", "59979/2", "59979/3", "59979/4",
+    ]
+
     # chương: br→\n, lọc dòng footer (笔趣阁/请记住本站/手机版), giữ câu văn thật
     p1, p2 = "第一段" + "字" * 30, "第二段" + "文" * 30
     a._get = lambda p: (

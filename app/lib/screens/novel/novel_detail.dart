@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -230,10 +231,31 @@ class _ChapterListTab extends ConsumerStatefulWidget {
 
 class _ChapterListTabState extends ConsumerState<_ChapterListTab> {
   bool _asc = true;
+  bool _tocRequested = false;
+  Timer? _tocPoll;
   // Chế độ CHỌN NHIỀU chương để dịch lại (2026-07-16): bấm nút dịch lại →
   // checkbox cạnh từng chương, mặc định tick chương đang đọc dở.
   bool _selecting = false;
   final _sel = <int>{};
+
+  void _loadToc() {
+    if (_tocRequested || sb.auth.currentUser == null) return;
+    _tocRequested = true;
+    requestToc(widget.novelId);
+    _tocPoll = Timer.periodic(const Duration(seconds: 5), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      ref.invalidate(chapterListProvider(widget.novelId));
+    });
+  }
+
+  @override
+  void dispose() {
+    _tocPoll?.cancel();
+    super.dispose();
+  }
 
   void _startSelect() {
     if (sb.auth.currentUser == null) {
@@ -304,12 +326,18 @@ class _ChapterListTabState extends ConsumerState<_ChapterListTab> {
       error: (e, _) => AppError(e, onRetry: () => ref.invalidate(chapterListProvider(widget.novelId))),
       data: (list) {
         final ordered = _asc ? list : list.reversed.toList();
-        // Mục lục lười: truyện chưa ai đọc chỉ giữ vài chương đọc thử. Xem thông tin
-        // KHÔNG tải mục lục (xem chưa chắc đọc) — chỉ khi bấm Đọc reader mới gọi
-        // request_toc; quay lại tab này list tự refetch (autoDispose) nên số tự nhích.
+        // Mục lục lười: mở tab chương là tín hiệu cần xem thật → xin crawler tải đầy đủ
+        // và poll danh sách; chỉ xem tab Giới thiệu vẫn không tốn lượt tải mục lục.
         final total = (novel?['chapter_count_source'] ?? 0) as int;
+        final needsToc = list.isEmpty || (total > 0 && list.length < total);
+        if (needsToc) {
+          WidgetsBinding.instance.addPostFrameCallback((_) => _loadToc());
+        } else {
+          _tocPoll?.cancel();
+          _tocPoll = null;
+        }
         return Column(children: [
-          if (list.isNotEmpty && list.length < total)
+          if (needsToc)
             _TocHint(have: list.length, total: total),
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 12, 12, 4),
@@ -393,7 +421,7 @@ class _ChapterListTabState extends ConsumerState<_ChapterListTab> {
   }
 }
 
-/// Hint mục lục lười: chỉ thông báo, KHÔNG tự tải (tải khi bấm Đọc — reader lo).
+/// Hint mục lục lười đang được crawler tải lại.
 class _TocHint extends StatelessWidget {
   final int have, total;
   const _TocHint({required this.have, required this.total});
@@ -414,8 +442,9 @@ class _TocHint extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              'Đang có $have chương đọc thử — mục lục đầy đủ ($total chương) '
-              'sẽ tự tải khi bạn bắt đầu đọc.',
+              total > 0
+                  ? 'Đang tải mục lục đầy đủ — hiện có $have/$total chương.'
+                  : 'Đang tải mục lục từ nguồn…',
               style: Theme.of(context).textTheme.labelMedium,
             ),
           ),

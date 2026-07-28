@@ -279,19 +279,41 @@ class BiqugeAdapter(SourceAdapter):
         html = self._get(self._novel_url(source_novel_id))
         # trang truyện = trang mục lục → parse ké trạng thái, khỏi tốn fetch_novel_meta riêng
         self.last_toc_status = self._status(html)
-        # Trang có block "最新章节" (mục mới nhất) trùng mục lục đầy đủ phía dưới.
-        # Dedupe theo chapter_id GIỮ lần xuất hiện cuối (block đầy đủ, đúng thứ tự 1→N).
         pattern = re.compile(
             r'<a href="[^"]*?/' + re.escape(source_novel_id) + r'/(\d+)\.html"[^>]*>([^<]+)</a>')
-        last: dict[str, tuple[int, str]] = {}
-        for order, m in enumerate(pattern.finditer(html)):
-            cid, title = m.group(1), unescape(m.group(2)).strip()
-            last[cid] = (order, title)
-        ordered = sorted(last.items(), key=lambda kv: kv[1][0])
+        # Shuhaige truyện hoàn thành có khối "结局" xếp N→1 TRƯỚC khối "正文" xếp 1→N.
+        # Chương mới nhất đôi khi chỉ có trong khối đầu và trang chưa sinh; giữ nguyên thứ
+        # tự HTML sẽ biến chương N thành index 1, chặn tuần tự cả truyện.
+        list_match = re.search(
+            r'<div[^>]*\bid=["\']list["\'][^>]*>(.*?)</div>', html, re.S)
+        body = list_match.group(1) if list_match else html
+        main_marker = next((
+            m for m in re.finditer(r'<dt[^>]*>.*?</dt>', body, re.S)
+            if "正文" in m.group(0)
+        ), None)
+        if main_marker:
+            main = list(pattern.finditer(body[main_marker.end():]))
+            ending = list(pattern.finditer(body[:main_marker.start()]))
+            matches = main + list(reversed(ending))
+            seen: dict[str, str] = {}
+            for m in matches:
+                seen.setdefault(m.group(1), unescape(m.group(2)).strip())
+            ordered = list(seen.items())
+        else:
+            # Khuôn cũ: block "最新章节" trùng mục lục đầy đủ phía dưới. Dedupe theo
+            # chapter_id GIỮ lần xuất hiện cuối (block đầy đủ, đúng thứ tự 1→N).
+            last: dict[str, tuple[int, str]] = {}
+            for order, m in enumerate(pattern.finditer(body)):
+                cid, title = m.group(1), unescape(m.group(2)).strip()
+                last[cid] = (order, title)
+            ordered = [
+                (cid, title)
+                for cid, (_, title) in sorted(last.items(), key=lambda kv: kv[1][0])
+            ]
         # URL chương cần cả book_id → nhúng vào source_chapter_id dạng "book/cid".
         refs = [
             ChapterRef(index=i + 1, source_chapter_id=f"{source_novel_id}/{cid}", title_zh=title)
-            for i, (cid, (_, title)) in enumerate(ordered)
+            for i, (cid, title) in enumerate(ordered)
         ]
         if not refs:
             raise ValueError(f"Không lấy được mục lục {self.name} cho {source_novel_id}")

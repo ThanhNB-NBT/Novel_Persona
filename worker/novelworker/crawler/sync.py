@@ -10,9 +10,27 @@ from datetime import datetime, timedelta, timezone
 from .. import db
 from ..config import settings
 from ..translator.text_clean import clean_source
-from .base import ChapterNotReady, SourceAdapter, SourceBlocked, SourceTransient
+from .base import ChapterNotReady, ChapterRef, SourceAdapter, SourceBlocked, SourceTransient
 
 log = logging.getLogger(__name__)
+
+
+def _normalize_chapter_refs(refs: list[ChapterRef], source: str) -> list[ChapterRef]:
+    """Giữ thứ tự adapter, loại id rỗng/trùng và đánh lại index liên tục."""
+    normalized: list[ChapterRef] = []
+    seen: set[str] = set()
+    for ref in refs:
+        source_id = (ref.source_chapter_id or "").strip()
+        if not source_id or source_id in seen:
+            continue
+        seen.add(source_id)
+        normalized.append(ChapterRef(len(normalized) + 1, source_id, ref.title_zh))
+    if not normalized:
+        raise ValueError(f"Mục lục {source} không có chương hợp lệ")
+    if len(normalized) != len(refs):
+        log.warning("Mục lục %s: bỏ %d chương có id rỗng/trùng", source,
+                    len(refs) - len(normalized))
+    return normalized
 
 
 def _chapter_sync_fields(
@@ -700,7 +718,7 @@ def sync_chapter_list(
     đổi gì" → 1 query count là xong, khỏi kéo 4000 index + re-upsert 4000 stub.
     ponytail: chương đã có KHÔNG được refresh title/source_chapter_id — nguồn đánh
     lại số chương thì _rescue_stale_chapter tự làm mới khi phát hiện."""
-    refs = adapter.fetch_chapter_list(source_novel_id)
+    refs = _normalize_chapter_refs(adapter.fetch_chapter_list(source_novel_id), adapter.name)
     total = len(refs)
     if limit_stubs is not None:
         refs = refs[:limit_stubs]
@@ -957,7 +975,8 @@ def _refresh_chapter_ids(novel_id: int, refs: list) -> int:
             ref = by_index.get(row["chapter_index"])
             if ref and ref.source_chapter_id != row["source_chapter_id"]:
                 db.sb().table("chapters").update(
-                    {"source_chapter_id": ref.source_chapter_id}, returning="minimal").eq("id", row["id"]).execute()
+                    {"source_chapter_id": ref.source_chapter_id, "title_zh": ref.title_zh},
+                    returning="minimal").eq("id", row["id"]).execute()
                 updated += 1
         if len(rows) < 1000:
             break
@@ -976,11 +995,12 @@ def _rescue_stale_chapter(adapter: SourceAdapter, novel_id: int, ch: dict, err) 
     - Truyện còn + id không đổi → nguồn thật sự thiếu trang chương này → failed với lý do đúng.
     """
     nv = (
-        db.sb().table("novels").select("source_novel_id")
+        db.sb().table("novels").select("source_novel_id, chapter_count_source")
         .eq("id", novel_id).single().execute()
     ).data or {}
     try:
-        refs = adapter.fetch_chapter_list(nv.get("source_novel_id") or "")
+        refs = _normalize_chapter_refs(
+            adapter.fetch_chapter_list(nv.get("source_novel_id") or ""), adapter.name)
     except Exception:
         _fail_chapter(ch, f"crawl: trang chương lẫn trang truyện đều không truy cập được "
                           f"sau {NOT_READY_GIVE_UP} lần thử — truyện có thể đã bị gỡ khỏi nguồn ({err})")
@@ -989,6 +1009,10 @@ def _rescue_stale_chapter(adapter: SourceAdapter, novel_id: int, ch: dict, err) 
     ref = next((r for r in refs if r.index == ch["chapter_index"]), None)
     if ref and ref.source_chapter_id != ch["source_chapter_id"]:
         n = _refresh_chapter_ids(novel_id, refs)
+        if len(refs) != (nv.get("chapter_count_source") or 0):
+            db.sb().table("novels").update(
+                {"chapter_count_source": len(refs)}, returning="minimal").eq(
+                    "id", novel_id).execute()
         log.warning("Novel %s: nguồn đánh lại id chương — làm mới %d stub, thử lại vòng sau",
                     novel_id, n)
         return True

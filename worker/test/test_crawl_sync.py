@@ -6,8 +6,12 @@ os.environ.setdefault("SUPABASE_URL", "https://example.supabase.co")
 os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "test")
 
 from novelworker.crawler import sync
-from novelworker.crawler.base import NovelMeta
-from novelworker.crawler.sync import _chapter_sync_fields, _frontier_step
+from novelworker.crawler.base import ChapterRef, NovelMeta
+from novelworker.crawler.sync import (
+    _chapter_sync_fields,
+    _frontier_step,
+    _normalize_chapter_refs,
+)
 
 
 def main() -> None:
@@ -30,6 +34,18 @@ def main() -> None:
     assert _chapter_sync_fields(10, "ongoing", None, 10, True, "now") == {
         "toc_synced_at": "now",
     }
+
+    # Mọi adapter đều qua cùng chốt: giữ thứ tự nguồn, bỏ id lỗi/trùng, index liên tục.
+    refs = _normalize_chapter_refs([
+        ChapterRef(8, " book/10 ", "Một"),
+        ChapterRef(9, "", "Rỗng"),
+        ChapterRef(10, "book/10", "Trùng"),
+        ChapterRef(20, "book/12", "Hai"),
+    ], "test")
+    assert [(r.index, r.source_chapter_id, r.title_zh) for r in refs] == [
+        (1, "book/10", "Một"),
+        (2, "book/12", "Hai"),
+    ]
 
     # Quota discovery chỉ được tính khi truyện thực sự qua lọc và đã xếp việc.
     original_sync = sync.sync_chapter_list
