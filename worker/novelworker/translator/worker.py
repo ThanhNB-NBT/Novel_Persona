@@ -466,7 +466,11 @@ def _prepare_suggested_term(term: dict) -> bool:
     if len(zh) == 1 and zh in _COMMON_SINGLE_HAN and term_type != "person":
         return False
     hv = hanviet.han_viet(zh)
+    # 'other' + toàn chữ thường + không chung âm nào với Hán-Việt = dịch nghĩa vu vơ.
+    # Trừ TỪ MƯỢN: prompt chủ đích bảo model trả 哥布林 → "goblin", 兽人 → "orc"; luật này
+    # từng chặn đúng những từ đó (đo 28/07 bằng cách bơm đầu ra model giả lập).
     if (term_type == "other" and not any(w[:1].isupper() for w in vi.split()) and hv
+            and not hanviet.is_loanword(vi)
             and not set(hv.lower().split()).intersection(vi.lower().split())):
         return False
     vi = hanviet.reconcile(zh, vi, term_type) or vi

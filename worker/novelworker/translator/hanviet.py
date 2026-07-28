@@ -194,6 +194,12 @@ _ENGLISH_STOP = frozenset(
 _PINYIN_TONE = re.compile(r"[āēīōūǖǎěǐǒǔǚǘǜǹ]")
 
 
+def is_loanword(vi: str | None) -> bool:
+    """Từ mượn người Việt dùng thật (goblin, orc, ninja, boss) — prompt CHỦ ĐÍCH yêu cầu
+    model trả dạng này, nên các bộ lọc rác phải chừa nó ra."""
+    return (vi or "").strip().lower() in _LOANWORDS
+
+
 def english_meaning(zh: str | None, vi: str | None, term_type: str | None) -> bool:
     """True khi `vi` là cụm TIẾNG ANH dịch nghĩa, không phải bản dịch tiếng Việt.
 
