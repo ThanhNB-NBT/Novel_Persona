@@ -1363,6 +1363,11 @@ def _consume_loop(worker_id: str, slot: int, paused: threading.Event, poll_secon
     """Vòng lặp 1 luồng dịch. `slot` chọn key nvidia (2 key → 2 lane song song).
     `paused` set = đã chạm trần chi phí ngày → nghỉ."""
     llm = build_chain(slot)  # ghim 1 key nvidia cho luồng này, tái dùng suốt vòng đời
+    # Model/timeout mà CHÍNH lane này đang chạy. Phải nhớ riêng: `settings` là biến chung,
+    # lane nào đọc worker_settings trước sẽ ghi vào đó rồi dựng lại chain của mình, lane
+    # còn lại so sánh thấy "không đổi" nên giữ model CŨ vĩnh viễn. Đo 28/07: đổi glm→mistral
+    # xong một lane vẫn timeout 150s của glm suốt, hàng đợi metadata đứng im.
+    applied = (settings.nvidia_model, settings.llm_timeout_sec)
     # Luồng 0 làm mọi loại như cũ; luồng 1 trở đi CHỈ dịch chương. Metadata ưu tiên cao
     # hơn chương nên nếu luồng nào cũng được bốc nó thì Hachimi đứng im (CPU 0%) suốt
     # lúc chờ LLM, dù hàng đợi còn cả nghìn chương — mà chương đâu cần LLM.
@@ -1382,11 +1387,12 @@ def _consume_loop(worker_id: str, slot: int, paused: threading.Event, poll_secon
                 rs = db.runtime_settings()
                 model = db.runtime_str(rs, "llm_model", settings.nvidia_model)
                 timeout = db.runtime_int(rs, "llm_timeout_sec", settings.llm_timeout_sec)
-                if (model, timeout) != (settings.nvidia_model, settings.llm_timeout_sec):
-                    log.info("Đổi LLM: %s (%ds) → %s (%ds)", settings.nvidia_model,
-                             settings.llm_timeout_sec, model, timeout)
+                if (model, timeout) != applied:
+                    log.info("Đổi LLM [lane %d]: %s (%ds) → %s (%ds)", slot,
+                             applied[0], applied[1], model, timeout)
                     settings.nvidia_model, settings.llm_timeout_sec = model, timeout
                     llm = build_chain(slot)
+                    applied = (model, timeout)
             except Exception:
                 log.warning("Không đọc được worker_settings — giữ model hiện tại")
         # TOÀN BỘ thân vòng lặp trong try — lỗi mạng tạm thời (Supabase "Server
