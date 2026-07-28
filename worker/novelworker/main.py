@@ -11,6 +11,8 @@ Lệnh vận hành:
     python -m novelworker.main audit [--fix]                 # quét chương done hỏng (Trung/cụt/mất đoạn), --fix để dịch lại
     python -m novelworker.main quality [--novel <id>]        # chấm điểm chất lượng dịch (metric: len, glossary, lặp cụm, mất đoạn)
     python -m novelworker.main meta --novel <id>             # dịch lại metadata (tên/mô tả/thể loại) 1 truyện — sau khi sửa prompt tên
+    python -m novelworker.main backfill --source ptwxz       # tải lại metadata truyện đã có (sau khi vá adapter)
+    python -m novelworker.main gclean [--approved]           # dọn gợi ý glossary là cụm tiếng Anh
 """
 from __future__ import annotations
 
