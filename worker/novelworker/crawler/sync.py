@@ -832,10 +832,13 @@ def sync_followed_novels(adapter: SourceAdapter) -> None:
             db.sb().table("novels").update(
                 {"last_checked_at": db.utc_now()}, returning="minimal").eq("id", nv["id"]).execute()
         except EmptyChapterList as exc:
+            # Truyện có người theo thì KHÔNG ẩn: ẩn là cửa một chiều (_maybe_unhide_grown
+            # chỉ bật lại truyện chưa dịch meta), mà nguồn nấc 1 nhịp mục lục rỗng là
+            # đủ để truyện biến mất khỏi tủ sách vĩnh viễn. Bỏ qua vòng này là đủ.
             db.sb().table("novels").update(
-                {"hidden": True, "last_checked_at": db.utc_now()},
+                {"last_checked_at": db.utc_now()},
                 returning="minimal").eq("id", nv["id"]).execute()
-            log.info("Sync tủ sách: ẩn truyện %s vì %s", nv["id"], exc)
+            log.warning("Sync tủ sách: bỏ qua truyện %s vì %s", nv["id"], exc)
         except Exception:
             log.exception("Lỗi sync truyện %s", nv["id"])
         time.sleep(2.0)
@@ -930,9 +933,15 @@ def refresh_canonical_updates(adapter: SourceAdapter, limit: int) -> None:
             # Truyện ma của riêng nguồn, không được tính thành lỗi toàn nguồn.
             synced = True
             fail_streak = 0
-            db.sb().table("novels").update(
-                {"hidden": True}, returning="minimal").eq("id", nv["id"]).execute()
-            log.info("Refresh: ẩn truyện %s vì %s", nv["id"], e)
+            # Chỉ ẩn truyện CHƯA dịch meta: ẩn là cửa một chiều với truyện đã dịch
+            # (_maybe_unhide_grown bỏ qua meta_translated), mà mục lục rỗng có thể chỉ
+            # là nguồn nấc — truyện đã lên kệ thì thà giữ còn hơn mất luôn.
+            if nv.get("meta_translated"):
+                log.warning("Refresh: mục lục rỗng truyện %s (giữ nguyên) — %s", nv["id"], e)
+            else:
+                db.sb().table("novels").update(
+                    {"hidden": True}, returning="minimal").eq("id", nv["id"]).execute()
+                log.info("Refresh: ẩn truyện %s vì %s", nv["id"], e)
         except Exception as e:
             fail_streak += 1
             # traceback 1 lần là đủ hiểu; nguồn sập thì 45 traceback giống hệt chỉ làm rác log

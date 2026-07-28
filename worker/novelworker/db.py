@@ -109,7 +109,8 @@ def finish_job(job_id: int, ok: bool, error: str | None = None) -> None:
         ).eq("id", job_id).execute()
         return
     # thất bại: còn lượt thì trả về pending để retry, hết lượt thì failed
-    job = sb().table("translation_jobs").select("attempts,max_attempts,chapter_id").eq("id", job_id).single().execute().data
+    job = sb().table("translation_jobs").select(
+        "attempts,max_attempts,chapter_id,type,novel_id").eq("id", job_id).single().execute().data
     status = "pending" if job["attempts"] < job["max_attempts"] else "failed"
     sb().table("translation_jobs").update(
         {"status": status, "error": (error or "")[:2000],
@@ -121,6 +122,30 @@ def finish_job(job_id: int, ok: bool, error: str | None = None) -> None:
             {"translation_status": "failed" if status == "failed" else "queued"},
             returning="minimal",
         ).eq("id", job["chapter_id"]).execute()
+    elif status == "failed" and job.get("type") == "metadata":
+        _release_chapters_waiting_metadata(job["novel_id"])
+
+
+def _release_chapters_waiting_metadata(novel_id: int) -> None:
+    """Metadata chết hẳn → thả chương mẫu đã xếp trước đó (handle_metadata xếp TRƯỚC khi
+    set meta_translated). Không thả thì claim_next_job chặn mãi vì meta_translated=false:
+    job pending vĩnh viễn, chapter kẹt 'queued' mà cleanup_orphan_translation_jobs cũng
+    không dọn được. Dịch lại metadata sẽ xếp lại chương mẫu từ đầu."""
+    jobs = (
+        sb().table("translation_jobs").select("id,chapter_id")
+        .eq("novel_id", novel_id).eq("type", "chapter").eq("status", "pending").execute()
+    ).data or []
+    if not jobs:
+        return
+    chapter_ids = [j["chapter_id"] for j in jobs if j.get("chapter_id")]
+    if chapter_ids:
+        sb().table("chapters").update(
+            {"translation_status": "none"}, returning="minimal"
+        ).in_("id", chapter_ids).eq("translation_status", "queued").execute()
+    sb().table("translation_jobs").delete(returning="minimal").in_(
+        "id", [j["id"] for j in jobs]).execute()
+    log.warning("Metadata truyện %s chết hẳn — thả %d job chương đang chờ",
+                novel_id, len(jobs))
 
 
 def defer_job(job_id: int, worker_id: str, error: str | None = None,
