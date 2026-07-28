@@ -246,12 +246,27 @@ def pinyin_written(zh: str | None, vi: str | None, term_type: str | None) -> str
     được hai ca này. Tách bằng CHỮ dùng để viết: tên ngoại được viết toàn bằng chữ chuyên
     phiên âm (安娜, 米兰, 琳达 — `_TRANSLIT_CHARS`), từ Trung thật thì không (仓库, 迅雷).
 
-    Bỏ qua `person`: đó là chỗ tên nước ngoài dồn vào, mà cụm tên nhiều chữ đã có
-    reconcile() lo. Đo 28/07/2026 trên 102k term: nhóm không-phải-person cho 68 ca,
-    đúng ~90% (Xunlei→Tấn Lôi, Baidu→Bách Độ, Tiyuguan→Thể Dục Quán); nhóm person cho
-    32 ca nhưng lẫn nhiều tên Tây (Hansen, Wensidun) nên không đụng."""
+    Bỏ qua `person`: đó là chỗ tên nước ngoài dồn vào, mà đổi bừa là hỏng (汉森 có thể
+    là "Hansen" mà cũng có thể là "Hán Sâm" — phải đọc truyện mới biết). Nhóm person đi
+    đường `pinyin_suspect()` → đánh dấu 'nghi sai' thay vì đổi. Đo 28/07/2026 trên 102k
+    term: non-person 68 ca, đúng ~90%; person 32 ca, lẫn nhiều tên Tây."""
+    return None if term_type == "person" else _pinyin_of(zh, vi)
+
+
+def pinyin_suspect(zh: str | None, vi: str | None) -> bool:
+    """`vi` là pinyin của chữ Hán đó, nhưng không đủ căn cứ để tự đổi (tên người).
+
+    Không đoán bừa và cũng không bỏ mặc: đánh dấu 'nghi sai' → term bị loại khỏi prompt
+    dịch (`prompts._injectable`) và khỏi termguard, vẫn nằm ở mục chờ duyệt trong app cho
+    ai rảnh thì chốt. Không duyệt cũng không sao — nó chỉ không được dùng."""
+    return _pinyin_of(zh, vi) is not None
+
+
+def _pinyin_of(zh: str | None, vi: str | None) -> str | None:
+    """Bản Hán-Việt nếu `vi` đúng là pinyin của `zh` và `zh` không phải cách viết tên
+    nước ngoài; None nếu không phải."""
     zh, s = (zh or "").strip(), (vi or "").strip()
-    if term_type == "person" or not zh or not s.isascii() or not _ALL_HAN.match(zh):
+    if not zh or not s.isascii() or not _ALL_HAN.match(zh):
         return None
     if all(c in _TRANSLIT_CHARS for c in zh):
         return None                                   # tên ngoại phiên qua chữ Hán → giữ

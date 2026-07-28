@@ -10,7 +10,8 @@ os.environ.setdefault("SUPABASE_URL", "https://example.supabase.co")
 os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "test")
 
 from novelworker.translator.hanviet import (
-    english_meaning, han_viet, pinyin_written, reconcile, transliteration_suspect)
+    english_meaning, han_viet, pinyin_suspect, pinyin_written, reconcile,
+    transliteration_suspect)
 
 
 def main() -> None:
@@ -120,6 +121,13 @@ def main() -> None:
     # đã là Hán-Việt / không phải pinyin của chữ đó → không đụng
     assert pinyin_written("仓库", "Thương Khố", "place") is None
     assert pinyin_written("芝加哥", "Chicago", "place") is None
+    # person viết bằng pinyin: KHÔNG tự đổi (汉森 có thể là Hansen), nhưng phải bị đánh
+    # dấu 'nghi sai' để rơi khỏi prompt dịch thay vì âm thầm được dùng
+    assert pinyin_suspect("汉森", "Hansen")
+    assert pinyin_suspect("玄净", "Xuanjing")
+    assert not pinyin_suspect("安娜", "Anna")       # toàn chữ chuyên phiên âm → tên ngoại
+    assert not pinyin_suspect("芝加哥", "Chicago")
+    assert not pinyin_suspect("仓库", "Thương Khố")
 
 
 if __name__ == "__main__":

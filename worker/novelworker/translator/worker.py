@@ -474,7 +474,9 @@ def _prepare_suggested_term(term: dict) -> bool:
     # pinyin ghép liền — "Cangku", "Tiyuguan" — lọt lưới. Đổi về Hán-Việt thay vì bỏ.
     vi = hanviet.pinyin_written(zh, vi, term_type) or vi
     term["zh"], term["vi"], term["type"] = zh, vi, term_type
-    if hanviet.transliteration_suspect(zh, vi, term_type):
+    # Còn là pinyin sau khi qua hai bước trên = tên người không đủ căn cứ để tự đổi
+    # (汉森 → "Hansen" hay "Hán Sâm"?). Đánh dấu để nó không lọt vào prompt dịch.
+    if hanviet.transliteration_suspect(zh, vi, term_type) or hanviet.pinyin_suspect(zh, vi):
         term["note"] = "nghi sai"
     return True
 

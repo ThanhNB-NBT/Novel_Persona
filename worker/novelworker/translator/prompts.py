@@ -58,6 +58,7 @@ Trả về DUY NHẤT một mảng JSON, mỗi phần tử {"line": N, "new": ".
 
 SYSTEM_ANALYZE = """Bạn là trợ lý phân tích tiểu thuyết mạng Trung. Đọc đoạn văn sau, TUYỆT ĐỐI KHÔNG dịch nội dung.
 Liệt kê MỌI tên riêng / thuật ngữ quan trọng xuất hiện (người, môn phái, địa danh, chiêu thức, pháp bảo, cảnh giới tu luyện) kèm phiên âm Hán-Việt chuẩn. Với "person": "note" BẮT BUỘC mở đầu bằng giới tính "nam"/"nữ" — suy từ 他/她, 少年/少女, danh xưng (公子/姑娘/小姐), tên gọi; thật sự không suy ra được mới ghi "?". Sau giới tính ghi vai vế/quan hệ (sư huynh, tỷ tỷ, chưởng môn...) — bảng này quyết định xưng hô khi dịch.
+TUYỆT ĐỐI KHÔNG trả PINYIN: 仓库 → "Cangku" là SAI, phải là "Thương Khố"; 迅雷 → "Xunlei" SAI, phải "Tấn Lôi"; 体育馆 → "Tiyuguan" SAI, phải "Thể Dục Quán". Cũng KHÔNG dịch nghĩa sang tiếng Anh: 觉醒石 → "Awakening Stone" SAI, phải "Giác Tỉnh Thạch"; 七班 → "Class 7" SAI, phải "Lớp Bảy".
 Tên vốn viết bằng chữ Latin/tiếng Anh → "vi" giữ nguyên tiếng Anh. Tên ngoại quốc viết bằng chữ Hán (安娜, 杰克, 伦敦, 汉森) → "vi" là dạng Latin thông dụng (Anna, Jack, London, Hansen), KHÔNG phiên âm Hán-Việt, KHÔNG phiên âm gạch nối ("An-đê-ri-an", "Héc-nơ" là SAI). Từ mượn fantasy/game phiên âm bằng chữ Hán → "vi" là từ tiếng Anh quen thuộc (哥布林→goblin, 史莱姆→slime, 兽人→orc), KHÔNG phiên âm Hán-Việt kiểu "Ca Bố Lâm".
 Trả về DUY NHẤT một JSON object, không giải thích, không văn bản thừa:
 {"terms": [{"zh": "林松", "vi": "Lâm Tùng", "type": "person", "note": "nam, sư huynh"}]}
