@@ -1111,3 +1111,65 @@ def ensure_chapters_fetched(adapter: SourceAdapter, novel_id: int) -> None:
                 {"status": "failed", "error": f"crawl: {e}"[:500]}, returning="minimal").eq("chapter_id", ch["id"]).eq("status", "pending").execute()
             log.exception("Lỗi tải chương %s → failed", ch["id"])
         time.sleep(1.5)
+
+
+def _pick_revivable(chs: list[dict], refs: list[ChapterRef]) -> list[tuple[dict, ChapterRef]]:
+    """Chương 'failed' nào có source_chapter_id đã LỆCH mục lục hiện tại → (chương, ref
+    đúng) để hồi sinh. Id còn KHỚP mục lục mà vẫn fail = nguồn thật sự thiếu trang chương
+    đó → để yên (đừng requeue, không thì lại 404 lặp mỗi vòng)."""
+    by_index = {r.index: r for r in refs}
+    out: list[tuple[dict, ChapterRef]] = []
+    for ch in chs:
+        ref = by_index.get(ch["chapter_index"])
+        if ref and ref.source_chapter_id != ch["source_chapter_id"]:
+            out.append((ch, ref))
+    return out
+
+
+def revive_stale_failed_chapters(adapter: SourceAdapter, limit: int = 30) -> int:
+    """Bít bẫy ĐÓNG BĂNG: ensure_chapters_fetched chỉ lấy chương 'queued', nên chương đã
+    bị đánh 'failed' KHÔNG BAO GIỜ được thử lại — dù nguyên nhân chỉ là nguồn đánh lại id
+    (hoặc stub hỏng từ parser cũ) và trang chương thật vẫn còn. Mỗi chu kỳ, soi lại các
+    chương failed: đối chiếu mục lục MỚI, nếu id đã lệch thì sửa id + trả về 'queued' để
+    tải lại; id còn khớp mà vẫn thiếu trang thì bỏ qua (đúng là chết).
+
+    Bounded: tối đa `limit` chương/nguồn/chu kỳ, gom theo truyện để mỗi truyện chỉ fetch
+    mục lục 1 lần. Nhường người đọc như các việc bảo trì khác."""
+    sid = _source_id(adapter)
+    rows = (
+        db.sb().table("chapters")
+        .select("id, novel_id, chapter_index, source_chapter_id, "
+                "novels!inner(source_id, source_novel_id)")
+        .eq("novels.source_id", sid).eq("translation_status", "failed")
+        .not_.is_("source_chapter_id", "null")
+        .order("novel_id").limit(limit).execute()
+    ).data or []
+    if not rows:
+        return 0
+    by_novel: dict[int, list[dict]] = {}
+    for r in rows:
+        by_novel.setdefault(r["novel_id"], []).append(r)
+    revived = 0
+    for novel_id, chs in by_novel.items():
+        if reader_fetch_waiting():
+            break
+        try:
+            refs = _normalize_chapter_refs(
+                adapter.fetch_chapter_list(chs[0]["novels"]["source_novel_id"]), adapter.name)
+        except Exception:
+            continue  # nguồn lỗi tạm / mục lục rỗng → để chu kỳ sau
+        for ch, ref in _pick_revivable(chs, refs):
+            db.sb().table("chapters").update({
+                "source_chapter_id": ref.source_chapter_id,
+                "title_zh": ref.title_zh,
+                "content_zh": None,
+                "translation_status": "queued",
+            }, returning="minimal").eq("id", ch["id"]).execute()
+            db.sb().table("translation_jobs").delete().eq(
+                "type", "chapter").eq("chapter_id", ch["id"]).execute()
+            db.enqueue("chapter", novel_id, chapter_id=ch["id"], priority=settings.prio_idle)
+            revived += 1
+        time.sleep(1.0)
+    if revived:
+        log.info("Hồi sinh %d chương failed do nguồn đánh lại id (%s)", revived, adapter.name)
+    return revived

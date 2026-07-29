@@ -11,6 +11,7 @@ from novelworker.crawler.sync import (
     _chapter_sync_fields,
     _frontier_step,
     _normalize_chapter_refs,
+    _pick_revivable,
 )
 
 
@@ -46,6 +47,16 @@ def main() -> None:
         (1, "book/10", "Một"),
         (2, "book/12", "Hai"),
     ]
+
+    # Hồi sinh chương failed: id lệch mục lục → sửa; id còn khớp / index đã biến mất → để yên.
+    refs_now = [ChapterRef(1, "b/100", "C1"), ChapterRef(2, "b/200", "C2")]
+    chs = [
+        {"id": 1, "chapter_index": 1, "source_chapter_id": "b/999"},  # id lệch → hồi sinh
+        {"id": 2, "chapter_index": 2, "source_chapter_id": "b/200"},  # id khớp → chết thật, bỏ
+        {"id": 3, "chapter_index": 9, "source_chapter_id": "b/9"},    # index không còn → bỏ
+    ]
+    picked = _pick_revivable(chs, refs_now)
+    assert [(c["id"], r.source_chapter_id) for c, r in picked] == [(1, "b/100")]
 
     # Quota discovery chỉ được tính khi truyện thực sự qua lọc và đã xếp việc.
     original_sync = sync.sync_chapter_list

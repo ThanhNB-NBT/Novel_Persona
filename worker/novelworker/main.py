@@ -190,6 +190,8 @@ def _source_tick(adapter: SourceAdapter, pending_fetch: list[dict], due: bool,
         sync.sync_followed_novels(adapter)
         # truyện đã có ra chương mới → nổi "Mới cập nhật" (không chỉ truyện mới)
         sync.refresh_canonical_updates(adapter, limit=refresh_n)
+        # chương 'failed' vì nguồn đánh lại id → hồi sinh (không thì kẹt vĩnh viễn)
+        sync.revive_stale_failed_chapters(adapter)
 
 
 def _source_loop(adapter: SourceAdapter, stop: threading.Event, cfg: dict) -> None:
