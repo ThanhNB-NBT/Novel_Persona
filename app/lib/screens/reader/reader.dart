@@ -1171,6 +1171,8 @@ class _EndPanel extends ConsumerStatefulWidget {
 class _EndPanelState extends ConsumerState<_EndPanel> {
   bool _auto = prefs.getBool('auto_translate_ahead') ?? true;
   Timer? _tocPoll; // poll mục lục lười đang tải (reader đã gọi request_toc lúc mở)
+  int _pollsLeft = 60; // ponytail: cap ~5 phút; ToC treo thì thôi kéo lại cả mục
+  // lục mỗi 5s (reader mở lâu → rò egress), rời chương/vào lại tự retry.
 
   @override
   void dispose() {
@@ -1224,8 +1226,14 @@ class _EndPanelState extends ConsumerState<_EndPanel> {
     final total = (novel?['chapter_count_source'] ?? 0) as int;
     final tocLoading = list.isNotEmpty && list.length < total;
     if (tocLoading) {
-      _tocPoll ??= Timer.periodic(const Duration(seconds: 5),
-          (_) => ref.invalidate(chapterListProvider(widget.novelId)));
+      _tocPoll ??= Timer.periodic(const Duration(seconds: 5), (timer) {
+        if (_pollsLeft-- <= 0) {
+          timer.cancel();
+          _tocPoll = null;
+          return;
+        }
+        ref.invalidate(chapterListProvider(widget.novelId));
+      });
     } else {
       _tocPoll?.cancel();
       _tocPoll = null;
