@@ -76,6 +76,8 @@ class _Header extends StatelessWidget {
             : ImageFiltered(
                 imageFilter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
                 child: Image.network(cover, fit: BoxFit.cover,
+                    // đằng nào cũng blur → decode nhỏ, khỏi ôm bìa full-res ~6MB
+                    cacheWidth: 400,
                     errorBuilder: (_, _, _) =>
                         Container(color: cs.primary.withValues(alpha: 0.35))),
               ),
@@ -233,6 +235,8 @@ class _ChapterListTabState extends ConsumerState<_ChapterListTab> {
   bool _asc = true;
   bool _tocRequested = false;
   Timer? _tocPoll;
+  int _pollsLeft = 60; // ponytail: cap ~5 phút; ToC treo (crawler tắt/khai khống
+  // chapter_count) thì thôi kéo lại cả mục lục mỗi 5s, vào lại màn tự retry.
   // Chế độ CHỌN NHIỀU chương để dịch lại (2026-07-16): bấm nút dịch lại →
   // checkbox cạnh từng chương, mặc định tick chương đang đọc dở.
   bool _selecting = false;
@@ -243,7 +247,7 @@ class _ChapterListTabState extends ConsumerState<_ChapterListTab> {
     _tocRequested = true;
     requestToc(widget.novelId);
     _tocPoll = Timer.periodic(const Duration(seconds: 5), (timer) {
-      if (!mounted) {
+      if (!mounted || _pollsLeft-- <= 0) {
         timer.cancel();
         return;
       }
