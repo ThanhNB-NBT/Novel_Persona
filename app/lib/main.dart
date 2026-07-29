@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -27,13 +30,59 @@ import 'screens/shell.dart';
 
 // Key đặt trong app/.env (đã gitignore), chạy:
 //   flutter run -d <android-device> --dart-define-from-file=.env
+// SUPABASE_URL/ANON_KEY là ĐÍCH MẶC ĐỊNH nướng vào bản build (fallback cuối).
 const supabaseUrl = String.fromEnvironment('SUPABASE_URL');
 const supabaseAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
+// Chuyển kho lưu KHÔNG cần build lại: app đọc {url, anonKey} từ 1 file JSON tĩnh
+// công khai lúc khởi động (đặt trên R2/GitHub raw — chỗ độc lập với chính Supabase,
+// để lúc Supabase chết vẫn tải được). Lật kho = sửa 1 file JSON đó rồi mở lại app.
+// Rỗng → giữ nguyên hành vi cũ (chỉ dùng đích nướng sẵn).
+const _endpointConfigUrl = String.fromEnvironment('ENDPOINT_CONFIG_URL');
+
+/// Thứ tự ưu tiên: JSON từ xa → bản cache lần trước → đích nướng sẵn.
+/// Cache lại để lần sau vẫn mở được app khi chỗ host JSON tạm chết.
+Future<({String url, String anonKey})> _resolveEndpoint() async {
+  if (_endpointConfigUrl.isNotEmpty) {
+    final j = await _fetchJson(_endpointConfigUrl);
+    final url = (j?['url'] as String?)?.trim() ?? '';
+    final key = (j?['anonKey'] as String?)?.trim() ?? '';
+    if (url.isNotEmpty && key.isNotEmpty) {
+      await prefs.setString('endpoint_url', url);
+      await prefs.setString('endpoint_anon', key);
+      return (url: url, anonKey: key);
+    }
+  }
+  final cu = prefs.getString('endpoint_url') ?? '';
+  final ck = prefs.getString('endpoint_anon') ?? '';
+  if (cu.isNotEmpty && ck.isNotEmpty) return (url: cu, anonKey: ck);
+  return (url: supabaseUrl, anonKey: supabaseAnonKey);
+}
+
+// ponytail: HttpClient stdlib thay vì thêm package http. Timeout 4s cứng — chỗ host
+// JSON (R2/GitHub) gần như luôn sống nên hiếm khi chạm; chạm thì rơi xuống cache/default.
+Future<Map<String, dynamic>?> _fetchJson(String url) async {
+  final client = HttpClient()..connectionTimeout = const Duration(seconds: 4);
+  try {
+    final resp = await (await client.getUrl(Uri.parse(url)).timeout(
+          const Duration(seconds: 4),
+        ))
+        .close()
+        .timeout(const Duration(seconds: 4));
+    if (resp.statusCode != 200) return null;
+    return jsonDecode(await resp.transform(utf8.decoder).join())
+        as Map<String, dynamic>;
+  } catch (_) {
+    return null; // offline / host JSON chết → caller dùng cache hoặc default
+  } finally {
+    client.close(force: true);
+  }
+}
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Supabase.initialize(url: supabaseUrl, publishableKey: supabaseAnonKey);
   prefs = await SharedPreferences.getInstance();
+  final ep = await _resolveEndpoint();
+  await Supabase.initialize(url: ep.url, publishableKey: ep.anonKey);
   AppErrorLog.install(); // bắt lỗi runtime → xem ở màn "Nhật ký lỗi"
   await initNotifications();
   loadHanViet(); // bảng tra Hán-Việt cho form sửa dịch — nạp nền, không chặn khởi động

@@ -140,3 +140,8 @@ tìm/ẩn/xoá truyện, sức khỏe model LLM, báo cáo lỗi từ người �
 - Worker production chạy trên VPS (Docker Compose, `restart: unless-stopped`); cập nhật bằng `git pull` + rebuild.
 - Model Hachimi CT2 đặt ở `worker/models/hachimi-ct2/` trên host (gitignored), mount read-only vào container translator.
 - Backup DB: cron trên VPS `pg_dump` Supabase → giữ bản trên đĩa VPS + đẩy lên R2.
+- **Dự phòng khi bỏ Supabase cloud:** bộ hồ sơ dựng **Supabase self-host** (cùng stack) trên
+  VPS nằm ở `infra/` — kiểu *warm standby*: dựng sẵn, đứng im, lúc cần thì restore dump + lật
+  đích là chạy, worker/app không phải viết lại. App đọc `{url, anonKey}` từ 1 file JSON tĩnh
+  lúc khởi động (biến build tuỳ chọn `ENDPOINT_CONFIG_URL`) nên đổi kho lưu KHÔNG cần build
+  lại app. Chưa kích hoạt — chi tiết & runbook: `infra/FAILOVER.md`.
