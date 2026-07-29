@@ -247,25 +247,40 @@ def sweep_glossary(since: str | None = None, dry: bool = False,
         if len(page) < step:
             break
         off += step
-    fixed, dropped, flagged = [], [], []
+    from .translator.worker import _conflicts_with_base_term
+    by_novel: dict[int, list[dict]] = {}
+    for t in rows:
+        by_novel.setdefault(t["novel_id"], []).append(t)
+
+    fixed, dropped, flagged, cleared = [], [], [], []
     for t in rows:
         if t.get("created_by"):        # user thêm tay → chủ đích, không đoán thay
             continue
-        hv = hanviet.pinyin_written(t["term_zh"], t["correct_vi"], t["term_type"]) if fix else None
+        zh, vi, tp = t["term_zh"], t["correct_vi"], t["term_type"]
+        hv = hanviet.pinyin_written(zh, vi, tp) if fix else None
         if hv:
             fixed.append({**t, "new_vi": hv})
         elif (fix and t.get("note") != "nghi sai"
-              and hanviet.pinyin_suspect(t["term_zh"], t["correct_vi"])):
+              and hanviet.pinyin_suspect(zh, vi)):
             # tên người viết bằng pinyin: không đủ căn cứ để tự đổi → 'nghi sai',
             # term rơi khỏi prompt dịch nhưng vẫn nằm ở mục chờ duyệt trong app
             flagged.append({**t, "new_vi": "(nghi sai)"})
-        elif clean and hanviet.english_meaning(t["term_zh"], t["correct_vi"], t["term_type"]):
+        elif (fix and t.get("note") == "nghi sai"
+              and not hanviet.transliteration_suspect(zh, vi, tp)
+              and not hanviet.pinyin_suspect(zh, vi)
+              # 'nghi sai' còn được gắn vì mâu thuẫn term gốc — kiểm lại kẻo gỡ nhầm
+              and not _conflicts_with_base_term(by_novel.get(t["novel_id"], []), zh, vi)):
+            cleared.append({**t, "new_vi": "(bỏ nghi sai)"})
+        elif clean and hanviet.english_meaning(zh, vi, tp):
             dropped.append(t)
     if dry:
-        return fixed + flagged, dropped
+        return fixed + flagged + cleared, dropped
     for t in flagged:
         sb().table("glossary_terms").update(
             {"note": "nghi sai"}, returning="minimal").eq("id", t["id"]).execute()
+    for t in cleared:
+        sb().table("glossary_terms").update(
+            {"note": None}, returning="minimal").eq("id", t["id"]).execute()
     for t in fixed:
         sb().table("glossary_terms").update(
             {"correct_vi": t["new_vi"], "wrong_vi": t.get("wrong_vi") or t["correct_vi"]},
@@ -274,7 +289,7 @@ def sweep_glossary(since: str | None = None, dry: bool = False,
     for i in range(0, len(ids), 200):   # chia lô: URL của .in_() có giới hạn độ dài
         sb().table("glossary_terms").delete(returning="minimal").in_(
             "id", ids[i:i + 200]).execute()
-    return fixed + flagged, dropped
+    return fixed + flagged + cleared, dropped
 
 
 def record_glossary_conflicts(novel_id: int, rows: list[dict]) -> None:

@@ -57,6 +57,17 @@ def main() -> None:
     assert not transliteration_suspect("安娜", "Anna", "person")
     assert not transliteration_suspect("罗森", "La Sâm", "person")
     assert transliteration_suspect("白衣少女", "cô gái áo trắng", "person")
+    # mọi âm đều là âm Hán-Việt hợp lệ của MỘT chữ trong cụm → cách gọi bình thường,
+    # đừng bắt chờ duyệt (美国 bỏ chữ 国; 哥 lặp âm; 研究院 đảo trật tự)
+    assert not transliteration_suspect("美国", "Mỹ", "place")
+    assert not transliteration_suspect("哥", "ca ca", "person")
+    assert not transliteration_suspect("研究院", "viện nghiên cứu", "place")
+    # phiên âm hỏng thì VẪN nghi (厦 đọc "hạ", không phải "hà") — cố ý KHÔNG tự sửa:
+    # luật "đúng số âm + một âm khớp" từng sửa 2572 term và phần lớn làm tệ đi
+    # (男主 "nam chính" → "Nam Chủ"), vì phiên sai và dịch đúng giống hệt nhau về cấu trúc
+    assert transliteration_suspect("大厦", "Đại hà", "place")
+    assert reconcile("大厦", "Đại hà", "place") == "Đại hà"
+    assert reconcile("男主", "nam chính", "person") == "nam chính"
 
     # cụm tiếng Anh dịch nghĩa (rác model trích tên) → chặn
     assert english_meaning("觉醒石", "Awakening Stone", "item")

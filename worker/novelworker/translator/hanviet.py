@@ -299,6 +299,12 @@ def transliteration_suspect(zh: str | None, vi: str | None, term_type: str | Non
     if len(syls) == len(chars) and all(t.get(ch) and s.lower() in t[ch]
                                              for ch, s in zip(chars, syls)):
         return False
+    # Mọi âm đều là âm Hán-Việt hợp lệ của MỘT chữ nào đó trong cụm → model dùng đúng
+    # bảng tra, chỉ khác số âm (美国 → "Mỹ" bỏ chữ 国; 哥 → "ca ca" lặp âm). Đó là cách
+    # gọi bình thường, không phải phiên bừa — đừng bắt chờ duyệt.
+    readings = {r for ch in chars for r in (t.get(ch) or [])}
+    if readings and all(s.lower() in readings for s in syls):
+        return False
     # Cùng khuôn reconcile đang xét là cố phiên âm; reconcile sẽ tự sửa nếu bảng tra được.
     return not (all(s[:1].isupper() for s in syls)
                 and (len(syls) == len(chars) or term_type == "person"))
@@ -340,6 +346,13 @@ def reconcile(zh: str | None, vi: str | None, term_type: str | None) -> str | No
     # person: tên người Trung không có "dịch nghĩa" toàn viết hoa hợp lệ → lệch số từ
     # ("Héc Nơ" 2 từ / 赫克诺 3 chữ) vẫn là phiên hỏng, không cần đếm khớp
     attempting = all_upper and (len(syls) == len(chars) or term_type == "person")
+    # KHÔNG nới "attempting" cho cụm viết thường. Đã thử luật "đúng số âm + ít nhất một âm
+    # khớp" để bắt 大厦 → "Đại hà"; chạy thử 28/07 trên kho thật thì nó sửa 2572 term và
+    # phần lớn là làm TỆ ĐI: 男主 "nam chính" → "Nam Chủ", 墓地 "nghĩa địa" → "Mộ Địa",
+    # 编号十三 "Mã số Thập Tam" → "Biên Gào Thập Tam". Lý do: "Đại hà" (phiên sai) và
+    # "nam chính" (dịch nghĩa đúng) giống hệt nhau về cấu trúc — chỉ khác NGHĨA, mà bảng
+    # tra không biết nghĩa. Phiên sai kiểu đó cứ để `transliteration_suspect` gắn 'nghi
+    # sai' là đủ: term không vào prompt dịch, không hại ai.
     if not attempting:
         return vi  # dịch nghĩa / cụm mô tả có từ thường — tôn trọng lựa chọn của model
     if len(syls) != len(chars):  # person lệch số từ → phiên hỏng chắc chắn, tra thẳng
