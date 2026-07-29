@@ -75,6 +75,11 @@ class SourceTransient(Exception):
     """Mạng/rate-limit/5xx vẫn có thể hồi phục — giữ chương queued cho chu kỳ sau."""
 
 
+class ChapterUnavailable(Exception):
+    """Chương VIP/không công khai — lỗi VĨNH VIỄN của riêng chương này (không phải
+    crash): đánh failed nhưng log 1 dòng gọn, khỏi traceback lấp mất lỗi thật."""
+
+
 def _is_transient_status(status: int | None) -> bool:
     return status is None or status in {401, 403, 429} or status >= 500
 

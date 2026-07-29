@@ -6,6 +6,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 os.environ.setdefault("SUPABASE_URL", "https://example.supabase.co")
 os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "test")
 
+from novelworker.crawler.base import ChapterUnavailable
 from novelworker.crawler.faloo import FalooAdapter
 from novelworker.crawler.registry import TEMPLATE_REGISTRY
 from novelworker.crawler.sync import _skip_by_source_policy
@@ -135,7 +136,7 @@ def main() -> None:
     try:
         adapter.fetch_chapter("123/2")
         raise AssertionError("VIP phải bị chặn")
-    except ValueError as error:
+    except ChapterUnavailable as error:
         assert "VIP" in str(error)
 
     # trang chống bot 系统提示 (HTTP 200) → SourceBlocked, không phải lỗi dữ liệu

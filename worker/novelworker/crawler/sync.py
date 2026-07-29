@@ -13,6 +13,7 @@ from ..translator.text_clean import clean_source
 from .base import (
     ChapterNotReady,
     ChapterRef,
+    ChapterUnavailable,
     EmptyChapterList,
     SourceAdapter,
     SourceBlocked,
@@ -1109,7 +1110,12 @@ def ensure_chapters_fetched(adapter: SourceAdapter, novel_id: int) -> None:
             # translator không claim (thiếu content_zh), admin retry lại chỉ reset job failed.
             db.sb().table("translation_jobs").update(
                 {"status": "failed", "error": f"crawl: {e}"[:500]}, returning="minimal").eq("chapter_id", ch["id"]).eq("status", "pending").execute()
-            log.exception("Lỗi tải chương %s → failed", ch["id"])
+            # Chương VIP/không công khai là tình huống ĐÃ BIẾT → 1 dòng gọn, khỏi
+            # traceback lấp lỗi thật. Còn lại (đổi cấu trúc/mạng) mới in đủ stack.
+            if isinstance(e, ChapterUnavailable):
+                log.warning("Chương %s không công khai/VIP → failed: %s", ch["id"], e)
+            else:
+                log.exception("Lỗi tải chương %s → failed", ch["id"])
         time.sleep(1.5)
 
 

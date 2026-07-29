@@ -5,7 +5,8 @@ import re
 from html import unescape
 from itertools import zip_longest
 
-from .base import ChapterRef, NovelMeta, SourceAdapter, SourceBlocked
+from .base import (
+    ChapterRef, ChapterUnavailable, NovelMeta, SourceAdapter, SourceBlocked)
 
 
 # Nhóm lớn đúng bộ lọc chung: 玄幻奇幻, 武侠仙侠, 科幻网游, 恐怖灵异.
@@ -217,5 +218,5 @@ class FalooAdapter(SourceAdapter):
         if len(text) < 50:
             if _blocked(html):
                 raise SourceBlocked(f"Faloo chặn IP (trang 系统提示) khi tải chương {source_chapter_id}")
-            raise ValueError(f"Chương Faloo {source_chapter_id} không công khai hoặc là VIP")
+            raise ChapterUnavailable(f"Chương Faloo {source_chapter_id} không công khai hoặc là VIP")
         return text
