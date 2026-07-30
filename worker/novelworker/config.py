@@ -26,10 +26,11 @@ class Settings(BaseSettings):
     # hanviet.reconcile vì đó mới là thứ vào glossary: qwen3-next 5/5, mistral-small 4/5
     # (nó viết "Erlton" — chữ Latin nên bảng tra không sửa được, sai là sai luôn),
     # gemma-4-31b 4/5 và chậm hơn, llama-4-maverick chỉ trích 4 term/chương nên sót nhiều.
-    # 2026-07-27: NVIDIA gỡ toàn bộ dòng qwen (410 end-of-life). Thay bằng glm-5.2 —
-    # ứng viên duy nhất còn chạy được: deepseek-v4-flash 503/timeout, minimax-m3 sai
-    # Hán-Việt ("Tu chinh tiểu hoành thượng"), nemotron-nano trả reasoning thay JSON.
-    nvidia_model: str = "z-ai/glm-5.2"
+    # 2026-07-27: NVIDIA gỡ toàn bộ dòng qwen (410 end-of-life), thay tạm glm-5.2.
+    # Model THẬT giờ chỉnh ở app (worker_settings.llm_model, worker đọc mỗi 60s) — hằng số
+    # dưới CHỈ là fallback khi không đọc được DB. Để khớp lựa chọn hiện tại nên worker
+    # không âm thầm tụt model lúc Supabase hụt nhịp.
+    nvidia_model: str = "mistralai/mistral-medium-3.5-128b"
     # Pacing theo từng API key, thấp hơn trần NVIDIA 40 RPM để chừa biên đồng hồ/retry.
     nvidia_rpm_limit: int = Field(default=30, ge=1, le=39)
 
