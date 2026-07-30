@@ -9,7 +9,7 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 
-from .. import db
+from .. import blob, db
 from ..config import settings
 from . import hanviet, lint, prompts
 from . import providers
@@ -567,10 +567,11 @@ def save_detected_names(novel_id: int, chapter_index: int, detected: list[dict],
 
 # Trích tên chạy NỀN, chương không chờ. Số luồng phải theo kịp nhịp chương: chương xong
 # mỗi ~24s, mỗi call ăn tới llm_timeout_sec (90s) → cần ≥ 90/24 ≈ 4 luồng chỉ để hoà vốn.
-# Lấy 6 cho có biên; quá tải thì pool tự xếp hàng, tên về muộn chứ không mất.
+# ponytail: giữ tối đa 6 tác vụ chạy + 6 tác vụ chờ; tăng trần khi đo thấy tên bị bỏ quá nhiều.
 # Luồng không phải daemon: worker restart sẽ đợi call đang bay (docker stop giết sau 10s —
 # mất vài cái tên là chấp nhận được, chương đã lưu xong từ trước).
 _NAME_POOL = ThreadPoolExecutor(max_workers=6, thread_name_prefix="names")
+_NAME_SLOTS = threading.BoundedSemaphore(12)
 
 
 def _extract_names_bg(llm, chunk: str, novel_id: int, chapter_index: int,
@@ -591,6 +592,23 @@ def _extract_names_bg(llm, chunk: str, novel_id: int, chapter_index: int,
     log.info("TÊN RIÊNG nv%s ch%s: %d tên mới · LLM %d call (%d lỗi) · %d+%d tok",
              novel_id, chapter_index, saved, st["calls"], st["failures"],
              st["prompt_tokens"], st["completion_tokens"])
+
+
+def _submit_name_extraction(llm, chunk: str, novel_id: int, chapter_index: int,
+                            terms: list[dict], preexisting_zh: set[str]) -> bool:
+    slots = _NAME_SLOTS
+    if not slots.acquire(blocking=False):
+        log.warning("Bỏ qua trích tên nền nv%s ch%s: hàng đợi đã đầy", novel_id, chapter_index)
+        return False
+    try:
+        future = _NAME_POOL.submit(
+            _extract_names_bg, llm, chunk, novel_id, chapter_index, terms, preexisting_zh,
+        )
+    except Exception:
+        slots.release()
+        raise
+    future.add_done_callback(lambda _future: slots.release())
+    return True
 
 
 def _analyze_names(llm, chunk: str) -> list[dict]:
@@ -1087,8 +1105,10 @@ def _translate_hachimi(
     # Trích tên bắn sang luồng nền và KHÔNG chờ: nó chỉ chờ mạng (38-79s từ VPS) trong khi
     # Hachimi xong chương trong ~24s. Nó tự lưu tên vào glossary → chương sau dùng ngay.
     if ch["chapter_index"] <= settings.hachimi_extract_max_chapter:
-        _NAME_POOL.submit(_extract_names_bg, chapter_llm, content[:CHUNK_LIMIT],
-                          ch["novel_id"], ch["chapter_index"], list(terms), set(existing_zh))
+        _submit_name_extraction(
+            chapter_llm, content[:CHUNK_LIMIT], ch["novel_id"], ch["chapter_index"],
+            list(terms), set(existing_zh),
+        )
 
     text = termguard.translate_text(content, terms, hachimi_engine.translate_text)
     # gộp nói lắp CT2 ("Cốc cốc cốc cốc" → "Cốc cốc") + dọn rác, DÙNG CHUNG với nhánh LLM.
@@ -1125,6 +1145,9 @@ def handle_chapter(job: dict, llm) -> None:
         db.sb().table("chapters").select("id, novel_id, chapter_index, title_zh, content_zh")
         .eq("id", job["chapter_id"]).single().execute()
     ).data
+    if not ch.get("content_zh"):
+        # Bản gốc có thể đã offload sang R2 (dịch lại) — lấy về thay vì chờ crawl lại.
+        ch["content_zh"] = blob.get_zh(ch["id"])
     if not ch.get("content_zh"):
         raise MissingContentError(f"Chương {ch['id']} chưa có content_zh — crawler chưa tải xong")
     # Chương mới đã sạch từ crawler; chạy lại ở biên dịch để cứu dữ liệu cũ trong DB
@@ -1242,16 +1265,18 @@ def handle_chapter(job: dict, llm) -> None:
         text += ("\n\n[Chương này ở nguồn chỉ có "
                  f"{len(ch['content_zh'])} ký tự — nội dung gốc có thể bị thiếu.]")
 
-    # Lưu chapter + đóng đúng job đang giữ lease trong MỘT transaction. Không xóa
-    # content_zh để các lần dịch lại sau không phải chờ crawler và tốn thêm I/O.
+    # Lưu chapter + đóng đúng job đang giữ lease trong MỘT transaction (RPC giữ content_zh).
     db.finalize_chapter_job(
         job["id"], job.get("locked_by") or "", ch["id"], title_vi, text, model,
         prompt_tokens, completion_tokens, glossary_version, summary_vi,
     )
     try:
-        db.sb().table("chapters").update({
-            "lint_score": lint.lint_score(ch.get("content_zh"), text),
-        }, returning="minimal").eq("id", ch["id"]).execute()
+        patch = {"lint_score": lint.lint_score(ch.get("content_zh"), text)}
+        # content_zh đã dùng xong: đẩy sang R2 rồi NULL cột để nhẹ DB. R2 tắt/hỏng →
+        # put_zh trả False → giữ nguyên trong DB (dịch lại đọc thẳng DB, không mất gì).
+        if blob.put_zh(ch["id"], ch["content_zh"]):
+            patch["content_zh"] = None
+        db.sb().table("chapters").update(patch, returning="minimal").eq("id", ch["id"]).execute()
     except Exception:
         log.exception("Không lưu được lint_score chương %s", ch["id"])
 

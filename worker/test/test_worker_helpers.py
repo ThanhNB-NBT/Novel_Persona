@@ -45,6 +45,13 @@ def main() -> None:
         worker_mod.db.refresh_job_lock = original_refresh
     assert refreshed == [(7, "worker:test")]
 
+    original_slots = worker_mod._NAME_SLOTS
+    try:
+        worker_mod._NAME_SLOTS = worker_mod.threading.BoundedSemaphore(0)
+        assert not worker_mod._submit_name_extraction(None, "源文", 1, 3, [], set())
+    finally:
+        worker_mod._NAME_SLOTS = original_slots
+
     data = _extract_json('metadata:\n```json\n{"title_vi":"Tên truyện"}\n```')
     assert data["title_vi"] == "Tên truyện"
     # Fence MỞ: câu trả lời bị cắt trước khi model đóng ``` (glm-5.2 chạy cả trăm giây

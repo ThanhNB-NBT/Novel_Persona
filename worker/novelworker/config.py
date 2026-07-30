@@ -100,5 +100,12 @@ class Settings(BaseSettings):
     # Chỉ trích tên (LLM liệt kê) để đắp glossary ở CHƯƠNG ĐẦU — chặn cost mass-requeue.
     hachimi_extract_max_chapter: int = 20
 
+    # Cloudflare R2 (S3-compatible) — lưu content_zh ngoài Supabase để nhẹ DB free tier.
+    # Thiếu bất kỳ trường nào → tính năng TẮT, content_zh nằm lại trong DB như cũ.
+    r2_account_id: str = ""
+    r2_access_key: str = ""
+    r2_secret_key: str = ""
+    r2_bucket: str = ""
+
 
 settings = Settings()

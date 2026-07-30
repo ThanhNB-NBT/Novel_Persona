@@ -10,3 +10,4 @@ opencc-python-reimplemented>=0.1.7   # phồn → giản thể cho yêu cầu tr
 ctranslate2>=4.4          # engine dịch Hachimi (CT2 INT8 chạy CPU)
 sentencepiece>=0.2        # tokenizer cho model Hachimi (nhẹ, khỏi cần transformers)
 pypinyin>=0.53            # nhận ra term bị viết bằng pinyin (Cangku) để đổi về Hán-Việt
+boto3>=1.34               # client S3 cho Cloudflare R2 (lưu content_zh ngoài Supabase)
