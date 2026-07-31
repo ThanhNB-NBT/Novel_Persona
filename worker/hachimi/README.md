@@ -33,6 +33,9 @@ cd E:/Novel_Project/worker/hachimi/pipeline && PYTHONPATH=E:/Novel_Project/worke
 | Gom pool câu chuỗi phẩy từ DB | `python 08_make_rhythm_pool.py [số dòng]` |
 | Chấm bản thầy viết | `python 09_gate_rhythm_gold.py [file.jsonl]` |
 | Sàng replay dạy sai nhịp | `python 10_screen_replay_rhythm.py` |
+| Nghiệm thu một lô corpus trước khi train | `python 14_gate_corpus.py <lo.jsonl>` |
+| Hiệu chỉnh ngưỡng cổng từ lô đã biết là tốt | `python 14_gate_corpus.py <lo.jsonl> --calibrate` |
+| Chấm độ căn khớp bằng LaBSE (máy nhà, ~1,8 GB) | `python 15_score_labse.py vao.jsonl ra.jsonl` |
 | Dựng gói Kaggle v3 | `python prepare_teacher_v3_pack.py` |
 | Đo model trên eval khoá | `cd ../eval && python evaluate_hachimi_teacher_v2.py` |
 | Đo ảnh hưởng cách chia câu | `cd ../eval && python evaluate_teacher_v2_split.py` |
