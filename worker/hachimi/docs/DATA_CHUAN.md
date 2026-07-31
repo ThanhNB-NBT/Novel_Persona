@@ -137,6 +137,12 @@ hiệu chỉnh từ dữ liệu tham chiếu trước khi tin** — đúng bài 
 | 2 | **Tỉ lệ độ dài** | ký tự đích / ký tự nguồn | nằm trong [2,0 – 4,5]; ngoài khoảng = nghi sót/thêm |
 | 3 | **Không lặp** | n-gram 3-4 lặp trong dòng, **trừ điệp ngữ có trong nguồn** | 0 ca lặp không có gốc ở nguồn |
 | 4 | **Nhất quán xưng hô** | **một nhân vật có bị gọi hai kiểu không** (nàng vs cô, hắn vs anh ta) — KHÔNG phải "có chứa từ hiện đại không" | ≤ 10% chương xung đột |
+| 4b | **Không "anh/em" sến trong văn kể** | đếm "anh"/"em" làm xưng hô ngôi 1-2 ngoài thoại-tình-cảm | loại chương ngôn tình đầy anh/em (user chốt 31/07: hắn/cô OK, ta-ngươi OK, nhưng "anh/em" sến không hợp văn viết) |
+
+**Gu register user đã chốt (31/07):** **hắn/cô chấp nhận được** (không bắt buộc hắn/nàng), ta-ngươi
+tốt, nhưng **"anh/em" là sến, không hợp văn viết** — phải lọc. Nỗi lo chính khi finetune là **lộn
+xộn giọng** (chương này hắn/cô, chương kia hắn/nàng), nên cổng 4 (nhất quán) quan trọng hơn việc
+ép một quy ước duy nhất. Đây là lý do kaihe (register hắn/cô) DÙNG ĐƯỢC, chỉ cần lọc phần anh/em.
 
 Cộng thêm **hai điều kiện về thành phần lô**, không phải về từng dòng:
 

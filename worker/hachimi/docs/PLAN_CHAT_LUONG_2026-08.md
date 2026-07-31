@@ -362,11 +362,29 @@ gold mới không phải tốn chỗ dạy lại những thứ mà một dòng p
 **Không** động vào `repetition_penalty` trước khi có ca lỗi thật — chỉnh mù sẽ phá điệp ngữ
 đúng ("Ba mươi năm Hà Đông…").
 
-### Bậc 1 — Đấu loại base (một lượt đo, không train)
-Đo **cùng một bộ test** cho: teacher-v4 (đang chạy), `HachimiMT-60-QT`, `MoxhiMT-60`,
-`hirashiba-mt-medium-ct2`, `opus-mt-zh-vi` (làm nền). Chỉ số: 4 con số ở mục 2 + tốc độ.
-**Con nào thắng thì thành base cho mọi vòng train sau — quyết bằng số, không bằng card model.**
-*(Việc này sửa quy tắc "luôn đi từ `HachimiMT-60-zh-vi`" trong README — chỉ sửa sau khi có số.)*
+### Bậc 1 — Đấu loại base (ĐÃ CHẠY 31/07, harness `eval/eval_register.py`)
+
+Bộ test `eval/testset_multi.jsonl`: 7 truyện đa thể loại, 13.532 dòng, nguồn từ R2, chỉ số ref-free.
+
+| Chỉ số | **teacher-v4** (giữ) | HachimiMT-60-QT |
+|---|---|---|
+| Bịa chủ ngữ | 25/11657 | **8/11657** |
+| Lệch giới | 0/334 | 0/334 |
+| Đại từ hiện đại lọt | **524** | 696 |
+| người đàn ông convert | 76 | 74 |
+| Cụm lặp | **478** | 540 |
+| Hán sót | 0 | 0 |
+| Tốc độ | 19,1 dòng/s | 17,2 dòng/s |
+
+**Kết luận: QT KHÔNG thắng → giữ teacher-v4 làm base.** QT hơn đúng cái nó được thiết kế (bịa
+chủ ngữ) nhưng cái đó cổng n-best đã lo (chênh 17/11.657); đổi lại nó tệ hơn ở vấn đề còn lại
+THẬT SỰ (đại từ hiện đại +172, lặp +62). Card model nói "0% đảo giọng" không thành thắng lợi
+trên bộ test rộng. `MoxhiMT-60`/`hirashiba`/`opus` chưa đo — nhưng vì teacher-v4 đã tốt ở chỉ số
+chính, chỉ đo tiếp nếu cần con base khác cho lý do khác. **Quy tắc "luôn đi từ HachimiMT-60-zh-vi"
+giữ nguyên.**
+
+**Chỉ số chính giờ là "đại từ hiện đại lọt" (524)** — không phải bịa chủ ngữ nữa (đã xuống 0,2%).
+Đây là lỗi cả-6-beam, chỉ Bậc 2 (train trên data sạch) sửa được.
 
 ### Bậc 2 — Doc-level (bậc ăn thua thật)
 
