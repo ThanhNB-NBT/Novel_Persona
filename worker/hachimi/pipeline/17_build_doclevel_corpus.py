@@ -51,6 +51,9 @@ _Q = re.compile(r"[“「『\"](.*?)[”」』\"]", re.S)
 # "văn viết", không riêng thoại. So với hệ ta-ngươi: nếu anh/em lấn át thì đó là register hỏng.
 _ANH_EM = re.compile(r"(?i)(?<!\w)(?:anh|em)(?!\w)")
 _TA_NGUOI = re.compile(r"(?i)(?<!\w)(?:ta|ngươi)(?!\w)")
+# Đại từ hiện đại CẤM ở CẤP DÒNG (đọc tay 31/07 thấy teacher lọt "Tôi" trong thoại — đúng lỗi
+# 524 đang chống). KHÔNG gồm "mình/bạn/cháu": "của mình" là phản thân hợp lệ, lọc sẽ giết oan.
+_MOD_LINE = re.compile(r"(?i)(?<!\w)(?:tôi|cậu|anh ta|cô ta|cô ấy|ông ta|bà ta)(?!\w)")
 
 
 def _register_ok(vi_lines: list[str]) -> bool:
@@ -74,6 +77,8 @@ def chapter_pairs(zh: list[str], vi: list[str], *, human: bool, source: str, ctx
     for p in _m16.doclevel_pairs(zh, vi, ctx=ctx, sep=SEP):
         cur = p["zh"].rsplit(SEP, 1)[-1] if p["ctx_len"] else p["zh"]
         if _m14.row_reject({"zh": cur, "vi": p["vi"]}, set()):  # Hán sót/tỉ lệ/lặp trên DÒNG hiện tại
+            continue
+        if _MOD_LINE.search(p["vi"]):  # đại từ hiện đại: đúng lỗi đang chống, đừng dạy lại
             continue
         out.append({**p, "human": human, "source": source})
     return out
@@ -141,6 +146,12 @@ def _self_check() -> None:
     vi = ["Hắn bước vào phòng.", "Mở miệng nói: “Ngươi đến rồi.”"]
     ps = chapter_pairs(zh, vi, human=True, source="kaihe", ctx=2)
     assert len(ps) == 2 and ps[1]["source"] == "kaihe" and ps[1]["human"] is True
+    # dòng có đại từ hiện đại bị bỏ, "của mình" thì giữ
+    assert chapter_pairs(["他来了。", "我说。"], ["Hắn tới rồi.", "Tôi nói."],
+                         human=False, source="teacher", ctx=1) == \
+        [{"zh": "他来了。", "vi": "Hắn tới rồi.", "ctx_len": 0, "human": False, "source": "teacher"}]
+    assert len(chapter_pairs(["他握剑。", "他护住自己。"], ["Hắn cầm kiếm.", "Hắn bảo vệ chính mình."],
+                             human=False, source="teacher", ctx=1)) == 2
     assert ps[1]["zh"].endswith("开口说道：“你来了。”") and SEP in ps[1]["zh"]
     # chương lệch số dòng → rỗng
     assert chapter_pairs(["a", "b"], ["x"], human=False, source="teacher", ctx=2) == []
