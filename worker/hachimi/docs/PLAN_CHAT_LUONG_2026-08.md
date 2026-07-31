@@ -430,6 +430,30 @@ Train từ base sạch + `doclevel_corpus.jsonl` (600k), 1 epoch. Đo trên 45 c
 - **Doc-level là công cụ cho BỊA CHỦ NGỮ, không phải cho đại từ hiện đại (524).** Lỗi 524 cần
   data register nhắm-đích đậm đặc — đúng thứ booster làm — không phải ngữ cảnh.
 
+### ❌❌ CẢ v2 CŨNG KHÔNG THẮNG + METRIC "524" LÀ NHIỄU (1/8/2026)
+
+Đo v2 (gold×6 + doc-level 34k) với metric ĐÃ SỬA (bỏ "mình" khỏi đếm đại từ hiện đại):
+
+| 45 chương | teacher-v4 | v2 ctx=2 |
+|---|---|---|
+| bịa chủ ngữ | 31 | 68 |
+| sai giới thật | 0* | 3 |
+| **đại từ hiện đại THẬT** (bỏ mình) | **2** | **1** |
+| (con số cũ gộp "mình", nhiễu) | 86 | 194 |
+| người đàn ông | 3 | 15 |
+
+**PHÁT HIỆN LỚN: metric "524 đại từ hiện đại" là ~98% "mình"** — mà "của mình/chính mình" là
+tiếng Việt ĐÚNG. Lỗi register THẬT chỉ ~2 dòng ở cả teacher-v4 lẫn v2. **Cả bài toán "524" tôi
+đuổi theo nhiều lượt là ảo do thước đo hỏng.** teacher-v4 vốn đã sạch register.
+
+**KẾT LUẬN CHỐT: giữ teacher-v4, KHÔNG deploy v1/v2.** Doc-level không cải thiện gì thật, còn
+tệ hơn ở bịa chủ ngữ + người đàn ông. Lỗi "nam ra nàng" user gặp ban đầu là từ model CŨ trong
+DB; teacher-v4 + n-best đã xử lý. **Đóng nhánh doc-level.** Nếu còn lỗi cụ thể thì cần user chỉ
+đúng chương RECENT (dịch bằng teacher-v4 hiện tại), không phải chương DB cũ.
+
+**Bài học đắt nhất cả đợt: hiệu chỉnh thước đo TRƯỚC, đừng để "mình" (hay bất cứ từ đa nghĩa nào)
+thổi phồng metric rồi lái cả loạt quyết định.**
+
 ### Bậc 3 — Tag giới tính từ glossary
 Thêm trường giới tính cho term tên riêng (LLM trích tên **đã chạy sẵn**, thêm một field vào
 JSON), chèn thẻ vào nguồn lúc train + lúc chạy. Bắt đúng ca nguồn lược chủ ngữ.
