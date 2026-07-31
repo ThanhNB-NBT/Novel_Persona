@@ -195,7 +195,38 @@ class _Engine:
             out.append(_join_translations(self._translate_safe(parts)))
         return out
 
+    def _with_context(self, lines: list[str], i: int) -> str:
+        """Ghép tối đa N dòng nguồn phía trước vào dòng i, đúng định dạng train `ctx ⟪ctx⟫ câu`.
+        Chỉ lấy dòng có nội dung làm ngữ cảnh; nếu ghép xong vượt trần token thì bỏ ngữ cảnh
+        (thà mất ngữ cảnh còn hơn để hard-split xé mất phần câu hiện tại)."""
+        n = settings.hachimi_context_lines
+        sep = settings.hachimi_context_sep
+        prev = [lines[j].strip() for j in range(max(0, i - n), i) if lines[j].strip()]
+        if not prev:
+            return lines[i]
+        joined = sep.join([*prev, lines[i]])
+        return joined if len(self.src.encode(joined)) <= settings.hachimi_max_len else lines[i]
+
+    def _translate_context(self, lines: list[str]) -> list[str]:
+        """Đường doc-level: nạp `ctx ⟪ctx⟫ câu`, nhưng CHẤM n-best theo CÂU HIỆN TẠI (phần sau
+        SEP cuối) — nếu chấm cả ngữ cảnh Trung thì phạt số/ngoặc sẽ lệch vì output chỉ là câu."""
+        sep = settings.hachimi_context_sep
+        sources = [self._with_context(lines, i) for i in range(len(lines))]
+        currents = [s.rsplit(sep, 1)[-1] for s in sources]
+        encoded = [self.src.encode(s, out_type=str) + [_EOS] for s in sources]
+        results = self.translator.translate_batch(
+            encoded, beam_size=self.beam, num_hypotheses=max(1, min(self.nbest, self.beam)),
+            max_decoding_length=settings.hachimi_max_len)
+        out: list[str] = []
+        for current, res in zip(currents, results):
+            best = min(res.hypotheses,
+                       key=lambda h: _rank_penalty(current, self.tgt.decode([t for t in h if t != _EOS])))
+            out.append(self.tgt.decode([t for t in best if t != _EOS]))
+        return out
+
     def translate_lines(self, lines: list[str]) -> list[str]:
+        if settings.hachimi_context_lines > 0:
+            return self._translate_context(lines)
         groups: list[tuple[int, int]] = []
         pieces: list[str] = []
         for line in lines:

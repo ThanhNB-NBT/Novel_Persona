@@ -505,6 +505,11 @@ def main() -> None:
     parser.add_argument("--clean-gold", type=Path, action="append", default=[])
     parser.add_argument("--clean-replay", type=Path, action="append", default=[])
     parser.add_argument("--eval-chapters", type=Path, action="append", default=[])
+    parser.add_argument("--doclevel-corpus", type=Path, default=None,
+                        help="Corpus doc-level dựng sẵn (pipeline 17). Bật nhánh doc-level: nạp "
+                             "thẳng {zh(có ⟪ctx⟫),vi}, BỎ toàn bộ gold/replay/HF-streaming.")
+    parser.add_argument("--eval-holdout", type=int, default=2000,
+                        help="Số cặp cuối corpus giữ làm eval (nhánh doc-level).")
     parser.add_argument("--extra-replay", type=Path, default=None,
                         help="Optional local JSONL with extra replay pairs (e.g. train_v2.jsonl)")
     parser.add_argument("--extra-replay-limit", type=int, default=20_000)
@@ -528,18 +533,26 @@ def main() -> None:
         _self_check()
         print("OK")
         return
-    if args.gold is None and not args.clean_gold:
-        raise SystemExit("Cần --gold approved_gold.jsonl")
-    if args.eval_path is None:
-        raise SystemExit("Cần --eval eval_reference.jsonl")
-    import torch
-    from transformers import (
-        AutoModelForSeq2SeqLM,
-        AutoTokenizer,
-        DataCollatorForSeq2Seq,
-        Seq2SeqTrainer,
-        Seq2SeqTrainingArguments,
-    )
+    if args.doclevel_corpus is None:
+        if args.gold is None and not args.clean_gold:
+            raise SystemExit("Cần --gold approved_gold.jsonl")
+        if args.eval_path is None:
+            raise SystemExit("Cần --eval eval_reference.jsonl")
+
+    if args.doclevel_corpus is not None:
+        # Nhánh doc-level: corpus dựng sẵn (pipeline 17) đã lọc register/Hán/lặp + trộn
+        # người/máy + gắn ⟪ctx⟫. Không cần gold/replay/HF-streaming ở đây.
+        corpus = [json.loads(l) for l in args.doclevel_corpus.read_text(encoding="utf-8").splitlines() if l.strip()]
+        rows_all = [{"zh": r["zh"], "vi": r["vi"]} for r in corpus]
+        random.Random(20260731).shuffle(rows_all)
+        holdout = min(args.eval_holdout, len(rows_all) // 20)
+        eval_rows = rows_all[:holdout]
+        rows = rows_all[holdout:]
+        eval_zh = {r["zh"] for r in eval_rows}
+        rows = [r for r in rows if r["zh"] not in eval_zh]  # chống rò eval sang train
+        print(f"Doc-level corpus: train {len(rows)} · eval-holdout {len(eval_rows)}")
+        _train_and_export(args, rows, eval_rows)
+        return
 
     if args.clean_gold and args.gold:
         raise SystemExit("Chỉ dùng --clean-gold hoặc --gold")
@@ -585,6 +598,34 @@ def main() -> None:
     rows = build_train_rows(gold, pro, replay, args.gold_repeat, extra_replay)
     print(f"Train: Pro={len(pro)}, replay={len(replay)}, extra={len(extra_replay)}, gold-weighted={len(gold) * args.gold_repeat}")
     print(f"Total rows: {len(rows)}")
+
+    manifest = {
+        "base_model": MODEL_ID,
+        "base_model_revision": MODEL_REVISION,
+        "teacher_dataset": DATASET_ID,
+        "teacher_dataset_revision": DATASET_REVISION,
+        "seed": 20260719,
+        "resume_from_checkpoint": str(args.resume_from_checkpoint) if args.resume_from_checkpoint else None,
+        "clean_gold": [_file_manifest(path, shard, args.gold_repeat) for path, shard in zip(gold_paths, gold_shards)],
+        "clean_replay": [_file_manifest(path, shard, 1) for path, shard in zip(args.clean_replay, clean_replay_shards)],
+        "effective_clean_gold": len(clean_gold),
+        "effective_clean_replay": len(clean_replay),
+        "eval_shards": [_file_manifest(path, [{}] * _line_count(path), 0) for path in eval_paths],
+        "pro": len(pro), "replay": len(replay), "extra_replay": len(extra_replay),
+        "gold": len(gold), "gold_repeat": args.gold_repeat,
+    }
+    _train_and_export(args, rows, eval_rows, manifest)
+
+
+def _train_and_export(args, rows: list[dict], eval_rows: list[dict], manifest: dict) -> None:
+    import torch
+    from transformers import (
+        AutoModelForSeq2SeqLM,
+        AutoTokenizer,
+        DataCollatorForSeq2Seq,
+        Seq2SeqTrainer,
+        Seq2SeqTrainingArguments,
+    )
 
     tokenizer = AutoTokenizer.from_pretrained(MODEL_ID, token=args.hf_token, revision=MODEL_REVISION)
     model = AutoModelForSeq2SeqLM.from_pretrained(MODEL_ID, token=args.hf_token, revision=MODEL_REVISION)
@@ -672,22 +713,7 @@ def main() -> None:
         tokenizer.save_pretrained(str(args.output_dir))
         (args.output_dir / "training_mix.json").write_text(
             json.dumps({
-                "base_model": MODEL_ID,
-                "base_model_revision": MODEL_REVISION,
-                "teacher_dataset": DATASET_ID,
-                "teacher_dataset_revision": DATASET_REVISION,
-                "seed": 20260719,
-                "resume_from_checkpoint": str(args.resume_from_checkpoint) if args.resume_from_checkpoint else None,
-                "clean_gold": [_file_manifest(path, shard, args.gold_repeat) for path, shard in zip(gold_paths, gold_shards)],
-                "clean_replay": [_file_manifest(path, shard, 1) for path, shard in zip(args.clean_replay, clean_replay_shards)],
-                "effective_clean_gold": len(clean_gold),
-                "effective_clean_replay": len(clean_replay),
-                "eval_shards": [_file_manifest(path, [{}] * _line_count(path), 0) for path in eval_paths],
-                "pro": len(pro),
-                "replay": len(replay),
-                "extra_replay": len(extra_replay),
-                "gold": len(gold),
-                "gold_repeat": args.gold_repeat,
+                **manifest,
                 "eval": len(eval_rows),
                 "total_rows": len(rows),
                 "epochs": args.epochs,

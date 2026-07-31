@@ -96,3 +96,6 @@ worker/models/
 
 .tmp_eval_g3/
 skills-lock.json
+
+# Goi Kaggle nen (binary lon)
+worker/hachimi/packs/**/*.zip

@@ -97,6 +97,11 @@ class Settings(BaseSettings):
     # lượng của dự án. Đo 12 chương thật: đại từ hiện đại 81→64, quote lệch 3→2, câu/chương
     # 97→100, thời gian +1,6% (nhiễu). 1 = giữ hành vi cũ (chỉ lấy giả thuyết đầu).
     hachimi_nbest: int = 6
+    # Doc-level: ghép tối đa N dòng nguồn Trung phía trước làm ngữ cảnh (đúng định dạng train
+    # `ctx ⟪ctx⟫ câu` của pipeline 17) để model hết bịa chủ ngữ. 0 = TẮT (hành vi cũ, an toàn) —
+    # chỉ bật SAU khi deploy model đã train doc-level; model thường không hiểu ⟪ctx⟫ sẽ dịch loạn.
+    hachimi_context_lines: int = 0
+    hachimi_context_sep: str = "⟪ctx⟫"    # phải khớp HỆT SEP lúc train (pipeline 16/17)
     # Chỉ trích tên (LLM liệt kê) để đắp glossary ở CHƯƠNG ĐẦU — chặn cost mass-requeue.
     hachimi_extract_max_chapter: int = 20
 
