@@ -39,13 +39,27 @@ def _narr_zh(zh: str) -> str:
     return H._ZH_NOT_SUBJECT.sub("", _Q.sub("", zh))
 
 
+def _make_codec(model_dir: str):
+    """Trả (encode(str)->tokens, decode(tokens)->str, eos). Nhận cả model dùng SentencePiece
+    (source.spm/target.spm) lẫn model dùng HF tokenizer.json (hirashiba-medium)."""
+    if (Path(model_dir) / "source.spm").is_file():
+        import sentencepiece as spm
+        sp = spm.SentencePieceProcessor(); sp.load(model_dir + "/source.spm")
+        tp = spm.SentencePieceProcessor(); tp.load(model_dir + "/target.spm")
+        return (lambda s: sp.encode(s, out_type=str)), (lambda t: tp.decode(t)), "</s>"
+    from transformers import AutoTokenizer
+    tok = AutoTokenizer.from_pretrained(model_dir)
+    eos = tok.eos_token or "</s>"
+    enc = lambda s: tok.convert_ids_to_tokens(tok(s).input_ids)
+    dec = lambda t: tok.decode(tok.convert_tokens_to_ids(t), skip_special_tokens=True)
+    return enc, dec, eos
+
+
 def score_model(model_dir: str, testset: Path = DEFAULT_TESTSET) -> dict:
     import ctranslate2
-    import sentencepiece as spm
 
     tr = ctranslate2.Translator(model_dir, device="cpu", compute_type="int8")
-    sp = spm.SentencePieceProcessor(); sp.load(model_dir + "/source.spm")
-    tp = spm.SentencePieceProcessor(); tp.load(model_dir + "/target.spm")
+    encode, decode, eos = _make_codec(model_dir)
 
     lines = [l for row in map(json.loads, testset.read_text(encoding="utf-8").splitlines())
              for l in row["zh_lines"] if l.strip()]
@@ -55,10 +69,10 @@ def score_model(model_dir: str, testset: Path = DEFAULT_TESTSET) -> dict:
     t0 = time.time()
     for i in range(0, len(lines), 400):
         chunk = lines[i:i + 400]
-        res = tr.translate_batch([sp.encode(l, out_type=str) + ["</s>"] for l in chunk],
+        res = tr.translate_batch([encode(l) + [eos] for l in chunk],
                                  beam_size=6, num_hypotheses=6, max_decoding_length=180)
         for src, r in zip(chunk, res):
-            hyps = [tp.decode([t for t in h if t != "</s>"]) for h in r.hypotheses]
+            hyps = [decode([t for t in h if t != eos]) for h in r.hypotheses]
             out = min(hyps, key=lambda c: H._rank_penalty(src, c))
             narr = _narr_zh(src).strip()
             # bịa chủ ngữ: nguồn lời kể KHÔNG có đại từ mà output mở đầu bằng đại từ

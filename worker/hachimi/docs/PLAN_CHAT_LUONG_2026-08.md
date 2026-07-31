@@ -366,22 +366,25 @@ gold mới không phải tốn chỗ dạy lại những thứ mà một dòng p
 
 Bộ test `eval/testset_multi.jsonl`: 7 truyện đa thể loại, 13.532 dòng, nguồn từ R2, chỉ số ref-free.
 
-| Chỉ số | **teacher-v4** (giữ) | HachimiMT-60-QT |
-|---|---|---|
-| Bịa chủ ngữ | 25/11657 | **8/11657** |
-| Lệch giới | 0/334 | 0/334 |
-| Đại từ hiện đại lọt | **524** | 696 |
-| người đàn ông convert | 76 | 74 |
-| Cụm lặp | **478** | 540 |
-| Hán sót | 0 | 0 |
-| Tốc độ | 19,1 dòng/s | 17,2 dòng/s |
+**Đo 7 model trên bộ 45 chương (5553 dòng lược chủ ngữ):**
 
-**Kết luận: QT KHÔNG thắng → giữ teacher-v4 làm base.** QT hơn đúng cái nó được thiết kế (bịa
-chủ ngữ) nhưng cái đó cổng n-best đã lo (chênh 17/11.657); đổi lại nó tệ hơn ở vấn đề còn lại
-THẬT SỰ (đại từ hiện đại +172, lặp +62). Card model nói "0% đảo giọng" không thành thắng lợi
-trên bộ test rộng. `MoxhiMT-60`/`hirashiba`/`opus` chưa đo — nhưng vì teacher-v4 đã tốt ở chỉ số
-chính, chỉ đo tiếp nếu cần con base khác cho lý do khác. **Quy tắc "luôn đi từ HachimiMT-60-zh-vi"
-giữ nguyên.**
+| model | bịa CN | **đại từ hiện đại** | nđ.ông | lặp | dòng/s |
+|---|---|---|---|---|---|
+| **teacher-v4 (giữ)** | 31 | **86** | 3 | 94 | 24,1 |
+| HachimiMT-60-QT | 8 | 142 | 1 | 158 | 23,9 |
+| HachimiMT-30 | 6 | 135 | 4 | 87 | 29,6 |
+| MoxhiMT-60 | 9 | 157 | 3 | 133 | 24,0 |
+| MoxhiMT-30 | 6 | 138 | 8 | 145 | 37,1 |
+| MoxhiMT-30-QT | 27 | 167 | 1 | 153 | 31,3 |
+| hirashiba-medium | 0 | 150 | 18 | 139 | 18,3 |
+
+(hirashiba-tiny lỗi spm không đọc được — bỏ.)
+
+**Kết luận: giữ teacher-v4 làm base — thắng DỨT KHOÁT ở chỉ số chính.** "Đại từ hiện đại lọt" là
+vấn đề còn lại thật sự (bịa chủ ngữ n-best đã lo, còn 0,2% trên bộ lớn), và teacher-v4 = **86**,
+mọi ứng viên khác **135-167** — gấp đôi. Các con khác giỏi hơn ở bịa-chủ-ngữ (thứ doc-level sẽ
+dọn nốt) nhưng đánh đổi bằng rò register nặng hơn nhiều. Đo qua 7 model, kết luận chắc.
+**Quy tắc "luôn đi từ HachimiMT-60-zh-vi" giữ nguyên.**
 
 **Chỉ số chính giờ là "đại từ hiện đại lọt" (524)** — không phải bịa chủ ngữ nữa (đã xuống 0,2%).
 Đây là lỗi cả-6-beam, chỉ Bậc 2 (train trên data sạch) sửa được.
