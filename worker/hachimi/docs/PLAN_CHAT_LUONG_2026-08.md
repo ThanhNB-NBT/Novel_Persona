@@ -409,6 +409,27 @@ Các bước còn lại (cần data + GPU):
 **Cổng huỷ:** nếu tỉ lệ bịa chủ ngữ trên bộ test không giảm ≥50% thì dừng nhánh này,
 chuyển sang bậc 3 thay vì đổ thêm data.
 
+### ❌ Doc-level v1 ĐÃ TRAIN VÀ THẤT BẠI (31/07) — đừng lặp lại
+
+Train từ base sạch + `doclevel_corpus.jsonl` (600k), 1 epoch. Đo trên 45 chương:
+
+| | teacher-v4 | doclevel ctx=2 | doclevel ctx=0 |
+|---|---|---|---|
+| bịa chủ ngữ | 31 | 56 | 71 |
+| **đại từ hiện đại** | **86** | 197 | 196 |
+
+**Tệ hơn teacher-v4 rõ rệt → không deploy.** Chẩn đoán:
+1. Đại từ hiện đại ~196 ở CẢ hai mode → register **không phải** vấn đề ngữ cảnh giải được. Ngữ
+   cảnh chỉ nhích bịa chủ ngữ (71→56).
+2. 196 ≈ mức register của BASE GỐC → train từ base sạch + corpus doc-level **rộng/loãng** đã
+   tụt register về base, **mất phần booster register nhắm-đích** làm teacher-v4 giỏi (86).
+
+**Hai bài học ghim:**
+- **Corpus train PHẢI gồm bộ gold register/booster của teacher-v4**, không chỉ kaihe+teacher.
+  Train từ base sạch mà bỏ gold = vứt thành quả cũ. (Lỗi thiết kế pipeline 17.)
+- **Doc-level là công cụ cho BỊA CHỦ NGỮ, không phải cho đại từ hiện đại (524).** Lỗi 524 cần
+  data register nhắm-đích đậm đặc — đúng thứ booster làm — không phải ngữ cảnh.
+
 ### Bậc 3 — Tag giới tính từ glossary
 Thêm trường giới tính cho term tên riêng (LLM trích tên **đã chạy sẵn**, thêm một field vào
 JSON), chèn thẻ vào nguồn lúc train + lúc chạy. Bắt đúng ca nguồn lược chủ ngữ.
