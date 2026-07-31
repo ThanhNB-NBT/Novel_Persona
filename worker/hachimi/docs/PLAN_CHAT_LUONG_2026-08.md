@@ -7,7 +7,12 @@ Viết sau khi chủ dự án đọc ~40 chương bản teacher-v4 và báo: **�
 **Ràng buộc chủ dự án đã chốt (31/07):**
 1. **Giữ VPS 2 vCPU, chỉ model nhỏ.** Không lên GPU, không lên API. Model ≥0,5B chỉ được dùng
    làm **thầy sinh data**, không bao giờ vào production.
-2. **Trần tốc độ: 86 s/chương** (giữ 1000 chương/ngày). Doc-level chậm 1,5-2× là chấp nhận được.
+2. **Tốc độ phải theo kịp crawl, KHÔNG có con số trần cố định.** *(Sửa 31/07: "trần 86 s/chương"
+   ở bản trước là suy sai từ cap 1000 chương/ngày trong tài liệu bàn giao — cap thật là **10000**
+   (`docker logs` xác nhận), mà 86400/10000 = 8,6 s còn thấp hơn tốc độ hiện tại 9,7 s. Nghĩa là
+   cap không phải mục tiêu thông lượng, nó chỉ là chốt an toàn.)* Ràng buộc thật: bản dịch phải
+   **theo kịp tốc độ crawl** — doc-level chậm 1,5-2× thì phải **đo before/after trên VPS** rồi so
+   với lượng chương thực tế về mỗi ngày, không so với một con số bịa.
 3. **Dịch lại kho cũ: hoãn quyết định** — train xong model mới rồi tính.
 4. Bậc 1 (đổi base) **do số đo quyết định**, không do card model của tác giả nói.
 
@@ -163,7 +168,7 @@ Có **cả một hệ sinh thái dịch truyện Trung-Việt** mà lần trư�
 
 | Model | Cỡ | Vì sao loại khỏi production |
 |---|---|---|
-| `tencent/Hy-MT2-1.8B`, `HY-MT1.5-1.8B` | 1,8B (rất được ưa chuộng: 162k lượt tải, 1.157 like) | Q4 trên 2 vCPU ước ~5-10 tok/s ⇒ **300-600 s/chương**, gấp 4-7 lần trần 86 s |
+| `tencent/Hy-MT2-1.8B`, `HY-MT1.5-1.8B` | 1,8B (rất được ưa chuộng: 162k lượt tải, 1.157 like) | Q4 trên 2 vCPU ước ~5-10 tok/s ⇒ **300-600 s/chương**, gấp ~30-60× tốc độ hiện tại (9,7 s) |
 | `tencent/Hunyuan-MT-7B` / `Hy-MT2-7B` / `Hy-MT2-30B-A3B` | 7B-30B | vô địch WMT25 (30/31 hạng mục), hơn Seed-X-PPO-7B và Tower-Plus-72B |
 | `ByteDance-Seed/Seed-X-PPO-7B`, `ModelSpace/GemmaX2-28-9B`, `NiuTrans/LMT-60-4B`, `YanoljaNEXT-Rosetta-4B/12B` | 4-12B | cùng loại |
 | `facebook/nllb-200-distilled-600M` (+ bản CT2 int8 có sẵn) | 600M | ~8-12× chậm hơn hiện tại; **và không biết giọng cổ phong** → vừa chậm vừa phải train lại |
@@ -182,7 +187,7 @@ gắn nhãn "translation" vì bản thân chúng chưa dịch được gì. Ch�
 | `google/mt5-small` | ~300M | Có (101 ngôn ngữ) | **Ứng viên thật cho bậc 5.** Là base *pretrain*, phải finetune trên corpus song ngữ mới dịch được. Bẫy: vocab **250k** → riêng embedding đã nặng, softmax chậm trên CPU. Có kỹ thuật **cắt vocab** (giữ token zh+vi) hạ xuống ~50-80M — bắt buộc phải làm nếu chọn hướng này. |
 | `google/umt5-small` / `umt5-base` | 300M / 580M | Có | bản mT5 cải tiến, cùng bẫy vocab |
 | `google/mt5-base` | ~580M | Có | ~2× small, sát trần tốc độ |
-| `google/gemma-3-270m` | 268M | Có (đa ngữ) | decoder, Google ra đúng để finetune việc hẹp. Sinh ~3k token/chương ⇒ ước **75-150 s/chương** trên 2 vCPU → **sát/vượt trần 86 s**. Đáng đo một lần chứ không đáng đặt cược. |
+| `google/gemma-3-270m` | 268M | Có (đa ngữ) | decoder, Google ra đúng để finetune việc hẹp. Sinh ~3k token/chương ⇒ ước **75-150 s/chương** trên 2 vCPU → **chậm gấp ~10× hiện tại**. Đáng đo một lần chứ không đáng đặt cược. |
 | `google/byt5-small` | ~300M | Có | byte-level, chậm hơn nhiều token-level — **loại** |
 | `google/flan-t5-*` | 80M-11B | **Không** (chủ yếu tiếng Anh) | loại |
 | **`google/madlad400-3b-mt`** | **2,94B** | Có, 400+ ngôn ngữ | **model dịch thật sự duy nhất của Google** — nhưng nhỏ nhất đã là 3B. Loại khỏi VPS, **giữ làm thầy**. |
@@ -260,7 +265,7 @@ không cần ai duyệt. Lưu ý chi phí: gọi LLM từ VPS 38-79 s/lần như
 - https://huggingface.co/datasets/chi-vi/linh_truyenfull
 - https://huggingface.co/datasets/chi-vi/CNovels — 120 GB, `gated: auto`
 
-| Kho DB của mình | **9.210 chương đã dịch** | **KHÔNG dùng làm gold được** — phần Việt là output của chính Hachimi (tự chưng cất chính mình = khuếch đại lỗi của chính mình), và `content_zh` đã xoá nên phải tải lại. Chỉ dùng làm **nguồn zh** và làm bộ test. |
+| Kho DB của mình | **9.210 chương đã dịch** | **KHÔNG dùng làm gold được** — phần Việt là output của chính Hachimi (tự chưng cất chính mình = khuếch đại lỗi của chính mình). `content_zh` **nằm trên R2** (`blob.get_zh`, đã lấy về được 45/45 chương truyện 2163), không phải cào lại. Chỉ dùng làm **nguồn zh** để tự sinh data thầy và làm bộ test. |
 
 Tức là tổng dữ liệu zh-vi công khai/gated **hơn 20 GB song ngữ** — gấp ~7 lần cái mình đang
 dùng. **Việc đầu tiên nên làm: xin quyền truy cập các dataset `chi-vi`.** Miễn phí, chỉ mất
@@ -276,8 +281,8 @@ Chủ dự án hỏi thẳng, nên trả lời thẳng: **làm được, và có
 
 - **Kiến trúc đề xuất** (nếu làm): Marian/Transformer **8 enc / 2 dec** (giữ mẹo của Hachimi vì
   nó tối ưu đúng chỗ mình nghẽn — decode trên CPU), d_model 640-768, ffn 2560-3072 →
-  **~120-200M tham số**, tức 2-3,5× hiện tại. Trên 2 vCPU ước **20-35 s/chương** (từ 9,7 s),
-  vẫn dưới trần 86 s **nhưng** sẽ hết dư địa nếu cộng thêm doc-level. Phải đo, không đoán.
+  **~120-200M tham số**, tức 2-3,5× hiện tại. Trên 2 vCPU ước **20-35 s/chương** (từ 9,7 s) —
+  cộng thêm doc-level nữa thì phải đo lại xem có theo kịp crawl không. Phải đo, không đoán.
 - **Tokenizer**: đây là chỗ from-scratch thắng rõ. Vocab 24k joint zh+vi hiện tại là **chật**
   cho tiếng Việt (âm tiết + dấu). Vocab riêng 32k, tách nguồn/đích, sẽ giảm số token đích →
   **nhanh hơn và ít lỗi cắt câu hơn**.
@@ -342,16 +347,17 @@ gold mới không phải tốn chỗ dạy lại những thứ mà một dòng p
 
 ### Bậc 0 — Vá được ngay + dựng thước đo (0 GPU)
 
-| Việc | Ở đâu | Nhắm vào |
-|---|---|---|
-| ⭐ **Phạt "bịa chủ ngữ"**: nguồn không có 他/她 mà giả thuyết mở đầu bằng Hắn/Nàng/Y/Gã/Nó → phạt nặng | `hachimi_engine.py:56` | **77/104 ca, đã đo. Không tốn thời gian chạy.** |
-| Thêm `người đàn ông\|người phụ nữ\|cô gái\|chàng trai` vào `_MODERN_VI` | `hachimi_engine.py:48` | 28 ca đo được ở 2.3 |
-| Hậu xử lý (không chỉ chấm n-best) cho nhóm từ hiện đại — vì có ca cả 6 beam đều dính | postprocess | "ông ta" 9 ca |
-| Phạt **lệch giới** trong `_rank_penalty`: nguồn 他/她 vs đích hắn/nàng | `hachimi_engine.py:56` | nhóm nguồn CÓ đại từ |
-| Glossary: 本少爷/本公子/本座/本尊/本王 | glossary global | 2.2 |
-| `repetition_penalty` / `no_repeat_ngram_size` (CT2 có sẵn, đang tắt) | `hachimi_engine.py:148` | **chờ ca lỗi cụ thể** — quét máy chưa xác nhận (2.5) |
-| Khoá 45 chương truyện 2163 (nguồn lấy từ **R2**, không phải cào lại) thành **bộ test có nguồn** | `hachimi/eval/` | mọi phép đo sau |
-| Xin quyền các dataset `chi-vi` trên HF | — | mở khoá bậc 2-5 |
+| Trạng thái | Việc | Ở đâu | Nhắm vào |
+|---|---|---|---|
+| ✅ **XONG, đã deploy** | Phạt "bịa chủ ngữ": nguồn không có 他/她 mà giả thuyết mở đầu bằng Hắn/Nàng/Y/Gã/Nó → phạt 6.0 | `hachimi_engine.py:67` `_invents_subject` | **77/104 ca, đã đo trên model production. 0 hồi quy.** |
+| ✅ XONG | Cổng nghiệm thu corpus + chấm LaBSE + test | `pipeline/14_gate_corpus.py`, `15_score_labse.py` | dựng thước đo data |
+| ✅ user đã làm | Xin quyền các dataset `chi-vi` trên HF | — | đang chờ duyệt |
+| ⬜ CHƯA | Thêm `người đàn ông\|người phụ nữ\|cô gái\|chàng trai` vào `_MODERN_VI` | `hachimi_engine.py:48` | 28 ca đo được ở 2.3 |
+| ⬜ CHƯA | Hậu xử lý (không chỉ chấm n-best) cho nhóm từ hiện đại — vì có ca cả 6 beam đều dính | postprocess | "ông ta" 9 ca |
+| ⬜ CHƯA | Phạt **lệch giới**: nguồn 他/她 vs đích hắn/nàng | `hachimi_engine.py:_rank_penalty` | nhóm nguồn CÓ đại từ |
+| ⬜ CHƯA | Glossary: 本少爷/本公子/本座/本尊/本王 | glossary global | 2.2 |
+| ⬜ chờ ca lỗi | `repetition_penalty` / `no_repeat_ngram_size` — quét máy CHƯA xác nhận có lỗi lặp máy móc (2.5) | `hachimi_engine.py:167` | lặp |
+| ⬜ CHƯA | Khoá 45 chương truyện 2163 (nguồn từ **R2**) thành **bộ test có nguồn** | `hachimi/eval/` | mọi phép đo sau |
 
 **Không** động vào `repetition_penalty` trước khi có ca lỗi thật — chỉnh mù sẽ phá điệp ngữ
 đúng ("Ba mươi năm Hà Đông…").
@@ -367,7 +373,7 @@ gold mới không phải tốn chỗ dạy lại những thứ mà một dòng p
 2. Train từ base thắng bậc 1.
 3. Sửa `translate_lines` truyền 1-2 dòng **nguồn Trung** phía trước làm ngữ cảnh (không dùng
    bản dịch, tránh dồn lỗi).
-4. **Đo tốc độ trên VPS trước khi deploy** — phải còn dưới 86 s/chương.
+4. **Đo tốc độ before/after trên VPS trước khi deploy** — phải còn theo kịp lượng chương crawl về/ngày.
 
 **Cổng huỷ:** nếu tỉ lệ "Nàng mở miệng" trên bộ test không giảm ≥50% thì dừng nhánh này,
 chuyển sang bậc 3 thay vì đổ thêm data.
