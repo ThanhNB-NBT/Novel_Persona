@@ -55,23 +55,39 @@ def _make_codec(model_dir: str):
     return enc, dec, eos
 
 
-def score_model(model_dir: str, testset: Path = DEFAULT_TESTSET) -> dict:
+def _build_units(testset: Path, context: int) -> list[tuple[str, str]]:
+    """Trả (nguồn_nạp_vào_model, câu_hiện_tại_để_chấm). context=0: hai cái bằng nhau.
+    context>0: ghép N dòng nguồn trước + ⟪ctx⟫ (đúng cách model doc-level được train/chạy)."""
+    sep = "⟪ctx⟫"
+    units: list[tuple[str, str]] = []
+    for row in map(json.loads, testset.read_text(encoding="utf-8").splitlines()):
+        lines = [l for l in row["zh_lines"] if l.strip()]
+        for i, cur in enumerate(lines):
+            if context <= 0:
+                units.append((cur, cur))
+            else:
+                prev = lines[max(0, i - context):i]
+                units.append((sep.join([*prev, cur]) if prev else cur, cur))
+    return units
+
+
+def score_model(model_dir: str, testset: Path = DEFAULT_TESTSET, context: int = 0) -> dict:
     import ctranslate2
 
     tr = ctranslate2.Translator(model_dir, device="cpu", compute_type="int8")
     encode, decode, eos = _make_codec(model_dir)
 
-    lines = [l for row in map(json.loads, testset.read_text(encoding="utf-8").splitlines())
-             for l in row["zh_lines"] if l.strip()]
+    units = _build_units(testset, context)
     m = {k: 0 for k in ("lines", "subj_drop_src", "invented", "gender_src", "gender_wrong",
                          "modern", "soft_modern", "repeat", "han")}
-    m["lines"] = len(lines)
+    m["lines"] = len(units)
     t0 = time.time()
-    for i in range(0, len(lines), 400):
-        chunk = lines[i:i + 400]
-        res = tr.translate_batch([encode(l) + [eos] for l in chunk],
+    for i in range(0, len(units), 400):
+        chunk = units[i:i + 400]
+        res = tr.translate_batch([encode(s) + [eos] for s, _ in chunk],
                                  beam_size=6, num_hypotheses=6, max_decoding_length=180)
-        for src, r in zip(chunk, res):
+        for (_, src), r in zip(chunk, res):
+            # src = CÂU HIỆN TẠI (không gồm ngữ cảnh) — chấm output theo đúng câu này
             hyps = [decode([t for t in h if t != eos]) for h in r.hypotheses]
             out = min(hyps, key=lambda c: H._rank_penalty(src, c))
             narr = _narr_zh(src).strip()
@@ -91,7 +107,7 @@ def score_model(model_dir: str, testset: Path = DEFAULT_TESTSET) -> dict:
             m["repeat"] += len(H._REPEAT.findall(out))
             m["han"] += len(H._HAN.findall(out))
     m["sec"] = round(time.time() - t0, 1)
-    m["lines_per_sec"] = round(len(lines) / (time.time() - t0), 1)
+    m["lines_per_sec"] = round(len(units) / (time.time() - t0), 1)
     return m
 
 
@@ -122,9 +138,15 @@ if __name__ == "__main__":
     else:
         args = sys.argv[1:]
         testset = DEFAULT_TESTSET
+        context = 0
         if "--testset" in args:
             i = args.index("--testset")
             testset = Path(args[i + 1])
             args = args[:i] + args[i + 2:]
+        if "--context" in args:
+            i = args.index("--context")
+            context = int(args[i + 1])
+            args = args[:i] + args[i + 2:]
         model = args[0] if args else str(DEFAULT_MODEL)
-        _report(f"{Path(model).name} @ {testset.name}", score_model(model, testset))
+        tag = f"{Path(model).name} @ {testset.name}" + (f" ctx={context}" if context else "")
+        _report(tag, score_model(model, testset, context))
