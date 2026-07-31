@@ -37,6 +37,7 @@ cd E:/Novel_Project/worker/hachimi/pipeline && PYTHONPATH=E:/Novel_Project/worke
 | Hiệu chỉnh ngưỡng cổng từ lô đã biết là tốt | `python 14_gate_corpus.py <lo.jsonl> --calibrate` |
 | Chấm độ căn khớp bằng LaBSE (máy nhà, ~1,8 GB) | `python 15_score_labse.py vao.jsonl ra.jsonl` |
 | Dựng cặp train doc-level (bậc 2, ngữ cảnh) | `python 16_make_doclevel.py <chuong.jsonl> <ra.jsonl> --ctx 2` |
+| Lắp corpus doc-level trộn kaihe+teacher (bậc 2) | `python 17_build_doclevel_corpus.py` |
 | Dựng gói Kaggle v3 | `python prepare_teacher_v3_pack.py` |
 | Đo model trên eval khoá | `cd ../eval && python evaluate_hachimi_teacher_v2.py` |
 | Đo ảnh hưởng cách chia câu | `cd ../eval && python evaluate_teacher_v2_split.py` |

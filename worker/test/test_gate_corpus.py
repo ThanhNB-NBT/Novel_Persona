@@ -22,3 +22,7 @@ def test_gate_corpus_selfcheck():
 
 def test_doclevel_selfcheck():
     _load("16_make_doclevel")._self_check()
+
+
+def test_build_corpus_selfcheck():
+    _load("17_build_doclevel_corpus")._self_check()
