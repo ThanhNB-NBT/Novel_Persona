@@ -26,3 +26,7 @@ def test_doclevel_selfcheck():
 
 def test_build_corpus_selfcheck():
     _load("17_build_doclevel_corpus")._self_check()
+
+
+def test_build_v2_selfcheck():
+    _load("18_build_train_v2")._self_check()
