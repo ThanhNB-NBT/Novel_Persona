@@ -51,6 +51,23 @@ _DIGITS = re.compile(r"\d+")
 _KINSHIP = (("哥哥", "anh trai"), ("姐姐", "chị gái"), ("妹妹", "em gái"), ("弟弟", "em trai"))
 # Cụm 1-3 từ lặp liền ("ngu ngốc đến mức ngu ngốc", "một một") — tật cố hữu của model nhỏ.
 _REPEAT = re.compile(r"(?i)\b([\wÀ-ỹ]+(?:\s+[\wÀ-ỹ]+){0,2})\s+\1\b")
+# Model tự BỊA chủ ngữ: nguồn lược chủ ngữ (开口说道：, 低声道：, 当即开怀畅饮。) mà bản dịch
+# tự thêm "Hắn/Nàng" vào đầu rồi đoán giới bừa. Đo 45 chương truyện 2163: 104 ca (50 "Hắn",
+# 33 "Nàng" sai giới), và 74% số ca ĐÃ có sẵn bản không chèn chủ ngữ trong n-best — chỉ thiếu
+# một cổng để chọn nó. Bản đúng theo gu dự án là LƯỢC chủ ngữ ("Mở miệng nói: …").
+_LEAD_PRONOUN = re.compile(r"^\s*(?:Hắn|Nàng|Y|Gã|Nó|Ả)(?!\w)")
+# Chỉ dò đại từ ở phần LỜI KỂ: 他/她 nằm trong thoại là lời nhân vật nói về người khác, không
+# phải chủ ngữ của câu kể (对其她人没有兴趣 / 我要让他…). Bỏ qua bước này thì 3/33 ca lọt.
+_ZH_QUOTED = re.compile(r"[“「『\"](.*?)[”」』\"]", re.S)
+# 他们/她们 = "bọn họ" (số nhiều), 其他/其她/其它 = "khác" — đều không phải chủ ngữ số ít.
+_ZH_NOT_SUBJECT = re.compile(r"[他她它]们|其[他她它]")
+_ZH_PRONOUN = re.compile(r"[他她它]")
+
+
+def _invents_subject(source: str, candidate: str) -> bool:
+    """True khi bản dịch mở đầu bằng đại từ ngôi 3 mà lời kể nguồn không có đại từ nào."""
+    narration = _ZH_NOT_SUBJECT.sub("", _ZH_QUOTED.sub("", source))
+    return bool(_LEAD_PRONOUN.match(candidate) and not _ZH_PRONOUN.search(narration))
 
 
 def _rank_penalty(source: str, candidate: str) -> float:
@@ -72,6 +89,9 @@ def _rank_penalty(source: str, candidate: str) -> float:
         zh in source and vi.lower() in candidate.lower() for zh, vi in _KINSHIP
     )
     penalty += 4.0 * len(_REPEAT.findall(candidate))
+    # 6 điểm: đủ đè nhịp câu (~1) và ngoặc kép (3), nhưng dưới Hán sót/đại từ hiện đại (10)
+    # — thà giữ chủ ngữ bịa còn hơn chọn bản lọt chữ Hán.
+    penalty += 6.0 * _invents_subject(source, candidate)
     # Nhịp: mỗi dấu kết câu nguồn nên cho ~2 câu tiếng Việt (đo ở docs/hachimi_rhythm_research.md).
     stops = sum(candidate.count(char) for char in ".!?") or 1
     source_stops = sum(source.count(char) for char in "。！？") or 1

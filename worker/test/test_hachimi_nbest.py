@@ -24,6 +24,35 @@ def test_loai_ban_lam_hong_so():
     assert best(source, "Hắn giết 5 con yêu thú.", "Hắn giết 3 con yêu thú.") == "Hắn giết 3 con yêu thú."
 
 
+def test_loai_ban_bia_chu_ngu():
+    # 开口说道 lược chủ ngữ: model hay tự thêm "Hắn/Nàng" rồi đoán giới bừa.
+    source = "开口说道：“不必了。”"
+    assert best(source, "Nàng mở miệng nói: “Không cần đâu.”", "Mở miệng nói: “Không cần đâu.”") \
+        == "Mở miệng nói: “Không cần đâu.”"
+
+
+def test_giu_chu_ngu_khi_nguon_that_su_co_dai_tu():
+    # Nguồn có 他 thì "Hắn" là dịch đúng, không được phạt.
+    assert _rank_penalty(SOURCE, "Hắn nắm chặt thương rồi rời đi.") \
+        == _rank_penalty(SOURCE, "Nắm chặt thương rồi rời đi.")
+
+
+def test_ho_khong_tinh_la_chu_ngu_so_it():
+    # 他们 = "bọn họ"; nguồn vẫn lược chủ ngữ nên "Nàng" vẫn là bịa.
+    source = "开口回应：“原本他们三天前就想让我回去的。”"
+    assert best(source, "Nàng mở miệng đáp: “Vốn bọn họ ba ngày trước đã muốn ta về.”",
+                "Mở miệng đáp: “Vốn bọn họ ba ngày trước đã muốn ta về.”") \
+        == "Mở miệng đáp: “Vốn bọn họ ba ngày trước đã muốn ta về.”"
+
+
+def test_dai_tu_trong_thoai_khong_cuu_duoc_chu_ngu_bia():
+    # 他 nằm trong lời thoại là người thứ ba nhân vật nhắc tới, không phải chủ ngữ câu kể.
+    source = "怒声道：“将他的四肢打断。”"
+    assert best(source, "Hắn tức giận nói: “Đánh gãy tứ chi của hắn.”",
+                "Tức giận nói: “Đánh gãy tứ chi của hắn.”") \
+        == "Tức giận nói: “Đánh gãy tứ chi của hắn.”"
+
+
 def test_khong_phat_quote_khi_nguon_da_lech():
     # Câu dài bị cắt: mảnh này chỉ có dấu mở, phạt mù sẽ chọn nhầm bản tệ hơn.
     source = "“我不去，"
