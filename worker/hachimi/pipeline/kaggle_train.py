@@ -551,7 +551,13 @@ def main() -> None:
         eval_zh = {r["zh"] for r in eval_rows}
         rows = [r for r in rows if r["zh"] not in eval_zh]  # chống rò eval sang train
         print(f"Doc-level corpus: train {len(rows)} · eval-holdout {len(eval_rows)}")
-        _train_and_export(args, rows, eval_rows)
+        manifest = {
+            "base_model": MODEL_ID,
+            "base_model_revision": MODEL_REVISION,
+            "seed": 20260731,
+            "doclevel_corpus": _file_manifest(args.doclevel_corpus, corpus, 1),
+        }
+        _train_and_export(args, rows, eval_rows, manifest)
         return
 
     if args.clean_gold and args.gold:
