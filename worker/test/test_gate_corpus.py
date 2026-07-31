@@ -18,3 +18,7 @@ def _load(name: str):
 
 def test_gate_corpus_selfcheck():
     _load("14_gate_corpus").self_check()
+
+
+def test_doclevel_selfcheck():
+    _load("16_make_doclevel")._self_check()

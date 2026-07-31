@@ -352,10 +352,10 @@ gold mới không phải tốn chỗ dạy lại những thứ mà một dòng p
 | ✅ **XONG, đã deploy** | Phạt "bịa chủ ngữ": nguồn không có 他/她 mà giả thuyết mở đầu bằng Hắn/Nàng/Y/Gã/Nó → phạt 6.0 | `hachimi_engine.py:67` `_invents_subject` | **77/104 ca, đã đo trên model production. 0 hồi quy.** |
 | ✅ XONG | Cổng nghiệm thu corpus + chấm LaBSE + test | `pipeline/14_gate_corpus.py`, `15_score_labse.py` | dựng thước đo data |
 | ✅ user đã làm | Xin quyền các dataset `chi-vi` trên HF | — | đang chờ duyệt |
-| ⬜ CHƯA | Thêm `người đàn ông\|người phụ nữ\|cô gái\|chàng trai` vào `_MODERN_VI` | `hachimi_engine.py:48` | 28 ca đo được ở 2.3 |
-| ⬜ CHƯA | Hậu xử lý (không chỉ chấm n-best) cho nhóm từ hiện đại — vì có ca cả 6 beam đều dính | postprocess | "ông ta" 9 ca |
-| ⬜ CHƯA | Phạt **lệch giới**: nguồn 他/她 vs đích hắn/nàng | `hachimi_engine.py:_rank_penalty` | nhóm nguồn CÓ đại từ |
-| ⬜ CHƯA | Glossary: 本少爷/本公子/本座/本尊/本王 | glossary global | 2.2 |
+| ✅ XONG, đã deploy | Ưu tiên "nam tử" hơn "người đàn ông" (男子/女人), phạt 4 | `hachimi_engine.py` `_SOFT_MODERN` | 6 ca sạch, 0 hồi quy |
+| ❌ BỎ — đo 0 lợi ích | Phạt **lệch giới**: nguồn 他/她 vs đích hắn/nàng | — | ranker đã KHÔNG bao giờ chọn sai giới khi nguồn có 他/她 rõ đầu dòng (đo 111 ca). Lỗi giới nằm hết ở nhóm bịa chủ ngữ → bản vá đã deploy lo rồi |
+| ❌ BỎ — model đã đúng | Glossary 本少爷/本公子/本座/本尊/本王 | — | teacher-v4 dịch đúng "bản thiếu gia" cả 6 giả thuyết. "Bản thiếu nữ" trong DB là do model CŨ. Luật: đừng ép cái model đã làm đúng |
+| ⬜ HOÃN — rủi ro | Hậu xử lý "ông ta" (cả 6 beam đều dính) | postprocess | rewrite trong ngoặc kép có thể phá thoại nơi "ông ta" là lời nhân vật. Chưa đo an toàn |
 | ⬜ chờ ca lỗi | `repetition_penalty` / `no_repeat_ngram_size` — quét máy CHƯA xác nhận có lỗi lặp máy móc (2.5) | `hachimi_engine.py:167` | lặp |
 | ⬜ CHƯA | Khoá 45 chương truyện 2163 (nguồn từ **R2**) thành **bộ test có nguồn** | `hachimi/eval/` | mọi phép đo sau |
 
@@ -369,13 +369,23 @@ gold mới không phải tốn chỗ dạy lại những thứ mà một dòng p
 *(Việc này sửa quy tắc "luôn đi từ `HachimiMT-60-zh-vi`" trong README — chỉ sửa sau khi có số.)*
 
 ### Bậc 2 — Doc-level (bậc ăn thua thật)
-1. Sinh data `ctx ⟨sep⟩ câu → dịch` từ `tran-vi-teacher` (+ data `chi-vi` nếu xin được).
-2. Train từ base thắng bậc 1.
-3. Sửa `translate_lines` truyền 1-2 dòng **nguồn Trung** phía trước làm ngữ cảnh (không dùng
-   bản dịch, tránh dồn lỗi).
-4. **Đo tốc độ before/after trên VPS trước khi deploy** — phải còn theo kịp lượng chương crawl về/ngày.
 
-**Cổng huỷ:** nếu tỉ lệ "Nàng mở miệng" trên bộ test không giảm ≥50% thì dừng nhánh này,
+**Công cụ đã dựng + kiểm chứng offline (31/07):** `pipeline/16_make_doclevel.py` sinh cặp
+`ctx ⟨SEP⟩ câu → dịch câu` từ dữ liệu căn theo chương. Chạy thử trên 45 chương thật (truyện 2163):
+- 6017 cặp, **99% có ngữ cảnh**;
+- độ dài nguồn sau ghép **p95=99, max=152 ký tự** — thừa chỗ trong max_pos 512, **KHÔNG chậm
+  gấp 2-3× như ước ban đầu** (câu truyện ngắn nên ghép 2 dòng vẫn nhỏ);
+- với dòng lược chủ ngữ, ngữ cảnh phía trước **thật sự chứa 他/她 rõ giới** → tín hiệu doc-level
+  cần để hết bịa chủ ngữ là CÓ THẬT trong data, không phải giả định.
+
+Các bước còn lại (cần data + GPU):
+1. Sinh cặp doc-level từ `kaihe` (căn theo chương, bản dịch người) + `tran-vi-teacher`.
+2. Train từ base thắng bậc 1. **SEP phải cố định giữa data train và `hachimi_engine` lúc chạy.**
+3. Sửa engine: `translate_lines` ghép 1-2 dòng **nguồn Trung** phía trước (không dùng bản dịch,
+   tránh dồn lỗi); ngữ cảnh phải sống sót qua bước cắt câu dài, không bị `_split_source` xé mất.
+4. **Đo tốc độ before/after trên VPS trước khi deploy** — theo kịp lượng chương crawl về/ngày.
+
+**Cổng huỷ:** nếu tỉ lệ bịa chủ ngữ trên bộ test không giảm ≥50% thì dừng nhánh này,
 chuyển sang bậc 3 thay vì đổ thêm data.
 
 ### Bậc 3 — Tag giới tính từ glossary
