@@ -28,6 +28,10 @@ DEFAULT_TESTSET = HERE / "testset_2163_45ch.jsonl"
 DEFAULT_MODEL = HERE.parents[1] / "models" / "hachimi-ct2"
 
 _Q = re.compile(r"[“「『\"](.*?)[”」』\"]", re.S)
+# Đại từ hiện đại THẬT — KHÔNG gồm "mình/bạn/cháu": "của mình/chính mình" là tiếng Việt đúng,
+# đếm nó thổi phồng metric 5-40× (đo 1/8: 190/194 con số cũ là "mình"). Bài học: dùng H._MODERN_VI
+# (có "mình") để CHẤM n-best thì ổn, nhưng làm THƯỚC ĐO chất lượng thì phải bỏ "mình".
+_MODERN_REAL = re.compile(r"(?i)(?<!\w)(?:tôi|cậu|anh ta|cô ta|cô ấy|ông ta|bà ta)(?!\w)")
 _LEAD_VI = re.compile(r"^\s*(?:Hắn|Nàng|Y|Gã|Nó|Ả)(?!\w)")
 _LEADF_ZH = re.compile(r"^\s*她(?!们)")
 _LEADM_ZH = re.compile(r"^\s*他(?!们)")
@@ -78,16 +82,17 @@ def score_model(model_dir: str, testset: Path = DEFAULT_TESTSET, context: int = 
     encode, decode, eos = _make_codec(model_dir)
 
     units = _build_units(testset, context)
-    m = {k: 0 for k in ("lines", "subj_drop_src", "invented", "gender_src", "gender_wrong",
-                         "modern", "soft_modern", "repeat", "han")}
+    m = {k: 0 for k in ("lines", "subj_drop_src", "invented", "invented_wrong_gender",
+                         "gender_src", "gender_wrong", "modern", "modern_real", "soft_modern",
+                         "repeat", "han")}
     m["lines"] = len(units)
     t0 = time.time()
     for i in range(0, len(units), 400):
         chunk = units[i:i + 400]
         res = tr.translate_batch([encode(s) + [eos] for s, _ in chunk],
                                  beam_size=6, num_hypotheses=6, max_decoding_length=180)
-        for (_, src), r in zip(chunk, res):
-            # src = CÂU HIỆN TẠI (không gồm ngữ cảnh) — chấm output theo đúng câu này
+        for (full_src, src), r in zip(chunk, res):
+            # src = CÂU HIỆN TẠI (chấm output theo câu này); full_src có cả ngữ cảnh (đoán giới)
             hyps = [decode([t for t in h if t != eos]) for h in r.hypotheses]
             out = min(hyps, key=lambda c: H._rank_penalty(src, c))
             narr = _narr_zh(src).strip()
@@ -96,6 +101,12 @@ def score_model(model_dir: str, testset: Path = DEFAULT_TESTSET, context: int = 
                 m["subj_drop_src"] += 1
                 if _LEAD_VI.match(out):
                     m["invented"] += 1
+                    # SAI GIỚI: bịa chủ ngữ mà ngược giới đại từ gần nhất trong ngữ cảnh
+                    ctx_pron = _narr_zh(full_src)
+                    male_ctx = "他" in ctx_pron and "她" not in ctx_pron
+                    female_ctx = "她" in ctx_pron and "他" not in ctx_pron
+                    if (male_ctx and _VF.match(out)) or (female_ctx and _VM.match(out)):
+                        m["invented_wrong_gender"] += 1
             # lệch giới: nguồn có 他/她 rõ đầu dòng lời kể
             if _LEADM_ZH.match(narr) or _LEADF_ZH.match(narr):
                 m["gender_src"] += 1
@@ -103,6 +114,7 @@ def score_model(model_dir: str, testset: Path = DEFAULT_TESTSET, context: int = 
                     m["gender_wrong"] += 1
             out_narr = _Q.sub("", out)
             m["modern"] += len(H._MODERN_VI.findall(out_narr))
+            m["modern_real"] += len(_MODERN_REAL.findall(out_narr))
             m["soft_modern"] += len(H._SOFT_MODERN.findall(out_narr))
             m["repeat"] += len(H._REPEAT.findall(out))
             m["han"] += len(H._HAN.findall(out))
@@ -115,9 +127,11 @@ def _report(name: str, m: dict) -> None:
     inv = f'{m["invented"]}/{m["subj_drop_src"]}'
     g = f'{m["gender_wrong"]}/{m["gender_src"]}'
     print(f"\n== {name}  ({m['lines']} dòng, {m['sec']}s, {m['lines_per_sec']} dòng/s)")
-    print(f"   BỊA CHỦ NGỮ (nguồn lược, output thêm) : {inv}  ← chỉ số cốt lõi")
+    print(f"   BỊA CHỦ NGỮ (nguồn lược, output thêm) : {inv}")
+    print(f"   → trong đó SAI GIỚI (ngược ngữ cảnh)  : {m['invented_wrong_gender']}  ← lỗi user thật sự thấy")
     print(f"   lệch giới (nguồn có 他/她)             : {g}")
-    print(f"   đại từ hiện đại lọt                    : {m['modern']}")
+    print(f"   đại từ hiện đại THẬT (bỏ 'mình')       : {m['modern_real']}  ← chỉ số đúng")
+    print(f"   (đại từ hiện đại gộp cả 'mình', nhiễu) : {m['modern']}")
     print(f"   'người đàn ông' kiểu convert           : {m['soft_modern']}")
     print(f"   cụm lặp                                : {m['repeat']}")
     print(f"   Hán sót                                : {m['han']}")
