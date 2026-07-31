@@ -46,6 +46,10 @@ def _join_translations(parts: list[str]) -> str:
 
 
 _MODERN_VI = re.compile(r"(?i)(?<!\w)(?:tôi|mình|bạn|cậu|cháu|anh ta|cô ta|cô ấy|ông ta|bà ta)(?!\w)")
+# Danh từ chỉ người kiểu convert hiện đại: 男子→"người đàn ông" (nên là "nam tử"), 女人→"người
+# phụ nữ". NHẸ hơn lỗi đại từ nên phạt 4 (dưới bịa-chủ-ngữ 6): thà giữ "người đàn ông" còn hơn
+# đổi lấy bản bịa chủ ngữ để né nó. Đo 6017 dòng truyện 2163: sửa 6 ca, 0 hồi quy.
+_SOFT_MODERN = re.compile(r"(?i)(?<!\w)(?:người đàn ông|người phụ nữ|cô gái|chàng trai)(?!\w)")
 _DIGITS = re.compile(r"\d+")
 # Danh xưng thân tộc: nguồn có 哥哥 mà đích ra "anh trai" là lệch văn phong cổ.
 _KINSHIP = (("哥哥", "anh trai"), ("姐姐", "chị gái"), ("妹妹", "em gái"), ("弟弟", "em trai"))
@@ -92,6 +96,7 @@ def _rank_penalty(source: str, candidate: str) -> float:
     # 6 điểm: đủ đè nhịp câu (~1) và ngoặc kép (3), nhưng dưới Hán sót/đại từ hiện đại (10)
     # — thà giữ chủ ngữ bịa còn hơn chọn bản lọt chữ Hán.
     penalty += 6.0 * _invents_subject(source, candidate)
+    penalty += 4.0 * len(_SOFT_MODERN.findall(candidate))
     # Nhịp: mỗi dấu kết câu nguồn nên cho ~2 câu tiếng Việt (đo ở docs/hachimi_rhythm_research.md).
     stops = sum(candidate.count(char) for char in ".!?") or 1
     source_stops = sum(source.count(char) for char in "。！？") or 1

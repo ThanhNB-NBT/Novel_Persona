@@ -53,6 +53,21 @@ def test_dai_tu_trong_thoai_khong_cuu_duoc_chu_ngu_bia():
         == "Tức giận nói: “Đánh gãy tứ chi của hắn.”"
 
 
+def test_uu_tien_nam_tu_hon_nguoi_dan_ong():
+    # 男子 → "nam tử" (register tiên hiệp), không phải "người đàn ông" (convert hiện đại).
+    source = "两名中年男子快速走了过来。"
+    assert best(source, "Hai người đàn ông trung niên bước tới.", "Hai nam tử trung niên bước tới.") \
+        == "Hai nam tử trung niên bước tới."
+
+
+def test_soft_modern_khong_de_len_bia_chu_ngu():
+    # Phạt danh từ (4) phải NHẸ hơn bịa chủ ngữ (6): thà giữ "người đàn ông" còn hơn bịa "Hắn".
+    source = "将目光投向了左侧男子。"  # lược chủ ngữ
+    assert best(source, "Hắn đưa mắt nhìn gã đàn ông bên trái.",
+                "Ánh mắt đổ dồn về phía người đàn ông bên trái.") \
+        == "Ánh mắt đổ dồn về phía người đàn ông bên trái."
+
+
 def test_khong_phat_quote_khi_nguon_da_lech():
     # Câu dài bị cắt: mảnh này chỉ có dấu mở, phạt mù sẽ chọn nhầm bản tệ hơn.
     source = "“我不去，"
