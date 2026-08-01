@@ -321,7 +321,7 @@ Supabase Free→Pro ($0–25) · Railway ~$5–10 · proxy $0 (chưa cần) → 
 ### 10.1 Nhật ký hiện trạng (2026-07-02)
 
 **P1 hoàn tất:**
-- Auth: chỉ đăng nhập, **đăng ký đã tắt** (app gỡ nút + Supabase tắt "Allow new users to sign up"). Tài khoản seed bằng `worker/seed_users.py` (idempotent): `demo1-4@novel.demo` / `Demo@123`, `admin@novel.demo` / `Admin@Novel#2026` (app_metadata.role=admin — hook sẵn cho RLS admin sau này).
+- Auth: chỉ đăng nhập, **đăng ký đã tắt** (app gỡ nút + Supabase tắt "Allow new users to sign up"). Các tài khoản seed cũ đã được xoá; repo không giữ tài khoản hoặc mật khẩu mẫu.
 - Tủ sách + tiến độ đọc: `app/lib/screens/library.dart`, providers trong `data.dart`; reader tự lưu chương đang đọc khi mở (chưa lưu scroll_offset — cột có sẵn, thêm khi cần); detail có nút bookmark + "Đọc tiếp chương X".
 - 4 theme đọc (Sáng/Trắng/Xanh dịu/Tối): popup trong reader, lưu `shared_preferences`.
 - Realtime: `chapterProvider` subscribe UPDATE trên chapters — chương dịch xong hiện ngay.

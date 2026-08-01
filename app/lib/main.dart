@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'data.dart';
+import 'endpoint.dart';
 import 'errorlog.dart';
 import 'hanviet.dart';
 import 'ink_transition.dart';
@@ -33,29 +34,55 @@ import 'screens/shell.dart';
 // SUPABASE_URL/ANON_KEY là ĐÍCH MẶC ĐỊNH nướng vào bản build (fallback cuối).
 const supabaseUrl = String.fromEnvironment('SUPABASE_URL');
 const supabaseAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
+const _endpointAllowedHosts = String.fromEnvironment('ENDPOINT_ALLOWED_HOSTS');
 // Chuyển kho lưu KHÔNG cần build lại: app đọc {url, anonKey} từ 1 file JSON tĩnh
 // công khai lúc khởi động (đặt trên R2/GitHub raw — chỗ độc lập với chính Supabase,
 // để lúc Supabase chết vẫn tải được). Lật kho = sửa 1 file JSON đó rồi mở lại app.
 // Rỗng → giữ nguyên hành vi cũ (chỉ dùng đích nướng sẵn).
 const _endpointConfigUrl = String.fromEnvironment('ENDPOINT_CONFIG_URL');
 
-/// Thứ tự ưu tiên: JSON từ xa → bản cache lần trước → đích nướng sẵn.
-/// Cache lại để lần sau vẫn mở được app khi chỗ host JSON tạm chết.
-Future<({String url, String anonKey})> _resolveEndpoint() async {
-  if (_endpointConfigUrl.isNotEmpty) {
-    final j = await _fetchJson(_endpointConfigUrl);
-    final url = (j?['url'] as String?)?.trim() ?? '';
-    final key = (j?['anonKey'] as String?)?.trim() ?? '';
-    if (url.isNotEmpty && key.isNotEmpty) {
-      await prefs.setString('endpoint_url', url);
-      await prefs.setString('endpoint_anon', key);
-      return (url: url, anonKey: key);
+/// Chỉ chuyển sang đích mới khi Data API, Auth và Storage đều sẵn sàng. Nếu mọi đích đều
+/// đang offline, vẫn khởi tạo bằng cache/default để người dùng vào thư viện offline.
+Future<Endpoint> _resolveEndpoint() async {
+  final candidates = <Endpoint>[];
+  final allowedHosts = endpointAllowedHosts(supabaseUrl, _endpointAllowedHosts);
+  void add(Endpoint? ep) {
+    if (ep != null && !candidates.any((e) => e.url == ep.url)) {
+      candidates.add(ep);
     }
   }
-  final cu = prefs.getString('endpoint_url') ?? '';
-  final ck = prefs.getString('endpoint_anon') ?? '';
-  if (cu.isNotEmpty && ck.isNotEmpty) return (url: cu, anonKey: ck);
-  return (url: supabaseUrl, anonKey: supabaseAnonKey);
+
+  if (_endpointConfigUrl.isNotEmpty) {
+    candidates.addAll(
+      endpointConfigCandidates(
+        await _fetchJson(_endpointConfigUrl),
+        allowedHosts: allowedHosts,
+      ),
+    );
+  }
+  final cached = endpointFromValues(
+    prefs.getString('endpoint_url'),
+    prefs.getString('endpoint_anon'),
+    allowedHosts: allowedHosts,
+  );
+  add(cached);
+  final builtIn = endpointFromValues(supabaseUrl, supabaseAnonKey);
+  add(builtIn);
+  if (candidates.isEmpty) {
+    throw StateError(
+      'Không có endpoint hợp lệ. Hãy kiểm tra SUPABASE_URL/ENDPOINT_CONFIG_URL.',
+    );
+  }
+
+  final ready = await Future.wait(candidates.map(_endpointReady));
+  for (var i = 0; i < candidates.length; i++) {
+    if (!ready[i]) continue;
+    final ep = candidates[i];
+    await prefs.setString('endpoint_url', ep.url);
+    await prefs.setString('endpoint_anon', ep.anonKey);
+    return ep;
+  }
+  return cached ?? builtIn ?? candidates.first;
 }
 
 // ponytail: HttpClient stdlib thay vì thêm package http. Timeout 4s cứng — chỗ host
@@ -63,11 +90,12 @@ Future<({String url, String anonKey})> _resolveEndpoint() async {
 Future<Map<String, dynamic>?> _fetchJson(String url) async {
   final client = HttpClient()..connectionTimeout = const Duration(seconds: 4);
   try {
-    final resp = await (await client.getUrl(Uri.parse(url)).timeout(
-          const Duration(seconds: 4),
-        ))
-        .close()
-        .timeout(const Duration(seconds: 4));
+    final resp =
+        await (await client
+                .getUrl(Uri.parse(url))
+                .timeout(const Duration(seconds: 4)))
+            .close()
+            .timeout(const Duration(seconds: 4));
     if (resp.statusCode != 200) return null;
     return jsonDecode(await resp.transform(utf8.decoder).join())
         as Map<String, dynamic>;
@@ -78,11 +106,51 @@ Future<Map<String, dynamic>?> _fetchJson(String url) async {
   }
 }
 
+Future<bool> _endpointReady(Endpoint ep) async {
+  final client = HttpClient()..connectionTimeout = const Duration(seconds: 4);
+  try {
+    const paths = [
+      '/rest/v1/novels?select=id&limit=1',
+      '/auth/v1/health',
+      '/storage/v1/status',
+    ];
+    final statuses = await Future.wait(
+      paths.map((path) async {
+        final request = await client
+            .getUrl(Uri.parse('${ep.url}$path'))
+            .timeout(const Duration(seconds: 4));
+        request.headers
+          ..set('apikey', ep.anonKey)
+          ..set(HttpHeaders.authorizationHeader, 'Bearer ${ep.anonKey}');
+        final response = await request.close().timeout(
+          const Duration(seconds: 4),
+        );
+        await response.drain<void>();
+        return response.statusCode;
+      }),
+    );
+    return statuses.every((status) => status >= 200 && status < 300);
+  } catch (_) {
+    return false;
+  } finally {
+    client.close(force: true);
+  }
+}
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   prefs = await SharedPreferences.getInstance();
   final ep = await _resolveEndpoint();
-  await Supabase.initialize(url: ep.url, publishableKey: ep.anonKey);
+  activeEndpointUrl = ep.url;
+  await Supabase.initialize(
+    url: ep.url,
+    publishableKey: ep.anonKey,
+    authOptions: FlutterAuthClientOptions(
+      localStorage: SharedPreferencesLocalStorage(
+        persistSessionKey: endpointAuthStorageKey(ep.url),
+      ),
+    ),
+  );
   AppErrorLog.install(); // bắt lỗi runtime → xem ở màn "Nhật ký lỗi"
   await initNotifications();
   loadHanViet(); // bảng tra Hán-Việt cho form sửa dịch — nạp nền, không chặn khởi động

@@ -131,7 +131,7 @@ Lệnh trên build + cài + mở app luôn; rút cáp thoải mái, app nằm l�
 **iPhone**: xem `app/IPHONE.md` — build IPA bằng GitHub Actions (workflow "iOS unsigned IPA",
 bấm Run workflow trên tab Actions) rồi cài qua SideStore.
 
-Tài khoản demo: xem `worker/seed_users.py` (đăng ký trong app đã tắt).
+Đăng ký trong app đã tắt; repo không giữ tài khoản hoặc mật khẩu mẫu.
 Tài khoản admin có màn **Quản trị** trong Cài đặt: thống kê kho, hàng đợi worker,
 tìm/ẩn/xoá truyện, sức khỏe model LLM, báo cáo lỗi từ người đọc.
 
@@ -140,8 +140,6 @@ tìm/ẩn/xoá truyện, sức khỏe model LLM, báo cáo lỗi từ người �
 - Worker production chạy trên VPS (Docker Compose, `restart: unless-stopped`); cập nhật bằng `git pull` + rebuild.
 - Model Hachimi CT2 đặt ở `worker/models/hachimi-ct2/` trên host (gitignored), mount read-only vào container translator.
 - Backup DB: cron trên VPS `pg_dump` Supabase → giữ bản trên đĩa VPS + đẩy lên R2.
-- **Dự phòng khi bỏ Supabase cloud:** bộ hồ sơ dựng **Supabase self-host** (cùng stack) trên
-  VPS nằm ở `infra/` — kiểu *warm standby*: dựng sẵn, đứng im, lúc cần thì restore dump + lật
-  đích là chạy, worker/app không phải viết lại. App đọc `{url, anonKey}` từ 1 file JSON tĩnh
-  lúc khởi động (biến build tuỳ chọn `ENDPOINT_CONFIG_URL`) nên đổi kho lưu KHÔNG cần build
-  lại app. Chưa kích hoạt — chi tiết & runbook: `infra/FAILOVER.md`.
+- **Phương án nếu sau này bỏ Supabase cloud:** hồ sơ tham khảo cho Supabase self-host nằm
+  trong `infra/`. Đây mới là bản chuẩn bị, chưa dựng hoặc kiểm chứng; nếu chuyển sang database
+  khác giao thức thì app/worker còn cần một lớp API tương thích. Chi tiết: `infra/FAILOVER.md`.

@@ -121,54 +121,97 @@ Future<void> saveProgress(int novelId, int chapterIndex) async {
 }
 
 // ---------- Thông báo ----------
+// Pull-based (dựng từ bảng chapters) + trạng thái đọc/xoá lưu LOCAL trên máy
+// (per-device, không backend). 3 mốc trong prefs:
+//   notify_seen_at   — mốc "đã đọc" (đặt khi mở màn) → đếm số chưa đọc.
+//   notify_dismissed — khoá 'nid:idx' đã xoá khỏi danh sách.
+//   notify_mine      — khoá 'nid:idx' chương MÌNH chủ động dịch lại → báo dù ngoài tủ.
 
-/// Thông báo: chương của truyện trong TỦ SÁCH vừa dịch xong (7 ngày gần đây).
-/// Pull-based — luôn xem lại được, không phụ thuộc app có đang mở lúc dịch xong.
+String _notifKey(int novelId, int index) => '$novelId:$index';
+Set<String> _notifDismissed() => prefs.getStringList('notify_dismissed')?.toSet() ?? {};
+Set<String> notifyMine() => prefs.getStringList('notify_mine')?.toSet() ?? {};
+
+/// Ghi 1 chương mình vừa bấm dịch lại → được báo khi worker xong (kể cả ngoài tủ).
+Future<void> addMyRetranslation(int novelId, int index) async {
+  final s = notifyMine()..add(_notifKey(novelId, index));
+  await prefs.setStringList('notify_mine', s.toList());
+}
+
+/// Xoá 1 thông báo (theo truyện+chương) khỏi danh sách.
+Future<void> dismissNotification(int novelId, int index) async {
+  final s = _notifDismissed()..add(_notifKey(novelId, index));
+  await prefs.setStringList('notify_dismissed', s.toList());
+}
+
+/// Xoá hết: nhét mọi khoá đang hiện vào tập đã-xoá. ponytail: tập chỉ phình bằng
+/// số thông báo từng thấy (chuỗi nhỏ), 7 ngày sau nguồn tự rụng nên không dọn.
+Future<void> dismissAllNotifications(Iterable<String> keys) async {
+  final s = _notifDismissed()..addAll(keys);
+  await prefs.setStringList('notify_dismissed', s.toList());
+}
+
+/// Khoá 'nid:idx' của 1 dòng thông báo — UI dùng để xoá.
+String notifKeyOf(Rec c) => _notifKey(c['novel_id'] as int, c['chapter_index'] as int);
+
+/// Novel_id user "theo dõi" = trong Tủ sách (library) HOẶC đang đọc dở
+/// (reading_progress). Chương mới dịch xong của các truyện này thì được báo.
+Future<Set<int>> followedNovelIds() async {
+  final uid = sb.auth.currentUser?.id;
+  if (uid == null) return {};
+  final lib = await sb.from('library').select('novel_id');
+  final rp = await sb.from('reading_progress').select('novel_id').eq('user_id', uid);
+  return {
+    for (final r in lib) r['novel_id'] as int,
+    for (final r in rp) r['novel_id'] as int,
+  };
+}
+
+/// Thông báo: chương dịch xong 7 ngày của (truyện đang theo dõi) HOẶC (chương mình
+/// dịch lại), trừ những cái đã xoá. Pull-based nên luôn xem lại được.
 final notificationsProvider = FutureProvider.autoDispose<List<Rec>>((ref) async {
   ref.watch(authStateProvider);
   if (sb.auth.currentUser == null) return [];
-  final lib = await sb.from('library').select('novel_id');
-  final ids = [for (final r in lib) r['novel_id'] as int];
-  if (ids.isEmpty) return [];
+  final followed = await followedNovelIds();
+  final mine = notifyMine();
+  final mineNovelIds = {for (final k in mine) int.parse(k.split(':').first)};
+  final allIds = {...followed, ...mineNovelIds}.toList();
+  if (allIds.isEmpty) return [];
   final since =
       DateTime.now().toUtc().subtract(const Duration(days: 7)).toIso8601String();
-  return List<Rec>.from(
-    await sb
-        .from('chapters')
-        .select('chapter_index, translated_at, novel_id, '
-            'novels(title_vi, title_zh, cover_url)')
-        .inFilter('novel_id', ids)
-        .eq('translation_status', 'done')
-        .gte('translated_at', since)
-        .order('translated_at', ascending: false)
-        .limit(100),
-  );
+  final rows = List<Rec>.from(await sb
+      .from('chapters')
+      .select('chapter_index, translated_at, novel_id, '
+          'novels(title_vi, title_zh, cover_url)')
+      .inFilter('novel_id', allIds)
+      .eq('translation_status', 'done')
+      .gte('translated_at', since)
+      .order('translated_at', ascending: false)
+      .limit(200));
+  final dismissed = _notifDismissed();
+  return rows.where((c) {
+    final key = notifKeyOf(c);
+    if (dismissed.contains(key)) return false;
+    // truyện đang theo dõi → mọi chương; ngoài diện đó → chỉ đúng chương mình dịch lại
+    return followed.contains(c['novel_id']) || mine.contains(key);
+  }).toList();
 });
 
-/// Có chương mới dịch xong SAU lần mở màn Thông báo gần nhất? — chấm đỏ trên
-/// chuông. Mốc "đã xem" lưu local (prefs), set khi mở màn Thông báo.
-final unseenNotifProvider = FutureProvider.autoDispose<bool>((ref) async {
+/// Số thông báo chưa đọc (mới hơn mốc "đã xem") — hiện lên badge chuông.
+final unreadNotifCountProvider = FutureProvider.autoDispose<int>((ref) async {
   ref.watch(authStateProvider);
-  if (sb.auth.currentUser == null) return false;
+  if (sb.auth.currentUser == null) return 0;
   final seen = prefs.getString('notify_seen_at');
   if (seen == null) {
-    // lần đầu: đặt mốc, khỏi chấm đỏ dội chuyện cũ
+    // lần đầu: đặt mốc, khỏi dội cả loạt thông báo cũ thành "chưa đọc"
     await prefs.setString('notify_seen_at', DateTime.now().toUtc().toIso8601String());
-    return false;
+    return 0;
   }
-  final lib = await sb.from('library').select('novel_id');
-  final ids = [for (final r in lib) r['novel_id'] as int];
-  if (ids.isEmpty) return false;
-  final rows = await sb
-      .from('chapters')
-      .select('id')
-      .inFilter('novel_id', ids)
-      .eq('translation_status', 'done')
-      .gt('translated_at', seen)
-      .limit(1);
-  return rows.isNotEmpty;
+  final list = await ref.watch(notificationsProvider.future);
+  return list
+      .where((c) => (c['translated_at'] as String).compareTo(seen) > 0)
+      .length;
 });
 
-/// Gọi khi mở màn Thông báo — dập chấm đỏ.
+/// Gọi khi mở màn Thông báo — đánh dấu đã đọc (badge về 0).
 Future<void> markNotificationsSeen() =>
     prefs.setString('notify_seen_at', DateTime.now().toUtc().toIso8601String());

@@ -34,24 +34,37 @@ class LibraryScreen extends ConsumerWidget {
         tooltip: 'Thông báo',
         iconSize: 22,
         visualDensity: VisualDensity.compact,
-        // chấm đỏ khi có chương dịch xong chưa xem (từ lần mở màn Thông báo trước)
-        icon: Stack(clipBehavior: Clip.none, children: [
-          const Icon(Icons.notifications_none_rounded),
-          if (ref.watch(unseenNotifProvider).value ?? false)
-            Positioned(
-              right: -1, top: -1,
-              child: Container(
-                width: 9, height: 9,
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.error,
-                  shape: BoxShape.circle,
+        // badge SỐ thông báo chưa đọc (chương dịch xong sau lần mở màn trước)
+        icon: Builder(builder: (context) {
+          final n = ref.watch(unreadNotifCountProvider).value ?? 0;
+          final cs = Theme.of(context).colorScheme;
+          return Stack(clipBehavior: Clip.none, children: [
+            const Icon(Icons.notifications_none_rounded),
+            if (n > 0)
+              Positioned(
+                right: -6, top: -6,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                  decoration: BoxDecoration(
+                    color: cs.error,
+                    borderRadius: BorderRadius.circular(9),
+                  ),
+                  child: Center(
+                    child: Text(n > 99 ? '99+' : '$n',
+                        style: TextStyle(
+                            color: cs.onError,
+                            fontSize: 10,
+                            height: 1.1,
+                            fontWeight: FontWeight.w700)),
+                  ),
                 ),
               ),
-            ),
-        ]),
+          ]);
+        }),
         onPressed: () async {
           await context.push('/notifications');
-          ref.invalidate(unseenNotifProvider); // vừa xem xong → tắt chấm
+          ref.invalidate(unreadNotifCountProvider); // vừa xem xong → về 0
         },
       ),
       const SizedBox(width: 4),
@@ -360,7 +373,7 @@ class _RequestSheetState extends ConsumerState<_RequestSheet> {
     final novel = r['novels'] as Map?;
     final (chip, color) = switch (r['status']) {
       'pending' => ('Đang tìm…', cs.primary),
-      'done' => ('Đã thêm', const Color(0xFF2E9E5B)),
+      'done' => ('Đã thêm', cs.tertiary), // token success (dark-aware)
       'notfound' => ('Không nguồn nào có', cs.error),
       _ => ('Lỗi', cs.error),
     };

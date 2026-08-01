@@ -7,6 +7,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../ambient.dart';
 import '../../data.dart';
+import '../../endpoint.dart';
+import '../../theme.dart' show Motion;
 import '../../widgets.dart';
 import 'filter.dart';
 import 'section.dart';
@@ -112,7 +114,8 @@ class _Brand extends StatelessWidget {
                 ], stops: const [0, 0.55, 1])
                     .createShader(r),
                 child: Text('Gác truyện',
-                    style: t.headlineMedium?.copyWith(color: Colors.white)),
+                    maxLines: 1,
+                    style: t.displaySmall?.copyWith(color: Colors.white)),
               ),
             ]),
           ),
@@ -253,7 +256,7 @@ class _HeroCard extends ConsumerWidget {
     final t = Theme.of(context).textTheme;
     final bg = Theme.of(context).scaffoldBackgroundColor;
     final dark = Theme.of(context).brightness == Brightness.dark;
-    final cover = n['cover_url'] as String?;
+    final cover = endpointStorageUrl(n['cover_url'] as String?);
     // khí quyển theo bìa: mỗi truyện một màu riêng (như NEO)
     final amb = ref.watch(ambientProvider(cover)).value ?? Ambient.fallback;
     final accent = amb.accent(dark);
@@ -398,7 +401,8 @@ class _SpotlightState extends State<_Spotlight> {
           itemBuilder: (_, i) => GestureDetector(
             onTap: () => setState(() => _sel = i),
             child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
+              duration: Motion.base,
+              curve: Motion.easeOut, // thay linear mặc định — bớt "máy móc"
               padding: const EdgeInsets.all(1),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(10),
@@ -423,7 +427,9 @@ class _SpotlightState extends State<_Spotlight> {
         child: TapScale(
           onTap: () => context.push('/novel/${n['id']}'),
           child: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 260),
+            duration: Motion.base,
+            switchInCurve: Motion.easeOut,
+            switchOutCurve: Motion.easeOut,
             child: Row(
               key: ValueKey(n['id']),
               crossAxisAlignment: CrossAxisAlignment.start,

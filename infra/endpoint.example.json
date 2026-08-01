@@ -1,0 +1,12 @@
+{
+  "active": {
+    "url": "https://db-primary.example.com",
+    "anonKey": "<anon_key_primary>"
+  },
+  "fallbacks": [
+    {
+      "url": "https://db-fallback.example.com",
+      "anonKey": "<anon_key_fallback>"
+    }
+  ]
+}

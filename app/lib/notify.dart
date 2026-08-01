@@ -84,13 +84,11 @@ class ChapterNotifier {
     if (!_seen.add(chapterId)) return; // đã báo chương này rồi
 
     final novelId = r['novel_id'] as int;
-    // chỉ báo truyện có trong tủ sách của user (RLS tự lọc theo auth.uid)
-    final inLib = await sb
-        .from('library')
-        .select('novel_id')
-        .eq('novel_id', novelId)
-        .maybeSingle();
-    if (inLib == null) return;
+    final idx = r['chapter_index'] as int;
+    // báo nếu là chương MÌNH chủ động dịch lại (local, kể cả ngoài diện theo dõi),
+    // hoặc truyện đang theo dõi (trong Tủ sách hoặc đang đọc dở).
+    final isMine = notifyMine().contains('$novelId:$idx');
+    if (!isMine && !(await followedNovelIds()).contains(novelId)) return;
 
     final nv = await sb
         .from('novels')
@@ -98,7 +96,6 @@ class ChapterNotifier {
         .eq('id', novelId)
         .maybeSingle();
     final title = nv?['title_vi'] ?? nv?['title_zh'] ?? 'Truyện';
-    final idx = r['chapter_index'];
 
     try {
       await _plugin.show(
@@ -126,8 +123,7 @@ Future<void> checkMissedChapters() async {
       'notify_last_check', DateTime.now().toUtc().toIso8601String());
   if (last == null) return; // lần đầu: chỉ đặt mốc, khỏi dội thông báo cũ
 
-  final lib = await sb.from('library').select('novel_id');
-  final ids = [for (final r in lib) r['novel_id'] as int];
+  final ids = (await followedNovelIds()).toList(); // Tủ sách + truyện đang đọc dở
   if (ids.isEmpty) return;
   final rows = List<Rec>.from(await sb
       .from('chapters')

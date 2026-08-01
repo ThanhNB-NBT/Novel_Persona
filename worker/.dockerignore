@@ -1,7 +1,10 @@
 .venv
+.hf-cache*
+models
+hachimi
+test
+.pytest_cache
 __pycache__
 **/__pycache__
 *.pyc
 .env
-test_worker_helpers.py
-seed_users.py

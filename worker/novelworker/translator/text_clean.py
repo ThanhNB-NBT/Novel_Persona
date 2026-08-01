@@ -19,6 +19,9 @@ _TRAILING_SLASH = re.compile(r"(?<=[。！？!?])/[ \t]*(?=\r?$)", re.M)
 _EMPTY_BRACKETS = re.compile(r"^[ \t]*[（(][ \t]*[）)][ \t]*(?:\r?\n|\Z)", re.M)
 _HAN_STAR = re.compile(r"(?<=[一-鿿])\*(?=[一-鿿])")
 _PUNCT_RUN = re.compile(r"([。！？!?])[。！？!?]+")
+# Nhãn hệ thống/âm thanh bọc 〈…〉: model quen nhãn game 【…】 (giữ sạch), còn 〈…〉
+# lạ nên nó dịch 〈 ra "·" và bỏ sót 〉. Đồng nhất về 【…】 trước khi nạp vào model.
+_ANGLE_LABEL = re.compile(r"〈([^〈〉\n]*)〉")
 
 
 def _balance_dialogue_quotes(text: str) -> str:
@@ -49,6 +52,7 @@ def clean_source(text: str) -> str:
     text = _EMPTY_BRACKETS.sub("", text)
     text = _HAN_STAR.sub("", text)
     text = _PUNCT_RUN.sub(r"\1", text)
+    text = _ANGLE_LABEL.sub(r"【\1】", text)
     # Chỉ gỡ cặp chống crawl nằm GIỮA chuỗi Hán. Không đụng thoại “哼！”,
     # nhãn game 【提示】 hay ngoặc sách hợp lệ.
     text = _RARE_WRAPPED_HAN.sub(r"\1", text)
@@ -63,6 +67,9 @@ if __name__ == "__main__":
     assert clean_source("‹是›") == "是"
     assert clean_source("“哼！”") == "“哼！”"
     assert clean_source("【提示】") == "【提示】"
+    assert clean_source("〈叮！〉") == "【叮！】"
+    assert clean_source("〈机缘暴击系统绑定中……〉") == "【机缘暴击系统绑定中……】"
+    assert clean_source("脸〈色〉苍白") == "脸色苍白"  # chống-crawl giữa Hán vẫn gỡ sạch
     assert clean_source("“回房间休息吧“，她说道！") == "“回房间休息吧”，她说道！"
     assert clean_source("“甲。”“乙。”") == "“甲。”“乙。”"
     assert clean_source("厅下都在议论！/\n( )") == "厅下都在议论！"

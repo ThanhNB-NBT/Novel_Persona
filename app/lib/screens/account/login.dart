@@ -182,7 +182,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     letterSpacing: 3, color: Colors.white.withValues(alpha: 0.85))),
             const SizedBox(height: 4),
             Text('Kho truyện dịch của bạn',
-                style: t.displaySmall?.copyWith(color: Colors.white, height: 1.05)),
+                style: t.displayMedium?.copyWith(color: Colors.white, height: 1.02)),
           ]),
         ]),
       ]),

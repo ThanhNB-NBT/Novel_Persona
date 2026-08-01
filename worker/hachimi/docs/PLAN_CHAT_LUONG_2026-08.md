@@ -454,6 +454,60 @@ DB; teacher-v4 + n-best đã xử lý. **Đóng nhánh doc-level.** Nếu còn l
 **Bài học đắt nhất cả đợt: hiệu chỉnh thước đo TRƯỚC, đừng để "mình" (hay bất cứ từ đa nghĩa nào)
 thổi phồng metric rồi lái cả loạt quyết định.**
 
+### ✅ ĐỌC TAY 7 TRUYỆN ĐA THỂ LOẠI (1/8/2026) — vì sao KHÔNG deploy doclevel, đúng bản chất
+
+Metric 45 chương trên chỉ đo 1 truyện tu tiên. Đọc tay 7 truyện (tu tiên ×4, đô thị/zombie,
+học đường ma pháp, game LitRPG), mỗi truyện 1 chương × 3 model (v4 ctx0, doclevel v1/v2 ctx2):
+
+- **Không model nào thắng tuyệt đối — phụ thuộc THỂ LOẠI.** Tu tiên/cổ trang: cả 3 ngang nhau,
+  ta-ngươi hợp cảnh. Hiện đại/học đường: v4 **sượng thật** ("lão sư", trò xưng "ta" với cô giáo,
+  牛b→"đồ bò"); doclevel đọc tự nhiên hơn ("thầy/cô", "em…ạ", "lợi hại").
+- **NHƯNG doclevel (CẢ v1 LẪN v2) trả giá bằng 2 lỗi phá niềm tin người đọc:**
+  1. **Bịa giới**: `你`(nam) → "cô" gọi nam chính (205); `回马枪`→"khẩu súng lục" (1380).
+     v4 dùng ta-ngươi trung tính nên KHÔNG BAO GIỜ sai giới ở ngôi 2.
+  2. **Nuốt ngữ cảnh (bịa nội dung)**: dịch xong câu rồi nối nguyên đoạn ⟪ctx⟫ vào bản dịch —
+     đo được ở 1256, 205, 282. Đây là bản chất kiến trúc ghép ngữ cảnh, v2 KHÔNG sửa được.
+- **Kết luận CHỐT không đổi nhưng lý do sâu hơn:** giữ v4 KHÔNG phải vì nó dịch hay hơn mọi mặt
+  (nó THUA doclevel ở register hiện đại), mà vì doclevel đổi "tự nhiên hơn" lấy bịa-giới +
+  bịa-nội-dung. Đừng ai lần sau tưởng "chỉ cần sửa register là doc-level ăn".
+- **Điểm yếu THẬT của v4 lộ ra (đáng làm, KHÔNG cần train rộng):**
+  - Register hiện đại (lão sư/ta-trò) → cần **booster register theo thể loại**, không phải doc-level.
+  - **Loạn tên riêng** cùng chương (罗森 → "Roson"/"La Sâm" lẫn lộn ở 282) → **glossary/termguard**.
+  - Số liệu khoa học (`焦耳`→"lạng tai") + lóng net: trần 57M, kệ.
+
+### ⚠️ BẪY: slot `models/hachimi-ct2` LOCAL lệch bản (đo 1/8/2026)
+
+- **VPS (production) = teacher-v4** — đo trong container: `md5 a1813ced…`, mtime 25/07. ĐÚNG bản tốt.
+- **LOCAL `models/hachimi-ct2` = bản CŨ 23/07** (`md5 22007e6…`), KHÁC v4. Mọi eval local dùng
+  `DEFAULT_MODEL = models/hachimi-ct2` (eval_register, evaluate_*_current) đang chấm **nhầm bản cũ**,
+  không phải bản đang chạy thật. **Trước khi tin số eval "current/production", đồng bộ slot này = v4.**
+- Hệ quả cho lỗi "dịch lại vẫn sai giới": KHÔNG do VPS chạy bản cũ (đã loại). Còn 2 khả năng —
+  (A) chương đang đọc là bản DB cũ, chưa thực sự `redich`; (B) v4 vốn còn sai giới ở ca lược chủ
+  ngữ. Tách bằng: query `model_used`+`translated_at` của đúng chương user chỉ, rồi dịch lại nguồn
+  chương đó bằng v4 hiện tại. Nếu v4 đúng mà DB sai → A; nếu v4 vẫn sai → cần Bậc 3 (tag giới).
+
+### ✅ ĐÃ TÁCH (1/8): ca "Giang Trần tự xưng nàng" (novel 2163 ch44/45) = **KHẢ NĂNG A**
+
+- Ca thật: ch44 nguồn `轻声道：...` (lược chủ ngữ, chủ ngữ ngầm = 江尘 nam) → bản DB dịch "**Nàng**
+  nhẹ giọng nói". Chương dịch 30/07, `model_used='hachimi'`.
+- **Dịch lại cả chương bằng v4 + code HIỆN TẠI → HẾT lỗi**: dòng đó ra "Nhẹ giọng nói" (lược, an
+  toàn), mọi "Nàng" còn lại đều là Cổ Hi Dao (nữ, đúng). Không tái hiện được lỗi.
+- `translation_jobs` cho ch44/45 đều `done` từ 30/07, KHÔNG có job dịch lại mới → **chương chưa
+  từng được `redich`** sau khi v4+n-best lên. Lỗi là tàn dư bản 30/07 (lúc đó chưa chặn bịa chủ ngữ).
+- ⇒ **Cách chữa: dịch lại thật các chương cũ** (dịch trước mốc v4+n-best). KHÔNG cần Bậc 3, KHÔNG
+  train, KHÔNG sửa engine cho ca này. Cần soi vì sao thao tác "dịch lại" của user không tạo job.
+
+### 🔬 Phép thử thẻ giới trên v4 (1/8) — dùng cho Bậc 3 sau này
+
+Dịch 1 câu lược chủ ngữ (江尘 nam) bằng v4 với các tín hiệu giới khác nhau:
+- **Thẻ `【男】` / `江尘（男）` → v4 dịch LITERAL** ("[Nam] khẽ nói") — **v4 KHÔNG hiểu thẻ**, muốn
+  dùng thẻ **bắt buộc train**.
+- **Ghép ngữ cảnh nguồn có tên nam / chèn `他` đầu câu → v4 ra "Hắn" đúng** — v4 **nghe ngữ cảnh +
+  đại từ** tốt, KHÔNG cần train. Nhưng ghép nguyên câu ngữ cảnh thì v4 (không có SEP) dịch luôn cả
+  câu ngữ cảnh vào output → phải chèn kiểu tối thiểu (1 đại từ), và cần heuristic phân giải chủ ngữ.
+- Kết luận cho Bậc 3: hướng "chèn thẻ" cần train; hướng "chèn đại từ 他/她 theo giới glossary" rẻ
+  hơn nhưng vướng bài toán biết-câu-nào-lược-chủ-ngữ-và-chủ-ngữ-là-ai.
+
 ### Bậc 3 — Tag giới tính từ glossary
 Thêm trường giới tính cho term tên riêng (LLM trích tên **đã chạy sẵn**, thêm một field vào
 JSON), chèn thẻ vào nguồn lúc train + lúc chạy. Bắt đúng ca nguồn lược chủ ngữ.

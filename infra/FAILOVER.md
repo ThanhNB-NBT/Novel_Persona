@@ -1,8 +1,11 @@
-# Luồng lưu trữ dự phòng — Supabase self-host (warm standby)
+# Phương án rời Supabase cloud — bản chuẩn bị
 
-Mục tiêu: khi ngừng dùng Supabase cloud, VPS chạy được **Supabase self-host** (cùng
-stack: Postgres + Auth + PostgREST + Realtime + Storage) nên worker và app **không phải
-viết lại code** — chỉ đổi đích kết nối.
+> **Chưa triển khai hoặc kiểm thử.** Các ref, địa chỉ HTTP và thao tác bên dưới chỉ là
+> placeholder để ước lượng công việc, không phải runbook production.
+
+Phạm vi tài liệu này là **Supabase self-host** (cùng stack: Postgres + Auth + PostgREST
++ Realtime + Storage), khi đó worker và app có thể chỉ đổi đích kết nối. Nếu nguồn
+database mới dùng giao thức khác, cần thêm API/adapter tương thích trước khi chuyển.
 
 Kiểu chuyển: **warm** — stack dựng sẵn, đứng im; lúc cần thì restore bản dump mới nhất,
 lật đích worker + app, xong trong vài phút. KHÔNG replication trực tiếp.
@@ -51,11 +54,25 @@ Cron đêm (`/root/backup/backup.sh` trên VPS worker) đã dump `public` + `aut
 `/root/backup/novel-YYYY-MM-DD.sql.gz` + R2 bucket `novel-backup`. Dùng chính bản đó:
 
 ```bash
-# lấy dump mới nhất (từ đĩa VPS worker hoặc R2), rồi nạp vào Postgres self-host
+# DỪNG các API trước khi thay schema để không có request ghi chen giữa restore.
+cd /path/to/supabase/docker
+docker compose stop auth rest realtime storage
+
+# Dump dùng để cutover PHẢI được tạo với pg_dump --clean --if-exists.
+# ON_ERROR_STOP + single transaction: một lệnh lỗi thì rollback toàn bộ, không để DB nửa vời.
 LATEST=$(ls -t /root/backup/novel-*.sql.gz | head -1)
-zcat "$LATEST" | docker exec -i supabase-db psql -U postgres -d postgres
+gzip -t "$LATEST"
+gzip -dc "$LATEST" | docker exec -i supabase-db \
+  psql -X -v ON_ERROR_STOP=1 --single-transaction -U postgres -d postgres
+
+docker compose up -d --wait
 ```
 
+> **Không restore trực tiếp dump cũ chưa có `--clean --if-exists`.** Trước ngày chuyển, cập nhật
+> lệnh `pg_dump` trong `/root/backup/backup.sh` với hai cờ đó, tạo một backup mới, rồi diễn tập
+> nguyên quy trình trên một stack self-host tạm dùng cùng `PINNED_REF`. Chỉ dùng backup đã diễn
+> tập thành công cho production.
+>
 > Muốn mất DATA ÍT NHẤT lúc chuyển: chạy `backup.sh` **ngay trước khi chuyển** để có
 > dump nóng, rồi restore bản đó (thay vì bản đêm qua).
 
@@ -87,7 +104,7 @@ rồi restart:
 
 ```bash
 cd /root/Novel_Project/worker
-sed -i 's#^SUPABASE_URL=.*#SUPABASE_URL=http://<vps-selfhost>:8000#' .env
+sed -i 's#^SUPABASE_URL=.*#SUPABASE_URL=https://db-selfhost.example.com#' .env
 sed -i 's#^SUPABASE_SERVICE_ROLE_KEY=.*#SUPABASE_SERVICE_ROLE_KEY=<service_role_key_selfhost>#' .env
 docker compose up -d --force-recreate
 docker compose logs -f --tail=50        # thấy claim job + heartbeat là OK
@@ -100,19 +117,43 @@ Quay lại cloud = đổi ngược 2 dòng, restart. (Giữ 1 bản `.env.cloud`
 
 ## 4. Chuyển APP sang self-host (không cần build lại)
 
-App đọc `{url, anonKey}` từ file JSON tĩnh lúc mở (biến build `ENDPOINT_CONFIG_URL`).
+App đọc danh sách đích từ file JSON tĩnh lúc mở (biến build `ENDPOINT_CONFIG_URL`).
 Lật kho = sửa file JSON đó rồi mở lại app.
 
-File JSON (đặt trên R2 public hoặc GitHub raw — **độc lập với Supabase**):
+File JSON (đặt trên R2 public hoặc GitHub raw — **độc lập với Supabase**) dùng mẫu
+`infra/endpoint.example.json`:
 
 ```json
-{ "url": "http://<vps-selfhost>:8000", "anonKey": "<anon_key_selfhost>" }
+{
+  "active": {
+    "url": "https://db-selfhost.example.com",
+    "anonKey": "<anon_key_selfhost>"
+  },
+  "fallbacks": [
+    {
+      "url": "https://<project>.supabase.co",
+      "anonKey": "<anon_key_cloud>"
+    }
+  ]
+}
 ```
 
-- Chuyển: đổi nội dung JSON sang url/anonKey self-host → upload đè.
-- App lần mở kế tiếp tải JSON, cache lại, `Supabase.initialize` trỏ đích mới.
+- App probe song song PostgREST (`novels`), Auth (`/auth/v1/health`) và Storage
+  (`/storage/v1/status`) trên các đích; chỉ chọn `active` khi cả ba đều sẵn sàng. Realtime
+  vẫn được kiểm bằng smoke test ở mục 6 vì socket không nên chặn người dùng vào thư viện.
+- Chỉ endpoint HTTPS được nhận trên máy thật. HTTP chỉ được nhận với localhost/emulator.
+- JSON chỉ được chọn host có trong biến build `ENDPOINT_ALLOWED_HOSTS` (phân cách bằng dấu
+  phẩy); host từ `SUPABASE_URL` luôn được tự thêm. Vì vậy chiếm quyền file JSON cũng không
+  thể chuyển app sang backend lạ.
+- URL Storage cũ trong dump được app đổi sang host đang active khi hiển thị. Object path
+  phải đã được mirror nguyên vẹn theo mục 2.
+- Mỗi host có vùng lưu phiên đăng nhập riêng, tránh JWT cloud bị gửi nhầm sang self-host.
 - Chưa set `ENDPOINT_CONFIG_URL` lúc build → app dùng đích nướng sẵn (hành vi cũ). Muốn
   bật cơ chế runtime, build với `--dart-define ENDPOINT_CONFIG_URL=https://.../endpoint.json`.
+  Với workflow release, đặt GitHub Actions secret `ENDPOINT_CONFIG_URL` và
+  `ENDPOINT_ALLOWED_HOSTS` một lần trước khi build APK/IPA. Allowlist phải chứa cả hostname
+  cloud và hostname self-host dự phòng. Bản app đã build thiếu hai biến này phải cập nhật
+  một lần cuối.
 
 > **Đăng nhập lại 1 lần:** token phiên cũ ký bằng JWT secret của cloud → self-host coi là
 > chữ ký sai → app tự đăng xuất, user đăng nhập lại (email/mật khẩu cũ vẫn đúng nhờ mục 1).
@@ -120,7 +161,20 @@ File JSON (đặt trên R2 public hoặc GitHub raw — **độc lập với Sup
 
 ---
 
-## 5. Kiểm sau khi chuyển
+## 5. Thứ tự chuyển để không mất dữ liệu
+
+1. Tạm dừng worker cloud để không phát sinh ghi mới.
+2. Chạy backup nóng, restore sang backend mới và mirror bucket `covers`.
+3. Chạy migration còn thiếu; kiểm trực tiếp API `novels`, Auth, Realtime và Storage.
+4. Đổi `.env` worker sang backend mới, chạy thử một job rồi giữ worker mới hoạt động.
+5. Upload JSON với backend mới ở `active`, cloud cũ trong `fallbacks`.
+6. Mở lại app, đăng nhập lại một lần, kiểm dữ liệu và bìa. Khi ổn mới tắt cloud.
+
+Rollback: đưa cloud lên `active` trong JSON và mở lại app; không cần build lại.
+
+---
+
+## 6. Kiểm sau khi chuyển
 
 - [ ] `docker compose ps` self-host: mọi service `healthy`.
 - [ ] Worker log: claim được job, dịch xong 1 chương, `finalize_chapter_job` không lỗi.
