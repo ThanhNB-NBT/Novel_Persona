@@ -2,11 +2,13 @@ import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../ambient.dart';
 import '../../data.dart';
+import '../../endpoint.dart';
 import '../../offline.dart';
 import '../../theme.dart' show monoStyle;
 import '../../widgets.dart';
@@ -24,7 +26,9 @@ class NovelDetailScreen extends ConsumerWidget {
         error: (e, _) => AppError(e, onRetry: () => ref.invalidate(novelProvider(novelId))),
         data: (n) {
           // nền khí quyển kiểu NEO: màu trích từ bìa loãng dần vào nền chung
-          final amb = ref.watch(ambientProvider(n['cover_url'] as String?)).value ??
+          final amb = ref.watch(
+                    ambientProvider(endpointStorageUrl(n['cover_url'] as String?)),
+                  ).value ??
               Ambient.fallback;
           return AmbientBackdrop(
             ambient: amb,
@@ -65,7 +69,7 @@ class _Header extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final cover = n['cover_url'] as String?;
+    final cover = endpointStorageUrl(n['cover_url'] as String?);
     const onDark = Colors.white;
     // ClipRect: ảnh blur vẽ TRÀN ra ngoài biên widget nếu không clip → lem xuống hàng tab
     return ClipRect(
@@ -187,6 +191,8 @@ class _IntroTab extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 96), // chừa chỗ cho bong bóng nổi
       children: [
+        _IdRow(n['id'] as int),
+        const SizedBox(height: 14),
         _stats(context),
         if (genres.isNotEmpty) ...[
           const SizedBox(height: 22),
@@ -220,6 +226,38 @@ class _IntroTab extends StatelessWidget {
       div,
       cell(n['status'] == 'completed' ? 'Hoàn thành' : 'Đang ra', 'Trạng thái'),
     ]);
+  }
+}
+
+/// Mã truyện — chạm để copy, tiện báo lỗi/tra cứu nhanh (số id nội bộ).
+class _IdRow extends StatelessWidget {
+  final int id;
+  const _IdRow(this.id);
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final t = Theme.of(context).textTheme;
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: () {
+          Clipboard.setData(ClipboardData(text: '$id'));
+          ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Đã sao chép mã truyện #$id')));
+        },
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Text('Mã truyện #$id',
+                style: t.labelMedium?.copyWith(color: cs.onSurfaceVariant)),
+            const SizedBox(width: 6),
+            Icon(Icons.copy_rounded, size: 14, color: cs.onSurfaceVariant),
+          ]),
+        ),
+      ),
+    );
   }
 }
 
@@ -309,6 +347,9 @@ class _ChapterListTabState extends ConsumerState<_ChapterListTab> {
         for (final i in picked) {
           await retranslateChapter(widget.novelId, i);
         }
+      }
+      for (final i in picked) {
+        await addMyRetranslation(widget.novelId, i); // báo khi từng chương dịch xong
       }
       if (!mounted) return;
       ref.invalidate(chapterListProvider(widget.novelId));

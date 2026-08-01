@@ -163,6 +163,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
 
   bool _restored = false;
   int _restoreTries = 0;
+  Timer? _statusPoll; // chương chưa 'done' (đang dịch/hàng đợi) → refetch tới khi xong
 
   // Bộ nhớ đệm phân trang (chế độ lật trang) — tính lại khi nội dung/cỡ chữ/kích thước đổi.
   List<String>? _pages;
@@ -208,6 +209,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
 
   @override
   void dispose() {
+    _statusPoll?.cancel();
     TtsPlayer.i.state.removeListener(_syncTts);
     TtsPlayer.i.paraAt.removeListener(_syncTts);
     _scroll.dispose();
@@ -523,6 +525,8 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
         data: (c) {
           if (c == null) return Center(child: Text('Không có chương này', style: TextStyle(color: col.fg)));
           final status = c['translation_status'];
+          // Đang dịch/hàng đợi (kể cả do dịch lại) → poll tới khi 'done' rồi tự hiện bản mới.
+          _ensureStatusPoll(status != 'done');
           if (status != 'done') {
             return _WaitingView(
               status: status,
@@ -1045,11 +1049,28 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
       context.push('/login');
       return;
     }
-    await retranslateChapter(novelId, chapterIndex);
+    final messenger = ScaffoldMessenger.of(context);
+    await retranslateChapter(novelId, chapterIndex); // RPC set status='queued'
+    await addMyRetranslation(novelId, chapterIndex); // được báo khi worker xong (kể cả ngoài tủ)
+    if (!mounted) return;
+    // refetch → status 'queued' → _WaitingView "Đang dịch…"; _ensureStatusPoll tự cập
+    // nhật khi worker xong. Không hiện bản cũ nữa.
     ref.invalidate(chapterProvider(ChapterKey(novelId, chapterIndex)));
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Đã xếp hàng dịch lại chương')));
+    messenger.showSnackBar(const SnackBar(content: Text('Đang dịch lại chương…')));
+  }
+
+  /// Chương chưa 'done' → refetch định kỳ tới khi xong (worker đổi status/nội dung).
+  /// Chạy đúng ở mọi đường vào reader vì bám status thật, không phải cờ cục bộ.
+  void _ensureStatusPoll(bool waiting) {
+    if (waiting) {
+      _statusPoll ??= Timer.periodic(const Duration(seconds: 5), (_) {
+        if (mounted) {
+          ref.invalidate(chapterProvider(ChapterKey(novelId, chapterIndex)));
+        }
+      });
+    } else {
+      _statusPoll?.cancel();
+      _statusPoll = null;
     }
   }
 }

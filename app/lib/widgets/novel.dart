@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../data.dart';
+import '../endpoint.dart';
 import '../theme.dart' show monoStyle;
 import 'common.dart';
 
@@ -20,6 +21,7 @@ class Cover extends StatelessWidget {
     final radius = BorderRadius.circular(8);
     final cs = Theme.of(context).colorScheme;
     final initial = (label ?? '').trim();
+    final imageUrl = endpointStorageUrl(url);
     // placeholder phẳng (tech-minimal): nền nhấn nhạt + chữ cái màu nhấn — không gradient
     Widget fallback = Container(
       width: width,
@@ -58,10 +60,10 @@ class Cover extends StatelessWidget {
       ),
       child: ClipRRect(
         borderRadius: radius,
-        child: (url == null || url!.isEmpty)
+        child: (imageUrl == null || imageUrl.isEmpty)
             ? fallback
             : Image.network(
-                url!,
+                imageUrl,
                 width: width,
                 height: h,
                 fit: BoxFit.cover,

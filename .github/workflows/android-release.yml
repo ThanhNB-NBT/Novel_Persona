@@ -55,7 +55,9 @@ jobs:
           flutter build apk --release \
             --target-platform android-arm64 \
             --dart-define=SUPABASE_URL="${{ secrets.SUPABASE_URL }}" \
-            --dart-define=SUPABASE_ANON_KEY="${{ secrets.SUPABASE_ANON_KEY }}"
+            --dart-define=SUPABASE_ANON_KEY="${{ secrets.SUPABASE_ANON_KEY }}" \
+            --dart-define=ENDPOINT_CONFIG_URL="${{ secrets.ENDPOINT_CONFIG_URL }}" \
+            --dart-define=ENDPOINT_ALLOWED_HOSTS="${{ secrets.ENDPOINT_ALLOWED_HOSTS }}"
           mv build/app/outputs/flutter-apk/app-release.apk \
              build/app/outputs/flutter-apk/GacTruyen-${{ github.ref_name }}.apk
 
@@ -82,7 +84,9 @@ jobs:
           flutter pub get
           flutter build ios --release --no-codesign \
             --dart-define=SUPABASE_URL="${{ secrets.SUPABASE_URL }}" \
-            --dart-define=SUPABASE_ANON_KEY="${{ secrets.SUPABASE_ANON_KEY }}"
+            --dart-define=SUPABASE_ANON_KEY="${{ secrets.SUPABASE_ANON_KEY }}" \
+            --dart-define=ENDPOINT_CONFIG_URL="${{ secrets.ENDPOINT_CONFIG_URL }}" \
+            --dart-define=ENDPOINT_ALLOWED_HOSTS="${{ secrets.ENDPOINT_ALLOWED_HOSTS }}"
           cd build/ios/iphoneos
           mkdir -p Payload
           cp -r Runner.app Payload/

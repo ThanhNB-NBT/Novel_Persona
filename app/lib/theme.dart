@@ -4,8 +4,8 @@ import 'package:google_fonts/google_fonts.dart';
 
 /// Hệ thiết kế "Thanh Tân" — sáng, trắng lạnh, nhấn XANH DƯƠNG, bo tròn nhiều.
 /// Ban đêm dùng bộ "Dạ Lam": nền xanh đêm, nhấn xanh băng.
-/// Một họ chữ Be Vietnam Pro (dấu tiếng Việt chuẩn), phân cấp bằng đậm/cỡ.
-/// Tránh trắng/đen tuyền hoàn toàn.
+/// Một họ chữ Plus Jakarta Sans (dấu tiếng Việt chuẩn) + mono cho SỐ LIỆU;
+/// phân cấp bằng đậm/cỡ. Tránh trắng/đen tuyền hoàn toàn.
 class Pal {
   // sáng — Thanh Tân
   static const bg = Color(0xFFF5F7FA); // nền trắng lạnh (ngả xanh nhẹ)
@@ -17,6 +17,7 @@ class Pal {
   static const accentDeep = Color(0xFF2A5BC7);
   static const accentSoft = Color(0xFFE1EBFE);
   static const gold = Color(0xFFE8913C); // streak / thành tựu (cam ấm)
+  static const ok = Color(0xFF2E9E5B); // thành công / positive (đã thêm, đã lưu…)
   static const line = Color(0xFFE6EAF0);
 
   // tối — Dạ Lam, bản OLED "tech-minimal": nền gần đen (tiết kiệm pin, chất công nghệ),
@@ -30,7 +31,18 @@ class Pal {
   static const dAccentDeep = Color(0xFF3A93B5);
   static const dAccentSoft = Color(0xFF14262F);
   static const dGold = Color(0xFFF2A65A);
+  static const dOk = Color(0xFF3DBE76); // thành công — sáng hơn cho nền tối
   static const dLine = Color(0xFF1D2530); // hairline kiểu Vercel/Linear
+}
+
+/// Nhịp chuyển động chuẩn — dùng thay cho Duration/Curve rải rác, cho nhất quán.
+/// Chỉ animate transform/opacity; motion là gia vị, cắt trước khi thêm.
+class Motion {
+  static const fast = Duration(milliseconds: 150); // phản hồi chạm, đổi trạng thái nhỏ
+  static const base = Duration(milliseconds: 240); // chuyển cảnh trong khung
+  static const slow = Duration(milliseconds: 400); // nhấn mạnh
+  static const easeOut = Curves.easeOutCubic;
+  static const easeInOut = Curves.easeInOutCubic;
 }
 
 /// Plus Jakarta Sans — sans hình học hiện đại, hỗ trợ dấu tiếng Việt.
@@ -40,6 +52,8 @@ TextTheme _text(Color ink, Color soft) {
       GoogleFonts.plusJakartaSans(
           fontSize: size, fontWeight: w, letterSpacing: sp, height: h, color: c ?? ink);
   return TextTheme(
+    // bậc hero — khoảnh khắc lớn (brand, tên truyện): cú nhảy rõ so với body
+    displayMedium: f(38, FontWeight.w800, sp: -1.2, h: 1.0),
     displaySmall: f(30, FontWeight.w800, sp: -0.9, h: 1.05),
     headlineMedium: f(24, FontWeight.w800, sp: -0.6),
     headlineSmall: f(20, FontWeight.w700, sp: -0.4),
@@ -70,6 +84,7 @@ ThemeData _build({required bool dark}) {
   final ink = dark ? Pal.dInk : Pal.ink;
   final soft = dark ? Pal.dInkSoft : Pal.inkSoft;
   final accent = dark ? Pal.dAccent : Pal.accent;
+  final ok = dark ? Pal.dOk : Pal.ok;
   final line = dark ? Pal.dLine : Pal.line;
   final onAccent = dark ? const Color(0xFF0F2630) : Colors.white;
 
@@ -90,7 +105,11 @@ ThemeData _build({required bool dark}) {
       primaryContainer: dark ? Pal.dAccentSoft : Pal.accentSoft,
       onPrimaryContainer: dark ? Pal.dAccent : Pal.accentDeep,
       secondary: dark ? Pal.dGold : Pal.gold,
-      onSecondary: Colors.white,
+      // gold/cam sáng → chữ TỐI mới đủ tương phản (white trên gold tụt dưới AA)
+      onSecondary: Pal.ink,
+      // tertiary = màu THÀNH CÔNG/positive (đã thêm, đã lưu) — trước phải hardcode xanh
+      tertiary: ok,
+      onTertiary: Colors.white,
       error: const Color(0xFFD1544A),
       onError: Colors.white,
       surface: surface,

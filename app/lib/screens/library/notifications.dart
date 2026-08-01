@@ -20,18 +20,37 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
     markNotificationsSeen(); // mở màn = đã xem → dập chấm đỏ trên chuông
   }
 
+  void _refresh() {
+    ref.invalidate(notificationsProvider);
+    ref.invalidate(unreadNotifCountProvider);
+  }
+
   @override
   Widget build(BuildContext context) {
     final items = ref.watch(notificationsProvider);
+    final list = items.value ?? const <Rec>[];
     return Scaffold(
-      appBar: AppBar(title: const Text('Thông báo')),
+      appBar: AppBar(
+        title: const Text('Thông báo'),
+        actions: [
+          if (list.isNotEmpty)
+            IconButton(
+              tooltip: 'Xoá tất cả',
+              icon: const Icon(Icons.delete_sweep_rounded),
+              onPressed: () async {
+                await dismissAllNotifications(list.map(notifKeyOf));
+                _refresh();
+              },
+            ),
+        ],
+      ),
       body: items.when(
         loading: () => const AppLoading(),
         error: (e, _) => AppError(e, onRetry: () => ref.invalidate(notificationsProvider)),
         data: (list) {
           if (list.isEmpty) {
             return Center(
-              child: Text('Chưa có thông báo nào.\nChương truyện trong tủ dịch xong sẽ hiện ở đây.',
+              child: Text('Chưa có thông báo nào.\nChương truyện trong tủ (hoặc chương bạn bấm dịch lại) dịch xong sẽ hiện ở đây.',
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.bodyMedium),
             );
@@ -48,7 +67,16 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
               itemCount: entries.length,
               separatorBuilder: (_, _) => const RowDivider(),
-              itemBuilder: (_, i) => _NovelDone(entries[i].value),
+              itemBuilder: (_, i) => _NovelDone(
+                entries[i].value,
+                onDismiss: () async {
+                  for (final c in entries[i].value) {
+                    await dismissNotification(
+                        c['novel_id'] as int, c['chapter_index'] as int);
+                  }
+                  _refresh();
+                },
+              ),
             ),
           );
         },
@@ -59,7 +87,8 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
 
 class _NovelDone extends StatelessWidget {
   final List<Rec> chapters; // các chương của 1 truyện (mới → cũ)
-  const _NovelDone(this.chapters);
+  final VoidCallback onDismiss;
+  const _NovelDone(this.chapters, {required this.onDismiss});
 
   @override
   Widget build(BuildContext context) {
@@ -90,6 +119,12 @@ class _NovelDone extends StatelessWidget {
           const SizedBox(width: 8),
           Text(timeAgo(chapters.first['translated_at']),
               style: t.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
+          IconButton(
+            tooltip: 'Xoá thông báo này',
+            visualDensity: VisualDensity.compact,
+            icon: Icon(Icons.close_rounded, size: 18, color: cs.onSurfaceVariant),
+            onPressed: onDismiss,
+          ),
         ]),
       ),
     );

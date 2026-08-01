@@ -10,6 +10,19 @@ on:
     branches: [main]
 
 jobs:
+  database-migrations:
+    name: Supabase migrations sạch
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Áp toàn bộ migration lên database mới
+        run: supabase start
+
   flutter-analyze:
     name: Flutter analyze + test
     runs-on: ubuntu-latest

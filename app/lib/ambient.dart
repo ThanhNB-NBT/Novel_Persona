@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:palette_generator/palette_generator.dart';
 
+import 'endpoint.dart';
+
 /// Khí quyển của một truyện (port từ app NEO): màu trích từ bìa, nhuộm nền
 /// trang thông tin truyện. Giữ màu THÔ; accent/deep chỉnh độ sáng theo chế độ.
 class Ambient {
@@ -28,11 +30,12 @@ class Ambient {
 
 /// Trích màu từ URL bìa (cache theo URL — mỗi bìa chỉ tính 1 lần).
 final ambientProvider = FutureProvider.family<Ambient, String?>((ref, url) async {
-  if (url == null || url.isEmpty) return Ambient.fallback;
+  final imageUrl = endpointStorageUrl(url);
+  if (imageUrl == null || imageUrl.isEmpty) return Ambient.fallback;
   ref.keepAlive();
   try {
     final p = await PaletteGenerator.fromImageProvider(
-      NetworkImage(url),
+      NetworkImage(imageUrl),
       size: const Size(96, 128), // decode nhỏ — đủ để lấy màu, rẻ
       maximumColorCount: 12,
     );

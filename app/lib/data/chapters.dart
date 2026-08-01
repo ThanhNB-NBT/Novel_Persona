@@ -73,7 +73,7 @@ final chapterProvider = FutureProvider.autoDispose.family<Rec?, ChapterKey>((
   return await sb
       .from('chapters')
       .select(
-        'chapter_index, title_vi, title_zh, content_vi, translation_status',
+        'chapter_index, title_vi, title_zh, content_vi, translation_status, translated_at',
       )
       .eq('novel_id', key.novelId)
       .eq('chapter_index', key.index)
