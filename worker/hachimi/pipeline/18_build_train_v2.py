@@ -70,11 +70,14 @@ def main(argv=None) -> None:
 
 
 def _self_check() -> None:
-    assert all(p.is_file() for p in GOLD), "thiếu file gold"
-    g = load_gold()
-    assert len(g) > 900 and all(r["zh"] and r["vi"] and r["source"] == "gold" for r in g)
+    # logic thuần — luôn kiểm (như self-check 16/17)
     assert _pair({"source_zh": "他", "target_vi": "Hắn"}) == {"zh": "他", "vi": "Hắn"}
     assert _pair({"zh": "", "vi": "x"}) is None
+    if not all(p.is_file() for p in GOLD):  # ponytail: gold bị gitignore, CI không có → chỉ kiểm logic
+        print("18_build_train_v2 OK (bỏ gold: không có data)")
+        return
+    g = load_gold()
+    assert len(g) > 900 and all(r["zh"] and r["vi"] and r["source"] == "gold" for r in g)
     print("18_build_train_v2 OK")
 
 
