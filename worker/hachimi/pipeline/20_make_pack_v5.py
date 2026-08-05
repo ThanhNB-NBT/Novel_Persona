@@ -63,21 +63,27 @@ def _sample_anchor(limit: int, blocked: set[str]) -> list[str]:
 
 
 def _readme(kaihe_n: int, total_anchor: int) -> str:
-    return f"""# Hachimi teacher v5 — Kaggle (v4 + mỏ neo người dịch kaihe)
+    return f"""# Hachimi teacher v5 — Kaggle (v4 + mỏ neo người dịch kaihe + LaBSE)
 
-Khác v4: thêm **{kaihe_n} cặp kaihe** (bản dịch NGƯỜI, đã lọc pipeline 19: cổng nhất quán
-xưng hô theo giới + anh/em sến + toàn bộ cổng replay của kaggle_train) làm **mỏ neo chống
-model-collapse** (DATA_CHUAN trục 1). Gold vẫn ×3 để giữ booster register nhắm-đích.
+Khác v4: thêm mỏ neo **kaihe** (bản dịch NGƯỜI, đã lọc pipeline 19: cổng nhất quán xưng hô
+theo giới + anh/em sến + toàn bộ cổng replay của kaggle_train) để chống **model-collapse**
+(DATA_CHUAN trục 1). Gold vẫn ×3 để giữ booster register nhắm-đích.
 
-Kaihe_anchor có **{total_anchor}** cặp sạch; pack này lấy **{kaihe_n}** (seed 20260805) để mỏ
-neo không nhấn chìm gold. **Nút chỉnh:** dựng lại pack với `--kaihe N` khác (0 = như v4;
-lớn hơn = mỏ neo mạnh hơn, rủi ro loãng register — đo A/B trước khi tin).
-
-**Khuyến nghị trước khi train (tùy chọn, DATA_CHUAN cổng 1):** kaihe còn ~vài % lệch-căn.
-Chạy `15_score_labse.py` lọc cosine≥0.7 trên `kaihe_anchor.jsonl` cho sạch hơn.
+`kaihe_pre_labse.jsonl` = **{kaihe_n}** cặp (sample seed 20260805 từ {total_anchor} cặp sạch),
+CHƯA lọc LaBSE. Chạy LaBSE trên GPU Kaggle để vứt cặp **lệch-căn** (Trung một đằng, Việt một
+nẻo) mà cổng regex không thấy — cả 3 bước dưới đây trong CÙNG 1 phiên Kaggle:
 
 ```bash
-pip -q install "transformers==4.48.3" "datasets==3.3.2" "accelerate==1.3.0" sentencepiece ctranslate2
+pip -q install "transformers==4.48.3" "datasets==3.3.2" "accelerate==1.3.0" \\
+  sentence-transformers sentencepiece ctranslate2
+
+# B1 — chấm độ căn khớp bằng LaBSE (tự dùng GPU T4)
+python 15_score_labse.py kaihe_pre_labse.jsonl kaihe_scored.jsonl --batch 256
+
+# B2 — xem 15 cặp điểm thấp (ĐỌC TAY chốt ngưỡng) rồi lọc ra file train
+python labse_filter.py kaihe_scored.jsonl kaihe_anchor.jsonl --min 0.70
+
+# B3 — train (dùng kaihe_anchor.jsonl vừa lọc)
 accelerate launch --num_processes=2 --multi_gpu kaggle_train.py \\
   --clean-gold core_gold_240.jsonl --clean-gold train_game_english_approved.jsonl \\
   --clean-gold train_db_game_litrpg_approved.jsonl --clean-gold booster_v3.jsonl \\
@@ -89,9 +95,15 @@ accelerate launch --num_processes=2 --multi_gpu kaggle_train.py \\
   --output-dir /kaggle/working/hachimi-teacher-v5 --export-ct2
 ```
 
-Sau khi tải model về: đo bằng `eval/eval_register.py` — mục tiêu GIỮ register của v4
-(bịa chủ ngữ, đại từ hiện đại thật) và xem mỏ neo có giảm lỗi phần-đuôi (lược chủ ngữ) không.
-Nếu register TỤT so với v4 → giảm --kaihe (đúng bài học doc-level v1).
+**Bỏ LaBSE (train nhanh, chấp nhận ~vài % lệch-căn):** `cp kaihe_pre_labse.jsonl kaihe_anchor.jsonl`
+rồi chạy thẳng B3.
+
+**Muốn lọc từ TOÀN BỘ {total_anchor} cặp** (chất hơn 40k pre-sample): upload
+`data/kaihe_anchor.jsonl` (463MB, ở máy) làm Kaggle Dataset, chạy B1/B2 trên nó rồi sample.
+
+Sau khi tải model về: đo bằng `eval/eval_register.py` — mục tiêu GIỮ register của v4 và xem mỏ
+neo có giảm lỗi phần-đuôi (lược chủ ngữ) không. Nếu register TỤT so v4 → dựng lại pack
+`20_make_pack_v5.py --kaihe N` nhỏ hơn (bài học doc-level v1).
 """
 
 
@@ -113,8 +125,12 @@ def main() -> None:
                 if name in ("README.md", "training_manifest.json"):
                     continue
                 dst.writestr(name, src.read(name))
+            # Script LaBSE để lọc lệch-căn trên GPU Kaggle (xem README, chạy trước train)
+            dst.write(ROOT / "15_score_labse.py", "15_score_labse.py")
+            dst.write(ROOT / "labse_filter.py", "labse_filter.py")
             if anchor_lines:
-                dst.writestr("kaihe_anchor.jsonl", "\n".join(anchor_lines) + "\n")
+                # CHƯA lọc LaBSE — Kaggle sẽ score+lọc thành kaihe_anchor.jsonl (README B1/B2)
+                dst.writestr("kaihe_pre_labse.jsonl", "\n".join(anchor_lines) + "\n")
             dst.writestr("README.md", _readme(len(anchor_lines), total_anchor))
             dst.writestr("training_manifest.json", json.dumps({
                 "status": "ready_for_kaggle_train",

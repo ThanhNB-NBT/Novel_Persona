@@ -35,6 +35,11 @@ def _load_pipeline():
 
 
 def main() -> None:
+    # Console Windows hay là cp1252 → ép stdout UTF-8, không crash khi in chữ Việt/Trung.
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="backslashreplace")
+    except Exception:
+        pass
     text = Path(sys.argv[1]).read_text(encoding="utf-8") if len(sys.argv) > 1 else SAMPLE
 
     print(f"Tải {MODEL_ID} …")
