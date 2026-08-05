@@ -1,5 +1,5 @@
 """Bộ chấm n-best: chọn giả thuyết sạch xưng hô/số/Hán thay vì giả thuyết xác suất cao nhất."""
-from novelworker.translator.hachimi_engine import _rank_penalty
+from novelworker.translator.hachimi_engine import _fix_lead_gender, _rank_penalty
 
 
 SOURCE = "他握紧长枪，转身离去。"
@@ -72,3 +72,39 @@ def test_khong_phat_quote_khi_nguon_da_lech():
     # Câu dài bị cắt: mảnh này chỉ có dấu mở, phạt mù sẽ chọn nhầm bản tệ hơn.
     source = "“我不去，"
     assert _rank_penalty(source, "“Ta không đi,") == _rank_penalty(source, "Ta không đi,")
+
+
+# --- ép giới đại từ mở đầu (_fix_lead_gender) ---
+
+def test_ep_gioi_nam_ra_nang():
+    # Nguồn 他 (nam) mà bản dịch mở "Nàng" → ép về "Hắn".
+    assert _fix_lead_gender("他握紧长枪。", "Nàng nắm chặt trường thương.") \
+        == "Hắn nắm chặt trường thương."
+
+
+def test_ep_gioi_nu_ra_han():
+    # Nguồn 她 (nữ) mà bản dịch mở "Hắn/Y/Gã" → ép về "Nàng".
+    assert _fix_lead_gender("她转身离去。", "Gã xoay người rời đi.") == "Nàng xoay người rời đi."
+
+
+def test_khong_dung_khi_dung_gioi():
+    # Đúng giới thì giữ nguyên (không đổi Ả→Nàng khi nguồn là 她).
+    assert _fix_lead_gender("她冷笑。", "Ả cười lạnh.") == "Ả cười lạnh."
+    assert _fix_lead_gender("他大笑。", "Hắn cười lớn.") == "Hắn cười lớn."
+
+
+def test_khong_dung_khi_nguon_luoc_chu_ngu():
+    # Nguồn không có đại từ giới ở lời kể → không ép (để cổng bịa-chủ-ngữ lo).
+    assert _fix_lead_gender("开口说道：“不必了。”", "Nàng mở miệng nói: “Không cần.”") \
+        == "Nàng mở miệng nói: “Không cần.”"
+
+
+def test_ho_so_nhieu_khong_kich_hoat():
+    # 他们 = "bọn họ" (số nhiều) — không phải chủ ngữ số ít, không ép giới.
+    assert _fix_lead_gender("他们走了过来。", "Nàng bọn họ bước tới.") == "Nàng bọn họ bước tới."
+
+
+def test_dai_tu_trong_thoai_khong_kich_hoat():
+    # 他 nằm trong thoại, lời kể lược chủ ngữ → không lấy làm căn cứ ép giới.
+    assert _fix_lead_gender("怒声道：“打断他。”", "Nàng tức giận nói: “Đánh gãy hắn.”") \
+        == "Nàng tức giận nói: “Đánh gãy hắn.”"

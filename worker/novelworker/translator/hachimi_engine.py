@@ -74,6 +74,27 @@ def _invents_subject(source: str, candidate: str) -> bool:
     return bool(_LEAD_PRONOUN.match(candidate) and not _ZH_PRONOUN.search(narration))
 
 
+# Ép giới đại từ MỞ ĐẦU câu kể: nguồn lời kể mở bằng 他/她 số ít (giới RÕ) mà bản dịch ra
+# ngược giới → lỗi user thật sự thấy ("nam mà ra nàng"). Metric gender_wrong trong eval đã đo
+# ca này; đây là bản VÁ runtime (không train lại). ponytail: chỉ ép đại từ ĐẦU DÒNG lời kể —
+# ca phổ biến + chắc chắn nhất; đại từ giới sai giữa câu không map được an toàn, để prompt/model lo.
+_VI_MALE_LEAD = re.compile(r"^(\s*)(?:Hắn|Y|Gã)\b")
+_VI_FEMALE_LEAD = re.compile(r"^(\s*)(?:Nàng|Ả)\b")
+
+
+def _fix_lead_gender(source: str, vi: str) -> str:
+    """Vá đại từ mở đầu bản dịch cho khớp giới của 他/她 rõ ở đầu lời kể nguồn.
+    _ZH_NOT_SUBJECT đã bỏ 他们/她们/其他 nên chỉ còn ngôi ba SỐ ÍT; thoại bị bỏ để không
+    lấy đại từ trong lời nhân vật làm chủ ngữ. Chỉ đổi khi NGƯỢC giới (giữ nguyên nếu đúng)."""
+    narr = _ZH_NOT_SUBJECT.sub("", _ZH_QUOTED.sub("", source)).lstrip()
+    head = narr[:1]
+    if head == "他":  # nam rõ → đích ra Nàng/Ả là sai
+        return _VI_FEMALE_LEAD.sub(r"\1Hắn", vi, count=1)
+    if head == "她":  # nữ rõ → đích ra Hắn/Y/Gã là sai
+        return _VI_MALE_LEAD.sub(r"\1Nàng", vi, count=1)
+    return vi
+
+
 def _rank_penalty(source: str, candidate: str) -> float:
     """Điểm phạt để chọn trong n-best. Beam search đã tính sẵn 4 giả thuyết, lấy hết ra
     gần như không tốn thêm gì — nên dùng chính các cổng chất lượng của dự án để chọn,
@@ -226,15 +247,18 @@ class _Engine:
 
     def translate_lines(self, lines: list[str]) -> list[str]:
         if settings.hachimi_context_lines > 0:
-            return self._translate_context(lines)
-        groups: list[tuple[int, int]] = []
-        pieces: list[str] = []
-        for line in lines:
-            start = len(pieces)
-            pieces.extend(self._split_source(line))
-            groups.append((start, len(pieces)))
-        translated = self._translate_safe(pieces)
-        return [_join_translations(translated[start:end]) for start, end in groups]
+            out = self._translate_context(lines)
+        else:
+            groups: list[tuple[int, int]] = []
+            pieces: list[str] = []
+            for line in lines:
+                start = len(pieces)
+                pieces.extend(self._split_source(line))
+                groups.append((start, len(pieces)))
+            translated = self._translate_safe(pieces)
+            out = [_join_translations(translated[start:end]) for start, end in groups]
+        # source-line ↔ vi-line thẳng hàng ở đây → ép giới đại từ mở đầu (xem _fix_lead_gender)
+        return [_fix_lead_gender(zh, vi) for zh, vi in zip(lines, out)]
 
 
 def available() -> bool:
