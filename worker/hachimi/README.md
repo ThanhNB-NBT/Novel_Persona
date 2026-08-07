@@ -41,6 +41,9 @@ cd E:/Novel_Project/worker/hachimi/pipeline && PYTHONPATH=E:/Novel_Project/worke
 | Dựng gói Kaggle v3 | `python prepare_teacher_v3_pack.py` |
 | Đo model trên eval khoá | `cd ../eval && python evaluate_hachimi_teacher_v2.py` |
 | Đo ảnh hưởng cách chia câu | `cd ../eval && python evaluate_teacher_v2_split.py` |
+| Sinh bó DictDis (term đa nghĩa/jargon, contrastive) | `python make_dictdis_probe.py` |
+| Train DictDis (vá v5 + replay chống-quên, CPU ~38ph) | `python train_dictdis_probe.py --dictdis-repeat 16 --replay-n 4000 --epochs 2` |
+| So 2 model CT2 trên câu DictDis tươi | `python eval_dictdis.py <ct2_A> <ct2_B>` |
 
 Mỗi script pipeline có `--self-check` chạy trong một giây; chạy nó trước khi tin kết quả.
 
@@ -55,3 +58,4 @@ Mỗi script pipeline có `--self-check` chạy trong một giây; chạy nó tr
    nửa lô. Chạy nhiều phiên song song, mỗi phiên một shard riêng.
 4. **Ghi tiếng Việt bằng Python `ensure_ascii=True`**, đừng đẩy qua dòng lệnh PowerShell.
 5. Mỗi vòng train đi từ base `ngocdang83/HachimiMT-60-zh-vi`, không chồng lớp lên vòng trước.
+6. **DictDis vá term đa nghĩa/jargon (đô thị + võng du) bằng THÊM DATA, không đổi kiến trúc** — và là ngoại lệ của quy tắc 5: nó *vá* lên chính v5, không train lại từ base. Marian 57M tự chọn nghĩa theo cue trong câu (人头→mạng, 输出→sát thương, 秒杀→flash sale, chứ không phải "đầu người/xuất khẩu/giết tức thì"). Trần thực tế ~27 term: `--dictdis-repeat 16 --epochs 2` là BẮT BUỘC (thấp hơn = loãng per-term / sập domain), `--replay-n 4000` giữ giọng tự nhiên; đổi lại prose cứng-nhẹ vài câu là giá cố hữu, và ~3 lỗ vặt (自摸-mạt chược, 隐身-offline, 抓人) đổi chỗ theo seed. Đã đo và bác hướng "model to hơn": NLLB-600M chậm 8× CPU + zero-shot dở hơn (chưa có gu). Luôn `eval_dictdis.py` **và đọc tay chương thật** trước khi deploy; deploy phải copy TRỌN BỘ dir CT2 (bản vá khác v5 cả file phụ), không swap mỗi `model.bin`.
