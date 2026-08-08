@@ -27,10 +27,15 @@ class Settings(BaseSettings):
     # (nó viết "Erlton" — chữ Latin nên bảng tra không sửa được, sai là sai luôn),
     # gemma-4-31b 4/5 và chậm hơn, llama-4-maverick chỉ trích 4 term/chương nên sót nhiều.
     # 2026-07-27: NVIDIA gỡ toàn bộ dòng qwen (410 end-of-life), thay tạm glm-5.2.
+    # 2026-08-08: mistral-medium-3.5 EOL (410) + mistral-small-4/large-2/nemotron đều
+    # 404/500/timeout; glm-5.2 chuẩn nhưng 200s/chương (reasoning). Đo lại 3 chương truyện 32:
+    # deepseek-v4-flash 4/5 & 37s, gemma-4-31b 4/5 & 41s (nhưng sót hẳn 1 tên, deepseek chỉ
+    # lệch dấu được reconcile nắn lại) → chọn deepseek-v4-flash. LLM ở đây CHỈ trích tên JSON
+    # nên "deepseek lệch giọng dịch" (lý do gỡ 2026-07-10) không áp dụng.
     # Model THẬT giờ chỉnh ở app (worker_settings.llm_model, worker đọc mỗi 60s) — hằng số
     # dưới CHỈ là fallback khi không đọc được DB. Để khớp lựa chọn hiện tại nên worker
     # không âm thầm tụt model lúc Supabase hụt nhịp.
-    nvidia_model: str = "mistralai/mistral-medium-3.5-128b"
+    nvidia_model: str = "deepseek-ai/deepseek-v4-flash-0731"
     # Pacing theo từng API key, thấp hơn trần NVIDIA 40 RPM để chừa biên đồng hồ/retry.
     nvidia_rpm_limit: int = Field(default=30, ge=1, le=39)
 

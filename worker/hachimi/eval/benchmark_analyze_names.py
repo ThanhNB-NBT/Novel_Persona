@@ -25,10 +25,11 @@ from novelworker.translator.worker import CHUNK_LIMIT, _extract_json
 BASE_URL = "https://integrate.api.nvidia.com/v1"
 CORPUS = Path(__file__).with_name("hachimi_base_longform.jsonl")
 OUTPUT_MD = Path(__file__).with_name("benchmark_analyze_names.md")
-# 2026-07-27: NVIDIA gỡ qwen3-next + mistral-small-4 (410 end-of-life), phải chọn lại.
+# 2026-08-08: cả dòng mistral (medium-3.5 EOL, small-4/large-2/nemotron 404/500/timeout) +
+# gpt-oss-120b (hỏng JSON) + llama-3.3-70b (chậm 235s) đều loại. Đang dùng deepseek-v4-flash.
 CANDIDATES = [
-    "z-ai/glm-5.2",                # đang dùng tạm, làm mốc
-    "mistralai/mistral-medium-3.5-128b",
+    "deepseek-ai/deepseek-v4-flash-0731",   # đang dùng, 4/5 & 37s/chương
+    "google/gemma-4-31b-it",                # mốc: 4/5 nhưng sót 1 tên, chậm hơn chút
 ]
 # Đáp án đã biết (đối chiếu tay từ glossary đã duyệt + gu đã chốt).
 EXPECTED = {
