@@ -313,6 +313,15 @@ def main() -> None:
     assert _key(2) == "keyA"
     assert [_key(i) for i in range(8)] == ["keyA", "keyB"] * 4
 
+    # llm_model nhận danh sách phân cách phẩy → chain thử lần lượt từng model trên CÙNG key.
+    # NIM khai tử/treo theo từng model nên đây là lưới đỡ để job không chết theo một con.
+    providers.settings.nvidia_model = " google/gemma-4-31b-it , openai/gpt-oss-20b "
+    chain = providers.build_chain(0)
+    assert [p.model for _, p in chain.providers] == ["google/gemma-4-31b-it", "openai/gpt-oss-20b"]
+    assert {p.client.api_key for _, p in chain.providers} == {"keyA"}
+    providers.settings.nvidia_model = "chi-mot-model"
+    assert len(providers.build_chain(0).providers) == 1
+
     # Limiter dùng chung theo key: cùng key cách đều 60/RPM, key khác không phải đợi.
     providers._next_request_at.clear()
     clock = [100.0]

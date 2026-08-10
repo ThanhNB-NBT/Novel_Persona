@@ -177,7 +177,10 @@ class FallbackChain:
                 return replace(res, provider=name)
             except Exception as e:
                 last_exc = e
-                log.warning("Provider '%s' lỗi (%s) — chuyển provider kế tiếp", name, e)
+                # Kèm model: chain giờ có nhiều model cùng tên provider 'nvidia', thiếu nó
+                # thì log không cho biết con nào chết.
+                log.warning("Provider '%s' model '%s' lỗi (%s) — thử cái kế tiếp",
+                            name, p.model, e)
         raise last_exc if last_exc else RuntimeError("Không có provider nào khả dụng")
 
     def pin(self, provider: str, model: str) -> "FallbackChain":
@@ -207,7 +210,12 @@ def build_chain(slot: int = 0) -> FallbackChain:
     keys = settings.nvidia_keys
     if not keys:
         raise ValueError("Thiếu NVIDIA_API_KEYS — kiểm tra .env")
-    provider = TranslationProvider(
-        _NVIDIA_BASE_URL, keys[slot % len(keys)], settings.nvidia_model, "nvidia")
+    key = keys[slot % len(keys)]
+    # nvidia_model nhận NHIỀU model, cách nhau dấu phẩy. NIM treo/khai tử theo TỪNG model
+    # (deepseek-v4-flash timeout 184s từ VPS 10/08, qwen3-next EOL 27/07) — model đầu hỏng
+    # thì thử con kế NGAY trong cùng job, thay vì hỏng job rồi chờ retry với đúng model đó.
+    # Đặt danh sách ở worker_settings.llm_model nên đổi thứ tự khỏi cần deploy.
+    models = [m.strip() for m in settings.nvidia_model.split(",") if m.strip()]
     # Luôn bọc FallbackChain (kể cả 1 provider) để `complete(validate=...)` đồng nhất.
-    return FallbackChain([("nvidia", provider)])
+    return FallbackChain([("nvidia", TranslationProvider(_NVIDIA_BASE_URL, key, m, "nvidia"))
+                          for m in models])

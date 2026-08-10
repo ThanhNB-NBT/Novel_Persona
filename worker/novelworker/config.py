@@ -32,10 +32,21 @@ class Settings(BaseSettings):
     # deepseek-v4-flash 4/5 & 37s, gemma-4-31b 4/5 & 41s (nhưng sót hẳn 1 tên, deepseek chỉ
     # lệch dấu được reconcile nắn lại) → chọn deepseek-v4-flash. LLM ở đây CHỈ trích tên JSON
     # nên "deepseek lệch giọng dịch" (lý do gỡ 2026-07-10) không áp dụng.
-    # Model THẬT giờ chỉnh ở app (worker_settings.llm_model, worker đọc mỗi 60s) — hằng số
-    # dưới CHỈ là fallback khi không đọc được DB. Để khớp lựa chọn hiện tại nên worker
-    # không âm thầm tụt model lúc Supabase hụt nhịp.
-    nvidia_model: str = "deepseek-ai/deepseek-v4-flash-0731"
+    # 2026-08-10: deepseek-v4-flash timeout hẳn (94s) khi gọi TỪ VPS — quét cả 41 model
+    # NIM ngay trong container thì chỉ 6 con còn trả lời, và NIM treo theo TỪNG model chứ
+    # không bóp cả IP (llama-3.1-70b chỉ 2,6s cùng lúc gemma-4-31b timeout). Chấm bài
+    # metadata thật (3 truyện, JSON + tên + mô tả):
+    #   llama-3.1-70b-instruct      3/3 3/3 3/3  20,7s  ← chọn
+    #   minimax-m3                  3/3 2/3 3/3  19,8s  (sót chữ Hán: "Thanh符Kiếp")
+    #   nemotron-super-49b-v1       3/3 0/3 3/3   5,6s  (nhanh nhất, tên sai hết)
+    #   mistral-nemotron            3/3 1/3 3/3  23,2s
+    #   llama-3.1-8b-instruct       3/3 1/3 3/3   1,7s
+    #   llama-3.2-3b-instruct       timeout
+    # Nhiều model cách nhau dấu phẩy = chuỗi dự phòng, con đầu treo thì thử con kế NGAY
+    # trong cùng job (xem build_chain). Model THẬT chỉnh ở app (worker_settings.llm_model,
+    # worker đọc mỗi 60s) — hằng số dưới CHỈ là fallback khi không đọc được DB.
+    nvidia_model: str = ("meta/llama-3.1-70b-instruct,minimaxai/minimax-m3,"
+                         "nvidia/llama-3.3-nemotron-super-49b-v1")
     # Pacing theo từng API key, thấp hơn trần NVIDIA 40 RPM để chừa biên đồng hồ/retry.
     nvidia_rpm_limit: int = Field(default=30, ge=1, le=39)
 
