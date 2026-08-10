@@ -643,6 +643,11 @@ def _split_chunks(text: str, limit: int = CHUNK_LIMIT) -> list[str]:
 
 
 _CTRL_ESC = {"\n": "\\n", "\r": "\\r", "\t": "\\t"}
+# Sau dấu phẩy NGẮT JSON thì token kế luôn là key/phần tử mới → mở bằng " { [.
+# Dấu phẩy nằm ngay sau chữ thường là phẩy trong câu văn: mô tả truyện hay có
+# `gọi là "hoạt chỉ nhân", mỗi con…` — trước đây bị hiểu là hết chuỗi nên cả object
+# vỡ và job metadata hỏng cả 3 lần thử (truyện 14816).
+_JSON_NEXT = re.compile(r',\s*(?:["{\[\-\d]|true\b|false\b|null\b)')
 
 
 def _repair_json(text: str) -> str:
@@ -664,7 +669,7 @@ def _repair_json(text: str) -> str:
             elif ch == '"':
                 # Dấu " chỉ đóng chuỗi khi tiếp theo là dấu ngắt JSON; giữa câu thì escape.
                 rest = text[i + 1:].lstrip()
-                if not rest or rest[0] in ",:}]":
+                if not rest or rest[0] in ":}]" or _JSON_NEXT.match(rest):
                     in_string = False
                     out.append(ch)
                 else:

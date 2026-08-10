@@ -59,6 +59,18 @@ def main() -> None:
     assert _extract_json('```json\n{"title_vi":"Tên"}')["title_vi"] == "Tên"
     assert _extract_json('```\n{"title_vi":"Tên", "description_vi": "mô tả bị cắt')["title_vi"] == "Tên"
 
+    # Quote chưa escape rồi tới dấu phẩy GIỮA CÂU: mô tả truyện hay có `gọi là "X", mỗi…`.
+    # Trước đây phẩy nào cũng tính là hết chuỗi → vỡ cả object (job metadata nv14816 hỏng
+    # cả 3 lần thử). Chỉ đóng chuỗi khi sau phẩy là token JSON mới (" { [).
+    trich = ('{"title_vi": "Thanh Phù Kiếp", "description_vi": "Thành xuất hiện '
+             '"hoạt chỉ nhân", mỗi con mang mảnh phù ấn.", "author_vi": "Tinh Tinh"}')
+    assert _extract_json(trich) == {
+        "title_vi": "Thanh Phù Kiếp",
+        "description_vi": 'Thành xuất hiện "hoạt chỉ nhân", mỗi con mang mảnh phù ấn.',
+        "author_vi": "Tinh Tinh"}
+    # Cùng ca đó nhưng bị cắt vì max_tokens — vẫn phải vớt được phần đã nhận.
+    assert _extract_json(trich[:trich.index("mỗi con")])["description_vi"].endswith('"hoạt chỉ nhân",')
+
     # _extract_json: JSON trơn, JSON lẫn chữ thừa 2 đầu, ngoặc/quote lồng trong string
     assert _extract_json('{"a": 1}') == {"a": 1}
     assert _extract_json('Đây là kết quả: [{"a": 1}] xong.') == [{"a": 1}]
