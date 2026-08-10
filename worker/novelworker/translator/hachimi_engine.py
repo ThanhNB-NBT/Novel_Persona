@@ -95,6 +95,35 @@ def _fix_lead_gender(source: str, vi: str) -> str:
     return vi
 
 
+# Ngoặc panel: model hay hạ 【…】 xuống "[… ]" và đổi “…” thành "…". Đo 38 chương mới nhất
+# truyện 2163: 96/98 dòng panel vỡ ngoặc, 527 dòng lệch nháy. Đây là KHUNG ký tự chứ không
+# phải nghĩa — ép thẳng cho khớp nguồn, đừng bắt model tự đoán.
+_PANEL_OPEN = re.compile(r"^\s*[\[【]?\s*")
+_PANEL_CLOSE = re.compile(r"\s*[\]】]?\s*$")
+
+
+def _fix_frame(zh: str, vi: str) -> str:
+    if zh.startswith("【") and zh.endswith("】"):
+        vi = "【" + _PANEL_CLOSE.sub("", _PANEL_OPEN.sub("", vi)) + "】"
+    if "“" in zh and '"' in vi:
+        opened = False
+        chars: list[str] = []
+        for char in vi:
+            if char == '"':
+                chars.append("”" if opened else "“")
+                opened = not opened
+            else:
+                chars.append(char)
+        vi = "".join(chars)
+    return vi
+
+
+def _collapse_repeats(text: str) -> str:
+    while (collapsed := _REPEAT.sub(r"\1", text)) != text:
+        text = collapsed
+    return text
+
+
 def _rank_penalty(source: str, candidate: str) -> float:
     """Điểm phạt để chọn trong n-best. Beam search đã tính sẵn 4 giả thuyết, lấy hết ra
     gần như không tốn thêm gì — nên dùng chính các cổng chất lượng của dự án để chọn,
@@ -211,8 +240,13 @@ class _Engine:
             parts = (soft if _HAN.search(decoded) and len(soft) > 1 else
                      self._hard_split(line, max(8, len(self.src.encode(line)) // 2)))
             if len(parts) == 1:
-                reason = "còn chữ Hán" if _HAN.search(decoded) else "chạm trần output"
-                raise RuntimeError(f"Hachimi {reason} dù nguồn không thể chia tiếp")
+                if _HAN.search(decoded):
+                    raise RuntimeError("Hachimi còn chữ Hán dù nguồn không thể chia tiếp")
+                # Dòng tượng thanh ngắn (咕叽咕叽) làm model lặp tới trần token mà nguồn lại
+                # quá ngắn để chia tiếp — chương 158 truyện 2163 chết vĩnh viễn vì đúng ca này.
+                # Gom cụm lặp rồi NHẬN: một dòng xấu rẻ hơn nhiều so với mất cả chương.
+                out.append(_collapse_repeats(decoded))
+                continue
             out.append(_join_translations(self._translate_safe(parts)))
         return out
 
@@ -257,8 +291,8 @@ class _Engine:
                 groups.append((start, len(pieces)))
             translated = self._translate_safe(pieces)
             out = [_join_translations(translated[start:end]) for start, end in groups]
-        # source-line ↔ vi-line thẳng hàng ở đây → ép giới đại từ mở đầu (xem _fix_lead_gender)
-        return [_fix_lead_gender(zh, vi) for zh, vi in zip(lines, out)]
+        # source-line ↔ vi-line thẳng hàng ở đây → ép giới đại từ mở đầu và khung ngoặc/nháy
+        return [_fix_frame(zh, _fix_lead_gender(zh, vi)) for zh, vi in zip(lines, out)]
 
 
 def available() -> bool:
@@ -317,6 +351,14 @@ def _self_check() -> None:
     from .termguard import _ALNUM_CODES
     code = _ALNUM_CODES[1]
     assert _join_translations(["Hắn hỏi,", f"{code} gật đầu."]) == f"Hắn hỏi, {code} gật đầu."
+    # Khung ngoặc/nháy phải khớp nguồn, kể cả khi panel có nhãn 【…】 lồng bên trong.
+    assert _fix_frame("【叮！】", "[Đinh! ]") == "【Đinh!】"
+    assert _fix_frame("【体质：九炎雷体【已激活50％】】",
+                      "[Thể chất: Cửu Viêm Lôi Thể 【Đã kích hoạt 50%】]"
+                      ) == "【Thể chất: Cửu Viêm Lôi Thể 【Đã kích hoạt 50%】】"
+    assert _fix_frame("他说：“走。”", 'Hắn nói: "Đi thôi."') == "Hắn nói: “Đi thôi.”"
+    assert _fix_frame("他说：\"走。\"", 'Hắn nói: "Đi thôi."') == 'Hắn nói: "Đi thôi."'
+    assert _collapse_repeats("Ục ù ù ù ù ù ù") == "Ục ù"
     dialogue = "“你不会吧？连这都问呀？”他说道！"
     assert _get()._split_source(dialogue) == [dialogue], "không được xé một lượt thoại"
     long_src = "少年握紧手中长剑。" * 30
