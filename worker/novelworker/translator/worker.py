@@ -8,6 +8,7 @@ import signal
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timezone
 
 from .. import blob, db
 from ..config import settings
@@ -1143,6 +1144,40 @@ def _novel_tag(novel_id: int, nv: dict | None = None) -> str:
     return f"nv{novel_id} «{title[:40]}»" if title else f"nv{novel_id}"
 
 
+def _retranslate_early_chapters_once(novel_id: int, chapter_index: int) -> None:
+    """Xếp dịch lại chương 1..gate MỘT LẦN, ngay sau khi vùng trích tên đi qua.
+
+    Trích tên chạy NỀN (chờ mạng 38-79s) còn Hachimi dịch xong chương trong ~24s → các
+    chương đầu bị dịch khi glossary còn rỗng, tên bịa theo từng chương: nv8466 có "Lư Quân
+    Nho" 23 lần lẫn "Lô Quân Nho" 14 lần cho CÙNG một người. Dịch lại bằng glossary đã đầy
+    là cách chữa rẻ nhất (Hachimi chạy local, 0 call LLM).
+    ponytail: chỉ bắt đúng chương gate+1 nên mỗi truyện tốn 1 query thừa trong cả đời;
+    truyện dịch nhảy cóc qua mốc này thì bỏ lỡ — xếp tay bằng "dịch lại chương" là xong.
+    """
+    if chapter_index != settings.hachimi_extract_max_chapter + 1:
+        return
+    try:
+        nv = (db.sb().table("novels").select("early_retranslated_at")
+              .eq("id", novel_id).single().execute()).data or {}
+        if nv.get("early_retranslated_at"):
+            return
+        # đánh dấu TRƯỚC khi xếp: hai worker cùng chạy tới đây thì chỉ một bên xếp job
+        db.sb().table("novels").update(
+            {"early_retranslated_at": datetime.now(timezone.utc).isoformat()},
+            returning="minimal").eq("id", novel_id).execute()
+        rows = (db.sb().table("chapters").select("id")
+                .eq("novel_id", novel_id).eq("translation_status", "done")
+                .lte("chapter_index", settings.hachimi_extract_max_chapter)
+                .execute()).data or []
+        for row in rows:
+            # priority thấp: chương người ta đang chờ đọc luôn được dịch trước
+            db.enqueue("chapter", novel_id, row["id"], priority=90)
+        log.info("Xếp dịch lại %d chương đầu của nv%s bằng glossary đã đủ tên",
+                 len(rows), novel_id)
+    except Exception:
+        log.exception("Không xếp được dịch lại chương đầu nv%s", novel_id)
+
+
 def handle_chapter(job: dict, llm) -> None:
     # Cột cụ thể, KHÔNG select("*"): dịch lại chương đã có bản Việt thì "*" kéo thêm cả
     # content_vi cũ (~10KB) về rồi vứt — egress Supabase Free có 5GB/tháng.
@@ -1286,6 +1321,7 @@ def handle_chapter(job: dict, llm) -> None:
         log.exception("Không lưu được lint_score chương %s", ch["id"])
 
     save_detected_names(ch["novel_id"], ch["chapter_index"], detected, terms, preexisting_zh)
+    _retranslate_early_chapters_once(ch["novel_id"], ch["chapter_index"])
     try:
         db.increment_glossary_hits(ch["novel_id"], [
             t["term_zh"] for t in terms
@@ -1315,12 +1351,16 @@ def _set_patch_result(job_id: int, note: str) -> None:
         log.debug("Không ghi được result cho job #%s (migration 069 chưa chạy?)", job_id)
 
 
-def _patch_replacements(terms: list[dict]) -> list[tuple[str, str]]:
-    """Chuỗi thay thế cho job vá, ưu tiên cụm dài để không đè thuật ngữ con."""
-    repls = [(t["wrong_vi"], t["correct_vi"]) for t in terms
+def _patch_replacements(terms: list[dict]) -> list[tuple[str, str, bool]]:
+    """Chuỗi thay thế cho job vá: (wrong, correct, theo_ranh_gioi_tu).
+
+    Cặp Việt→Việt phải theo RANH GIỚI TỪ: replace() thô từng biến "xem" thành "xmuội"
+    trên MỌI chương done khi glossary có cặp 'em'→'muội'. Cụm Hán→Việt thì không có biên
+    từ nên thay thẳng. Ưu tiên cụm dài để không đè thuật ngữ con."""
+    repls = [(t["wrong_vi"], t["correct_vi"], True) for t in terms
              if t.get("wrong_vi") and t.get("correct_vi")]
     # + tên còn SÓT dạng chữ Hán trong bản dịch cũ → thay bằng bản chuẩn luôn thể
-    repls += [(t["term_zh"], t["correct_vi"]) for t in terms
+    repls += [(t["term_zh"], t["correct_vi"], False) for t in terms
               if t.get("term_zh") and t.get("correct_vi")]
     repls.sort(key=lambda p: -len(p[0]))  # cụm dài thay trước, không đè cụm con
     return repls
@@ -1350,9 +1390,13 @@ def handle_patch(job: dict, llm=None) -> None:
     for ch in chapters:
         title, content = ch.get("title_vi") or "", ch.get("content_vi") or ""
         new_title, new_content = title, content
-        for wrong, correct in repls:
-            new_title = new_title.replace(wrong, correct)
-            new_content = new_content.replace(wrong, correct)
+        for wrong, correct, by_word in repls:
+            if by_word:
+                new_title = db.replace_word(new_title, wrong, correct)
+                new_content = db.replace_word(new_content, wrong, correct)
+            else:
+                new_title = new_title.replace(wrong, correct)
+                new_content = new_content.replace(wrong, correct)
         if (new_title, new_content) != (title, content):
             db.sb().table("chapters").update({
                 "title_vi": new_title or None, "content_vi": new_content,

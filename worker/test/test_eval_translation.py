@@ -44,8 +44,8 @@ def test_patch_replacements_include_old_vietnamese_and_han_residue():
         {'term_zh': '林同', 'correct_vi': 'Lâm Tùng'},
     ])
 
-    assert ('Lâm', 'Lâm Tùng') in repls
-    assert ('林同', 'Lâm Tùng') in repls
+    assert ('Lâm', 'Lâm Tùng', True) in repls   # Việt→Việt: theo ranh giới từ
+    assert ('林同', 'Lâm Tùng', False) in repls  # Hán→Việt: thay thẳng
 
 
 def test_self_reference_omission():

@@ -547,6 +547,15 @@ def mark_source_fail(source_id: int, fail_limit: int) -> bool:
 
 # ---------- glossary ----------
 
+# Thay theo RANH GIỚI TỪ. Cặp sửa của user là tiếng Việt ('em'→'muội'); replace() thô biến
+# "xem" thành "xmuội" và term "Kiếm" thành "Kimuội" — đã ra lỗi thật (chapter_edit_vi_history).
+# Chữ Hán không có biên từ nên chỉ dùng hàm này cho cặp Việt→Việt.
+def replace_word(text: str, wrong: str, correct: str) -> str:
+    if not wrong:
+        return text
+    return re.sub(rf"(?<!\w){re.escape(wrong)}(?!\w)", correct.replace("\\", "\\\\"), text)
+
+
 def heal_glossary_terms(terms: list[dict]) -> list[dict]:
     """User sửa bản dịch qua form ("Hoan Yêu"→"Huyễn Yêu", term thường KHÔNG có term_zh)
     nhưng gợi ý LLM mang đúng cái sai đó (幻妖→"Hoan Yêu") vẫn nằm trong glossary → prompt
@@ -560,7 +569,7 @@ def heal_glossary_terms(terms: list[dict]) -> list[dict]:
         cv = t.get("correct_vi") or ""
         new = cv
         for w, c in repls:
-            new = new.replace(w, c)
+            new = replace_word(new, w, c)
         if new != cv:
             if not t.get("wrong_vi"):
                 t["wrong_vi"] = cv

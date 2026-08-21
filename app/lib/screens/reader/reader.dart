@@ -321,6 +321,15 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     });
   }
 
+  /// Tên riêng tiếng Việt: MỌI từ viết hoa ("Lâm Hiên", "Trúc Cơ"). Dùng để quyết định
+  /// cặp sửa có được đắp vào glossary (áp cho cả truyện) hay chỉ sửa chương này.
+  static bool _looksLikeName(String s) {
+    final words = s.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
+    if (words.isEmpty) return false;
+    return words.every((w) =>
+        w[0].toUpperCase() == w[0] && w[0].toLowerCase() != w[0]);
+  }
+
   void _closeEdit() {
     _correct.clear();
     _editing.value = false;
@@ -335,9 +344,14 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     final v = _correct.text.trim();
     final w = wrong.trim();
     if (v.isEmpty || w.isEmpty || v == w) return; // trống/không đổi → bỏ
+    // Chỉ TÊN RIÊNG mới được đắp vào glossary: glossary áp cho MỌI chương sau bằng
+    // string-replace, nên cặp từ thường ('em'→'muội') từng sinh ra "xmuội" khắp truyện.
+    // Sửa từ thường vẫn có tác dụng — chỉ giới hạn trong chương đang đọc.
+    final isName = _looksLikeName(w) && _looksLikeName(v);
     try {
-      await editChapterText(novelId, chapterIndex, w, v); // sửa THẲNG chương này (không LLM, không queue)
-      await submitCorrection(novelId, w, v); // lưu glossary cho chương/truyện dịch SAU
+      // p_para = đoạn đang chạm → server chỉ sửa trong đoạn đó, chỗ khác trong chương yên
+      await editChapterText(novelId, chapterIndex, w, v, para: _sel.value?.block);
+      if (isName) await submitCorrection(novelId, w, v); // glossary cho chương dịch SAU
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Chưa lưu được: $e')));
@@ -350,9 +364,11 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     if (mounted) {
       final messenger = ScaffoldMessenger.of(context);
       messenger.showSnackBar(SnackBar(
-        content: const Text('Đã sửa'),
+        content: Text(isName ? 'Đã sửa' : 'Đã sửa trong chương này'),
         duration: const Duration(milliseconds: 2500), // gọn — mặc định 4s hơi lâu
-        action: SnackBarAction(
+        // "Áp cả truyện" chạy string-replace theo glossary → chỉ mời khi vừa thêm TÊN
+        // RIÊNG vào glossary; từ thường không có gì để áp, bấm chỉ tổ vá nhầm.
+        action: !isName ? null : SnackBarAction(
           label: 'Áp cả truyện',
           // string-replace mọi chương done (miễn phí, chạy nền) — chỉ khi bạn chủ động bấm.
           // SnackBarAction tự ẩn snackbar; hiện xác nhận ngắn thay thế.
@@ -365,6 +381,52 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
         ),
       ));
     }
+  }
+
+  /// Viết lại NGUYÊN đoạn đang chạm. Không string-replace: server ghép đoạn mới vào đúng
+  /// chỗ đoạn cũ, và từ chối nếu đoạn cũ đã đổi (người khác vừa sửa) — xem migration 093.
+  Future<void> _editWholePara(String block) async {
+    if (sb.auth.currentUser == null) {
+      context.push('/login');
+      return;
+    }
+    final ctrl = TextEditingController(text: block);
+    final messenger = ScaffoldMessenger.of(context);
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Sửa cả đoạn'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: TextField(
+            controller: ctrl,
+            autofocus: true,
+            maxLines: null,
+            minLines: 5,
+            decoration: const InputDecoration(
+              helperText: 'Viết lại nguyên đoạn; chỉ đoạn này đổi.',
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Huỷ')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Lưu')),
+        ],
+      ),
+    );
+    final text = ctrl.text.trim();
+    ctrl.dispose();
+    if (saved != true || text.isEmpty || text == block) return;
+    try {
+      await editChapterPara(novelId, chapterIndex, block, text);
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Chưa lưu được: $e')));
+      return;
+    }
+    _closeEdit();
+    ref.invalidate(chapterProvider(ChapterKey(novelId, chapterIndex)));
+    messenger.showSnackBar(const SnackBar(
+        content: Text('Đã sửa đoạn'), duration: Duration(milliseconds: 2000)));
   }
 
   Future<void> _showTranslationReport(Sel sel, String selected) async {
@@ -1027,6 +1089,16 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
               child: FilledButton(
                 onPressed: () => _submitEdit(wrong),
                 child: const Text('Lưu'),
+              ),
+            ),
+            const SizedBox(height: 6),
+            SizedBox(
+              width: double.infinity,
+              // Câu tối nghĩa thì thay một từ không cứu được — mở luôn cả đoạn ra viết lại.
+              child: OutlinedButton.icon(
+                onPressed: () => _editWholePara(block),
+                icon: const Icon(Icons.notes_rounded),
+                label: const Text('Sửa cả đoạn'),
               ),
             ),
             const SizedBox(height: 6),

@@ -84,17 +84,29 @@ final chapterProvider = FutureProvider.autoDispose.family<Rec?, ChapterKey>((
 
 /// Sửa TRỰC TIẾP bản dịch 1 chương (string-replace, không LLM, không hàng đợi) → hiện ngay
 /// sau khi invalidate chapterProvider. RPC SECURITY DEFINER (migration 021).
-Future<void> editChapterText(int novelId, int index, String wrong, String correct) =>
+Future<void> editChapterText(int novelId, int index, String wrong, String correct,
+        {String? para}) =>
     sb.rpc('edit_chapter_vi', params: {
       'p_novel_id': novelId,
       'p_index': index,
       'p_wrong': wrong,
       'p_correct': correct,
+      // đoạn đang chạm — server chỉ thay TRONG đoạn này (migration 091); null = cả chương
+      'p_para': para,
+    });
+
+/// Sửa NGUYÊN ĐOẠN (viết lại cả câu) — không string-replace, chỉ ghép đoạn mới vào đúng chỗ
+/// đoạn cũ. Server báo lỗi nếu đoạn cũ đã đổi (RPC migration 093).
+Future<void> editChapterPara(int novelId, int index, String oldPara, String newPara) =>
+    sb.rpc('edit_chapter_para', params: {
+      'p_novel_id': novelId,
+      'p_index': index,
+      'p_old': oldPara,
+      'p_new': newPara,
     });
 
 /// Góp ý sửa bản dịch: lưu như term glossary (dùng cho chương/truyện dịch SAU). Theo plan §5.2.
 Future<void> submitCorrection(int novelId, String wrong, String correct) async {
-  final uid = sb.auth.currentUser!.id;
   // Term đang mang ĐÚNG bản sai này (thường là gợi ý LLM có kèm chữ Trung, vd
   // 幻妖→"Hoan Yêu") → sửa TẠI CHỖ thay vì thêm term mới: giữ liên kết term_zh nên
   // chương dịch SAU được prompt ép đúng tên, không chỉ vá chương cũ bằng patch.
@@ -103,24 +115,16 @@ Future<void> submitCorrection(int novelId, String wrong, String correct) async {
       .select('id')
       .eq('novel_id', novelId)
       .eq('correct_vi', wrong));
-  if (hits.isNotEmpty) {
-    for (final h in hits) {
-      await sb.from('glossary_terms').update({
-        'correct_vi': correct,
-        'wrong_vi': wrong,
-        'approved': true,
-      }).eq('id', h['id']);
-    }
-    return;
+  // KHÔNG chèn term mới khi không tìm thấy: term không có term_zh chẳng giúp gì lúc dịch
+  // (termguard cưỡng chế theo chữ Hán), nó chỉ chạy string-replace lên MỌI chương — đúng
+  // cơ chế đã đẻ ra 'em'→'muội' rồi "xmuội". Sửa từ lạ chỉ có tác dụng trong chương đang đọc.
+  for (final h in hits) {
+    await sb.from('glossary_terms').update({
+      'correct_vi': correct,
+      'wrong_vi': wrong,
+      'approved': true,
+    }).eq('id', h['id']);
   }
-  await sb.from('glossary_terms').insert({
-    'novel_id': novelId,
-    'wrong_vi': wrong,
-    'correct_vi': correct,
-    'term_type': 'other',
-    'approved': true,
-    'created_by': uid,
-  });
 }
 
 // ---------- Yêu cầu dịch ----------
