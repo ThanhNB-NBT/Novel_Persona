@@ -113,6 +113,10 @@ class Settings(BaseSettings):
     # lượng của dự án. Đo 12 chương thật: đại từ hiện đại 81→64, quote lệch 3→2, câu/chương
     # 97→100, thời gian +1,6% (nhiễu). 1 = giữ hành vi cũ (chỉ lấy giả thuyết đầu).
     hachimi_nbest: int = 6
+    # Trần số câu CT2 gom vào một lượt giải mã. 0 = không giới hạn (mặc định của CT2) nghĩa
+    # là cả chương 246 dòng nằm trong RAM cùng lúc — trên VPS 2GB là swap, chương dài từng
+    # ngốn 2365s thay vì ~30s. Đo trên máy 8 lõi: batch 8 còn NHANH hơn không-giới-hạn 25%.
+    hachimi_max_batch: int = 8
     # Doc-level: ghép tối đa N dòng nguồn Trung phía trước làm ngữ cảnh (đúng định dạng train
     # `ctx ⟪ctx⟫ câu` của pipeline 17) để model hết bịa chủ ngữ. 0 = TẮT (hành vi cũ, an toàn) —
     # chỉ bật SAU khi deploy model đã train doc-level; model thường không hiểu ⟪ctx⟫ sẽ dịch loạn.

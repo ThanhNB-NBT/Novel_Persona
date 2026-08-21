@@ -222,7 +222,8 @@ class _Engine:
         results = self.translator.translate_batch(
             source, beam_size=self.beam,
             num_hypotheses=nbest,
-            max_decoding_length=settings.hachimi_max_len)
+            max_decoding_length=settings.hachimi_max_len,
+            max_batch_size=settings.hachimi_max_batch)
         out: list[str] = []
         for line, res in zip(lines, results):
             best = res.hypotheses[0]
@@ -271,7 +272,8 @@ class _Engine:
         encoded = [self.src.encode(s, out_type=str) + [_EOS] for s in sources]
         results = self.translator.translate_batch(
             encoded, beam_size=self.beam, num_hypotheses=max(1, min(self.nbest, self.beam)),
-            max_decoding_length=settings.hachimi_max_len)
+            max_decoding_length=settings.hachimi_max_len,
+            max_batch_size=settings.hachimi_max_batch)
         out: list[str] = []
         for current, res in zip(currents, results):
             best = min(res.hypotheses,
