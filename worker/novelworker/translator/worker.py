@@ -1170,6 +1170,9 @@ def _retranslate_early_chapters_once(novel_id: int, chapter_index: int) -> None:
                 .lte("chapter_index", settings.hachimi_extract_max_chapter)
                 .execute()).data or []
         for row in rows:
+            # Chương đã dịch xong đang giữ một job 'done'; unique index chặn job trùng nên
+            # phải dọn job cũ trước, y như RPC retranslate_chapter vẫn làm.
+            db.sb().table("translation_jobs").delete(returning="minimal")                 .eq("chapter_id", row["id"]).in_("status", ["done", "failed"]).execute()
             # priority thấp: chương người ta đang chờ đọc luôn được dịch trước
             db.enqueue("chapter", novel_id, row["id"], priority=90)
         log.info("Xếp dịch lại %d chương đầu của nv%s bằng glossary đã đủ tên",
