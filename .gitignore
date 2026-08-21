@@ -100,3 +100,6 @@ skills-lock.json
 
 # Goi Kaggle nen (binary lon)
 worker/hachimi/packs/**/*.zip
+
+# backup glossary do script dọn sinh ra (dữ liệu người dùng, không lên repo public)
+worker/glossary_unanchored_backup_*.json
