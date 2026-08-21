@@ -185,6 +185,40 @@ class _JobsTab extends ConsumerWidget {
   }
 }
 
+/// Một dòng nhịp tim worker: chấm màu + "hoạt động 12s trước". crawler beat mỗi ~10s
+/// (mịn hơn khi đang tải chương), translator mỗi 60s; quá 3 phút im = coi như treo/tắt.
+Widget workerPulse(BuildContext context, List<Rec> beats, String name, String label) {
+  final cs = Theme.of(context).colorScheme;
+  final t = Theme.of(context).textTheme;
+  final row = beats.where((b) => b['name'] == name).firstOrNull;
+  String text;
+  Color dot;
+  if (row == null) {
+    text = '$label: chưa từng chạy';
+    dot = cs.error;
+  } else {
+    final age = DateTime.now().toUtc()
+        .difference(DateTime.parse(row['at'] as String).toUtc());
+    final alive = age.inSeconds < 180;
+    dot = alive ? _kLive : cs.error;
+    final ago = age.inSeconds < 60 ? '${age.inSeconds}s' : _elapsed(row['at'] as String);
+    final note = alive ? (row['note'] as String?) : null;
+    text = alive
+        ? '$label: hoạt động $ago trước${note != null ? ' — $note' : ''}'
+        : '$label: KHÔNG phản hồi ($ago) — kiểm tra Docker';
+  }
+  return Row(children: [
+    Container(width: 8, height: 8,
+        decoration: BoxDecoration(color: dot, shape: BoxShape.circle)),
+    const SizedBox(width: 8),
+    Expanded(
+      child: Text(text, maxLines: 1, overflow: TextOverflow.ellipsis,
+          style: t.labelSmall),
+    ),
+  ]);
+}
+
+
 /// Thống kê nhanh hàng đợi worker + NHỊP TIM (crawler/translator điểm danh định kỳ
 /// vào worker_heartbeat — biết chắc sống hay treo, không phải đoán qua job).
 class _JobStats extends ConsumerWidget {
@@ -194,38 +228,8 @@ class _JobStats extends ConsumerWidget {
        required this.blocked, required this.pending, required this.shown,
        required this.failed});
 
-  /// crawler beat mỗi ~10s (mịn hơn khi đang tải chương), translator mỗi 60s.
-  /// Quá 3 phút không điểm danh = coi như treo/tắt.
-  Widget _pulse(BuildContext context, List<Rec> beats, String name, String label) {
-    final cs = Theme.of(context).colorScheme;
-    final t = Theme.of(context).textTheme;
-    final row = beats.where((b) => b['name'] == name).firstOrNull;
-    String text;
-    Color dot;
-    if (row == null) {
-      text = '$label: chưa từng chạy';
-      dot = cs.error;
-    } else {
-      final age = DateTime.now().toUtc()
-          .difference(DateTime.parse(row['at'] as String).toUtc());
-      final alive = age.inSeconds < 180;
-      dot = alive ? _kLive : cs.error;
-      final ago = age.inSeconds < 60 ? '${age.inSeconds}s' : _elapsed(row['at'] as String);
-      final note = alive ? (row['note'] as String?) : null;
-      text = alive
-          ? '$label: hoạt động $ago trước${note != null ? ' — $note' : ''}'
-          : '$label: KHÔNG phản hồi ($ago) — kiểm tra Docker';
-    }
-    return Row(children: [
-      Container(width: 8, height: 8,
-          decoration: BoxDecoration(color: dot, shape: BoxShape.circle)),
-      const SizedBox(width: 8),
-      Expanded(
-        child: Text(text, maxLines: 1, overflow: TextOverflow.ellipsis,
-            style: t.labelSmall),
-      ),
-    ]);
-  }
+  Widget _pulse(BuildContext context, List<Rec> beats, String name, String label) =>
+      workerPulse(context, beats, name, label);
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -540,8 +544,9 @@ class _CrawlTab extends ConsumerStatefulWidget {
 }
 
 class _CrawlTabState extends ConsumerState<_CrawlTab> {
-  // Thu gọn từng mục — tab dài, admin thường chỉ soi 1 mục mỗi lần.
-  bool _openCfg = true, _openTrans = true, _openSrc = true, _openFresh = true;
+  // Mặc định THU GỌN hết: tab dài, admin mở đúng mục cần xem. Thẻ nhịp 24h ở đầu luôn
+  // hiện nên vào tab vẫn thấy ngay hệ thống có chạy không.
+  bool _openCfg = false, _openTrans = false, _openSrc = false, _openFresh = false;
 
   // Knob của translator (note bắt đầu 'DỊCH ·') tách nhóm riêng khỏi crawler.
   static bool _isTransKey(Rec s) => '${s['note'] ?? ''}'.startsWith('DỊCH');
@@ -558,6 +563,8 @@ class _CrawlTabState extends ConsumerState<_CrawlTab> {
       ref.invalidate(crawlSettingsProvider);
       ref.invalidate(crawlSourcesProvider);
       ref.invalidate(newNovels24hProvider);
+      ref.invalidate(crawlPulseProvider);
+      ref.invalidate(workerHeartbeatProvider);
     }
 
     // thẻ bo tròn viền mảnh — cùng ngôn ngữ với thẻ thống kê các tab khác
@@ -606,12 +613,31 @@ class _CrawlTabState extends ConsumerState<_CrawlTab> {
 
     // 1 hàng cấu hình: tên thân thiện + key kỹ thuật (mono, mờ) + pill giá trị kèm bút
     // sửa — cả pill là affordance "bấm để sửa" rõ ràng.
-    Widget settingRow(Rec s) => InkWell(
+    // pill giá trị: nền nhấn nhạt, bo tròn — dùng cho cả giá trị ngắn lẫn từng model dài
+    Widget valuePill(String v, {bool mono = false}) => Container(
+          padding: EdgeInsets.fromLTRB(mono ? 10 : 13, mono ? 4 : 6, mono ? 10 : 13, mono ? 4 : 6),
+          decoration: BoxDecoration(
+            color: cs.primaryContainer.withValues(alpha: mono ? 0.35 : 0.5),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          // mono = tên model/định danh kỹ thuật: chữ nhỏ, đều nét, đọc dễ hơn chữ tít
+          child: Text(v,
+              maxLines: 1, overflow: TextOverflow.ellipsis,
+              style: mono
+                  ? monoStyle(context, size: 11, color: cs.primary)
+                  : t.titleSmall?.copyWith(color: cs.primary)),
+        );
+
+    Widget settingRow(Rec s) {
+      final value = '${s['value']}';
+      final long = value.length > 16 || value.contains(',');
+      return InkWell(
           onTap: () => _editSetting(context, ref, s),
           borderRadius: BorderRadius.circular(12),
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 11),
-            child: Row(children: [
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
               Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   // bỏ tiền tố nhóm 'DỊCH ·'/'CRAWL ·' — đã tách section rồi
@@ -623,23 +649,25 @@ class _CrawlTabState extends ConsumerState<_CrawlTab> {
                 ]),
               ),
               const SizedBox(width: 10),
-              Container(
-                padding: const EdgeInsets.fromLTRB(13, 6, 9, 6),
-                decoration: BoxDecoration(
-                  color: cs.primaryContainer.withValues(alpha: 0.5),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  Text('${s['value']}',
-                      style: t.titleSmall?.copyWith(color: cs.primary)),
-                  const SizedBox(width: 6),
-                  Icon(Icons.edit_rounded, size: 13,
-                      color: cs.primary.withValues(alpha: 0.7)),
-                ]),
-              ),
+              if (!long) valuePill('${s['value']}'),
+              if (long)
+                Icon(Icons.edit_rounded, size: 15,
+                    color: cs.primary.withValues(alpha: 0.7)),
             ]),
+            // Giá trị dài (chuỗi model LLM dự phòng) nhét vào pill bên phải thì bị bóp
+            // còn một ký tự mỗi dòng — cho xuống hàng riêng, mỗi model một chip.
+            if (long) ...[
+              const SizedBox(height: 8),
+              Wrap(spacing: 6, runSpacing: 6, children: [
+                for (final part in '${s['value']}'.split(',').map((e) => e.trim())
+                    .where((e) => e.isNotEmpty))
+                  valuePill(part, mono: true),
+              ]),
+            ],
+          ]),
           ),
         );
+    }
 
     // 1 hàng nguồn: tên + chip trạng thái màu (SỐNG/LỖI/TẮT) + host/nhịp gọn, switch bật/tắt
     Widget sourceRow(Rec s) {
@@ -704,6 +732,7 @@ class _CrawlTabState extends ConsumerState<_CrawlTab> {
       child: ListView(
         padding: const EdgeInsets.only(bottom: 24),
         children: [
+          const _CrawlPulseCard(),
           sectionLabel(Icons.translate_rounded, 'CẤU HÌNH DỊCH',
               hint: 'Sửa xong worker tự nhận trong ~1 phút — không cần restart.',
               open: _openTrans,
@@ -776,6 +805,9 @@ class _CrawlTabState extends ConsumerState<_CrawlTab> {
 
   void _editSetting(BuildContext context, WidgetRef ref, Rec s) {
     final ctrl = TextEditingController(text: '${s['value']}');
+    // Knob số thì bắt số như cũ; knob CHUỖI (llm_model = danh sách model dự phòng) trước
+    // đây rơi vào int.tryParse → bấm Lưu không có gì xảy ra, không sửa được từ app.
+    final isNumber = int.tryParse('${s['value']}') != null;
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -785,17 +817,25 @@ class _CrawlTabState extends ConsumerState<_CrawlTab> {
           child: TextField(
             controller: ctrl,
             autofocus: true,
-            keyboardType: TextInputType.number,
-            decoration: InputDecoration(labelText: s['key']),
+            keyboardType: isNumber ? TextInputType.number : TextInputType.text,
+            maxLines: isNumber ? 1 : null,
+            decoration: InputDecoration(
+              labelText: s['key'],
+              helperText: isNumber ? null : 'Nhiều giá trị thì ngăn bằng dấu phẩy.',
+            ),
           ),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Huỷ')),
           FilledButton(
             onPressed: () async {
-              final v = int.tryParse(ctrl.text.trim());
-              if (v == null || v < 0) return; // chỉ nhận số không âm (0 = tắt với knob hỗ trợ)
-              await updateCrawlSetting(s['key'] as String, '$v');
+              final raw = ctrl.text.trim();
+              if (raw.isEmpty) return;
+              if (isNumber) {
+                final v = int.tryParse(raw);
+                if (v == null || v < 0) return; // số không âm (0 = tắt với knob hỗ trợ)
+              }
+              await updateCrawlSetting(s['key'] as String, raw);
               if (ctx.mounted) Navigator.pop(ctx);
               ref.invalidate(crawlSettingsProvider);
             },
@@ -806,6 +846,70 @@ class _CrawlTabState extends ConsumerState<_CrawlTab> {
     );
   }
 }
+
+/// Nhịp 24 giờ ở đầu tab Crawl: crawl về bao nhiêu, dịch xong bao nhiêu, còn kẹt bao
+/// nhiêu — cộng nhịp tim hai tiến trình. Mọi mục bên dưới mặc định thu gọn nên đây là
+/// thứ admin thấy đầu tiên khi mở tab.
+class _CrawlPulseCard extends ConsumerWidget {
+  const _CrawlPulseCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final cs = Theme.of(context).colorScheme;
+    final t = Theme.of(context).textTheme;
+    final p = ref.watch(crawlPulseProvider).value;
+    final beats = ref.watch(workerHeartbeatProvider).value ?? const <Rec>[];
+    Widget cell(int? v, String label, Color? c) => Expanded(
+          child: Column(children: [
+            Text(v == null ? '—' : '$v', style: t.headlineSmall?.copyWith(color: c)),
+            const SizedBox(height: 2),
+            Text(label, textAlign: TextAlign.center, style: t.labelSmall),
+          ]),
+        );
+    final failedChapters = p?['failedChapters'] ?? 0;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+        decoration: BoxDecoration(
+          color: cs.primaryContainer.withValues(alpha: 0.4),
+          borderRadius: BorderRadius.circular(18),
+        ),
+        child: Column(children: [
+          Row(children: [
+            cell(p?['novels24h'], 'truyện mới\n24h', cs.primary),
+            cell(p?['chapters24h'], 'chương về\n24h', cs.tertiary),
+            cell(p?['done24h'], 'dịch xong\n24h', _kLive),
+            cell(failedChapters, 'chương lỗi',
+                failedChapters > 0 ? cs.error : null),
+          ]),
+          const SizedBox(height: 12),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Column(children: [
+              Text(
+                [
+                  '${p?['done1h'] ?? '—'} chương/giờ',
+                  'chờ dịch ${p?['queued'] ?? '—'}',
+                  'chưa dịch giới thiệu ${p?['metaPending'] ?? '—'}',
+                  'job lỗi ${p?['failedJobs'] ?? '—'}',
+                  'đang theo dõi ${p?['tracked'] ?? '—'} truyện',
+                ].join(' · '),
+                textAlign: TextAlign.center,
+                style: t.labelSmall?.copyWith(color: cs.onSurfaceVariant),
+              ),
+              const SizedBox(height: 10),
+              workerPulse(context, beats, 'crawler', 'Crawler'),
+              const SizedBox(height: 6),
+              workerPulse(context, beats, 'translator', 'Translator'),
+            ]),
+          ),
+        ]),
+      ),
+    );
+  }
+}
+
 
 /// 1 truyện mới về: bìa + tên + lúc về + "Top #N · nguồn" (nguồn KHÔNG công bố số
 /// lượt đọc — chỉ có thứ hạng trên bảng xếp hạng tổng lượt đọc của nguồn đó).
