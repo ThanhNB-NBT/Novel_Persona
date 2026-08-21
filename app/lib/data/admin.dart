@@ -260,6 +260,32 @@ final newNovels24hProvider = FutureProvider.autoDispose<List<Rec>>((ref) async {
       .order('created_at', ascending: false));
 });
 
+/// Nhịp 24 giờ của crawler + translator cho tab Crawl: đủ để nhìn phát biết hệ thống
+/// còn "thở" hay đứng, mà không phải mở log VPS. Toàn count() nên rẻ, không kéo bản ghi.
+final crawlPulseProvider = FutureProvider.autoDispose<Map<String, int>>((ref) async {
+  final now = DateTime.now().toUtc();
+  final since = now.subtract(const Duration(hours: 24)).toIso8601String();
+  final hour = now.subtract(const Duration(hours: 1)).toIso8601String();
+  final r = await Future.wait([
+    sb.from('novels').count().gte('created_at', since),
+    sb.from('chapters').count().gte('created_at', since), // dòng mục lục mới về
+    sb.from('chapters').count().eq('translation_status', 'done').gte('translated_at', since),
+    sb.from('chapters').count().eq('translation_status', 'queued'),
+    sb.from('chapters').count().eq('translation_status', 'failed'),
+    sb.from('novels').count().eq('meta_translated', false),
+    sb.from('novels').count().eq('is_canonical', true).eq('hidden', false),
+    sb.from('translation_jobs').count().eq('status', 'failed'),
+    // nhịp thật của translator: 2 vCPU nên một chương dài có thể ngốn cả chục phút,
+    // con số này cho biết ngay hệ thống đang bò hay đang chạy
+    sb.from('chapters').count().eq('translation_status', 'done').gte('translated_at', hour),
+  ]);
+  return {
+    'novels24h': r[0], 'chapters24h': r[1], 'done24h': r[2], 'queued': r[3],
+    'failedChapters': r[4], 'metaPending': r[5], 'tracked': r[6], 'failedJobs': r[7],
+    'done1h': r[8],
+  };
+});
+
 /// Nhịp tim worker (crawler/translator điểm danh định kỳ) — tab Worker hiện sống/chết.
 final workerHeartbeatProvider = FutureProvider.autoDispose<List<Rec>>((ref) async =>
     List<Rec>.from(await sb.from('worker_heartbeat').select('name, at, note')));
