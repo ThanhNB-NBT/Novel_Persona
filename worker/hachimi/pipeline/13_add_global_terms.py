@@ -29,7 +29,20 @@ TERMS = [
     ("天赋", "thiên phú", "hanviet=Thiên Phú; 44 truyện, có nhánh 'thiên phúc' (sai âm)"),
     ("异能", "dị năng", "46 truyện, model đẻ ra 'năng lực dị năng'/'năng lực dị' (lặp, cụt)"),
     ("金手指", "kim thủ chỉ", "gu truyện chuyển ngữ; 'kim chỉ nam'/'kim chỉ' là sai nghĩa"),
+    # Đợt 5/8: đọc tay v5 thấy dịch KHÔNG NHẤT QUÁN trong cùng chương ('đệ tử nòng cốt' vs
+    # 'đệ tử hạch tâm'). 1-nghĩa, an toàn ép global. Bản dưới là ĐỀ XUẤT — đổi nếu gu muốn
+    # 'hạch tâm'. Đây là term chung, LLM không trích nên không tự vào glossary → phải thêm tay.
+    ("核心弟子", "đệ tử nòng cốt", "5/8: cùng chương ra 2 kiểu (nòng cốt/hạch tâm); chốt 1 bản"),
+    # Hạng 2 (7/8) — LÓNG/THƯƠNG HIỆU BẤT NHỊ NGHĨA. Chỉ thêm term gần như luôn 1 nghĩa,
+    # an toàn ép global (termguard khớp thô term_zh in zh; đa nghĩa sẽ bắn nhầm — xem EXCLUDE).
+    ("嘎腰子", "lấy thận", "meme mổ cướp thận; model ra 'bóp eo'. Niche, ~luôn 1 nghĩa"),
+    ("网吧", "quán net", "internet cafe, ánh xạ 1:1 tuyệt đối"),
+    ("开黑", "chơi tổ đội", "lóng game 'tổ đội có voice'; model ra 'mở màn'. ĐỀ XUẤT — tinh gu VI"),
 ]
+# Hạng 2 — ĐA NGHĨA, KHÔNG ép global (bắn nhầm ngữ cảnh khác). Để dành cho vòng train
+# Hạng 1 dưới dạng ví dụ phân biệt ngữ cảnh (DictDis), hoặc thêm per-novel cho truyện game/mạt chược:
+#   自摸  = mạt chược "tự ù/tự mò"  NHƯNG cũng "tự sờ" → ép global sẽ hỏng cảnh thân mật
+#   脉动  = nước Mizone            NHƯNG cũng "nhịp đập/mạch động" → ép global phá câu tả cảnh
 # ĐÃ THỬ VÀ BỎ: 高中 → "trường cấp ba". Model vốn dịch đúng 高中生 = "dáng vẻ học sinh
 # cấp ba"; ép term làm câu tệ đi ("trông như thật của trường cấp ba"). Chỉ ép những chỗ
 # model thật sự dịch sai, đừng ép cái nó đã làm đúng.

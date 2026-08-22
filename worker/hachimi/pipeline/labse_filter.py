@@ -22,6 +22,7 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("output", type=Path, help="file train sau lọc")
     ap.add_argument("--min", type=float, default=0.70, help="ngưỡng cosine LaBSE (DATA_CHUAN ~0.70)")
     ap.add_argument("--show", type=int, default=15, help="số cặp điểm thấp in ra để đọc tay")
+    ap.add_argument("--sample", type=int, default=0, help="lọc xong lấy N mẫu ngẫu nhiên (0=giữ hết); dùng khi lọc từ toàn bộ 745k")
     args = ap.parse_args(argv)
     try:
         import sys
@@ -45,6 +46,10 @@ def main(argv: list[str] | None = None) -> None:
         print(f"        VI: {r['vi'][:90]}")
 
     kept = [r for r in scored if r["labse"] >= args.min]
+    if args.sample and len(kept) > args.sample:
+        import random
+        random.Random(20260805).shuffle(kept)   # seed cố định để tái lập
+        kept = kept[:args.sample]
     args.output.write_text(
         "".join(json.dumps({k: v for k, v in r.items() if k != "labse"}, ensure_ascii=False) + "\n"
                 for r in kept), encoding="utf-8")
