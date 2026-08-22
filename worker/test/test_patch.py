@@ -49,3 +49,15 @@ def test_early_retranslate_chi_kich_hoat_o_chuong_ngay_sau_vung_trich(monkeypatc
     for idx in (1, gate, gate + 2, gate + 50):
         _retranslate_early_chapters_once(1, idx)
     assert not touched
+
+
+def test_cyrillic_tu_nguon_mojibake_khong_bi_coi_la_hong():
+    """Nguồn GBK giải sai mang sẵn chữ Nga → dịch lại vô ích, audit không được xếp lại.
+
+    Ca thật: nv17104 ch1 bị audit xếp lại 8 lần, mỗi lần 40 phút, vì nguồn mojibake.
+    """
+    from novelworker.translator.worker import check_translation
+
+    assert check_translation("云?掣?Я嘶乩凑夤淼胤?" * 20, "Vân? Xiết? Р Hôi Tuyển?" * 20) is None
+    # nguồn sạch mà bản dịch có chữ Nga thì vẫn là lỗi thật của model
+    assert "Cyrillic" in (check_translation("他走了。" * 30, "Hắn đi rồi. РА" * 30) or "")

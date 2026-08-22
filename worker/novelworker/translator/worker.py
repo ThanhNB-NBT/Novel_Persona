@@ -147,7 +147,9 @@ def check_translation(content_zh: str, content_vi: str) -> str | None:
         return (f"còn {len(han_chars)} ký tự Hán, "
                 f"{len(set(han_chars))} chữ khác nhau (mẫu '{sample}')")
     cyrillic = CYRILLIC_CHARS.findall(content_vi)
-    if cyrillic:
+    # Nguồn mojibake (GBK giải sai) mang sẵn chữ Cyrillic → bản dịch dính theo là chuyện của
+    # NGUỒN, dịch lại bao nhiêu lần cũng vẫn thế. Chỉ tính là lỗi khi nguồn sạch.
+    if cyrillic and not CYRILLIC_CHARS.search(content_zh or ""):
         sample = "".join(dict.fromkeys(cyrillic))[:12]
         return f"còn ký tự Cyrillic/tiếng Nga (mẫu '{sample}')"
     # Chỉ chặn bản cụt rõ ràng; tỷ lệ zh→vi dao động mạnh theo thể loại/câu thoại.
@@ -297,7 +299,19 @@ def scan_bad_chapters(
         frm += 500
     bad: list[tuple[dict, str]] = []
     for c in rows:
-        reason = _audit_reason(c.get("content_zh") or "", c.get("content_vi") or "")
+        zh, vi = c.get("content_zh") or "", c.get("content_vi") or ""
+        reason = _audit_reason(zh, vi)
+        # Chương done gần như luôn có content_zh = NULL (bản gốc đã dời sang R2) nên mọi
+        # phép đối chiếu ở trên chạy MÙ. Chỉ khi đã nghi hỏng mới kéo bản gốc về kiểm lại —
+        # một request R2 cho vài chương nghi, thay vì cho cả kho.
+        if reason and not zh:
+            try:
+                zh = blob.get_zh(c["id"]) or ""
+            except Exception:
+                zh = ""
+            if zh:
+                c["content_zh"] = zh
+                reason = _audit_reason(zh, vi)
         if reason:
             bad.append((c, reason))
     return bad
