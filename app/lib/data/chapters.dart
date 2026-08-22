@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -39,6 +41,59 @@ class ChapterKey {
   int get hashCode => Object.hash(novelId, index);
 }
 
+// ---------- Realtime gom theo TRUYỆN ----------
+// Trước đây mỗi (novelId, index) đang mở mở 1 kênh riêng nhưng filter chỉ tới
+// mức novel_id → đọc 1 truyện = 3+ kênh, UPDATE chương nào cũng bắn cho tất cả
+// rồi mới lọc client. Gom thành ĐÚNG 1 kênh/truyện, mọi chương đang xem đăng ký
+// callback vào đấy; không còn ai xem thì đóng.
+
+class _NovelChapterRealtime {
+  _NovelChapterRealtime(this.novelId) {
+    _channel = sb
+        .channel('chapters:$novelId')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.update,
+          schema: 'public',
+          table: 'chapters',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'novel_id',
+            value: novelId,
+          ),
+          callback: (payload) {
+            final idx = payload.newRecord['chapter_index'];
+            if (idx is int) {
+              for (final cb in Set.of(_watchers)) {
+                cb(idx);
+              }
+            }
+          },
+        )
+        .subscribe();
+  }
+
+  final int novelId;
+  late final RealtimeChannel _channel;
+  final Set<void Function(int)> _watchers = {};
+
+  void close() => sb.removeChannel(_channel);
+}
+
+final Map<int, _NovelChapterRealtime> _realtimeByNovel = {};
+
+/// Đăng ký nhận "chương [index] của truyện vừa bị UPDATE". Trả hàm huỷ đăng ký.
+void Function() _watchNovelChapters(int novelId, void Function(int) onUpdate) {
+  final rt = _realtimeByNovel.putIfAbsent(novelId, () => _NovelChapterRealtime(novelId));
+  rt._watchers.add(onUpdate);
+  return () {
+    rt._watchers.remove(onUpdate);
+    if (rt._watchers.isEmpty) {
+      _realtimeByNovel.remove(novelId);
+      rt.close();
+    }
+  };
+}
+
 final chapterProvider = FutureProvider.autoDispose.family<Rec?, ChapterKey>((
   ref,
   key,
@@ -46,30 +101,26 @@ final chapterProvider = FutureProvider.autoDispose.family<Rec?, ChapterKey>((
   // Offline-first: chương đã tải về máy → đọc local (chạy cả khi mất mạng), khỏi
   // subscribe realtime. Chương chưa tải → rơi xuống nhánh online bên dưới.
   final local = await offlineStore.getChapter(key.novelId, key.index);
-  if (local != null) return local;
-  // Realtime: chương này được worker UPDATE (dịch xong/đổi trạng thái) → tự refetch
-  final channel = sb
-      .channel('chapter:${key.novelId}:${key.index}')
-      .onPostgresChanges(
-        event: PostgresChangeEvent.update,
-        schema: 'public',
-        table: 'chapters',
-        filter: PostgresChangeFilter(
-          type: PostgresChangeFilterType.eq,
-          column: 'novel_id',
-          value: key.novelId,
-        ),
-        callback: (payload) {
-          // filter realtime chỉ lọc được 1 cột (novel_id) ở server → lọc thêm
-          // chapter_index phía client: dịch hàng loạt bắn update mọi chương của
-          // truyện, không lọc thì chương đang đọc refetch liên tục dù không đổi.
-          if (payload.newRecord['chapter_index'] == key.index) {
-            ref.invalidateSelf();
-          }
-        },
-      )
-      .subscribe();
-  ref.onDispose(() => sb.removeChannel(channel));
+  if (local != null) {
+    // Bản local có thể stale (server dịch lại/sửa/glossary patch). Hỏi nền bằng
+    // 1 select nhẹ so mốc updated_at — đổi thì đè local + refetch. Offline thì
+    // bỏ qua, đọc tiếp bản đã tải.
+    unawaited(() async {
+      try {
+        if (await offlineStore.refreshIfStale(key.novelId, key.index)) {
+          ref.invalidateSelf();
+        }
+      } catch (_) {
+        // offline / server lỗi — bản local vẫn là thứ tốt nhất đang có
+      }
+    }());
+    return local;
+  }
+  // Kênh realtime gom theo truyện: chương này được worker UPDATE → tự refetch
+  final unsubscribe = _watchNovelChapters(key.novelId, (idx) {
+    if (idx == key.index) ref.invalidateSelf();
+  });
+  ref.onDispose(unsubscribe);
   return await sb
       .from('chapters')
       .select(
