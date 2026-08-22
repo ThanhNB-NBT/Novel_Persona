@@ -171,6 +171,11 @@ Future<void> main() async {
   runApp(const ProviderScope(child: NovelApp()));
 }
 
+/// Path param số: deep link hỏng (/novel/abc từ browser/notification) không được
+/// ném FormatException crash app ở tầng router — rơi về id 0, màn hình tự báo trống.
+int _intParam(GoRouterState s, String key) =>
+    int.tryParse(s.pathParameters[key] ?? '') ?? 0;
+
 final _router = GoRouter(routes: [
   GoRoute(path: '/', builder: (_, _) => const RootShell()),
   // Mọi màn push đi qua chuyển cảnh MỰC LOANG (ink_transition.dart) — chữ ký
@@ -210,19 +215,19 @@ final _router = GoRouter(routes: [
     path: '/admin/novel/:id',
     pageBuilder: (_, s) => inkPage(
         key: s.pageKey,
-        child: AdminNovelScreen(novelId: int.parse(s.pathParameters['id']!))),
+        child: AdminNovelScreen(novelId: _intParam(s, 'id'))),
   ),
   GoRoute(
     path: '/novel/:id',
     pageBuilder: (_, s) => inkPage(
         key: s.pageKey,
-        child: NovelDetailScreen(novelId: int.parse(s.pathParameters['id']!))),
+        child: NovelDetailScreen(novelId: _intParam(s, 'id'))),
   ),
   GoRoute(
     path: '/novel/:id/glossary',
     pageBuilder: (_, s) => inkPage(
         key: s.pageKey,
-        child: GlossaryScreen(novelId: int.parse(s.pathParameters['id']!))),
+        child: GlossaryScreen(novelId: _intParam(s, 'id'))),
   ),
   GoRoute(
     path: '/novel/:id/read/:index',
@@ -242,8 +247,8 @@ final _router = GoRouter(routes: [
                 child: child)
             : FadeTransition(opacity: anim, child: child),
         child: ReaderScreen(
-          novelId: int.parse(s.pathParameters['id']!),
-          chapterIndex: int.parse(s.pathParameters['index']!),
+          novelId: _intParam(s, 'id'),
+          chapterIndex: _intParam(s, 'index'),
         ),
       );
     },

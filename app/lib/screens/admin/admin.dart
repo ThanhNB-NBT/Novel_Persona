@@ -1421,6 +1421,23 @@ class AdminNovelScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Gate đầu vào như màn Quản trị: deep-link thẳng vào đây cũng bị chặn UI
+    // (RLS vẫn là lớp chặn dữ liệu cuối cùng).
+    final admin = ref.watch(isAdminProvider);
+    return admin.when(
+      loading: () => const Scaffold(body: Center(child: CircularProgressIndicator())),
+      error: (e, _) => Scaffold(
+          body: AppError(e, onRetry: () => ref.invalidate(isAdminProvider))),
+      data: (ok) => ok
+          ? _buildBody(context, ref)
+          : Scaffold(
+              appBar: AppBar(title: const Text('Quản trị truyện')),
+              body: const Center(child: Text('Bạn không có quyền quản trị.')),
+            ),
+    );
+  }
+
+  Widget _buildBody(BuildContext context, WidgetRef ref) {
     final novel = ref.watch(novelProvider(novelId)).value;
     final chapters = ref.watch(adminChaptersProvider(novelId));
     final t = Theme.of(context).textTheme;

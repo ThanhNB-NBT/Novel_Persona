@@ -27,6 +27,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   }
 
   Future<void> _save() async {
+    if (_saving) return; // chặn double-tap: 2 lần updateProfile chồng nhau
     final name = _name.text.trim();
     if (name.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -34,12 +35,22 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
       return;
     }
     setState(() => _saving = true);
-    await updateProfile(displayName: name, avatarUrl: _avatar ?? '');
-    ref.invalidate(profileProvider);
-    if (mounted) {
-      context.pop();
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Đã lưu hồ sơ')));
+    try {
+      await updateProfile(displayName: name, avatarUrl: _avatar ?? '');
+      ref.invalidate(profileProvider);
+      if (mounted) {
+        context.pop();
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Đã lưu hồ sơ')));
+      }
+    } catch (e) {
+      // lỗi mạng/RLS phải báo ra chứ không nuốt — nếu không nút Lưu kẹt vĩnh viễn
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Lỗi lưu hồ sơ: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
   }
 
