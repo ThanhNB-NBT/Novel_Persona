@@ -117,6 +117,12 @@ class Settings(BaseSettings):
     # là cả chương 246 dòng nằm trong RAM cùng lúc — trên VPS 2GB là swap, chương dài từng
     # ngốn 2365s thay vì ~30s. Đo trên máy 8 lõi: batch 8 còn NHANH hơn không-giới-hạn 25%.
     hachimi_max_batch: int = 8
+    # Chặn lặp máy móc lúc decode — audit 22/08 đo 8/48 chương bị nhân đôi câu
+    # (zh sạch ⇒ lỗi decode). no_repeat_ngram cấm lặp lại đúng chuỗi 8 token liền
+    # (đủ dài để không chạm lặp hợp pháp); repetition_penalty để 1.0 = tắt mặc định,
+    # bật qua .env khi cần thí nghiệm.
+    hachimi_no_repeat_ngram: int = 8
+    hachimi_repetition_penalty: float = 1.0
     # Doc-level: ghép tối đa N dòng nguồn Trung phía trước làm ngữ cảnh (đúng định dạng train
     # `ctx ⟪ctx⟫ câu` của pipeline 17) để model hết bịa chủ ngữ. 0 = TẮT (hành vi cũ, an toàn) —
     # chỉ bật SAU khi deploy model đã train doc-level; model thường không hiểu ⟪ctx⟫ sẽ dịch loạn.

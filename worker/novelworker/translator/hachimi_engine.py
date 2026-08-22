@@ -124,6 +124,19 @@ def _collapse_repeats(text: str) -> str:
     return text
 
 
+# Nhân đôi ĐOẠN DÀI liền kề ("... A A ..." với A >= 12 ký tự): lỗi decode đo ở
+# audit 22/08 — 8/48 chương bị. Gộp về một bản, lặp tới khi ổn định.
+_DUP_SPAN = re.compile(r"(.{12,}?)\s*\1")
+
+
+def _collapse_dup_spans(text: str) -> str:
+    prev = None
+    while prev != text:
+        prev = text
+        text = _DUP_SPAN.sub(r"\1", text)
+    return text
+
+
 def _rank_penalty(source: str, candidate: str) -> float:
     """Điểm phạt để chọn trong n-best. Beam search đã tính sẵn 4 giả thuyết, lấy hết ra
     gần như không tốn thêm gì — nên dùng chính các cổng chất lượng của dự án để chọn,
@@ -143,6 +156,9 @@ def _rank_penalty(source: str, candidate: str) -> float:
         zh in source and vi.lower() in candidate.lower() for zh, vi in _KINSHIP
     )
     penalty += 4.0 * len(_REPEAT.findall(candidate))
+    # Nhân đôi đoạn dài trong cùng giả thuyết: phạt nặng để n-best chọn bản sạch
+    # (audit 22/08: 8/48 chương bị — decode không có ràng buộc chống lặp).
+    penalty += 8.0 * len(_DUP_SPAN.findall(candidate))
     # 6 điểm: đủ đè nhịp câu (~1) và ngoặc kép (3), nhưng dưới Hán sót/đại từ hiện đại (10)
     # — thà giữ chủ ngữ bịa còn hơn chọn bản lọt chữ Hán.
     penalty += 6.0 * _invents_subject(source, candidate)
@@ -223,7 +239,9 @@ class _Engine:
             source, beam_size=self.beam,
             num_hypotheses=nbest,
             max_decoding_length=settings.hachimi_max_len,
-            max_batch_size=settings.hachimi_max_batch)
+            max_batch_size=settings.hachimi_max_batch,
+            repetition_penalty=settings.hachimi_repetition_penalty,
+            no_repeat_ngram_size=settings.hachimi_no_repeat_ngram)
         out: list[str] = []
         for line, res in zip(lines, results):
             best = res.hypotheses[0]
@@ -233,7 +251,7 @@ class _Engine:
                     key=lambda h: _rank_penalty(line, self.tgt.decode([t for t in h if t != _EOS])),
                 )
             tokens = [t for t in best if t != _EOS]
-            decoded = self.tgt.decode(tokens)
+            decoded = _collapse_dup_spans(self.tgt.decode(tokens))
             if len(tokens) < settings.hachimi_max_len and not _HAN.search(decoded):
                 out.append(decoded)
                 continue
@@ -273,12 +291,14 @@ class _Engine:
         results = self.translator.translate_batch(
             encoded, beam_size=self.beam, num_hypotheses=max(1, min(self.nbest, self.beam)),
             max_decoding_length=settings.hachimi_max_len,
-            max_batch_size=settings.hachimi_max_batch)
+            max_batch_size=settings.hachimi_max_batch,
+            repetition_penalty=settings.hachimi_repetition_penalty,
+            no_repeat_ngram_size=settings.hachimi_no_repeat_ngram)
         out: list[str] = []
         for current, res in zip(currents, results):
             best = min(res.hypotheses,
                        key=lambda h: _rank_penalty(current, self.tgt.decode([t for t in h if t != _EOS])))
-            out.append(self.tgt.decode([t for t in best if t != _EOS]))
+            out.append(_collapse_dup_spans(self.tgt.decode([t for t in best if t != _EOS])))
         return out
 
     def translate_lines(self, lines: list[str]) -> list[str]:
