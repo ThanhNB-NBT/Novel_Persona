@@ -23,7 +23,8 @@ class OfflineStore {
       databaseFactory = databaseFactoryFfi;
     }
     final path = p.join(await getDatabasesPath(), 'offline.db');
-    return openDatabase(path, version: 1, onCreate: (db, _) async {
+    return openDatabase(path, version: 2,
+        onCreate: (db, _) async {
       await db.execute('''
         create table novels(
           novel_id integer primary key, title text, author text,
@@ -31,7 +32,13 @@ class OfflineStore {
       await db.execute('''
         create table chapters(
           novel_id integer, chapter_index integer, title_vi text, content_vi text,
+          server_updated_at text,
           primary key(novel_id, chapter_index))''');
+    }, onUpgrade: (db, oldV, newV) async {
+      // v2: thêm mốc updated_at phía server để phát hiện bản offline stale
+      if (oldV < 2) {
+        await db.execute('alter table chapters add column server_updated_at text');
+      }
     });
   }
 
@@ -67,7 +74,7 @@ class OfflineStore {
       final batchIdx = missing.sublist(i, min(i + 200, missing.length));
       rows.addAll(List<Rec>.from(await sb
           .from('chapters')
-          .select('chapter_index, title_vi, content_vi')
+          .select('chapter_index, title_vi, content_vi, updated_at')
           .eq('novel_id', id)
           .inFilter('chapter_index', batchIdx)));
     }
@@ -80,6 +87,7 @@ class OfflineStore {
           'chapter_index': r['chapter_index'],
           'title_vi': r['title_vi'],
           'content_vi': r['content_vi'],
+          'server_updated_at': r['updated_at'] as String?,
         },
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
@@ -112,6 +120,43 @@ class OfflineStore {
         limit: 1);
     if (rows.isEmpty) return null;
     return {...rows.first, 'translation_status': 'done'};
+  }
+
+  /// Kiểm tra NỀN 1 chương local còn khớp server không (so mốc updated_at).
+  /// Server đổi (dịch lại/sửa/glossary patch) → đè bản mới xuống local và trả
+  /// true để caller refetch. Mất mạng → false, đọc tiếp bản local như cũ.
+  Future<bool> refreshIfStale(int novelId, int index) async {
+    final db = await _database;
+    final localRows = await db.query('chapters',
+        columns: ['server_updated_at'],
+        where: 'novel_id = ? and chapter_index = ?',
+        whereArgs: [novelId, index],
+        limit: 1);
+    if (localRows.isEmpty) return false; // chưa tải offline — nhánh online lo
+    final server = await sb
+        .from('chapters')
+        .select('title_vi, content_vi, updated_at, translation_status')
+        .eq('novel_id', novelId)
+        .eq('chapter_index', index)
+        .maybeSingle();
+    if (server == null || server['translation_status'] != 'done') {
+      return false; // chương phía server bị reset — giữ bản đã tải cho đọc tiếp
+    }
+    if (server['updated_at'] == localRows.first['server_updated_at']) {
+      return false; // chưa đổi, không tốn ghi DB
+    }
+    await db.insert(
+      'chapters',
+      {
+        'novel_id': novelId,
+        'chapter_index': index,
+        'title_vi': server['title_vi'],
+        'content_vi': server['content_vi'],
+        'server_updated_at': server['updated_at'],
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+    return true;
   }
 
   Future<bool> hasNovel(int novelId) async {
