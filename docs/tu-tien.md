@@ -2,7 +2,7 @@
 
 > Tài liệu này để MỌI phiên làm việc (Claude, ChatGPT/Codex, người) đọc trước khi
 > đụng vào hệ Tu Tiên. Đổi thiết kế → SỬA FILE NÀY TRONG CÙNG COMMIT.
-> Cập nhật lần cuối: 2026-07-13.
+> Cập nhật lần cuối: 2026-08-22.
 
 ## 1. Tư tưởng chung
 
@@ -57,26 +57,21 @@ trong `_sprites` (pixel.dart), không có thì fallback 'pill' xấu.
   bậc GẤP ĐÔI mỗi bậc (5→10→20→40→80→160 — càng cao càng khó), tốc độ CẤP SỐ NHÂN
   ×2 mỗi bậc (Tạp ×1 … Tiên ×64), điểm lẻ nội suy tuyến tính trong bậc, quá trần Tiên
   +10%/điểm. Tất cả trong `cult_linhcan_mult(elements, variant, linh_can)`. Hợp hệ ×1.3
-  nếu công pháp trùng 1 hệ trong bộ / 'all' / chủ nhân Hỗn Độn căn. Ví dụ chốt: Ngũ Hành
-  Tạp +5 điểm → bậc Tứ Linh Căn nhưng mục hệ VẪN đủ 5 hệ ngũ hành.
-- Tốc độ tu: `cult_base_rate()` — công pháp(grade) × hợp hệ 1.3 × **linh căn (bậc đã gộp điểm)**
+  nếu công pháp trùng 1 hệ trong bộ / 'all' / chủ nhân Hỗn Độn căn.
+- **Tốc độ tu**: `cult_base_rate()` — công pháp(grade) × hợp hệ 1.3 × **linh căn (bậc đã gộp điểm)**
   × tộc Ma 1.10 × **buff cấp Tiên (1+0.2×tien_tier)** × buff đan/linh thạch/pháp bảo.
-- Chỉ số: `cult_stats()` — nền ×1.12/tầng **× buff cấp Tiên (1+0.15×tien_tier)** + trang bị;
+- **Chỉ số**: `cult_stats()` — nền ×1.12/tầng **× buff cấp Tiên (1+0.15×tien_tier)** + trang bị;
   tộc Yêu ×1.3 atk/hp, Linh ×1.3 thần thức.
-- Đột phá: `85 − 8×(realm−1) + đan hộ thân + pháp chú`, kẹp [10,100]; fail −30% exp
+- **Đột phá**: `85 − 8×(realm−1) + đan hộ thân + pháp chú`, kẹp [10,100]; fail −30% exp
   (Linh tộc mất nửa), Nhân +5%, Ma −5%.
-- **Tâm Ma** (migration 054, CHỈ đại cảnh giới stage 9→realm+1): server tính 1 lần từ
-  5 chỉ số — mức vũ trang `(atk+def+hp+agi có đồ)/(87×base tay không)` + thần thức
-  (Linh tộc ×1.3), nền 35% kẹp [15,90]. Thắng → `+15%` đột phá & giảm NỬA tổn thất;
-  thua → đột phá thường, KHÔNG khóa tiến trình. Hằng số là heuristic, chỉnh trong 054.
-- **Cấp bậc Tiên hậu Phi Thăng** (migration 064): sau `ascended_at`, `cult_tick` BỎ trần
+- **Cấp bậc Tiên & Thánh Đạo hậu Phi Thăng** (migration 064 + 103): sau `ascended_at`, `cult_tick` BỎ trần
   Độ Kiếp, đổi sang trần `cult_tien_req(tien_tier)` (= đỉnh Độ Kiếp × 1.6^(tier+1)); đầy
-  bar → RPC `cult_ascend_tier` thăng 1 bậc (`tien_tier`++), exp về 0, KHÔNG Tâm Ma/phạt.
-  7 bậc: Tiên Nhân(0)→Địa Tiên→Thiên Tiên→Kim Tiên→Thái Ất Kim Tiên→Đại La Kim Tiên→
-  Đạo Tổ(6, `cult_tien_max`). `cult_state` hậu phi thăng trả `req`=mốc bậc kế + `tien_tier`.
-  Từ **067**: mỗi lần Độ Thiên Kiếp có **Tâm Ma** (chỉ số/trang bị càng mạnh, cơ hội càng
-  cao; thắng → thăng bậc exp về 0; thua → giữ bậc, hao 20% tiên nguyên) + buff thật theo
-  bậc (rate ×1.2/bậc, chỉ số ×1.15/bậc). Nút "Độ Thiên Kiếp"; snackbar báo thắng/thua.
+  bar → RPC `cult_ascend_tier` thăng 1 bậc (`tien_tier`++), exp về 0.
+  10 bậc: Tiên Nhân(0)→Địa Tiên→Thiên Tiên→Kim Tiên→Thái Ất Kim Tiên→Đại La Kim Tiên→
+  Đạo Tổ(6)→Hỗn Nguyên Thánh Nhân(7)→Hồng Mông Chí Tôn(8)→Hư Vô Đại Đạo Tổ(9, `cult_tien_max`).
+  `cult_state` hậu phi thăng trả `req`=mốc bậc kế + `tien_tier`.
+- **Luyện hóa bản dư (053 + 103)**: `cult_recycle(item_id)` luyện hóa đồ thừa (qty > 1) nhận
+  tu vi theo cấp số nhân: Hoàng=50, Huyền=300, Địa=2.000, Thiên=12.000, Tiên=80.000.
 - **Cơ duyên**: chương có quà ⇔ `md5(uid:novel:index)[0..6] % 100 < 50` (~50% chương).
   Rơi đồ: `select * from cult_items order by random() limit 1` — đều tăm tắp.
 - **Trận pháp hào quang** (migration 068, CHỈ hậu Phi Thăng): cosmetic đội THẲNG lên nhân
@@ -97,8 +92,9 @@ trong `_sprites` (pixel.dart), không có thì fallback 'pill' xấu.
 | Hash vị trí quà trong chương | như trên | `giftHash` (cùng file) |
 | Tỷ lệ đột phá hiển thị (có +5/−5 tộc) | `cult_advance` (044) | `cultBreakthroughChance` — app/lib/cultivation.dart (có test `cult_chance_test.dart`) |
 | Hệ số công pháp ×1.5→×24 | `cult_mult` | `_cpMult` + `_EquipRow._bonus` |
-| Bậc tiên hậu phi thăng (7 bậc) | `cult_tien_max` (064) | `tienTierNames`/`tienDaoTitles` — app/lib/cultivation.dart (test `scene_render_test.dart`) |
+| Bậc tiên hậu phi thăng (10 bậc) | `cult_tien_max` (064, 103) | `tienTierNames`/`tienDaoTitles` — app/lib/cultivation.dart (test `scene_render_test.dart`) |
 | Bậc + tốc linh căn (thang 7 nấc, điểm luyện căn) | `cult_linhcan_mult` (078)/`cult_assign_root` (067) | `linhCanBornTier`/`linhCanTier`/`linhCanMult`/`rootName` — app/lib/cultivation.dart (test `linh_can_tier_test.dart`) |
+| Tu vi luyện hóa đồ thừa | `cult_recycle_gain` (103) | `cultRecycleGain` — app/lib/cultivation.dart |
 
 ## 3. Lớp hình ảnh (client-only, không đụng DB)
 
@@ -107,7 +103,7 @@ File map:
 - `app/lib/screens/cultivation/pixel.dart` — sprite 12×12 + palette phẩm + `paintOrbitSprite`.
 - `app/assets/cultivators/{human|fox|demon|spirit}_{male|female}.webp` — ảnh nhân vật
   (CHỈ webp được bundle; PNG là file gốc không ship — bug 1.0.2 vì trỏ .png).
-- `app/assets/cult_items/*.webp` — 27 minh hoạ vật phẩm theo `pixel` key trong catalog;
+- `app/assets/cult_items/*.webp` — 27+ minh hoạ vật phẩm theo `pixel` key trong catalog;
   một hình dùng lại cho mọi item cùng key, còn phẩm cấp thể hiện bằng viền/màu UI.
 - `app/assets/cult_fx/sword_wheel.webp` — kiếm luân ngũ sắc sau đầu, xoay trực tiếp như một ảnh
   có nền trong suốt; không dựng lại bằng nét Canvas đơn giản.
@@ -130,10 +126,10 @@ Bố cục cảnh `_AnimatedCultivator` (canvas 150×145, loop 4s), vẽ theo th
    kể cả vùng sau status bar. Nội dung vẫn nằm trong `SafeArea`; status bar trong suốt,
    icon thời gian/pin/sóng sáng để không mất khả năng đọc.
 
-Hậu Phi Thăng, `_SkyPainter` nhận `tienTier` (0..6; -1 = chưa phi thăng) → vẽ **hào quang
+Hậu Phi Thăng, `_SkyPainter` nhận `tienTier` (0..9; -1 = chưa phi thăng) → vẽ **hào quang
 cõi tiên** sau đầu (`_drawTienCorona`): đĩa vàng ấm + tia sáng xoay, càng lên bậc càng
-nhiều tia + rực. Hero đổi tên cảnh giới → tên bậc tiên, đạo hiệu → `tienDaoTitles`, ẩn pill
-tầng; nút đột phá đổi thành "Độ Thiên Kiếp · <bậc kế>", tới Đạo Tổ thì khoá.
+nhiều tia + rực. Hero đổi tên cảnh giới → tên bậc tiên/thánh, đạo hiệu → `tienDaoTitles`, ẩn pill
+tầng; nút đột phá đổi thành "Độ Thiên Kiếp · <bậc kế>", tới Hư Vô Đại Đạo Tổ thì khoá.
 `_SkyPainter` cũng nhận `elements` (bộ hệ linh căn) → `_drawElementWisps`: mỗi hệ là một
 dòng 6 hạt có lõi sáng, bay lệch pha quanh đan điền — tạp 5 hệ = 5 dòng ngũ sắc, đơn hệ =
 1 dòng thuần. Hạt dùng thời gian tích luỹ cùng các tần số vô tỉ (tỉ lệ vàng, √2, √3), nên
@@ -206,20 +202,14 @@ xuất webp cùng cỡ.
 
 ## 5. Trạng thái & roadmap
 
-Đã có (migration 039→058): exp/realm/stage + đột phá · 8 loại vật phẩm ~100 món ·
+Đã có (migration 039→058 + 064 + 067 + 068 + 078 + 103): exp/realm/stage + đột phá · 8 loại vật phẩm ~100 món ·
 ngũ hành linh căn · 5 chỉ số · tộc/giới tính + ảnh nhân vật · cơ duyên 50% uniform ·
 hero stage + thẻ tilt + đĩa dock bát quái · **Tâm Ma khi đại cảnh giới (054)** ·
-**Luyện hóa đồ trùng → tu vi (053)** · **Bộ sưu tập ghi nhận đồ từng sở hữu (057)** ·
+**Luyện hóa đồ trùng → tu vi (053, tái cân bằng 103)** · **Bộ sưu tập ghi nhận đồ từng sở hữu (057)** ·
 **ảnh riêng cho nhóm vật phẩm cấp cao (058)** ·
 **Phi Thăng ở đỉnh Độ Kiếp → danh hiệu Tiên Nhân (055)** ·
-**Cấp bậc Tiên hậu Phi Thăng: 7 bậc Tiên Nhân→Đạo Tổ + đạo hiệu cõi tiên + hào quang vàng (064)** ·
+**Cấp bậc Tiên & Thánh Đạo hậu Phi Thăng: 10 bậc Tiên Nhân→Hư Vô Đại Đạo Tổ (064, 103)** ·
 **Đại tu linh căn: bộ hệ ngũ hành cố định (elements[]) + dị/thiên căn, refine chỉ tăng tốc,
 sương ngũ sắc trên nhân vật; buff thật + Tâm Ma theo cấp Tiên (067)** ·
 **Trận pháp hào quang hậu Phi Thăng: 6 trận đội thẳng lên nhân vật, rơi khi đọc, admin dev
 chọn (068)**.
-
-Roadmap (chưa làm, làm theo thứ tự user chọn):
-- Shop / tiền tệ linh thạch (nguồn: quà trùng → tự bán?).
-- Tông môn, xếp hạng (cần chống gian lận — lúc đó mới siết claim theo reading_progress).
-- Thành tựu.
-- Rig tách layer tóc/tay áo cho idle 2.5D sâu hơn (bộ chibi hiện tại dùng 1 layer/nhân vật).

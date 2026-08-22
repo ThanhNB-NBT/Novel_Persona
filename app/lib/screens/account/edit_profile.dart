@@ -195,7 +195,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     );
   }
 
-  /// Ô chọn emblem: đĩa nhấn giống hệt dock (xem trước), vòng nhấn khi chọn.
+  /// Ô chọn emblem: đĩa nhấn xem trước, viền sáng khi chọn.
   Widget _emblemChoice(String key, String cur, ColorScheme cs, WidgetRef ref) {
     final sel = cur == key;
     return InkWell(
@@ -206,21 +206,23 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           border: Border.all(
-              color: sel ? cs.primary : Colors.transparent, width: 2),
+            color: sel ? cs.primary : Colors.transparent,
+            width: 2,
+          ),
         ),
         child: Container(
           width: 42,
           height: 42,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [cs.primary, cs.primary.withValues(alpha: 0.8)]),
-            border: Border.all(color: cs.surface.withValues(alpha: 0.9), width: 2),
+            color: sel ? cs.primary.withValues(alpha: 0.12) : cs.surface,
+            border: Border.all(
+              color: sel ? cs.primary : cs.outlineVariant,
+              width: sel ? 1.4 : 1.0,
+            ),
           ),
           alignment: Alignment.center,
-          child: PixelIcon(key, grade: 5, size: 23),
+          child: PixelIcon(key, grade: 5, size: 22),
         ),
       ),
     );

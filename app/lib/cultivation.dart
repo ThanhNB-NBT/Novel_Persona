@@ -22,20 +22,33 @@ const daoTitles = [
   'Độ Kiếp bán tiên',
 ]; // realm 1..9
 
-/// Cấp bậc Tiên hậu Phi Thăng (migration 064). tien_tier 0 = vừa phi thăng, tăng dần
-/// khi tiếp tục tích tu vi ở cõi tiên tới Đạo Tổ. Độ dài PHẢI = cult_tien_max()+1 ở SQL.
+/// Cấp bậc Tiên & Thánh Đạo hậu Phi Thăng (migration 064 + 103). tien_tier 0 = vừa phi thăng,
+/// tăng dần khi tiếp tục tích tu vi cõi tiên tới Đạo Tổ và các tầng Thánh Đạo Thái Sơ.
+/// Độ dài PHẢI = cult_tien_max()+1 ở SQL (10 bậc, 0..9).
 const tienTierNames = [
   'Tiên Nhân', 'Địa Tiên', 'Thiên Tiên', 'Kim Tiên',
   'Thái Ất Kim Tiên', 'Đại La Kim Tiên', 'Đạo Tổ',
-]; // tien_tier 0..6
+  'Hỗn Nguyên Thánh Nhân', 'Hồng Mông Chí Tôn', 'Hư Vô Đại Đạo Tổ',
+]; // tien_tier 0..9
 
-/// Đạo hiệu cõi tiên theo bậc — thay daoTitles khi đã phi thăng.
+/// Đạo hiệu cõi tiên & thánh đạo theo bậc — thay daoTitles khi đã phi thăng.
 const tienDaoTitles = [
   'sơ đăng tiên tịch', 'Địa Tiên tản nhân', 'Thiên Tiên chân quân',
   'Kim Tiên đạo tôn', 'Thái Ất thượng tiên', 'Đại La thiên tôn', 'Hồng Mông Đạo Tổ',
-]; // tien_tier 0..6
+  'Vạn Kiếp Bất Hủ Thánh Tôn', 'Chư Thiên Khởi Nguyên Chủ', 'Đại Đạo Quy Nhất Tôn',
+]; // tien_tier 0..9
 
 int get tienTierMax => tienTierNames.length - 1;
+
+/// Số linh khí nhận được khi luyện hóa 1 bản dư theo phẩm cấp (mirror migration 103).
+int cultRecycleGain(int grade) => switch (grade.clamp(1, 6)) {
+  1 => 50,
+  2 => 300,
+  3 => 2000,
+  4 => 12000,
+  5 => 80000,
+  _ => 500000,
+};
 
 /// Trận pháp hào quang hậu Phi Thăng (migration 068): cosmetic đội thẳng lên nhân vật,
 /// rơi khi đọc như cơ duyên. code → (tên hiển thị, màu chủ đạo). Ảnh:

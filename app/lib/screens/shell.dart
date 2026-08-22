@@ -9,12 +9,16 @@ import 'package:go_router/go_router.dart';
 import '../cultivation.dart';
 import '../data.dart';
 import '../update.dart';
+import '../widgets.dart';
 import 'cultivation/cultivation.dart';
 import 'cultivation/pixel.dart';
 import 'explore/home.dart';
 import 'library/library.dart';
 import 'library/queue.dart';
 import 'account/settings.dart';
+
+/// Cờ tĩnh ghi nhận splash đã chiếu trong phiên chạy (không lặp lại khi đổi tab)
+bool _splashShown = false;
 
 /// Khung 5 tab: Tủ truyện · Khám phá · TU TIÊN (giữa, nổi) · Hàng đợi · Cài đặt.
 /// Mặc định mở Tủ truyện (chưa đăng nhập → Khám phá). Vuốt ngang đổi tab bằng PageView.
@@ -29,6 +33,7 @@ class RootShell extends ConsumerStatefulWidget {
 class _RootShellState extends ConsumerState<RootShell> {
   late int _i;
   late final _pc = PageController(initialPage: _i);
+  late bool _showSplash = !_splashShown;
   static const _pages = [
     LibraryScreen(), HomeScreen(), CultivationScreen(), QueueScreen(), SettingsScreen(),
   ];
@@ -121,7 +126,22 @@ class _RootShellState extends ConsumerState<RootShell> {
           ),
           // Tab dùng IndexedStack (giữ sống) nên không tự fetch lại — go() làm mới
           // dữ liệu khi mở tab để thấy thay đổi vừa gây ở màn khác.
-          Align(alignment: Alignment.bottomCenter, child: _Dock(index: _i, onTap: go)),
+          Align(
+            alignment: Alignment.bottomCenter,
+            child: _Dock(index: _i, pageController: _pc, onTap: go),
+          ),
+          // Hoạt ảnh khởi động: Chữ "Gác Truyện" bay vào giữa màn hình rồi chuyển hóa sang Logo
+          if (_showSplash)
+            _AppSplashIntro(
+              onComplete: () {
+                if (mounted) {
+                  setState(() {
+                    _splashShown = true;
+                    _showSplash = false;
+                  });
+                }
+              },
+            ),
         ]),
       ),
     );
@@ -178,29 +198,33 @@ class _KeepAliveState extends State<_KeepAlive> with AutomaticKeepAliveClientMix
   }
 }
 
-/// Dock nổi: bên trong đọng một vũng LINH DỊCH có mặt nước gợn sóng. Mặt nước
-/// dâng thành gò dưới tab đang chọn (không còn "ô chạy"), giọt Tu Tiên ở giữa
-/// dính vào vũng qua smooth-min, và nội dung sau dock bị bẻ cong qua khối lỏng.
-///
-/// Toàn bộ do `shaders/liquid_dock.frag` vẽ — gooey là metaball thật trong SDF,
-/// không phải mẹo blur + ngưỡng alpha ở tầng widget (cách đó gần như vô hình).
-/// Cần Impeller; không có thì rơi về nền kính mờ thường.
+/// Dock nổi 120fps Ultra-Smooth: vũng LINH DỊCH metaball bám sát ngón tay theo
+/// thời gian thực qua PageController.
 class _Dock extends StatefulWidget {
   final int index;
+  final PageController pageController;
   final ValueChanged<int> onTap;
-  const _Dock({required this.index, required this.onTap});
+  const _Dock({
+    required this.index,
+    required this.pageController,
+    required this.onTap,
+  });
   @override
   State<_Dock> createState() => _DockState();
 }
 
-class _DockState extends State<_Dock> with SingleTickerProviderStateMixin {
-  // nhịp sống của chất lỏng. 2π/vòng: mọi hệ số thời gian trong shader là số
-  // nguyên nên sóng khớp liền mạch qua mỗi vòng lặp, không giật.
+class _DockState extends State<_Dock> with TickerProviderStateMixin {
+  // Nhịp thở chất lỏng tuần hoàn (2π/vòng)
   late final _amb =
       AnimationController(vsync: this, duration: const Duration(seconds: 8))
         ..repeat();
 
-  // shader dùng chung cho cả app, nạp đúng 1 lần
+  // Animation controller chuyên dụng cho sóng chạm và giọt bắn 120fps
+  late final _splashCtrl = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 650),
+  );
+
   static FragmentShader? _liquid;
   static bool _tried = false;
 
@@ -217,8 +241,6 @@ class _DockState extends State<_Dock> with SingleTickerProviderStateMixin {
       final p = await FragmentProgram.fromAsset('shaders/liquid_dock.frag');
       if (mounted) setState(() => _liquid = p.fragmentShader());
     } catch (e) {
-      // Hỏng lặng lẽ ở đây thì dock trông y hệt "quên làm hiệu ứng" → kêu lên.
-      // Vẫn còn vũng vẽ tay ở _LiquidPainter nên không mất hẳn chất lỏng.
       debugPrint('liquid_dock.frag không nạp được: $e');
     }
   }
@@ -226,17 +248,23 @@ class _DockState extends State<_Dock> with SingleTickerProviderStateMixin {
   @override
   void dispose() {
     _amb.dispose();
+    _splashCtrl.dispose();
     super.dispose();
   }
 
-  static const _h = 56.0, _pad = 6.0; // cao vùng tab, đệm quanh
+  static const _h = 56.0, _pad = 6.0;
   static const _n = 5;
-  static const _splashMs = 750;
 
-  // lần chạm gần nhất → sóng lan + giọt bắn. Painter tự tính độ tắt dần theo
-  // đồng hồ nên không cần controller riêng.
-  DateTime? _tapAt;
   double _tapX = 0;
+
+  double _calcX() {
+    final pc = widget.pageController;
+    if (pc.hasClients && pc.position.haveDimensions) {
+      final p = pc.page;
+      if (p != null) return p;
+    }
+    return widget.index.toDouble();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -248,13 +276,14 @@ class _DockState extends State<_Dock> with SingleTickerProviderStateMixin {
       minimum: const EdgeInsets.fromLTRB(24, 0, 24, 14),
       child: LayoutBuilder(builder: (_, c) {
         final cell = (c.maxWidth - _pad * 2) / _n;
-        // x chạy mượt giữa các tab: cấp cho shader cả vị trí gò lẫn mức "đang
-        // chảy" (|x - đích| → sóng mạnh hơn, gò cao hơn giữa đường).
-        return TweenAnimationBuilder<double>(
-          tween: Tween(end: widget.index.toDouble()),
-          duration: const Duration(milliseconds: 560),
-          curve: Curves.easeOutCubic,
-          builder: (_, x, _) => _body(cs, t, dark, cell, c.maxWidth, x),
+        // AnimatedBuilder hợp nhất Vsync ticker: lắng nghe cử chỉ vuốt PageController
+        // + nhịp sóng amb + hiệu ứng chạm splashCtrl
+        return AnimatedBuilder(
+          animation: Listenable.merge([widget.pageController, _amb, _splashCtrl]),
+          builder: (_, _) {
+            final x = _calcX();
+            return _body(cs, t, dark, cell, c.maxWidth, x);
+          },
         );
       }),
     );
@@ -263,27 +292,33 @@ class _DockState extends State<_Dock> with SingleTickerProviderStateMixin {
   Widget _body(ColorScheme cs, TextTheme t, bool dark, double cell, double w,
       double x) {
     final liquid = cs.primary;
+    // Độ dãn dính khi chuyển giữa các tab (0 = đứng yên tại tab, 1 = giữa 2 tab)
+    final flow = ((x - x.round()).abs() * 2.0).clamp(0.0, 1.0);
+    final cent = (1.0 - (x - 2.0).abs()).clamp(0.0, 1.0);
+    final splashVal = _splashCtrl.isAnimating
+        ? (1.0 - _splashCtrl.value).clamp(0.0, 1.0)
+        : 0.0;
 
     return DecoratedBox(
-      // bóng ở NGOÀI ClipRRect — trong clip là bị cắt mất, dock "bẹt"
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(32),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withValues(alpha: dark ? 0.45 : 0.16),
-              blurRadius: 26,
-              offset: const Offset(0, 10)),
+            color: Colors.black.withValues(alpha: dark ? 0.45 : 0.16),
+            blurRadius: 26,
+            offset: const Offset(0, 10),
+          ),
           BoxShadow(
-              color: liquid.withValues(alpha: dark ? 0.14 : 0.09),
-              blurRadius: 34),
+            color: liquid.withValues(alpha: dark ? 0.14 : 0.09),
+            blurRadius: 34,
+          ),
         ],
       ),
-      // RepaintBoundary: chất lỏng chạy 60fps, đừng kéo cả cây widget vẽ lại
       child: RepaintBoundary(
         child: ClipRRect(
           borderRadius: BorderRadius.circular(32),
           child: Stack(children: [
-            // nền kính mờ (không dính dáng gì tới shader → luôn có)
+            // Nền kính mờ (BackdropFilter)
             Positioned.fill(
               child: BackdropFilter(
                 filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
@@ -291,14 +326,14 @@ class _DockState extends State<_Dock> with SingleTickerProviderStateMixin {
                   decoration: BoxDecoration(
                     color: cs.surface.withValues(alpha: dark ? 0.55 : 0.68),
                     border: Border.all(
-                        color: cs.outlineVariant.withValues(alpha: 0.6)),
+                      color: cs.outlineVariant.withValues(alpha: 0.6),
+                    ),
                     borderRadius: BorderRadius.circular(32),
                   ),
                 ),
               ),
             ),
-            // vũng linh dịch, vẽ THẲNG lên canvas — không qua ImageFilter nên
-            // không phụ thuộc Impeller
+            // Vũng linh dịch chạy 120fps trên canvas
             Positioned.fill(
               child: IgnorePointer(
                 child: CustomPaint(
@@ -308,9 +343,9 @@ class _DockState extends State<_Dock> with SingleTickerProviderStateMixin {
                     color: liquid,
                     alpha: dark ? 0.52 : 0.46,
                     selX: _pad + (x + 0.5) * cell,
-                    cent: (1 - (x - 2).abs()).clamp(0.0, 1.0),
-                    flow: (x - widget.index).abs().clamp(0.0, 1.0),
-                    tapAt: _tapAt,
+                    cent: cent,
+                    flow: flow,
+                    splash: splashVal,
                     tapX: _tapX,
                   ),
                 ),
@@ -325,13 +360,13 @@ class _DockState extends State<_Dock> with SingleTickerProviderStateMixin {
                     Expanded(
                       child: GestureDetector(
                         onTap: () {
-                          _tapAt = DateTime.now();
                           _tapX = _pad + (i + 0.5) * cell;
-                          widget.onTap(i); // haptic do go() lo
+                          _splashCtrl.forward(from: 0);
+                          widget.onTap(i);
                         },
                         behavior: HitTestBehavior.opaque,
                         child: i == 2
-                            ? _Emblem(selected: widget.index == 2)
+                            ? _Emblem(proximity: cent)
                             : _label(cs, t, i, x),
                       ),
                     ),
@@ -344,42 +379,55 @@ class _DockState extends State<_Dock> with SingleTickerProviderStateMixin {
     );
   }
 
-  /// Icon + chữ của 4 tab thường. Càng gần khối lỏng càng phồng lên, như bị
-  /// mặt nước dâng đội lên.
+  /// Icon + chữ cross-fade mượt mà theo khoảng cách x thực tế
   Widget _label(ColorScheme cs, TextTheme t, int i, double x) {
-    final near = (1 - (i - x).abs()).clamp(0.0, 1.0);
+    final near = (1.0 - (i - x).abs()).clamp(0.0, 1.0);
     final color = Color.lerp(cs.onSurfaceVariant, cs.primary, near)!;
     final tab = _RootShellState._tabs[i];
+
     return Column(mainAxisAlignment: MainAxisAlignment.center, children: [
       Transform.translate(
-        offset: Offset(0, -2.5 * near),
+        offset: Offset(0, -3.0 * near),
         child: Transform.scale(
-          scale: 1 + 0.1 * near,
-          child: Icon(i == widget.index ? tab.active : tab.icon,
-              size: 20, color: color),
+          scale: 1.0 + 0.12 * near,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              // Icon viền nét mờ
+              Opacity(
+                opacity: (1.0 - near).clamp(0.0, 1.0),
+                child: Icon(tab.icon, size: 20, color: cs.onSurfaceVariant),
+              ),
+              // Icon đặc phát sáng khi active
+              Opacity(
+                opacity: near,
+                child: Icon(tab.active, size: 20, color: cs.primary),
+              ),
+            ],
+          ),
         ),
       ),
       const SizedBox(height: 2),
-      // độ đậm CỐ ĐỊNH — đổi weight giữa hoạt ảnh làm chữ đổi bề rộng, nhìn giật
-      Text(tab.label,
-          style: t.labelSmall?.copyWith(
-              letterSpacing: 0,
-              fontSize: 9.5,
-              fontWeight: FontWeight.w600,
-              color: color)),
+      Text(
+        tab.label,
+        style: t.labelSmall?.copyWith(
+          letterSpacing: 0,
+          fontSize: 9.5,
+          fontWeight: near > 0.5 ? FontWeight.w700 : FontWeight.w500,
+          color: color,
+        ),
+      ),
     ]);
   }
 }
 
-/// Vũng linh dịch trong dock. Có shader thì vẽ bằng `liquid_dock.frag` (metaball
-/// + đổ bóng theo pháp tuyến); không có thì vẫn vẽ tay mặt sóng + giọt Tu Tiên —
-/// nhạt hơn nhưng KHÔNG bao giờ để dock trơ ra như quên làm hiệu ứng.
+/// Vũng linh dịch vẽ tay + shader
 class _LiquidPainter extends CustomPainter {
   final Animation<double> amb;
   final FragmentShader? shader;
   final Color color;
-  final double alpha, selX, cent, flow, tapX;
-  final DateTime? tapAt;
+  final double alpha, selX, cent, flow, splash, tapX;
+
   _LiquidPainter({
     required this.amb,
     required this.shader,
@@ -388,17 +436,9 @@ class _LiquidPainter extends CustomPainter {
     required this.selX,
     required this.cent,
     required this.flow,
-    required this.tapAt,
+    required this.splash,
     required this.tapX,
   }) : super(repaint: amb);
-
-  /// 1 ngay lúc chạm → 0 sau _splashMs
-  double get _splash {
-    final at = tapAt;
-    if (at == null) return 0;
-    final age = DateTime.now().difference(at).inMilliseconds;
-    return (1 - age / _DockState._splashMs).clamp(0.0, 1.0);
-  }
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -416,33 +456,34 @@ class _LiquidPainter extends CustomPainter {
         ..setFloat(7, color.g)
         ..setFloat(8, color.b)
         ..setFloat(9, alpha)
-        ..setFloat(10, _splash)
+        ..setFloat(10, splash)
         ..setFloat(11, tapX);
       canvas.drawRect(Offset.zero & size, Paint()..shader = sh);
       return;
     }
 
-    // ponytail: bản vẽ tay bỏ metaball (không có smooth-min trên Path) — mặt
-    // sóng và giọt chỉ chồng lên nhau, không dính mềm. Đủ dùng cho máy không
-    // chạy được shader; muốn dính mềm thì phải có shader.
     final paint = Paint()..color = color.withValues(alpha: alpha);
     final base = size.height * 0.82;
     final path = Path()..moveTo(0, size.height);
-    for (var px = 0.0; px <= size.width; px += 4) {
-      final k = (px - selX) / 30;
+    for (var px = 0.0; px <= size.width; px += 3) {
+      final k = (px - selX) / (28 + 10 * flow);
       final y = base -
-          20 * math.exp(-k * k) +
-          1.4 * math.sin(px * 0.055 + t * 2) +
-          0.9 * math.sin(px * 0.090 - t * 3);
+          (24 + 8 * flow) * math.exp(-k * k) +
+          1.2 * math.sin(px * 0.055 + t * 2) +
+          0.8 * math.sin(px * 0.090 - t * 3);
       path.lineTo(px, y);
     }
     canvas.drawPath(
-        path
-          ..lineTo(size.width, size.height)
-          ..close(),
-        paint);
-    canvas.drawCircle(Offset(size.width / 2, size.height / 2),
-        14 + 3 * cent, paint);
+      path
+        ..lineTo(size.width, size.height)
+        ..close(),
+      paint,
+    );
+    canvas.drawCircle(
+      Offset(size.width / 2, size.height / 2),
+      14 + 3.5 * cent,
+      paint,
+    );
   }
 
   @override
@@ -450,25 +491,191 @@ class _LiquidPainter extends CustomPainter {
       old.selX != selX ||
       old.cent != cent ||
       old.flow != flow ||
+      old.splash != splash ||
       old.color != color;
 }
 
-/// Ô giữa: chỉ còn biểu tượng, không chữ. Thân giọt Tu Tiên (méo + vệ tinh quay)
-/// do _LiquidPainter vẽ phía sau, nên ở đây không vẽ gì thêm ngoài cái ấn tín.
+/// Ô giữa: Biểu tượng Tu Tiên đồng bộ thuần túy với các tab còn lại
 class _Emblem extends ConsumerWidget {
-  final bool selected;
-  const _Emblem({required this.selected});
+  final double proximity; // 0..1
+  const _Emblem({required this.proximity});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final emblem = ref.watch(tabEmblemProvider); // biểu tượng do user chọn
+    final cs = Theme.of(context).colorScheme;
+    final t = Theme.of(context).textTheme;
+    final emblem = ref.watch(tabEmblemProvider);
+    final near = proximity.clamp(0.0, 1.0);
+    final scale = 1.0 + 0.10 * near;
+    final color = Color.lerp(cs.onSurfaceVariant, cs.primary, near)!;
+
     return Center(
-      child: AnimatedScale(
-        scale: selected ? 1.2 : 1,
-        duration: const Duration(milliseconds: 320),
-        curve: Curves.easeOutBack,
-        child: PixelIcon(emblem, grade: 5, size: 22),
+      child: Transform.scale(
+        scale: scale,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            PixelIcon(emblem, grade: near > 0.5 ? 5 : 1, size: 24),
+            const SizedBox(height: 2),
+            Text(
+              'Tu Tiên',
+              maxLines: 1,
+              style: t.labelSmall?.copyWith(
+                fontSize: 9.5,
+                letterSpacing: 0,
+                fontWeight: near > 0.5 ? FontWeight.w700 : FontWeight.w500,
+                color: color,
+              ),
+            ),
+          ],
+        ),
       ),
+    );
+  }
+}
+
+/// Hoạt ảnh mở màn: Chữ "Gác Truyện" bay vào giữa màn hình, chuyển hóa sang logo sắc nét
+class _AppSplashIntro extends StatefulWidget {
+  final VoidCallback onComplete;
+  const _AppSplashIntro({required this.onComplete});
+
+  @override
+  State<_AppSplashIntro> createState() => _AppSplashIntroState();
+}
+
+class _AppSplashIntroState extends State<_AppSplashIntro>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1250),
+    );
+    _ctrl.forward().then((_) {
+      if (mounted) widget.onComplete();
+    });
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final t = Theme.of(context).textTheme;
+    final bg = Theme.of(context).scaffoldBackgroundColor;
+
+    return AnimatedBuilder(
+      animation: _ctrl,
+      builder: (context, child) {
+        final val = _ctrl.value;
+
+        // Giai đoạn 1 (0.0 -> 0.38): Chữ bay từ dưới vào giữa màn hình
+        final textIn = (val / 0.38).clamp(0.0, 1.0);
+        final textSlide = Curves.easeOutCubic.transform(textIn);
+
+        // Giai đoạn 2 (0.38 -> 0.68): Chữ tan biến, Logo nở ra giữa tâm
+        final morph = ((val - 0.38) / 0.30).clamp(0.0, 1.0);
+        final textOut = (1.0 - morph).clamp(0.0, 1.0);
+        final logoIn = Curves.easeOutBack.transform(morph);
+
+        // Giai đoạn 3 (0.70 -> 1.0): Mờ dần toàn bộ splash, vào giao diện chính
+        final fadeOut = ((val - 0.70) / 0.30).clamp(0.0, 1.0);
+        final overallOpacity = (1.0 - fadeOut).clamp(0.0, 1.0);
+
+        return IgnorePointer(
+          ignoring: val > 0.75,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () {
+              _ctrl.stop();
+              widget.onComplete();
+            },
+            child: Opacity(
+              opacity: overallOpacity,
+              child: Container(
+                color: bg,
+                alignment: Alignment.center,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    // Chữ bay vào tâm
+                    if (textOut > 0.01)
+                      Opacity(
+                        opacity: (textIn * textOut).clamp(0.0, 1.0),
+                        child: Transform.translate(
+                          offset: Offset(0, 42 * (1.0 - textSlide) - 16 * morph),
+                          child: Transform.scale(
+                            scale: 0.90 + 0.14 * textSlide,
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  'Gác Truyện',
+                                  style: t.displaySmall?.copyWith(
+                                    fontWeight: FontWeight.w800,
+                                    color: cs.onSurface,
+                                    letterSpacing: -0.5,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Container(
+                                  width: 28,
+                                  height: 2,
+                                  decoration: BoxDecoration(
+                                    color: cs.primary,
+                                    borderRadius: BorderRadius.circular(1),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+
+                    // Logo nở ra từ tâm
+                    if (morph > 0.01)
+                      Opacity(
+                        opacity: morph.clamp(0.0, 1.0),
+                        child: Transform.scale(
+                          scale: 0.55 + 0.45 * logoIn,
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: cs.primary.withValues(alpha: 0.08 * logoIn.clamp(0.0, 1.0)),
+                                ),
+                                child: const BrandLogo(height: 64),
+                              ),
+                              const SizedBox(height: 10),
+                              Text(
+                                'GÁC TRUYỆN',
+                                style: t.labelSmall?.copyWith(
+                                  color: cs.primary,
+                                  letterSpacing: 4,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }
