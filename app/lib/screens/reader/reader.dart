@@ -12,123 +12,12 @@ import '../../hanviet.dart';
 import '../../tts.dart';
 import '../../widgets.dart';
 import '../cultivation/pixel.dart';
+import 'reader_dialogs.dart';
 import 'reader_settings.dart';
+import 'reader_text.dart';
 
-/// Vùng chữ đang chọn để sửa: khối chứa + vị trí đầu/cuối trong khối.
-typedef Sel = ({String block, int start, int end});
-
-/// Ranh giới từ để chạm-sửa: dấu ngoặc, nháy, phẩy, hai chấm… không thuộc từ.
-bool isWordChar(String s, int i) {
-  final c = s.codeUnitAt(i);
-  return (c >= 0x30 && c <= 0x39) || // 0-9
-      (c >= 0x41 && c <= 0x5a) || // A-Z
-      (c >= 0x61 && c <= 0x7a) || // a-z
-      (c >= 0x00c0 && c <= 0x024f) || // Latin có dấu
-      (c >= 0x1e00 && c <= 0x1eff) || // tiếng Việt có dấu
-      (c >= 0x3400 && c <= 0x9fff) || // chữ Hán còn sót
-      c == 0x5f; // _
-}
-
-int _wordIndex(String s, int offset) {
-  var i = offset.clamp(0, s.length).toInt();
-  if (i < s.length && isWordChar(s, i)) return i;
-  if (i > 0 && isWordChar(s, i - 1)) return i - 1;
-  while (i < s.length && !isWordChar(s, i)) { i++; }
-  return i == s.length ? -1 : i;
-}
-
-int wordLeft(String s, int offset) {
-  var i = _wordIndex(s, offset);
-  if (i < 0) return s.length;
-  while (i > 0 && isWordChar(s, i - 1)) { i--; }
-  return i;
-}
-
-int wordRight(String s, int offset) {
-  var i = _wordIndex(s, offset);
-  if (i < 0) return s.length;
-  while (i < s.length && isWordChar(s, i)) { i++; }
-  return i;
-}
-
-int previousWordStart(String s, int before) {
-  final clamped = before.clamp(0, s.length).toInt();
-  var i = clamped - 1;
-  while (i >= 0 && !isWordChar(s, i)) { i--; }
-  return i < 0 ? clamped : wordLeft(s, i);
-}
-
-bool _isGapSpace(String s, int i) {
-  final c = s.codeUnitAt(i);
-  return c == 0x20 || c == 0x09; // chỉ space/tab là "khoảng trắng nối từ"
-}
-
-/// Mở rộng vùng chọn sang PHẢI một từ — nhưng CHỈ khi cách bởi khoảng trắng, gặp dấu
-/// câu (", : ; . …) thì dừng, không nuốt dấu vào vùng sửa (sửa thường 1-2 từ sạch).
-int extendRightWord(String s, int end) {
-  var j = end;
-  while (j < s.length && _isGapSpace(s, j)) { j++; }
-  if (j >= s.length || !isWordChar(s, j)) return end; // sau khoảng trắng là dấu/hết → giữ nguyên
-  while (j < s.length && isWordChar(s, j)) { j++; }
-  return j;
-}
-
-/// Mở rộng sang TRÁI một từ, cùng luật: chỉ vượt khoảng trắng, không nuốt dấu câu.
-int extendLeftWord(String s, int start) {
-  var j = start;
-  while (j > 0 && _isGapSpace(s, j - 1)) { j--; }
-  if (j <= 0 || !isWordChar(s, j - 1)) return start;
-  while (j > 0 && isWordChar(s, j - 1)) { j--; }
-  return j;
-}
-
-int nextWordEnd(String s, int from) {
-  final clamped = from.clamp(0, s.length).toInt();
-  var i = clamped;
-  while (i < s.length && !isWordChar(s, i)) { i++; }
-  return i == s.length ? clamped : wordRight(s, i);
-}
-
-/// Chạm trúng 1 âm tiết VIẾT HOA (tên riêng Hán-Việt nhiều âm tiết: "Trần Đại Chinh")
-/// → nuốt TRỌN cụm âm tiết viết hoa liền nhau, dừng ở từ thường/dấu câu. Từ thường
-/// ("hệ thống") → giữ nguyên 1 từ (khỏi quơ trúng từ bên cạnh làm hỏng gợi ý theo tên).
-(int, int) nameRunBounds(String s, int a, int b) {
-  bool capAt(int i) {
-    if (i < 0 || i >= s.length) return false;
-    final ch = s[i];
-    return ch.toUpperCase() == ch && ch.toLowerCase() != ch; // chữ CÁI viết hoa
-  }
-  if (!capAt(a)) return (a, b);
-  var start = a, end = b;
-  while (true) {
-    final na = extendLeftWord(s, start);
-    if (na == start || !capAt(na)) break;
-    start = na;
-  }
-  while (true) {
-    final nb = extendRightWord(s, end);
-    if (nb == end) break;
-    var w = end; // đầu âm tiết vừa với tới
-    while (w < nb && !isWordChar(s, w)) { w++; }
-    if (!capAt(w)) break; // âm tiết kế viết thường → không nuốt
-    end = nb;
-  }
-  return (start, end);
-}
-
-/// Bản dịch cũ có thể đã chép đuôi chương trước do model nhìn thấy context.
-/// Chỉ ẩn các đoạn đầu khớp nguyên văn đuôi trước; dữ liệu DB không bị sửa khi đọc.
-String withoutLeadingPreviousEcho(String current, String? previous) {
-  if (previous == null || previous.trim().isEmpty) return current;
-  final tail = previous.trim();
-  final lines = current.split('\n');
-  while (lines.isNotEmpty) {
-    final lead = lines.first.trim();
-    if (lead.length < 20 || !tail.contains(lead)) break;
-    lines.removeAt(0);
-  }
-  return lines.join('\n').trimLeft();
-}
+// Thuật toán ranh giới từ / phân đoạn / highlight TTS nằm ở reader_text.dart,
+// sheet + dialog (sửa cả đoạn, báo lỗi, chọn giọng) ở reader_dialogs.dart.
 
 class ReaderScreen extends ConsumerStatefulWidget {
   final int novelId;
@@ -230,12 +119,11 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   void _syncTts() {
     if (!mounted) return;
     final st = TtsPlayer.i.state.value;
-    final here = st.active && st.novelId == novelId && st.chapterIndex == chapterIndex;
-    _localTtsPara.value = (here && !st.paused) ? TtsPlayer.i.paraAt.value : -1;
-    if (st.active &&
-        st.playing &&
-        st.novelId == novelId &&
-        st.chapterIndex != chapterIndex &&
+    _localTtsPara.value = ttsLocalPara(st,
+        novelId: novelId,
+        chapterIndex: chapterIndex,
+        paraAt: TtsPlayer.i.paraAt.value);
+    if (ttsMovedAway(st, novelId: novelId, chapterIndex: chapterIndex) &&
         !_navigating) {
       _goChapter(st.chapterIndex);
     }
@@ -383,115 +271,23 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     }
   }
 
-  /// Viết lại NGUYÊN đoạn đang chạm. Không string-replace: server ghép đoạn mới vào đúng
-  /// chỗ đoạn cũ, và từ chối nếu đoạn cũ đã đổi (người khác vừa sửa) — xem migration 093.
+  /// Viết lại NGUYÊN đoạn đang chạm — dialog nằm ở reader_dialogs.dart; lưu xong mới
+  /// đóng form, refetch chương và báo "Đã sửa đoạn".
   Future<void> _editWholePara(String block) async {
-    if (sb.auth.currentUser == null) {
-      context.push('/login');
-      return;
-    }
-    final ctrl = TextEditingController(text: block);
     final messenger = ScaffoldMessenger.of(context);
-    final saved = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Sửa cả đoạn'),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: TextField(
-            controller: ctrl,
-            autofocus: true,
-            maxLines: null,
-            minLines: 5,
-            decoration: const InputDecoration(
-              helperText: 'Viết lại nguyên đoạn; chỉ đoạn này đổi.',
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Huỷ')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Lưu')),
-        ],
-      ),
-    );
-    final text = ctrl.text.trim();
-    ctrl.dispose();
-    if (saved != true || text.isEmpty || text == block) return;
-    try {
-      await editChapterPara(novelId, chapterIndex, block, text);
-    } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('Chưa lưu được: $e')));
-      return;
-    }
+    final ok = await editWholeParaDialog(context,
+        novelId: novelId, chapterIndex: chapterIndex, block: block);
+    if (!ok) return;
     _closeEdit();
+    // refetch chương → bản sửa hiện NGAY
     ref.invalidate(chapterProvider(ChapterKey(novelId, chapterIndex)));
     messenger.showSnackBar(const SnackBar(
         content: Text('Đã sửa đoạn'), duration: Duration(milliseconds: 2000)));
   }
 
-  Future<void> _showTranslationReport(Sel sel, String selected) async {
-    if (sb.auth.currentUser == null) {
-      context.push('/login');
-      return;
-    }
-    final note = TextEditingController();
-    var type = 'Sai nghĩa';
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: const Text('Báo lỗi bản dịch'),
-          // scroll: bàn phím bật lên trên màn nhỏ thì cuộn thay vì tràn/cắt ô nhập
-          content: SingleChildScrollView(
-              child: Column(mainAxisSize: MainAxisSize.min, children: [
-            Text('Đoạn chọn: “${selected.trim()}”', maxLines: 2,
-                overflow: TextOverflow.ellipsis),
-            const SizedBox(height: 12),
-            DropdownButtonFormField<String>(
-              initialValue: type,
-              decoration: const InputDecoration(labelText: 'Loại lỗi'),
-              items: const [
-                DropdownMenuItem(value: 'Sai nghĩa', child: Text('Sai nghĩa')),
-                DropdownMenuItem(value: 'Xưng hô/giọng', child: Text('Xưng hô hoặc giọng văn')),
-                DropdownMenuItem(value: 'Chính tả', child: Text('Chính tả')),
-                DropdownMenuItem(value: 'Cảm thán/chữ đệm', child: Text('Cảm thán hoặc chữ đệm')),
-                DropdownMenuItem(value: 'Khác', child: Text('Khác')),
-              ],
-              onChanged: (value) => setState(() => type = value ?? type),
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: note,
-              maxLines: 3,
-              decoration: const InputDecoration(
-                labelText: 'Ghi chú (không bắt buộc)',
-                hintText: 'Không sửa nội dung chương',
-              ),
-            ),
-          ])),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Hủy')),
-            FilledButton(
-              onPressed: () async {
-                final contextText = sel.block.replaceAll(RegExp(r'\s+'), ' ').trim();
-                final excerpt = contextText.length <= 400
-                    ? contextText : '${contextText.substring(0, 400)}…';
-                await reportChapter(novelId, chapterIndex,
-                    '[$type] Chọn: “${selected.trim()}”. Ngữ cảnh: “$excerpt”. ${note.text.trim()}');
-                if (dialogContext.mounted) Navigator.pop(dialogContext);
-                if (mounted) {
-                  ScaffoldMessenger.of(this.context).showSnackBar(
-                      const SnackBar(content: Text('Đã gửi báo lỗi; chương không bị sửa')));
-                }
-              },
-              child: const Text('Gửi báo lỗi'),
-            ),
-          ],
-        ),
-      ),
-    );
-    note.dispose();
-  }
+  Future<void> _showTranslationReport(Sel sel, String selected) =>
+      translationReportDialog(context,
+          novelId: novelId, chapterIndex: chapterIndex, sel: sel, selected: selected);
 
   @override
   Widget build(BuildContext context) {
@@ -855,40 +651,11 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     );
   }
 
-  /// Cắt văn bản thành các trang vừa 1 màn (tìm nhị phân số ký tự vừa chiều cao).
+  /// Cắt văn bản thành các trang vừa 1 màn — thuật toán nằm ở reader_text.dart
+  /// (paginateText) để unit-test được.
   List<String> _paginate(
-      String text, TextStyle style, double maxWidth, double pageH, double firstH) {
-    final pages = <String>[];
-    final tp = TextPainter(textDirection: TextDirection.ltr, maxLines: null);
-    final n = text.length;
-    int start = 0;
-    while (start < n) {
-      final limit = pages.isEmpty ? firstH : pageH;
-      int lo = start + 1, hi = n, best = start + 1;
-      while (lo <= hi) {
-        final mid = (lo + hi) >> 1;
-        tp.text = TextSpan(text: text.substring(start, mid), style: style);
-        tp.layout(maxWidth: maxWidth);
-        if (tp.height <= limit) {
-          best = mid;
-          lo = mid + 1;
-        } else {
-          hi = mid - 1;
-        }
-      }
-      int end = best;
-      if (end < n) {
-        // lùi về khoảng trắng gần nhất để không cắt giữa từ
-        final ws = text.lastIndexOf(RegExp(r'\s'), end - 1);
-        if (ws > start) end = ws + 1;
-      }
-      if (end <= start) end = (start + 1).clamp(0, n); // an toàn, tránh lặp vô hạn
-      pages.add(text.substring(start, end).trim());
-      start = end;
-    }
-    if (pages.isEmpty) pages.add('');
-    return pages;
-  }
+          String text, TextStyle style, double maxWidth, double pageH, double firstH) =>
+      paginateText(text, style, maxWidth, pageH, firstH);
 
   // -------- Overlay form sửa (mở thẳng khi chạm từ), chỉ nó rebuild theo selection --------
   Widget _overlay(BuildContext context) => AnimatedBuilder(
@@ -1407,113 +1174,6 @@ class _EndPanelState extends ConsumerState<_EndPanel> {
   }
 }
 
-Future<void> _showTtsVoiceSheet(
-    BuildContext context, TtsState state, Color fg, Color bg) async {
-  final messenger = ScaffoldMessenger.of(context);
-  if (state.playing) await TtsPlayer.i.pause();
-  if (!context.mounted) return;
-
-  var selected = TtsPlayer.i.selectedVoiceKey;
-  final voices = TtsPlayer.i.availableVoices();
-  await showModalBottomSheet<void>(
-    context: context,
-    backgroundColor: bg,
-    isScrollControlled: true,
-    showDragHandle: true,
-    builder: (sheetContext) => StatefulBuilder(
-      builder: (_, setLocal) => SizedBox(
-        height: MediaQuery.sizeOf(sheetContext).height * 0.68,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('Giọng đọc tiếng Việt',
-                style: TextStyle(color: fg, fontSize: 18, fontWeight: FontWeight.w700)),
-            const SizedBox(height: 4),
-            Text('Chạm để chọn · nút phát để nghe thử',
-                style: TextStyle(color: fg.withValues(alpha: 0.6), fontSize: 13)),
-            const SizedBox(height: 12),
-            Expanded(
-              child: FutureBuilder<List<TtsVoice>>(
-                future: voices,
-                builder: (_, snapshot) {
-                  if (snapshot.connectionState != ConnectionState.done) {
-                    return Center(
-                        child: CircularProgressIndicator(color: fg.withValues(alpha: 0.7)));
-                  }
-                  final items = snapshot.data ?? const [];
-                  selected ??= TtsPlayer.i.selectedVoiceKey;
-                  if (items.isEmpty) {
-                    return Center(
-                      child: Text(
-                        'Chưa tìm thấy giọng Tiếng Việt.\n'
-                        'Hãy tải voice Tiếng Việt trong cài đặt TTS/Trợ năng của máy.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: fg.withValues(alpha: 0.7), height: 1.5),
-                      ),
-                    );
-                  }
-                  return ListView.separated(
-                    itemCount: items.length,
-                    separatorBuilder: (_, _) =>
-                        Divider(height: 1, color: fg.withValues(alpha: 0.1)),
-                    itemBuilder: (_, index) {
-                      final voice = items[index];
-                      final active = selected == voice.key;
-
-                      Future<void> choose({required bool preview}) async {
-                        try {
-                          if (preview) {
-                            await TtsPlayer.i.previewVoice(voice);
-                          } else {
-                            await TtsPlayer.i.selectVoice(voice);
-                          }
-                          if (sheetContext.mounted) setLocal(() => selected = voice.key);
-                        } catch (e) {
-                          messenger.showSnackBar(
-                              SnackBar(content: Text('Không dùng được giọng này: $e')));
-                        }
-                      }
-
-                      return ListTile(
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 4),
-                        selected: active,
-                        selectedTileColor: fg.withValues(alpha: 0.06),
-                        leading: Icon(
-                            active ? Icons.radio_button_checked : Icons.radio_button_off,
-                            color: active ? fg : fg.withValues(alpha: 0.45)),
-                        title: Text(voice.name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(color: fg, fontWeight: FontWeight.w600)),
-                        subtitle: Text(
-                          '${voice.qualityLabel}${voice.networkRequired ? ' · cần mạng' : ' · offline'}',
-                          style: TextStyle(color: fg.withValues(alpha: 0.58)),
-                        ),
-                        trailing: IconButton(
-                          tooltip: 'Nghe thử ${voice.name}',
-                          icon: Icon(Icons.play_circle_outline_rounded,
-                              color: fg.withValues(alpha: 0.7)),
-                          onPressed: () => choose(preview: true),
-                        ),
-                        onTap: () => choose(preview: false),
-                      );
-                    },
-                  );
-                },
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Giọng Nâng cao/Premium chỉ xuất hiện sau khi được tải về máy.',
-              style: TextStyle(color: fg.withValues(alpha: 0.5), fontSize: 12),
-            ),
-          ]),
-        ),
-      ),
-    ),
-  );
-}
-
 /// Thanh điều khiển nghe truyện: play/pause + chương đang đọc + giọng + tốc độ + tắt.
 class _TtsBar extends StatelessWidget {
   final TtsState state;
@@ -1557,7 +1217,7 @@ class _TtsBar extends StatelessWidget {
           tooltip: 'Chọn giọng đọc',
           visualDensity: VisualDensity.compact,
           icon: Icon(Icons.record_voice_over_rounded, size: 20, color: soft),
-          onPressed: () => _showTtsVoiceSheet(context, state, fg, bg),
+          onPressed: () => showTtsVoiceSheet(context, state, fg, bg),
         ),
         // bấm xoay vòng tốc độ — StatefulBuilder khỏi kéo cả reader rebuild
         StatefulBuilder(
