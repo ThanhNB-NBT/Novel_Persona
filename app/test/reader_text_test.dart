@@ -1,7 +1,8 @@
 // Test logic văn bản thuần của reader: ranh giới từ (chạm-để-sửa) + tách câu hiển thị.
 import 'package:flutter_test/flutter_test.dart';
 import 'package:novel_reader/chapter_paras.dart';
-import 'package:novel_reader/screens/reader/reader.dart';
+import 'package:novel_reader/screens/reader/reader_text.dart';
+import 'package:novel_reader/tts.dart';
 
 void main() {
   group('wordLeft / wordRight — mở rộng vùng chọn theo từ', () {
@@ -110,6 +111,27 @@ void main() {
       expect(extendRightWord(s, 3), 3); // "nói" + dấu ":" ngay sau → không mở rộng
       expect(extendLeftWord(s, 5), 5); // "nhìn" bên trái là ":" → không mở rộng
       expect(extendRightWord(s, 9), 12); // "nhìn" → "về" cách bởi khoảng trắng → mở được
+    });
+  });
+
+  group('ttsLocalPara / ttsMovedAway — logic highlight TTS tách từ reader', () {
+    const otherNovel = TtsState(novelId: 7, chapterIndex: 3, playing: true);
+    const movedChapter =
+        TtsState(novelId: 1, chapterIndex: 5, playing: true); // cùng truyện, chương khác
+    const here = TtsState(novelId: 1, chapterIndex: 2, playing: true);
+    const pausedHere = TtsState(novelId: 1, chapterIndex: 2, playing: false, paused: true);
+
+    test('chương đang nghe → mirror đoạn; chương khác/pause → -1', () {
+      expect(ttsLocalPara(here, novelId: 1, chapterIndex: 2, paraAt: 5), 5);
+      expect(ttsLocalPara(otherNovel, novelId: 1, chapterIndex: 2, paraAt: 5), -1);
+      expect(ttsLocalPara(pausedHere, novelId: 1, chapterIndex: 2, paraAt: 5), -1);
+    });
+
+    test('tự sang chương khác (cùng truyện, đang phát) → reader đi theo', () {
+      expect(ttsMovedAway(movedChapter, novelId: 1, chapterIndex: 2), isTrue);
+      expect(ttsMovedAway(here, novelId: 1, chapterIndex: 2), isFalse);
+      // truyện khác thì không nhảy màn
+      expect(ttsMovedAway(otherNovel, novelId: 1, chapterIndex: 2), isFalse);
     });
   });
 }
