@@ -194,6 +194,7 @@ class _IntroTab extends StatelessWidget {
         _IdRow(n['id'] as int),
         const SizedBox(height: 14),
         _stats(context),
+        SourceFacts(n),
         if (genres.isNotEmpty) ...[
           const SizedBox(height: 22),
           label('Thể loại'),
@@ -228,6 +229,71 @@ class _IntroTab extends StatelessWidget {
     ]);
   }
 }
+
+/// Số liệu do CHÍNH nguồn Trung công bố (số chữ, lượt đọc, ngày cập nhật…). Mỗi nguồn khai
+/// một kiểu và phần lớn nguồn không khai gì, nên chỉ hiện dòng nào thật sự có — không chừa
+/// chỗ trống. Dữ liệu thô nằm ở novels.word_count + novels.source_stats (migration 099).
+class SourceFacts extends StatelessWidget {
+  final Rec n;
+  const SourceFacts(this.n, {super.key});
+
+  /// 25930710 → "25,9 triệu" · 32685 → "33 nghìn" · 8500 → "8,5 nghìn" · 215 → "215".
+  /// Hàng triệu giữ một số lẻ (chênh lệch còn có nghĩa), hàng nghìn từ 10 trở lên làm tròn.
+  static String short(num v) {
+    String fmt(num x, int digits) =>
+        x.toStringAsFixed(digits).replaceAll('.', ',');
+    if (v >= 1000000) return '${fmt(v / 1000000, 1)} triệu';
+    if (v >= 10000) return '${fmt(v / 1000, 0)} nghìn';
+    if (v >= 1000) return '${fmt(v / 1000, 1)} nghìn';
+    return '$v';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).textTheme;
+    final cs = Theme.of(context).colorScheme;
+    final stats = (n['source_stats'] as Map?) ?? const {};
+    final words = n['word_count'] as int?;
+    final facts = <(IconData, String)>[
+      if (words != null) (Icons.text_fields_rounded, '${short(words)} chữ Trung'),
+      if (stats['reads'] is num)
+        (Icons.visibility_outlined, '${short(stats['reads'] as num)} lượt đọc'),
+      if (stats['favorites'] is num)
+        (Icons.bookmark_border_rounded, '${short(stats['favorites'] as num)} lưu'),
+      if (stats['recommends'] is num)
+        (Icons.thumb_up_outlined, '${short(stats['recommends'] as num)} đề cử'),
+      if (stats['flowers'] is num)
+        (Icons.local_florist_outlined, '${short(stats['flowers'] as num)} hoa'),
+      if (stats['updated_at'] is String)
+        (Icons.update_rounded, 'nguồn cập nhật ${stats['updated_at']}'),
+    ];
+    if (facts.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 16),
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          for (final (icon, text) in facts)
+            Container(
+              padding: const EdgeInsets.fromLTRB(10, 6, 12, 6),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: cs.outlineVariant),
+              ),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Icon(icon, size: 14, color: cs.onSurfaceVariant),
+                const SizedBox(width: 6),
+                Text(text,
+                    style: t.labelMedium?.copyWith(color: cs.onSurfaceVariant)),
+              ]),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 
 /// Mã truyện — chạm để copy, tiện báo lỗi/tra cứu nhanh (số id nội bộ).
 class _IdRow extends StatelessWidget {
