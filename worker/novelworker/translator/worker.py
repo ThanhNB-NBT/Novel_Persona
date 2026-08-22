@@ -292,7 +292,7 @@ def scan_bad_chapters(
             q = q.gte("translated_at", since)
         if novel_id is not None:
             q = q.eq("novel_id", novel_id)
-        b = (q.range(frm, frm + 499).execute()).data or []
+        b = (q.order("id").range(frm, frm + 499).execute()).data or []
         rows += b
         if len(b) < 500:
             break
@@ -1400,7 +1400,7 @@ def handle_patch(job: dict, llm=None) -> None:
         b = (
             db.sb().table("chapters").select("id, title_vi, content_vi")
             .eq("novel_id", job["novel_id"]).eq("translation_status", "done")
-            .range(frm, frm + 499).execute()
+            .order("id").range(frm, frm + 499).execute()
         ).data or []
         chapters += b
         if len(b) < 500:

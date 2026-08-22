@@ -769,7 +769,8 @@ def sync_chapter_list(
             while True:
                 b = (
                     db.sb().table("chapters").select("chapter_index, source_chapter_id")
-                    .eq("novel_id", novel_id).range(frm, frm + 999).execute()
+                    .eq("novel_id", novel_id).order("chapter_index")
+                    .range(frm, frm + 999).execute()
                 ).data or []
                 for r in b:
                     have[r["chapter_index"]] = r.get("source_chapter_id")
@@ -1013,7 +1014,8 @@ def _refresh_chapter_ids(novel_id: int, refs: list) -> int:
     while True:
         rows = (
             db.sb().table("chapters").select("id, chapter_index, source_chapter_id")
-            .eq("novel_id", novel_id).range(frm, frm + 999).execute()
+            .eq("novel_id", novel_id).order("chapter_index")
+            .range(frm, frm + 999).execute()
         ).data or []
         for row in rows:
             ref = by_index.get(row["chapter_index"])

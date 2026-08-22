@@ -389,7 +389,7 @@ def run_quality(novel_id: int | None) -> None:
              .eq("translation_status", "done"))
         if novel_id:
             q = q.eq("novel_id", novel_id)
-        b = q.range(frm, frm + 299).execute().data or []
+        b = q.order("id").range(frm, frm + 299).execute().data or []
         rows += b
         if len(b) < 300:
             break
@@ -661,7 +661,7 @@ def run_redich_leaked(priority: int = 70, dry: bool = True) -> None:
         rows = (db.sb().table("chapters")
                 .select("id, novel_id, chapter_index, content_vi")
                 .eq("translation_status", "done").not_.is_("content_vi", "null")
-                .range(frm, frm + 299).execute().data or [])
+                .order("id").range(frm, frm + 299).execute().data or [])
         dirty += [r for r in rows if _LEAK.search(r["content_vi"] or "")]
         if len(rows) < 300:
             break
