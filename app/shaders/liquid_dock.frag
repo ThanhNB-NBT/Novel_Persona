@@ -1,24 +1,23 @@
 #version 460 core
 #include <flutter/runtime_effect.glsl>
 
-// Vũng LINH DỊCH trong dock 5 tab. Vẽ thẳng lên canvas (Paint..shader) chứ KHÔNG
-// qua ImageFilter.shader — đường đó chỉ chạy trên Impeller và hỏng thì im lặng.
-//  · mặt vũng đọng ở đáy dock, gợn sóng liên tục
-//  · mặt nước dâng thành gò dưới tab đang chọn (thay cho "ô chạy")
+// Vũng LINH DỊCH trong dock 5 tab. Vẽ thẳng lên canvas (Paint..shader).
+//  · mặt vũng đọng ở đáy dock, gợn sóng liên tục (120fps ultra-fluid)
+//  · mặt nước dâng thành gò dưới tab đang chọn, dãn tơ dính khi di chuyển (uFlow)
 //  · giọt Tu Tiên ở giữa: méo theo sóng + 3 vệ tinh quay quanh
-//  · tất cả hoà vào nhau bằng smooth-min → gooey thật (metaball)
-//  · đổ bóng/highlight theo pháp tuyến bề mặt → chất thuỷ tinh dày
+//  · tất cả hoà vào nhau bằng smooth-min (metaball SDF)
+//  · đổ bóng/phản quang viền men (meniscus caustic highlight) chân thật
 
 precision highp float;
 
 uniform vec2 uSize;
-uniform float uT;      // 0..2π, tuần hoàn (hệ số thời gian phải là số nguyên)
+uniform float uT;      // 0..2π, tuần hoàn
 uniform float uSelX;   // tâm tab đang chọn (px)
 uniform float uCent;   // 1 = tab giữa (Tu Tiên) đang được chọn
-uniform float uFlow;   // 0..1: đang chảy sang tab khác
+uniform float uFlow;   // 0..1: độ dãn dính khi đang chuyển giữa các tab
 uniform vec3 uColor;   // màu linh dịch
 uniform float uAlpha;  // độ đặc trong lòng vũng
-uniform float uSplash; // 1 = vừa chạm, tắt dần về 0
+uniform float uSplash; // 1 = vừa chạm, tắt dần về 0 theo Ticker 120fps
 uniform float uSplashX; // nơi ngón tay chạm (px)
 
 out vec4 fragColor;
@@ -30,45 +29,48 @@ float smin(float a, float b, float k) {
 
 // SDF của toàn khối lỏng tại p (px). Âm = bên trong.
 float field(vec2 p) {
-  // 1. mặt vũng: sóng nền + gò dâng dưới tab đang chọn (chảy thì gò cao hơn)
-  float wave = 1.4 * sin(p.x * 0.055 + uT * 2.0)
-             + 0.9 * sin(p.x * 0.090 - uT * 3.0);
-  // mực nước nền thấp (0.82) để chữ các tab KHÔNG bị cắt ngang; chỉ gò dưới tab
-  // đang chọn mới dâng cao ôm lấy icon → vẫn đủ làm chỉ báo tab
-  float k = (p.x - uSelX) / 28.0;
-  float hump = (30.0 + 8.0 * uFlow) * exp(-k * k);
+  // 1. Mặt nước: sóng êm + gò dâng theo vị trí ngón tay/tab
+  float wave = 1.2 * sin(p.x * 0.055 + uT * 2.0)
+             + 0.8 * sin(p.x * 0.090 - uT * 3.0);
 
-  // sóng lan từ chỗ vừa chạm: vòng gợn chạy ra hai bên rồi tắt
+  // Gò dâng: khi đang kéo (uFlow > 0), gò dãn rộng và nâng cao mô phỏng sức căng bề mặt
+  float spread = 28.0 + 12.0 * uFlow;
+  float k = (p.x - uSelX) / spread;
+  float hump = (28.0 + 10.0 * uFlow) * exp(-k * k);
+
+  // Sóng gợn lan tỏa từ vị trí chạm
   float dx = abs(p.x - uSplashX);
-  float ripple = 7.0 * uSplash * cos(dx * 0.13 - (1.0 - uSplash) * 14.0)
-                 * exp(-dx * 0.018);
+  float ripple = 8.0 * uSplash * cos(dx * 0.15 - (1.0 - uSplash) * 16.0)
+                 * exp(-dx * 0.022);
 
   float d = (uSize.y * 0.82 - hump + wave - ripple) - p.y;
 
-  // hai giọt bắn lên từ chỗ chạm rồi rơi xuống theo parabol
-  float fly = 1.0 - uSplash;              // 0 lúc bắn → 1 lúc tắt
-  float up = 26.0 * fly * (1.0 - fly) * 4.0;
-  for (int i = 0; i < 2; i++) {
-    float dir = (i == 0) ? -1.0 : 1.0;
-    vec2 c = vec2(uSplashX + dir * 16.0 * fly, uSize.y * 0.82 - up);
-    d = smin(d, length(p - c) - 4.5 * uSplash, 6.0);
+  // Giọt bắn phụ khi chạm (fountain droplets)
+  if (uSplash > 0.01) {
+    float fly = 1.0 - uSplash;
+    float up = 28.0 * fly * (1.0 - fly) * 4.0;
+    for (int i = 0; i < 2; i++) {
+      float dir = (i == 0) ? -1.0 : 1.0;
+      vec2 c = vec2(uSplashX + dir * 18.0 * fly, uSize.y * 0.82 - up);
+      d = smin(d, length(p - c) - (4.0 * uSplash), 5.0);
+    }
   }
 
-  // 2. giọt Tu Tiên giữa dock: bán kính méo theo hai sóng lệch pha
+  // 2. Giọt Tu Tiên giữa dock: bán kính co dãn theo sóng
   vec2 q = p - vec2(uSize.x * 0.5, uSize.y * 0.5);
   float ang = atan(q.y, q.x);
-  float wob = 0.08 + 0.06 * uCent;
-  float rad = 14.0 + 3.0 * uCent;
+  float wob = 0.07 + 0.05 * uCent;
+  float rad = 14.0 + 3.5 * uCent;
   float r = rad * (1.0 + wob * sin(3.0 * ang + uT * 2.0)
-                       + wob * 0.7 * sin(5.0 * ang - uT * 3.0));
-  d = smin(d, length(q) - r, 10.0);
+                       + wob * 0.6 * sin(5.0 * ang - uT * 3.0));
+  d = smin(d, length(q) - r, 9.0);
 
-  // 3. ba vệ tinh quay quanh giọt; được chọn thì quỹ đạo co lại, dính vào thân
-  float orb = rad + mix(8.0, 3.0, uCent);
+  // 3. Ba vệ tinh linh khí quay quanh giọt
+  float orb = rad + mix(8.5, 3.0, uCent);
   for (int i = 0; i < 3; i++) {
-    float a = uT * (1.0 + uCent) + float(i) * 2.0944;
+    float a = uT * (1.0 + uCent * 0.5) + float(i) * 2.0944;
     vec2 o = vec2(cos(a), sin(a)) * (orb + 2.0 * sin(uT * 2.0 + float(i)));
-    d = smin(d, length(q - o) - (3.4 + uCent), 5.0);
+    d = smin(d, length(q - o) - (3.2 + uCent * 0.8), 4.5);
   }
   return d;
 }
@@ -83,25 +85,25 @@ void main() {
     return;
   }
 
-  // pháp tuyến bề mặt = gradient SDF (sai phân hữu hạn)
-  const float e = 1.5;
+  // Pháp tuyến bề mặt = gradient SDF
+  const float e = 1.2;
   vec2 n = normalize(vec2(field(p + vec2(e, 0.0)) - field(p - vec2(e, 0.0)),
                           field(p + vec2(0.0, e)) - field(p - vec2(0.0, e)))
                      + vec2(0.0001));
 
-  // dày ở giữa, mỏng ở mép → chất lỏng có khối, không phải mảng màu bẹt
-  float body = smoothstep(0.0, -12.0, d);
-  vec3 col = uColor * (0.85 + 0.35 * body);
+  // Khối nước dày ở giữa, trong suốt ở rìa
+  float body = smoothstep(0.0, -14.0, d);
+  vec3 col = uColor * (0.88 + 0.32 * body);
 
-  // ĐƯỜNG MẶT THOÁNG: dải sáng mảnh bám đúng mặt trên khối lỏng. Thiếu nó thì
-  // mắt đọc vũng nước thành mảng sương, không ra chất lỏng.
+  // Phản quang men mặt nước (meniscus caustic highlight)
   float top = max(-n.y, 0.0);
-  float film = exp(-abs(d) * 1.7) * pow(top, 1.5);
-  col += film * 0.9;
-  col += top * pow(1.0 - body, 2.0) * 0.45;
+  float film = exp(-abs(d) * 1.8) * pow(top, 1.6);
+  col += vec3(0.95, 0.98, 1.0) * film * 0.95;
+  col += top * pow(1.0 - body, 2.0) * 0.40;
 
+  // Alpha gradient
   float a = uAlpha * (0.55 + 0.45 * body) * inside;
-  a = min(a + film * 0.75 + exp(-abs(d) * 0.6) * 0.20 * inside, 1.0);
+  a = min(a + film * 0.80 + exp(-abs(d) * 0.5) * 0.22 * inside, 1.0);
 
-  fragColor = vec4(clamp(col, 0.0, 1.0) * a, a); // Flutter cần premultiplied
+  fragColor = vec4(clamp(col, 0.0, 1.0) * a, a);
 }

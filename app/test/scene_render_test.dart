@@ -19,11 +19,11 @@ void main() {
         'assets/bg/cultivation_bg_night.webp');
   });
 
-  // Mirror SQL↔Dart: cult_tien_max()=6 → 7 tên bậc + 7 đạo hiệu, tránh index-out-of-range.
-  test('bảng bậc tiên khớp cult_tien_max (064)', () {
-    expect(tienTierNames.length, 7);
-    expect(tienDaoTitles.length, 7);
-    expect(tienTierMax, 6);
+  // Mirror SQL↔Dart: cult_tien_max()=9 → 10 tên bậc + 10 đạo hiệu, tránh index-out-of-range.
+  test('bảng bậc tiên khớp cult_tien_max (103)', () {
+    expect(tienTierNames.length, 10);
+    expect(tienDaoTitles.length, 10);
+    expect(tienTierMax, 9);
   });
 
   testWidgets('render cảnh tu luyện ra PNG', (tester) async {

@@ -42,17 +42,8 @@ class PageHeader extends StatelessWidget {
                   style: t.labelSmall?.copyWith(color: cs.primary, letterSpacing: 3)),
             ]),
             const SizedBox(height: 2),
-            // tiêu đề "mực loang": đầu chữ đậm mực, cuối phai nhẹ về màu nhấn
-            ShaderMask(
-              shaderCallback: (r) => LinearGradient(colors: [
-                cs.onSurface,
-                cs.onSurface,
-                Color.lerp(cs.onSurface, cs.primary, 0.55)!,
-              ], stops: const [0, 0.55, 1])
-                  .createShader(r),
-              child: Text(title,
-                  style: t.headlineMedium?.copyWith(color: Colors.white)),
-            ),
+            Text(title,
+                style: t.headlineMedium?.copyWith(color: cs.onSurface)),
           ]),
         ),
         ...actions,

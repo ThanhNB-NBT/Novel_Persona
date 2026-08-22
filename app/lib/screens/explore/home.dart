@@ -106,17 +106,9 @@ class _Brand extends StatelessWidget {
                         t.labelSmall?.copyWith(color: cs.primary, letterSpacing: 3)),
               ]),
               const SizedBox(height: 2),
-              ShaderMask(
-                shaderCallback: (r) => LinearGradient(colors: [
-                  cs.onSurface,
-                  cs.onSurface,
-                  Color.lerp(cs.onSurface, cs.primary, 0.55)!,
-                ], stops: const [0, 0.55, 1])
-                    .createShader(r),
-                child: Text('Gác truyện',
-                    maxLines: 1,
-                    style: t.displaySmall?.copyWith(color: Colors.white)),
-              ),
+              Text('Gác truyện',
+                  maxLines: 1,
+                  style: t.displaySmall?.copyWith(color: cs.onSurface)),
             ]),
           ),
           // nút icon trần, nhỏ — không viền tròn
