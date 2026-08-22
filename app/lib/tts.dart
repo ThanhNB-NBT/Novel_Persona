@@ -143,7 +143,10 @@ class TtsPlayer {
           networkRequired: network == true || '$network'.toLowerCase() == 'true',
         );
       }).where((voice) => isVietnameseTtsLocale(voice.locale)));
-    } catch (_) {
+    } catch (e) {
+      // liệt kê giọng lỗi không phải chuyện thường — trả rỗng để _chooseVoice
+      // rơi về giọng mặc định; log ra để còn biết vì sao TTS câm.
+      debugPrint('TTS: không liệt kê được giọng: $e');
       return const [];
     }
   }
@@ -159,7 +162,7 @@ class TtsPlayer {
     String? warn;
     try {
       await _tts.awaitSpeakCompletion(true); // speak() trả về khi ĐỌC XONG
-    } catch (_) {}
+    } catch (e) { debugPrint('TTS: bỏ qua lỗi cấu hình: $e'); }
     if (!kIsWeb && Platform.isAndroid) {
       // Máy Android hay câm vì: engine mặc định (Samsung TTS...) không có giọng
       // tiếng Việt. Thử engine hiện tại → không có vi thì ép sang Google TTS →
@@ -184,13 +187,13 @@ class TtsPlayer {
     }
     try {
       await _tts.setLanguage('vi-VN');
-    } catch (_) {}
+    } catch (e) { debugPrint('TTS: bỏ qua lỗi cấu hình: $e'); }
     _voices = await _readVietnameseVoices();
     _selectedVoice = _chooseVoice(_voices);
     if (_selectedVoice != null) {
       try {
         await _tts.setVoice(_selectedVoice!.selector);
-      } catch (_) {}
+      } catch (e) { debugPrint('TTS: bỏ qua lỗi cấu hình: $e'); }
     } else {
       warn ??= !kIsWeb && Platform.isIOS
           ? 'Máy chưa có giọng tiếng Việt. Vào Cài đặt > Trợ năng > Nội dung được đọc '
@@ -201,13 +204,13 @@ class TtsPlayer {
     try {
       await _tts.setSpeechRate(rate);
       await _tts.setVolume(1.0);
-    } catch (_) {}
+    } catch (e) { debugPrint('TTS: bỏ qua lỗi cấu hình: $e'); }
     if (!kIsWeb && Platform.isIOS) {
       // iOS: phát cả khi máy gạt im lặng + duy trì audio session nền
       try {
         await _tts.setIosAudioCategory(IosTextToSpeechAudioCategory.playback,
             [IosTextToSpeechAudioCategoryOptions.mixWithOthers]);
-      } catch (_) {}
+      } catch (e) { debugPrint('TTS: bỏ qua lỗi cấu hình: $e'); }
     }
     _inited = warn == null; // còn cảnh báo thì lần sau kiểm lại (user vừa cài giọng)
     return warn;

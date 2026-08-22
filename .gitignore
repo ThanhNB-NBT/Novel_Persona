@@ -103,3 +103,6 @@ worker/hachimi/packs/**/*.zip
 
 # backup glossary do script dọn sinh ra (dữ liệu người dùng, không lên repo public)
 worker/glossary_unanchored_backup_*.json
+
+# config MCP cua may dev (path cuc bo)
+.mcp.json
