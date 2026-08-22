@@ -1,5 +1,30 @@
 # Benchmark Hy-MT2-1.8B trên VPS
 
+> ## ⛔ KẾT QUẢ THỰC TẾ (22/08/2026): LOẠI hướng này khỏi VPS 2GB
+>
+> Đã chạy thật trên VPS production. Ba phát hiện:
+>
+> 1. **GGUF low-bit chính chủ hỏng**: cả `2Bit.gguf` lẫn `1.25Bit.gguf` đều fail
+>    `tensor offset mismatch` ở `blk.0.attn_k_norm` — file viết bằng writer riêng
+>    của AngelSlim, lệch chuẩn kể cả khi build llama.cpp từ nhánh PR #22836
+>    (`sjl623/llama.cpp@STQ_0`, commit 1e411d8). Là issue đã biết — HF discussion
+>    #6; Tencent xác nhận *"main branch does not support our kernel"* và kernel
+>    2-bit **chưa viết xong** ("on the way"). File tải về khớp SHA256 của HF nên
+>    KHÔNG phải do download hỏng.
+> 2. **Q4_K_M (quant chuẩn) chạy được nhưng quá chậm + quá nặng**: đo thật cùng
+>    máy với worker — token generation **~2,2 tok/s** (tuột còn <1 khi swap
+>    thrash), RSS **1,2GB**, load average 3.2 trên 2 core. Một chương ~2500
+>    token = **~19 phút**, chậm hơn Hachimi v5 (~10s/chương) khoảng 100×.
+> 3. **Cổng qua/lo fail cả hai điều kiện** (<10 tok/s, >900MB).
+>
+> ### Giữ lại từ đợt này
+> - Build llama-server nhánh STQ_0 còn nằm ở `/root/llamacpp-stq/` trên VPS —
+>   dùng lại được khi (a) Tencent sửa file GGUF + merge kernel, hoặc (b) muốn tự
+>   quantize bản LoRA-finetune theo công thức trong PR #22836
+>   (`convert_hf_to_gguf.py` → `llama-quantize STQ1_0`) chạy Ở MÁY KHÁC.
+> - Hướng Hy-MT2 vẫn sống ở vai trò **teacher offline** (Kaggle/máy nhà) sinh
+>   data distill vào model nhỏ — xem lại khi làm vòng v6.
+
 Đo xem model dịch chuyên 1.8B của Tencent có đủ nhanh/nhẹ để chạy chung VPS
 2 core/2GB với worker không — quyết định bằng SỐ + MẮT, không bằng ước tính.
 
