@@ -345,6 +345,66 @@ EXAMPLES: dict[str, dict[str, list[tuple[str, str]]]] = {
             ("钱包空了，接下来准备吃土吧。", "Ví rỗng rồi, tới đây chuẩn bị cháy túi thôi."),
         ],
     },
+    # ---------- Audit 22/08: term yếu tần suất cao nhất (班 ×25/48 chương) ----------
+    "班": {
+        "work": [
+            ("今天加班到十点才回家。", "Hôm nay tăng ca tới mười giờ mới về nhà."),
+            ("他上夜班，白天都在睡觉。", "Hắn trực ca đêm, ban ngày ngủ suốt."),
+            ("下班后一起去吃饭吧。", "Tan làm đi ăn cùng nhau nhé."),
+            ("明天开始倒班，记得调好闹钟。", "Mai bắt đầu đổi ca, nhớ chỉnh đồng hồ báo thức."),
+        ],
+        "class": [
+            ("班长把作业都收上去了。", "Lớp trưởng đã thu hết bài lên."),
+            ("全班同学都通过了期末考试。", "Cả lớp đồng học đều đậu thi cuối kỳ."),
+            ("我们班有四十个学生。", "Lớp chúng ta có bốn mươi học sinh."),
+            ("上课铃响了，各班依次进场。", "Chuông vào học vang lên, các lớp lần lượt vào chỗ."),
+        ],
+    },
+    # Jargon võng du: audit đọc tay thấy "2服" -> "mặc áo 2" ngay ở chương điểm cao nhất
+    "服": {
+        "server": [
+            ("二服的公会战今晚八点开打。", "Chiến công hội máy chủ 2 tối nay tám giờ khai chiến."),
+            ("全区全服公告：新版本正式上线。", "Thông báo toàn khu toàn máy chủ: bản mới chính thức ra mắt."),
+            ("他在三服重新练了一个号。", "Hắn lập lại một acc mới ở máy chủ ba."),
+            ("跨服战场里高手如云。", "Sân xuyên máy chủ cao thủ đông như mây."),
+        ],
+        "clothes": [
+            ("这件衣服洗过就缩水了。", "Cái áo này giặt xong bị co lại."),
+            ("开学第一天就要穿校服。", "Ngày khai giảng đầu tiên đã phải mặc đồng phục."),
+        ],
+    },
+    # ---------- Thành ngữ số lượng từ review ----------
+    "数一数二": {
+        "top": [
+            ("他的剑法在整个门派数一数二。", "Kiếm pháp của hắn xếp hàng đầu trong cả môn phái."),
+            ("论资质，她在同辈中数一数二。", "Xét về tư chất, nàng đứng đầu trong đồng bối."),
+            ("这孩子的成绩在全年级数一数二。", "Thành tích của đứa trẻ này thuộc nhóm dẫn đầu toàn khối."),
+            ("论酿酒的手艺，老张在镇上数一数二。", "Xét nghề ủi rượu, lão Trương hàng đầu trong trấn."),
+        ],
+    },
+    "十有八九": {
+        "most_likely": [
+            ("看他的表情，十有八九是在撒谎。", "Nhìn biểu cảm của hắn, mười phần là đang nói dối."),
+            ("这么晚还没回来，十有八九是出事了。", "Muộn thế mà chưa về, chín mười là gặp chuyện rồi."),
+            ("他十有八九不会答应这种条件。", "Mười phần hắn sẽ không chấp nhận điều kiện kiểu này."),
+        ],
+    },
+    # ---------- Tu tiên: tái tạo thân thể ----------
+    "重塑": {
+        "reforge": [
+            ("重塑肉身需要天材地宝。", "Tái tạo nhục thân cần thiên tài địa bảo."),
+            ("渡劫失败，他不得不重塑真体。", "Độ kiếp thất bại, hắn đành phải tái tạo chân thể."),
+            ("重塑经脉之痛，非常人所能忍受。", "Nỗi đau tái tạo kinh mạch, không phải thường nhân nào chịu nổi."),
+        ],
+    },
+    # ---------- Kỳ nghi: tinh quái vật nhỏ ----------
+    "黄皮子": {
+        "weasel": [
+            ("老人说山里的黄皮子会迷惑人。", "Lão nhân bảo hoàng tinh trong núi sẽ mê hoặc người."),
+            ("供桌上的贡品是给黄皮子留的。", "Đồ cúng trên án lệ là để dành cho chồn tiên."),
+            ("那座荒庙里住着一只成了精的黄皮子。", "Trong ngôi miếu hoang đó cư ngụ một con chồn vàng tu thành tinh."),
+        ],
+    },
 }
 
 

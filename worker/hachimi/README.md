@@ -44,6 +44,14 @@ cd E:/Novel_Project/worker/hachimi/pipeline && PYTHONPATH=E:/Novel_Project/worke
 | Sinh bó DictDis (term đa nghĩa/jargon, contrastive) | `python make_dictdis_probe.py` |
 | Train DictDis (vá v5 + replay chống-quên, CPU ~38ph) | `python train_dictdis_probe.py --dictdis-repeat 16 --replay-n 4000 --epochs 2` |
 | So 2 model CT2 trên câu DictDis tươi | `python eval_dictdis.py <ct2_A> <ct2_B>` |
+| Sinh booster ngày tháng/giờ/số (chặn xáo trộn thứ tự) | `python 21_make_date_booster.py --n 2400` |
+| Sinh booster tên nhân vật nhất quán | `python 22_make_name_booster.py --n 800` |
+| Lấy câu thành ngữ/phương ngữ từ kaihe để oversample | `python 23_mine_idiom_gold.py --per-term 40` |
+
+Vòng patch 22/08: DictDis bổ sung 班/服/数一数二/十有八九/重塑/黄皮子 (audit 48 chương),
+train gộp thêm booster bằng `--extra-jsonl` (mặc định đã trỏ date+name+idiom):
+`python train_dictdis_probe.py --dictdis-repeat 12 --replay-n 4000 --epochs 2`
+— chạy xong BẮT BUỘC `eval_dictdis.py` + đọc tay chương thật trước khi swap model.
 
 Mỗi script pipeline có `--self-check` chạy trong một giây; chạy nó trước khi tin kết quả.
 

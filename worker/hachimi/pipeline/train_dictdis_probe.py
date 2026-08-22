@@ -43,7 +43,28 @@ def load_replay(n: int, seed: int = 42) -> list[dict]:
     return rows[:n]
 
 
-def main(dictdis_repeat: int, replay_n: int, epochs: float, lr: float, batch: int) -> None:
+def load_extra(paths: list[str]) -> list[dict]:
+    """Booster bổ sung (date/name/idiom…): mỗi dòng {zh, vi}, không repeat."""
+    rows: list[dict] = []
+    for p in paths:
+        path = Path(p)
+        if not path.exists():
+            print(f"cảnh báo: thiếu {path} — bỏ qua", flush=True)
+            continue
+        n0 = len(rows)
+        for l in path.open(encoding="utf-8"):
+            if not l.strip():
+                continue
+            r = json.loads(l)
+            zh, vi = r.get("zh"), r.get("vi")
+            if zh and vi and 6 <= len(zh) <= 200:
+                rows.append({"zh": zh, "vi": vi})
+        print(f"extra {path.name}: +{len(rows) - n0}", flush=True)
+    return rows
+
+
+def main(dictdis_repeat: int, replay_n: int, epochs: float, lr: float, batch: int,
+         extra_jsonl: list[str]) -> None:
     import torch
     from transformers import (
         AutoModelForSeq2SeqLM,
@@ -55,9 +76,11 @@ def main(dictdis_repeat: int, replay_n: int, epochs: float, lr: float, batch: in
 
     dd = load_dictdis()
     replay = load_replay(replay_n)
-    rows = dd * dictdis_repeat + replay
+    extra = load_extra(extra_jsonl)
+    rows = dd * dictdis_repeat + extra + replay
     random.Random(0).shuffle(rows)
-    print(f"train rows: {len(rows)} = DictDis {len(dd)}×{dictdis_repeat} + replay {len(replay)}", flush=True)
+    print(f"train rows: {len(rows)} = DictDis {len(dd)}×{dictdis_repeat} "
+          f"+ extra {len(extra)} + replay {len(replay)}", flush=True)
 
     tok = AutoTokenizer.from_pretrained(str(V5_HF))
     model = AutoModelForSeq2SeqLM.from_pretrained(str(V5_HF))
@@ -99,9 +122,16 @@ if __name__ == "__main__":
     ap.add_argument("--epochs", type=float, default=2.0)
     ap.add_argument("--lr", type=float, default=1e-5)
     ap.add_argument("--batch", type=int, default=8)
+    ap.add_argument("--extra-jsonl", nargs="*", default=[
+        str(ROOT / "hachimi" / "data" / "gold" / "date_booster.jsonl"),
+        str(ROOT / "hachimi" / "data" / "gold" / "name_booster.jsonl"),
+        str(ROOT / "hachimi" / "data" / "gold" / "idiom_oversample.jsonl"),
+    ], help="booster bổ sung gộp vào tập dạy (mặc định: date+name+idiom)")
     ap.add_argument("--smoke", action="store_true", help="dry-run bé: 1 epoch, replay 60, repeat 1")
     a = ap.parse_args()
     if a.smoke:
-        main(dictdis_repeat=1, replay_n=60, epochs=1.0, lr=1e-5, batch=8)
+        main(dictdis_repeat=1, replay_n=60, epochs=1.0, lr=1e-5, batch=8,
+             extra_jsonl=a.extra_jsonl[:1] if a.extra_jsonl else [])
     else:
-        main(a.dictdis_repeat, a.replay_n, a.epochs, a.lr, a.batch)
+        main(a.dictdis_repeat, a.replay_n, a.epochs, a.lr, a.batch,
+             extra_jsonl=a.extra_jsonl)
