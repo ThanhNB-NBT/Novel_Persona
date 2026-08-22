@@ -317,27 +317,35 @@ def requeue_stale_jobs(max_minutes: int = 10) -> int:
     """Job 'running' quá lâu (worker chết/mất mạng giữa chừng) → trả về hàng đợi.
 
     Chạy định kỳ trong translator loop — không cần pg_cron.
-    Job đã hết lượt retry (attempts >= 3) thì đánh failed luôn thay vì lặp vô hạn.
+    Job hết lượt retry (attempts >= max_attempts CỦA CHÍNH NÓ) thì đánh failed,
+    không còn hardcode attempts >= 3 như trước (job max_attempts cao bị chặt oan).
+
+    Chọn TRƯỚC rồi mới update theo id: returning="minimal" trả body rỗng nên
+    bản cũ đọc .data sau update luôn được [] — phần đồng bộ chương chưa từng chạy.
     """
     cutoff = (datetime.now(timezone.utc) - timedelta(minutes=max_minutes)).isoformat()
 
-    # hết lượt → failed
-    dead = (
+    rows = (
         sb().table("translation_jobs")
-        .update({"status": "failed", "locked_by": None, "locked_at": None,
-                 "error": f"worker không phản hồi sau {max_minutes} phút, hết lượt retry"}, returning="minimal")
-        .eq("status", "running").lt("locked_at", cutoff).gte("attempts", 3)
-        .execute()
-    ).data or []
-
-    # còn lượt → pending
-    stale = (
-        sb().table("translation_jobs")
-        .update({"status": "pending", "locked_by": None, "locked_at": None,
-                 "error": f"requeue: worker không phản hồi sau {max_minutes} phút"}, returning="minimal")
+        .select("id,chapter_id,attempts,max_attempts")
         .eq("status", "running").lt("locked_at", cutoff)
         .execute()
     ).data or []
+    dead = [j for j in rows if j["attempts"] >= j["max_attempts"]]
+    stale = [j for j in rows if j["attempts"] < j["max_attempts"]]
+
+    if dead:
+        sb().table("translation_jobs").update(
+            {"status": "failed", "locked_by": None, "locked_at": None,
+             "error": f"worker không phản hồi sau {max_minutes} phút, hết lượt retry"},
+            returning="minimal",
+        ).in_("id", [j["id"] for j in dead]).execute()
+    if stale:
+        sb().table("translation_jobs").update(
+            {"status": "pending", "locked_by": None, "locked_at": None,
+             "error": f"requeue: worker không phản hồi sau {max_minutes} phút"},
+            returning="minimal",
+        ).in_("id", [j["id"] for j in stale]).execute()
 
     # đồng bộ trạng thái chương tương ứng
     failed_ch = [j["chapter_id"] for j in dead if j.get("chapter_id")]
