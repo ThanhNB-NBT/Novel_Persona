@@ -1,6 +1,22 @@
-# Benchmark Hy-MT2-1.8B trên VPS
+# Benchmark model thay thế trên VPS
 
-> ## ⛔ KẾT QUẢ THỰC TẾ (22/08/2026): LOẠI hướng này khỏi VPS 2GB
+> ## 📋 TỔNG KẾT 22/08/2026: cả hai ứng viên đều LOẠI — giữ Hachimi v5
+>
+> ### mBART-50 (facebook/mbart-large-50-many-to-many-mmt, CT2 int8 ~600MB)
+> - Đo thật trong container worker: **7,5 tok/s · VmHWM 1,47GB** → vượt ngân sách RAM,
+>   ~4,5 phút/chương. Chưa tệ như Hy-MT2 nhưng vẫn fail cổng.
+> - **Chất lượng zero-shot là RÁC**: vòng lặp vô hạn ("Bắt đầu..." ×∞). Đã loại trừ lỗi
+>   pipeline bằng cách đối chiếu với HF pipeline chính chủ của Meta — sinh rác y hệt
+>   (lặp câu + lẫn tiếng Anh). mbart-50 many-to-many KHÔNG biết dịch zh→vi văn học;
+>   bài báo VLSP (UET) phải fine-tune nặng + augmentation mới đạt 38.9 BLEU.
+> - Chỉ đáng quay lại nếu: finetune riêng cho zh→vi (nguyên liệu corpus có sẵn) VÀ chạy
+>   trên VPS mạnh hơn.
+>
+> ### Hy-MT2-1.8B — xem kết luận chi tiết bên dưới (2,2 tok/s · 1,2GB · file GGUF hỏng)
+
+---
+
+## ⛔ KẾT QUẢ HY-MT2 THỰC TẾ (22/08/2026): LOẠI hướng này khỏi VPS 2GB
 >
 > Đã chạy thật trên VPS production. Ba phát hiện:
 >
