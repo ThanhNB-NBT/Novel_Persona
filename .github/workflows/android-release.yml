@@ -20,7 +20,30 @@ permissions:
   contents: write # tạo release
 
 jobs:
+  # Quality gate trước khi đốt công build: tag v* không chạy qua pr-check
+  # (pr-check chỉ trigger PR/push main) nên phải tự kiểm tra tại đây — nếu không,
+  # tag trên main hỏng vẫn phát hành được.
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Pytest worker (không cần mạng/LLM)
+        working-directory: worker
+        run: |
+          pip install -r requirements.txt pytest
+          python -m pytest test/ -x -q --tb=short
+        env:
+          SUPABASE_URL: "https://placeholder.supabase.co"
+          SUPABASE_SERVICE_ROLE_KEY: "placeholder"
+          NVIDIA_API_KEY: "placeholder"
+
   apk:
+    needs: [check]
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -67,6 +90,7 @@ jobs:
           path: app/build/app/outputs/flutter-apk/GacTruyen-*.apk
 
   ipa:
+    needs: [check]
     runs-on: macos-latest
     defaults:
       run:
