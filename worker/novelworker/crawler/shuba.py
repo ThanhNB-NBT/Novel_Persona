@@ -22,7 +22,7 @@ import time
 from html import unescape
 from itertools import zip_longest
 
-from .base import ChapterRef, NovelMeta, SourceAdapter
+from .base import ChapterRef, NovelMeta, SourceAdapter, parse_cn_number
 
 log = logging.getLogger(__name__)
 
@@ -122,6 +122,16 @@ class ShubaAdapter(SourceAdapter):
         if desc:
             desc = re.sub(r"<[^>]+>", "", re.sub(r"<br\s*/?>", "\n", desc, flags=re.I)).strip()
         cat = self._og(html, "og:novel:category")
+        # Trang truyện còn khoe: "363.1万字 | 全本" · "更新：2014-10-07" · "1254 章节数".
+        mw = re.search(r"([\d.]+\s*万?)字", html)
+        mu = re.search(r"更新[：:]\s*([\d\-/]{8,10})", html) or re.search(
+            r'og:novel:update_time"\s+content="([^"]+)"', html)
+        # <li>1254<span>章节数</span></li>
+        mc = re.search(r"<li>\s*(\d+)\s*<span>\s*章节数", html)
+        stats = {k: v for k, v in {
+            "updated_at": mu.group(1).strip() if mu else None,
+            "chapter_count_site": int(mc.group(1)) if mc else None,
+        }.items() if v}
         return NovelMeta(
             source_novel_id=source_novel_id,
             source_url=f"{self.base_url}{self._novel_url(source_novel_id)}",
@@ -131,6 +141,8 @@ class ShubaAdapter(SourceAdapter):
             description_zh=desc or None,
             genres_zh=[cat] if cat else [],
             status=_STATUS_MAP.get(self._og(html, "og:novel:status") or "", "ongoing"),
+            word_count=parse_cn_number(mw.group(1)) if mw else None,
+            stats=stats,
         )
 
     def fetch_chapter_list(self, source_novel_id: str) -> list[ChapterRef]:

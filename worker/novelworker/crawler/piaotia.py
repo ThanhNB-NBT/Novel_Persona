@@ -17,7 +17,7 @@ import logging
 import re
 from html import unescape
 
-from .base import ChapterRef, NovelMeta, SourceAdapter
+from .base import ChapterRef, NovelMeta, SourceAdapter, parse_cn_number
 
 log = logging.getLogger(__name__)
 
@@ -101,6 +101,19 @@ class PiaotiaAdapter(SourceAdapter):
             d = re.sub(r"</p\s*>|<br\s*/?>", "\n", md.group(1), flags=re.I)
             d = re.sub(r"<[^>]+>", "", unescape(d)).replace("　", " ")
             desc = "\n".join(ln.strip() for ln in d.split("\n") if ln.strip()) or None
+        # Bảng info còn: 全文长度：1741012字 · 最后更新：2023-09-02 · 收藏数 · 总推荐数.
+        # Nhãn giãn bằng &nbsp; nên dùng lại _gap.
+        def _labeled(label: str) -> str | None:
+            pattern = _gap.join(label) + _gap + r"[：:]" + _gap + r"([^<\n]+)"
+            m = re.search(pattern, html)
+            return unescape(m.group(1)).strip() if m else None
+
+        stats = {k: v for k, v in {
+            "updated_at": _labeled("最后更新"),
+            "favorites": parse_cn_number(_labeled("收藏数")),
+            "recommends": parse_cn_number(_labeled("总推荐数")),
+            "first_release": _labeled("首发状态"),
+        }.items() if v}
         return NovelMeta(
             source_novel_id=source_novel_id,
             source_url=f"{self.base_url}{self._novel_url(source_novel_id)}",
@@ -110,6 +123,8 @@ class PiaotiaAdapter(SourceAdapter):
             description_zh=desc,
             genres_zh=genres,
             status="completed" if st in ("已完成", "完本", "完结") else "ongoing",
+            word_count=parse_cn_number(_labeled("全文长度")),
+            stats=stats,
         )
 
     def fetch_chapter_list(self, source_novel_id: str) -> list[ChapterRef]:

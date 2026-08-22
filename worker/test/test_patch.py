@@ -61,3 +61,15 @@ def test_cyrillic_tu_nguon_mojibake_khong_bi_coi_la_hong():
     assert check_translation("云?掣?Я嘶乩凑夤淼胤?" * 20, "Vân? Xiết? Р Hôi Tuyển?" * 20) is None
     # nguồn sạch mà bản dịch có chữ Nga thì vẫn là lỗi thật của model
     assert "Cyrillic" in (check_translation("他走了。" * 30, "Hắn đi rồi. РА" * 30) or "")
+
+
+def test_parse_cn_number():
+    """Số nguồn công bố: '417万' (faloo), '363.1万字' (69shuba), '1741012字' (ptwxz)."""
+    from novelworker.crawler.base import parse_cn_number
+
+    assert parse_cn_number("417万") == 4_170_000
+    assert parse_cn_number("363.1万字") == 3_631_000
+    assert parse_cn_number("1741012字") == 1_741_012
+    assert parse_cn_number("25,930,710") == 25_930_710
+    assert parse_cn_number("1.2亿") == 120_000_000
+    assert parse_cn_number("") is None and parse_cn_number(None) is None

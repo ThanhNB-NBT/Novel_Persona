@@ -6,7 +6,8 @@ from html import unescape
 from itertools import zip_longest
 
 from .base import (
-    ChapterRef, ChapterUnavailable, NovelMeta, SourceAdapter, SourceBlocked)
+    ChapterRef, ChapterUnavailable, NovelMeta, SourceAdapter, SourceBlocked,
+    parse_cn_number)
 
 
 # Nhóm lớn đúng bộ lọc chung: 玄幻奇幻, 武侠仙侠, 科幻网游, 恐怖灵异.
@@ -158,6 +159,17 @@ class FalooAdapter(SourceAdapter):
         genres = [value for value in (labeled("大类"), labeled("小类")) if value]
         if not genres and (category := meta_value("og:novel:category")):
             genres = [category]
+        # Chỉ số nguồn tự công bố: 字数：417万 · 已有 25930710 人阅读 · 鲜花 32685
+        mw = re.search(r"字数[：:]\s*([\d.]+\s*[万亿]?)", html)
+        words = parse_cn_number(mw.group(1)) if mw else None
+        reads = re.search(r"([\d,]+)\s*</?\w*>?\s*人阅读", html) or re.search(r"([\d,]+)\s*人阅读", html)
+        # 鲜花<span class='gray12'>32685</span> — số nằm TRONG span kề nhãn, bắt lỏng thì
+        # dính id truyện trong onclick ngay trước đó.
+        flowers = re.search(r"鲜花\s*<span[^>]*>\s*([\d,]+)\s*</span>", html)
+        stats = {k: v for k, v in {
+            "reads": parse_cn_number(reads.group(1)) if reads else None,
+            "flowers": parse_cn_number(flowers.group(1)) if flowers else None,
+        }.items() if v is not None}
         return NovelMeta(
             source_novel_id=source_novel_id,
             source_url=f"{self.base_url}{self._novel_path(source_novel_id)}",
@@ -168,6 +180,8 @@ class FalooAdapter(SourceAdapter):
             genres_zh=genres,
             status="completed" if re.search(r"状态[：:]\s*(?:完成|完结)", html) else "ongoing",
             chapter_count=free_count,
+            word_count=words,
+            stats=stats,
         )
 
     def fetch_chapter_list(self, source_novel_id: str) -> list[ChapterRef]:

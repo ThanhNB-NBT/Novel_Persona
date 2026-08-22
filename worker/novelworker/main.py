@@ -521,6 +521,10 @@ def run_backfill(source: str, dry: bool = True, limit: int | None = None) -> Non
             patch["author_zh"] = meta.author_zh
         if meta.status != nv.get("status"):
             patch["status"] = meta.status
+        if meta.word_count and not nv.get("word_count"):
+            patch["word_count"] = meta.word_count
+        if meta.stats and not nv.get("source_stats"):
+            patch["source_stats"] = meta.stats
         if not patch:
             continue
         n_fix += 1

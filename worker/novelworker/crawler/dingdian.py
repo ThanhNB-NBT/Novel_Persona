@@ -119,6 +119,12 @@ class DingdianAdapter(SourceAdapter):
         status, genres = "ongoing", []
         if mt:
             title, author = mt.group(1).strip(), mt.group(2).strip()
+            # ddxs KHÔNG có nhãn "类别" nhưng breadcrumb có: <a href="/category/10.html">悬疑</a>
+            # — trước đây bỏ qua nên 5251/7140 truyện ddxs nằm trong DB mà trống thể loại,
+            # trong khi luật lọc thể loại lại dựa vào chính trường này.
+            mb = re.search(r'<a href="/category/\d+\.html">([^<]+)</a>', html)
+            if mb:
+                genres = [mb.group(1).strip()]
         else:
             # quanben5 cùng khuôn URL nhưng trang truyện khác hẳn: tựa ở <h1>, tác giả
             # /类别/状态 nằm trong <span> có nhãn — nguồn này CÓ lộ trạng thái, khác ddxs.

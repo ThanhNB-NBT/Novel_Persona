@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import random
+import re
 import threading
 import time
 from abc import ABC, abstractmethod
@@ -84,6 +85,23 @@ def _is_transient_status(status: int | None) -> bool:
     return status is None or status in {401, 403, 429} or status >= 500
 
 
+def parse_cn_number(raw: str | None) -> int | None:
+    """'417万' → 4_170_000 · '363.1万字' → 3_631_000 · '1741012字' → 1741012 · '25,930,710' → …"""
+    if not raw:
+        return None
+    text = raw.replace(",", "").replace("，", "").strip()
+    m = re.search(r"(\d+(?:\.\d+)?)\s*([万亿])?", text)
+    if not m:
+        return None
+    value = float(m.group(1))
+    unit = m.group(2)
+    if unit == "万":
+        value *= 10_000
+    elif unit == "亿":
+        value *= 100_000_000
+    return int(value)
+
+
 @dataclass
 class NovelMeta:
     source_novel_id: str
@@ -96,6 +114,12 @@ class NovelMeta:
     status: str = "ongoing"          # ongoing | completed | hiatus
     chapter_count: int = 0
     last_chapter_at: datetime | None = None
+    # Số chữ Trung nguồn tự công bố (faloo/ptwxz/69shuba có). Dùng để ước lượng độ dài thật
+    # và khối lượng dịch — chapter_count không nói lên gì khi chương dài ngắn thất thường.
+    word_count: int | None = None
+    # Chỉ số nguồn công bố, mỗi nguồn một kiểu (lượt đọc, thu thập, đề cử, hoa, ngày cập
+    # nhật). Để nguyên dạng thô trong một túi JSON thay vì đẻ cột cho từng nguồn.
+    stats: dict = field(default_factory=dict)
 
 
 @dataclass
