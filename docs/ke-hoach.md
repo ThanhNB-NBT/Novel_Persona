@@ -21,8 +21,8 @@
 | HTTP crawl | `curl_cffi` (impersonate Chrome TLS fingerprint) | Vượt anti-bot tốt hơn httpx/requests |
 | Config worker | `pydantic-settings` (đọc `.env`) | Xem `worker/novelworker/config.py` |
 | Retry | `tenacity` (exponential backoff 2→30s, 3 lần) | Bọc quanh call LLM |
-| LLM client | `openai` SDK trỏ base_url OpenRouter/Fireworks/NVIDIA | 1 client cho cả 3 provider |
-| Model dịch | DeepSeek V4 Flash (`deepseek/deepseek-v4-flash` qua OpenRouter) | Fallback: Fireworks / NVIDIA NIM (cùng model) |
+| LLM client | `openai` SDK trỏ base_url NVIDIA NIM (OpenAI-compatible) | 1 client, nhiều model dự phòng trong chuỗi |
+| Model dịch | **Hachimi CT2 60M chạy local** (engine chính); LLM NVIDIA NIM chỉ trích tên + metadata + truyện ghim | LLM chỉnh runtime ở DB (`worker_settings.llm_model`) |
 | Queue | Bảng `translation_jobs` trong Postgres + `FOR UPDATE SKIP LOCKED` | Không cần Redis/RabbitMQ giai đoạn này |
 | Fonts đọc | Literata / Noto Serif (bundle trong app) | Serif tiếng Việt đủ dấu |
 
@@ -80,7 +80,7 @@ Ba ranh giới bảo mật rõ ràng:
 ### 2.3 Vận hành quanh queue (scale cá nhân 1-2 user)
 
 - **Job reaper: ✅ đã làm trong worker** (`db.requeue_stale_jobs`, gọi mỗi 60s trong translator) — job `running` quá `STALE_JOB_MINUTES` (máy sập/ngủ giữa chừng) trả về `pending`, hết lượt retry thì `failed`. Không cần pg_cron.
-- **Chống đốt tiền: ✅ cầu chì `MAX_CHAPTERS_PER_DAY`** trong worker (mặc định 200 chương/ngày ≈ $1-2 kịch trần) thay cho quota per-user — với 1-2 người dùng, quota theo user là thừa.
+- **Chống đốt tiền: ✅ cầu chì `MAX_CHAPTERS_PER_DAY`** trong worker (mặc định 1000 chương/ngày — nâng từ 200 khi chuyển hẳn sang Hachimi local, LLM chỉ còn việc phụ) thay cho quota per-user — với 1-2 người dùng, quota theo user là thừa.
 - Cân nhắc sau: xóa `content_zh` của chương đã dịch lâu ngày để tiết kiệm dung lượng (chỉ cần khi DB gần đầy free tier — 500MB chứa được cỡ vài nghìn chương cả gốc lẫn dịch).
 
 ---
@@ -183,13 +183,16 @@ Fanqie (miễn phí, kho khổng lồ của ByteDance) + JJWXC gần như phủ 
 
 `TranslationProvider` = 1 client `openai` với `base_url` tùy provider — OpenRouter, Fireworks, NVIDIA NIM đều nói chuyện OpenAI-compatible nên đổi provider chỉ là đổi env `LLM_PROVIDER`, pipeline không đổi. `LLMResult` trả kèm `prompt_tokens/completion_tokens` → ghi vào từng chương để tính tiền.
 
-| Ưu tiên | Provider | Model (đang set trong `.env`) | Vai trò |
+| Ưu tiên | Provider | Model | Vai trò |
 |---|---|---|---|
-| 1 | NVIDIA NIM | `deepseek-ai/deepseek-v4-flash` | **Chính — free** (có rate-limit RPM, đủ cho 1-2 người đọc) |
-| 2 | Fireworks | `accounts/fireworks/models/deepseek-v4-flash` | Dự phòng khi NIM lỗi/rate-limit |
-| 3 | OpenRouter | `deepseek/deepseek-v4-flash` | Dự phòng cuối |
+| 1 | NVIDIA NIM | chuỗi dự phòng, chỉnh runtime ở DB (`worker_settings.llm_model`; fallback cứng: `llama-3.1-70b-instruct`, `minimax-m3`, `nemotron-super-49b-v1`) | **Duy nhất** (free, rate-limit RPM; nhiều key = nhiều lane song song) |
 
-**Fallback tự động (✅ đã code):** `LLM_PROVIDER=nvidia,fireworks,openrouter` — `get_provider()` trả về `FallbackChain`: gọi NIM trước, lỗi/429 thì chuyển Fireworks rồi OpenRouter **ngay trong cùng lần dịch**, job không fail oan. Provider chưa điền API key tự bị bỏ qua. Với NIM là chính, chi phí gần như $0; chỉ tốn tiền những lúc NIM nghẽn.
+> ⚠️ Cập nhật 2026-08: đã bỏ OpenRouter/Fireworks (fallback deepseek làm lệch giọng dịch) và
+> model deepseek-v4-flash (timeout hẳn từ VPS). Chỉ còn NVIDIA NIM; "chuỗi dự phòng" giờ là
+> NHIỀU MODEL cách nhau dấu phẩy trong cùng provider — con đầu treo thử con kế ngay trong job.
+> Model thật chỉnh ở app (Quản trị → Cấu hình dịch), worker đọc lại mỗi 60s.
+
+**Fallback tự động (✅ đã code):** lỗi/429/treolỗi model thì chuyển model kế **ngay trong cùng lần dịch**, job không fail oan. Engine chính cho nội dung là Hachimi CT2 chạy local (§ trên); LLM chỉ dùng trích tên glossary + dịch metadata + truyện ghim provider.
 
 Đổi model = sửa `.env`, không đụng code. Chương ~3.000 chữ Hán ≈ 4–5k token in + 5–6k out. Tham số: `temperature=0.3`, `max_tokens=8192`. Cột `model_used` từng chương ghi model *tại thời điểm dịch* — chương cũ hiện model cũ là bình thường.
 
@@ -229,11 +232,11 @@ lib/
 │  ├─ library/
 │  └─ settings/
 └─ data/
-   ├─ models/      # freezed: Novel, Chapter, Comment, GlossaryTerm, Progress
+   ├─ models/      # Map (Rec) — KHÔNG codegen (xem AGENTS.md)
    └─ repositories/ # NovelRepo, ChapterRepo, GlossaryRepo, ProgressRepo
 ```
 
-Model dùng `freezed` + `json_serializable`; repository là lớp duy nhất chạm `supabase_flutter`, provider Riverpod bọc trên.
+Model là `Map` (`Rec`) truy cập trực tiếp; repository/provider bọc trên. Thiết kế ban đầu định dùng `freezed` + `json_serializable` nhưng đã bỏ — thêm dependency cho ít trường thì không đáng, và barrel `data.dart` vẫn là lớp duy nhất chạm `supabase_flutter`.
 
 ### 6.2 Realtime "chương hiện dần"
 
@@ -330,7 +333,7 @@ Supabase Free→Pro ($0–25) · Railway ~$5–10 · proxy $0 (chưa cần) → 
 - Tóm tắt liên chương: LLM xuất dòng `SUMMARY:` trong cùng call dịch → lưu `chapters.summary_vi` (migration 003) → bơm vào prompt chương kế (`prev_summary`).
 - Cầu chì chất lượng dịch (worker): >5% ký tự Hán trong output HOẶC output <30% độ dài gốc → fail để retry/đổi provider (chặn vụ model trả nguyên văn tiếng Trung / trả rỗng).
 
-**Provider (benchmark 2026-07-02):** `LLM_PROVIDER=nvidia,openrouter,fireworks`. NVIDIA `google/diffusiongemma-26b-a4b-it` (đổi 2026-07: sinh token nhanh + độ trễ thấp hơn qwen3.5), chính. OpenRouter `google/gemma-4-31b-it:free`: dịch hay nhất nhóm free nhưng 429 thường xuyên (1/3 OK) — lớp đỡ giữa. Fireworks trả phí — tấm chắn cuối. Các model free khác (qwen3-next, gpt-oss-120b, llama-3.3-70b) 429 liên tục, loại.
+**Provider (benchmark 2026-07-02 — LỊCH SỬ, đã bỏ chuỗi nvidia→openrouter→fireworks và model diffusiongemma; hiện chỉ NVIDIA NIM + Hachimi local):** `LLM_PROVIDER=nvidia,openrouter,fireworks`. NVIDIA `google/diffusiongemma-26b-a4b-it` (đổi 2026-07: sinh token nhanh + độ trễ thấp hơn qwen3.5), chính. OpenRouter `google/gemma-4-31b-it:free`: dịch hay nhất nhóm free nhưng 429 thường xuyên (1/3 OK) — lớp đỡ giữa. Fireworks trả phí — tấm chắn cuối. Các model free khác (qwen3-next, gpt-oss-120b, llama-3.3-70b) 429 liên tục, loại.
 
 **Hạ tầng:** Supabase CLI đã link project — schema mới thêm file `supabase/migrations/00x_*.sql` rồi `supabase db push` (không paste SQL Editor nữa, tránh lặp lỗi drift). Đã vá 2 drift do chạy tay trước đây: trigger `handle_new_user` (002 — fix lỗi 500 khi tạo user), `claim_next_job` (004 — fix vòng lặp claim job chưa có content_zh).
 

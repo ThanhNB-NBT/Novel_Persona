@@ -212,7 +212,7 @@ Hiện hotlink `cover_url` thẳng từ nguồn. Rủi ro: nguồn chết/chặn
 
 | File | Thay đổi |
 |---|---|
-| `supabase/migrations/012_multisource.sql` | **mới** — cột `sources` + `novels` ở §3.3 |
+| `supabase/migrations/013_multisource.sql` | **mới** — cột `sources` + `novels` ở §3.3 (bảng ở §4 đầu trang ghi nhầm 012) |
 | `worker/novelworker/crawler/base.py` | `SourceAdapter.__init__(base_url, config, source_row)`; thêm helper build URL từ config |
 | `worker/novelworker/crawler/biquge.py` | **mới** — tổng quát hoá `shuhaige.py` thành `BiqugeAdapter(base_url, config)`, implement `fetch_latest` (ranking) |
 | `worker/novelworker/crawler/shuhaige.py` | **xoá** — shuhaige thành 1 dòng `sources` template=biquge |
