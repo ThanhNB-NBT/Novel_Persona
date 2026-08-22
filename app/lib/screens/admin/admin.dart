@@ -86,7 +86,7 @@ class AdminScreen extends ConsumerWidget {
             ),
             body: const TabBarView(children: [
               _JobsTab(),
-              _CrawlTab(),
+              CrawlTab(),
               _ReadingNowTab(),
               _NovelsTab(),
               _TokensTab(),
@@ -536,14 +536,14 @@ void _showError(BuildContext context, Object? chIdx, String error) {
 }
 
 // ---------------- Crawl: config + nguồn + truyện mới 24h ----------------
-class _CrawlTab extends ConsumerStatefulWidget {
-  const _CrawlTab();
+class CrawlTab extends ConsumerStatefulWidget {
+  const CrawlTab({super.key});
 
   @override
-  ConsumerState<_CrawlTab> createState() => _CrawlTabState();
+  ConsumerState<CrawlTab> createState() => _CrawlTabState();
 }
 
-class _CrawlTabState extends ConsumerState<_CrawlTab> {
+class _CrawlTabState extends ConsumerState<CrawlTab> {
   // Mặc định THU GỌN hết: tab dài, admin mở đúng mục cần xem. Thẻ nhịp 24h ở đầu luôn
   // hiện nên vào tab vẫn thấy ngay hệ thống có chạy không.
   bool _openCfg = false, _openTrans = false, _openSrc = false, _openFresh = false;
