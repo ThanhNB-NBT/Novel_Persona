@@ -15,6 +15,7 @@ import 'ink_transition.dart';
 import 'notify.dart';
 import 'theme.dart';
 import 'screens/admin/admin.dart';
+import 'screens/admin/tabs/novels_tab.dart';
 import 'screens/account/edit_profile.dart';
 import 'screens/account/guide.dart';
 import 'screens/cultivation/cultivation.dart';

@@ -13,7 +13,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:novel_reader/data.dart';
-import 'package:novel_reader/screens/admin/admin.dart';
+import 'package:novel_reader/screens/admin/tabs/crawl_tab.dart';
 import 'package:novel_reader/theme.dart';
 
 void main() {
