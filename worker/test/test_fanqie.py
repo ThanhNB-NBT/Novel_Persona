@@ -24,6 +24,7 @@ BOOK_STATE = {
         "thumbUrl": "https://p3-novel-sign.example/novel-pic/abc~tplv-resize:225:300.image",
         "categoryV2": '[{"Name": "悬疑脑洞"}, {"Name": "环环相扣"}]',
         "wordNumber": 3201288, "chapterTotal": 3, "readCount": 12345,
+        "creationStatus": 0, "lastPublishTime": "1761919823",
         "lastChapterItemId": "333",
         # itemIds xếp MỚI-NHẤT-TRƯỚC → phải bị đảo thành 1→N
         "itemIds": ["333", "222", "111"],
@@ -51,6 +52,9 @@ def main() -> None:
     assert m.title_zh == "十日终焉" and m.author_zh == "杀虫队队员"
     assert m.genres_zh == ["悬疑脑洞", "环环相扣"]
     assert m.chapter_count == 3 and m.word_count == 3201288
+    # creationStatus=0 = 完结; lastPublishTime unix → last_chapter_at
+    assert m.status == "completed"
+    assert m.last_chapter_at is not None and m.last_chapter_at.year == 2025
     # host CDN p3 hỏng → phải được ép về p9 để cache_cover tải được bìa
     assert m.cover_url.startswith("https://p9-novel-sign.example/"), m.cover_url
 

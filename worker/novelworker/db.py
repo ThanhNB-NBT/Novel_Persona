@@ -483,6 +483,75 @@ def heartbeat(name: str, note: str | None = None) -> None:
         log.debug("heartbeat lỗi (bỏ qua): %s", name)
 
 
+def report_host_metrics(stats: dict) -> None:
+    """Đẩy số liệu máy chủ chạy worker lên host_metrics (màn 'Theo dõi VPS' trong app).
+    Best-effort: thiếu bảng (chưa migrate) / lỗi mạng → bỏ qua. Đổi VPS chỉ cần worker
+    trên máy mới đẩy dòng host mới — app tự thấy thêm."""
+    if not stats.get("host"):
+        return
+    try:
+        sb().table("host_metrics").upsert(
+            {**stats, "updated_at": utc_now()}, on_conflict="host").execute()
+    except Exception as e:
+        log.debug("report_host_metrics bỏ qua: %s", e)
+
+
+def collect_host_stats(cpu_pct: float | None = None) -> dict:
+    """Đọc số liệu hệ điều hành (Linux/VPS) KHÔNG cần psutil: /proc/meminfo,
+    /proc/loadavg, /proc/uptime, statvfs('/'). cpu_pct truyền vào từ vòng đo riêng
+    (/proc/stat 2 lần) vì một lần đọc không ra được %. Trên Windows trả đủ key với
+    giá trị rác tối thiểu — chỉ để script chạy được khi dev local."""
+    import os
+    import socket
+
+    def _read(path: str) -> str:
+        with open(path, encoding="ascii") as f:
+            return f.read()
+
+    stats: dict = {"host": socket.gethostname()}
+    try:
+        mem = {}
+        for line in _read("/proc/meminfo").splitlines():
+            k, _, v = line.partition(":")
+            mem[k.strip()] = int(v.strip().split()[0])  # kB
+        total = mem.get("MemTotal", 0)
+        avail = mem.get("MemAvailable", 0)
+        stats["mem_total_mb"] = total // 1024
+        stats["mem_used_mb"] = max(0, (total - avail)) // 1024
+    except OSError:
+        pass
+    try:
+        parts = _read("/proc/loadavg").split()
+        stats["load1"] = round(float(parts[0]), 2)
+        stats["cpu_count"] = os.cpu_count()
+    except (OSError, ValueError, IndexError):
+        pass
+    try:
+        vm = os.statvfs("/")
+        total_gb = vm.f_blocks * vm.f_frsize // (1 << 30)
+        free_gb = vm.f_bavail * vm.f_frsize // (1 << 30)
+        stats["disk_total_gb"] = total_gb
+        stats["disk_used_gb"] = max(0, total_gb - free_gb)
+    except OSError:
+        pass
+    try:
+        stats["uptime_h"] = round(float(_read("/proc/uptime").split()[0]) / 3600, 1)
+    except (OSError, ValueError, IndexError):
+        pass
+    if cpu_pct is not None:
+        stats["cpu_pct"] = round(cpu_pct, 1)
+    return stats
+
+
+def read_cpu_jiffies() -> tuple[int, int]:
+    """Đọc (busy, idle+iowait) tích lũy từ /proc/stat. Caller gọi 2 lần cách nhau vài
+    giây rồi tự tính %CPU = Δbusy / (Δbusy + Δidle) — một lần đọc không ra được %."""
+    with open("/proc/stat", encoding="ascii") as f:
+        vals = [int(x) for x in f.readline().split()[1:]]  # dòng 'cpu' tổng hợp
+    idle = vals[3] + (vals[4] if len(vals) > 4 else 0)
+    return sum(vals) - idle, idle
+
+
 def runtime_settings() -> dict[str, str]:
     """Config chỉnh từ app (bảng worker_settings) — đọc mỗi chu kỳ discovery,
     đổi trong app là ăn ngay không cần restart. Lỗi/thiếu → {} (dùng default code)."""

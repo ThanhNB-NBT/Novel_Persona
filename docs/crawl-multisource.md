@@ -26,6 +26,8 @@
 >
 > **Conditional GET cho soi mục lục (2026-08-22):** nguồn khai `config.conditional_toc` được probe If-None-Match/If-Modified-Since trước khi soi (`fetch_chapter_list_conditional`, migration 104 thêm cột `novels.toc_etag/toc_last_modified`). Nguồn trả 304 → bỏ sạch tải body + parse + upsert, chỉ bump last_checked_at; 200 (có đổi/lần đầu) mới tải mục lục đầy đủ — trang 1 bị tải 2 lần CHỈ với truyện vừa ra chương mới. Chỉ refresh_canonical_updates bật (TOC-lười/pending cần stub thật kể cả khi trang không đổi). Live kiểm chứng: **69shuba** 0.78s→0.08s, **ptwxz** 3.33s→0.25s mỗi truyện không đổi; qiushubang trả Last-Modified động từng request nên không bật; ddxs/xslou không có header. sleep giữa các lần soi giảm 2s→1s. Muốn bật thêm nguồn: probe ETag/Last-Modified có tĩnh không rồi set flag trong sources.config.
 >
+> **Quota discovery THEO TỪNG nguồn (migration 106):** cột `sources.discover_quota` (int, NULL = dùng chung `discover_new_per_cycle`). Admin sửa trong app (tab Crawl → hàng nguồn → pill "chung/N/đợt"); `_reconcile_adapters` giờ cập nhật cả source_row của adapter đang chạy nên đổi quota ăn ngay ở tick kế (~10s), không restart.
+>
 > **Qidian & Fanqie (2026-08-22):**
 > - **qidian** ❌ bỏ: chặn tầng HTTP (mọi request trả 202 + trang thách thức JS 209 byte), cần headless browser + login mới vào được mà chương free cũng chỉ phần nhỏ → không khả thi cho crawler HTTP thuần.
 > - **fanqie** ✅ ĐÃ THÊM (migration 105, adapter `FanqieAdapter` riêng — KHÁCH hoàn toàn với khuôn HTML biquge):

@@ -144,6 +144,14 @@ class FanqieAdapter(SourceAdapter):
             # CDN host p3 hay chặn/timeout (cả VPS lẫn máy dân dụng), p9 ổn định
             # → ép về p9 để cache_cover tải được bìa về Storage.
             cover = re.sub(r"//p\d+(-novel-sign)\.", r"//p9\1.", str(cover))
+        # Ngữ nghĩa đã đối chiếu thực tế (2026-08-22): status luôn =1 vô nghĩa;
+        # creationStatus: 1 = 连载 đang ra (lastPublishTime hôm nay), 0 = 完结 xong.
+        status = "ongoing" if p.get("creationStatus") == 1 else "completed"
+        last_at = None
+        raw_ts = str(p.get("lastPublishTime") or "")
+        if raw_ts.isdigit():
+            from datetime import datetime, timezone
+            last_at = datetime.fromtimestamp(int(raw_ts), tz=timezone.utc)
         return NovelMeta(
             source_novel_id=source_novel_id,
             source_url=f"{self.base_url}/page/{source_novel_id}",
@@ -152,9 +160,10 @@ class FanqieAdapter(SourceAdapter):
             cover_url=cover,
             description_zh=p.get("abstract") or p.get("description"),
             genres_zh=genres,
-            status="ongoing",  # fanqie không lộ cờ hoàn thành đáng tin trên web
+            status=status,
             chapter_count=int(p.get("chapterTotal") or len(p.get("itemIds") or []) or 0),
             word_count=p.get("wordNumber"),
+            last_chapter_at=last_at,
             stats={"readCount": p.get("readCount")} if p.get("readCount") else {},
         )
 

@@ -66,18 +66,20 @@ def build_adapters() -> dict[str, SourceAdapter]:
 
 
 def _reconcile_adapters(adapters: dict[str, SourceAdapter]) -> None:
-    """Ăn trạng thái bật/tắt nguồn từ DB mà không cần restart crawler.
-
-    Adapter đang chạy được giữ nguyên để không mất bộ đếm health; nguồn vừa bật mới
-    được dựng thêm, nguồn vừa tắt bị gỡ ngay khỏi vòng crawl kế tiếp.
+    """Đồng bộ trạng thái bật/tắt nguồn VÀ source_row (discover_quota…) từ DB mà
+    không cần restart crawler. Adapter đang chạy được giữ nguyên để không mất bộ đếm
+    health; nguồn vừa bật mới được dựng thêm, nguồn vừa tắt bị gỡ ngay khỏi vòng crawl.
     """
     rows = db.sb().table("sources").select("*").eq("enabled", True).execute().data or []
     enabled = {s["name"]: s for s in rows}
     for name in set(adapters) - set(enabled):
         adapters.pop(name, None)
-        log.info("Nguồn '%s' đã tắt — gỡ khỏi crawler đang chạy", name)
+        log.info("Nguồn '%s' đã tắt → gỡ khỏi crawler đang chạy", name)
     for name, source in enabled.items():
         if name in adapters:
+            # row DB thay đổi (vd admin sửa discover_quota) → cập nhật tại chỗ, worker
+            # dùng giá trị mới ở tick kế mà không phải restart.
+            adapters[name].source_row = source
             continue
         cls = TEMPLATE_REGISTRY.get(source.get("template") or "")
         if not cls:
@@ -181,12 +183,18 @@ def _source_tick(adapter: SourceAdapter, pending_fetch: list[dict], due: bool,
         sync.ensure_chapters_fetched(adapter, nv["id"])
     # 2) discovery + sync truyện theo dõi — theo chu kỳ dài. Cào MỌI mục để truyện dày dần.
     if due:
-        sync.discover_ranking(adapter, max_new=max_new)
+        # Quota truyện mới RIÊNG của nguồn (sources.discover_quota) thắng quota chung;
+        # NULL/rời rạc → dùng giá trị chung từ worker_settings.
+        try:
+            quota = int(adapter.source_row.get("discover_quota") or 0) or max_new
+        except (TypeError, ValueError):
+            quota = max_new
+        sync.discover_ranking(adapter, max_new=quota)
         sync.discover_pool(adapter, "fetch_recommended", "Recommended")
         sync.discover_pool(adapter, "fetch_top", "Top")
         sync.discover_pool(adapter, "fetch_completed", "Completed")
         sync.discover_pool(adapter, "fetch_latest", "Latest")
-        sync.process_discovery_candidates(adapter, max_new=max_new)
+        sync.process_discovery_candidates(adapter, max_new=quota)
         sync.sync_followed_novels(adapter)
         # truyện đã có ra chương mới → nổi "Mới cập nhật" (không chỉ truyện mới)
         sync.refresh_canonical_updates(adapter, limit=refresh_n)
@@ -259,6 +267,23 @@ def run_crawler() -> None:
                 log.exception("Lỗi xử lý yêu cầu truyện")
             time.sleep(10)
     threading.Thread(target=_requests_loop, daemon=True).start()
+
+    # Số liệu máy chủ cho màn "Theo dõi VPS" trong app: đẩy mỗi 60s, best-effort.
+    # Đổi VPS = worker trên máy mới tự đẩy dòng host mới, app không phải sửa gì.
+    def _host_metrics_loop() -> None:
+        while True:
+            try:
+                busy1, idle1 = db.read_cpu_jiffies()
+                time.sleep(5)
+                busy2, idle2 = db.read_cpu_jiffies()
+                dtot = (busy2 - busy1) + (idle2 - idle1)
+                cpu = (busy2 - busy1) / dtot * 100 if dtot > 0 else None
+                db.report_host_metrics(db.collect_host_stats(cpu))
+            except Exception:
+                log.exception("Không thu được số liệu máy chủ")
+            time.sleep(55)
+
+    threading.Thread(target=_host_metrics_loop, daemon=True).start()
 
     threads: dict[str, tuple[threading.Thread, threading.Event]] = {}
     while True:
