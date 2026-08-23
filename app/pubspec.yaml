@@ -1,4 +1,4 @@
-﻿name: novel_reader
+name: novel_reader
 description: "Gac Truyen - doc tieu thuyet mang Trung Quoc dich sang tieng Viet bang LLM."
 publish_to: 'none'
 version: 1.0.19+20
