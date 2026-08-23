@@ -51,6 +51,10 @@ class ShubaAdapter(SourceAdapter):
     def _list_url(self, book_id: str) -> str:
         return self.config.get("list_path", "/book/{book_id}/").format(book_id=book_id)
 
+    def _toc_probe_path(self, source_novel_id: str) -> str:
+        # Mục lục 69shuba nằm ở /book/{id}/, KHÔNG phải trang truyện /book/{id}.htm.
+        return self._list_url(source_novel_id)
+
     def _chapter_url(self, book_id: str, cid: str) -> str:
         return self.config.get(
             "chapter_path", "/txt/{book_id}/{chapter_id}").format(

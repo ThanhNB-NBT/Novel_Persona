@@ -125,6 +125,76 @@ def main() -> None:
     assert "trang một" in txt and "trang hai" in txt
     assert "下一页" not in txt  # dòng nhắc phân trang phải bị lọc
 
+    # --- Nguồn mới 2026-08: mục lục PHÂN TRANG riêng (qiushubang /index/{id}/{page}/).
+    # Mỗi trang lặp khối "mới nhất" trước khối danh sách đầy đủ → toc_split cắt lấy
+    # phần SAU lần xuất hiện CUỐI; trang không thêm gì → dừng.
+    q = _adapter({
+        "novel_path": "/index/{book_id}/",
+        "chapter_path": "/read/{book_id}/{chapter_id}.html",
+        "toc_page_path": "/index/{book_id}/{page}/",
+        "toc_split": '<div class="section-box">',
+        "toc_max_pages": 10,
+    })
+    def page_html(newest, full):
+        return ('<div class="section-box"><ul><li><a href="/read/77/'
+                + newest + '.html">Mới nhất</a></li></ul></div>'
+                '<div class="section-box"><ul>'
+                + "".join(f'<li><a href="/read/77/{c}.html">Ch.{c}</a></li>' for c in full)
+                + "</ul></div>")
+    toc_pages = {
+        "/index/77/": page_html("900", ["1", "2"]),
+        "/index/77/2/": page_html("900", ["3", "4"]),
+        "/index/77/3/": page_html("900", ["4"]),  # hết chương mới → dừng
+    }
+    calls = []
+    def toc_get(p):
+        calls.append(p)
+        return toc_pages[p]
+    q._get = toc_get
+    refs = q.fetch_chapter_list("77")
+    assert [r.source_chapter_id for r in refs] == [
+        "77/1", "77/2", "77/3", "77/4"], refs
+    assert len(calls) == 3, calls  # trang 4 không được gọi (dừng khi hết fresh)
+
+    # --- junk_re: watermark xáo trộn nhồi GIỮA câu (qiushubang) phải biến mất,
+    # còn văn thường KHÔNG bị đụng tới. Bộ regex khớp migration 104.
+    _SEP = "[^\\s一-龥，。！？…、；：“”‘’（）《》—]"
+    w = _adapter({"junk_re": [
+        f"[一-龥](?:{_SEP}{{1,4}}[一-龥]){{3,}}",
+        "[^\\s一-龥，。！？…、；：“”‘’（）《》—0-9a-zA-Z]{2,}",
+        f"(?:[^\\w\\s一-龥，。！？…、；：“”‘’（）《》—]\\w{{1,3}}){{4,}}"
+        f"[^\\w\\s一-龥，。！？…、；：“”‘’（）《》—]?",
+        f"{_SEP}{{1,4}}首{_SEP}{{1,4}}发{_SEP}{{0,4}}",
+    ]})
+    w._get = lambda p: (
+        '<div id="content">她爬了几百阶。,天`禧^晓′税￠罔·\\追?罪/辛/蟑·结.<br>'
+        '她睁开眼。*x-i,n_x¨s¨c+m,s^.￠c\\o<br>'
+        '房间不大。~搜¨搜.小^说*网+ ~首,发/<br>'
+        '她干脆坐下休息。</div>')
+    out = w.fetch_chapter("77/1")
+    assert out == ("她爬了几百阶。\n她睁开眼。\n房间不大。\n她干脆坐下休息。"), repr(out)
+
+    # --- Discovery guard: nguồn khác shuhaige KHÔNG khai latest_path/ranking_path
+    # → pool tắt ([]), không 404 route mặc định của shuhaige mỗi chu kỳ.
+    g = _adapter()
+    g.name = "khac"
+    def boom(_p):  # nếu vẫn fetch thì test fail ngay
+        raise AssertionError("không được gọi _get")
+    g._get = boom
+    assert g.fetch_latest(10) == [] and g.fetch_ranking(10) == []
+    # khai đường dẫn riêng thì lại fetch bình thường:
+    h = _adapter({"latest_path": "/moi/", "latest_pages": 1,
+                  "ranking_path": "/xep-hang/", "ranking_pages": 1})
+    h.name = "khac"
+    seen = []
+    h._get = lambda p: (seen.append(p) or "") or {
+        "/moi/": '<span class="s2"><a href="/41/">Sách mới</a></span>',
+        "/xep-hang/": '<span class="s2"><a href="/42/">Hot</a></span>',
+    }.get(p, "")
+    assert [x.source_novel_id for x in h.fetch_latest(10)] == ["41"]
+    assert h.fetch_ranking(10) == [("42", 0)]
+    assert seen == ["/moi/", "/xep-hang/"], seen
+
 
 if __name__ == "__main__":
     main()

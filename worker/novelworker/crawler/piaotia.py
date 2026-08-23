@@ -31,6 +31,10 @@ class PiaotiaAdapter(SourceAdapter):
     def _list_url(self, book_id: str) -> str:
         return self.config.get("list_path", "/html/{book_id}/").format(book_id=book_id)
 
+    def _toc_probe_path(self, source_novel_id: str) -> str:
+        # Mục lục piaotia nằm ở /html/{id}/, KHÔNG phải trang truyện bookinfo.
+        return self._list_url(source_novel_id)
+
     def _chapter_url(self, book_id: str, cid: str) -> str:
         return self.config.get(
             "chapter_path", "/html/{book_id}/{chapter_id}.html").format(

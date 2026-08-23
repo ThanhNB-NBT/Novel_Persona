@@ -92,6 +92,10 @@ class Settings(BaseSettings):
     prio_idle: int = 75          # chương đọc thử + chương truyện không ai đọc — nền
     sample_chapters: int = 1     # số chương dịch sẵn "đọc thử" khi có truyện mới
     crawl_fetch_batch: int = 20  # số chương tải nguồn tối đa cho một novel mỗi tick
+    # Số luồng tải chương SONG SONG trong một nguồn (curl_cffi session tạo handle curl
+    # theo từng luồng → an toàn). 1 = tuần tự như cũ; 3 = nhanh ~3× mà vẫn lịch sự với
+    # host (mỗi luồng vẫn nghỉ giữa các chương). Nâng quá 8 dễ nuôi rate-limit nguồn TQ.
+    crawl_fetch_workers: int = Field(default=3, ge=1, le=8)
     # Timeout 1 call LLM (giây). Hạ 150 → 90 (26/07). Trích tên giờ chạy nền nên timeout
     # KHÔNG còn ảnh hưởng tốc độ chương; nó chỉ định cỡ hàng đợi luồng nền (xem _NAME_POOL).
     # Cận dưới là độ trễ THẬT đo từ VPS: 38-79s/call, cùng key ấy từ máy nhà chỉ 2-3s.

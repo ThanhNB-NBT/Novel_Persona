@@ -8,9 +8,21 @@ sách <dd><a> mục lục; chương ở /{book}/{cid}.html trong div#content, pl
 `config` (jsonb) override mặc định khi site lệch:
     novel_path   : "/{book_id}/"                 trang truyện + mục lục
     chapter_path : "/{book_id}/{chapter_id}.html" trang 1 chương
-    content_id   : "content"                       id div nội dung chương
-    ad_markers   : []                              chuỗi phụ cần lọc ở cuối chương
+    content_id   : "content"                      id div nội dung chương
+    ad_markers   : []                             chuỗi phụ cần lọc ở cuối chương
+    toc_page_path: (không)                        mục lục PHÂN TRANG riêng, vd
+                                                  "/index/{book_id}/{page}/" — khi có
+                                                  key này fetch_chapter_list đi luồng mới
+    toc_split    : ""                             marker cắt khối "mới nhất" lặp đầu mỗi
+                                                  trang mục lục — chỉ parse phần SAU lần
+                                                  xuất hiện CUỐI của chuỗi này
+    toc_max_pages: 300                            trần trang mục lục, phòng loop
+    junk_re      : []                             regex xoá WATERMARK nhồi giữa văn
+                                                  (tên site xáo trộn ký tự lạ)
     encoding     : "utf-8"
+
+Discovery: fetch_latest/fetch_ranking mặc định trỏ route shuhaige; nguồn khác KHÔNG khai
+latest_path/ranking_path thì pool đó tự TẮT (trả []) thay vì 404 mỗi chu kỳ.
 
 Kiểm chứng chạy thật với shuhaige.net 2026-07. Site khác cần test trước khi bật
 (selector có thể lệch nhẹ → thêm vào config).
@@ -110,9 +122,14 @@ class BiqugeAdapter(SourceAdapter):
         return out
 
     def fetch_latest(self, limit: int = 30, page: int | None = None) -> list[NovelMeta]:
-        """Trang mới cập nhật; trả metadata nhẹ để discovery enrich khi gặp truyện mới."""
+        """Trang mới cập nhật; trả metadata nhẹ để discovery enrich khi gặp truyện mới.
+        Nguồn không phải shuhaige mà KHÔNG khai latest_path → tắt pool luôn (trả [])
+        thay vì 404 /lastupdate/ mỗi chu kỳ discovery (nhiễu log + đốt health oan)."""
+        base = self.config.get("latest_path")
+        if base is None and self.name != "shuhaige":
+            return []
         return self._fetch_catalog(
-            self.config.get("latest_path", "/lastupdate/"),
+            base or "/lastupdate/",
             1 if page else int(self.config.get("latest_pages", 20)), limit,
             start_page=page or 1)
 
@@ -185,11 +202,14 @@ class BiqugeAdapter(SourceAdapter):
         return out
 
     def fetch_ranking(self, limit: int = 100) -> list[tuple[str, int]]:
-        """TOÀN BỘ bảng xếp hạng tổng lượt đọc → [(source_novel_id, rank)] (rank nhỏ
-        = hot). shuhaige `/allvisit/` phân trang (~20 trang × 30 truyện, xếp theo 总点击);
+        """TOÀN BỘ bảng xếp hạng từng lượt đọc → [(source_novel_id, rank)] (rank nhỏ
+        = hot). shuhaige `/allvisit/` phân trang (~20 trang × 30 truyện, xếp theo đọc);
         mỗi dòng `<span class="s2..."><a href="/{id}/">`. Rank = thứ tự xuất hiện toàn cục.
-        Nguồn KHÔNG công bố con số lượt đọc — chỉ có thứ hạng. Site khác đổi qua
-        config['ranking_path'] / config['ranking_pages']."""
+        Nguồn KHÔNG công bố con số lượt đọc thì chỉ có thứ hạng. Site khác ĐỔI qua
+        config['ranking_path'] / config['ranking_pages']; không khai → pool tắt ([])
+        thay vì 404 /allvisit/ mỗi chu kỳ."""
+        if self.name != "shuhaige" and not self.config.get("ranking_path"):
+            return []
         base = self.config.get("ranking_path", "/allvisit/")
         pages = int(self.config.get("ranking_pages", 20))
         pat = re.compile(r'<span class="s2[^"]*"><a href="/(\d+)/"')
@@ -274,7 +294,43 @@ class BiqugeAdapter(SourceAdapter):
             last_chapter_at=last_at,
         )
 
+    def _fetch_toc_paginated(self, source_novel_id: str) -> list[ChapterRef]:
+        """Mục lục PHÂN TRANG khuôn riêng (vd qiushubang /index/{id}/{page}/). Mỗi trang
+        lặp khối "mới nhất" TRƯỚC một lát danh sách đầy đủ → chỉ parse phần SAU lần xuất
+        hiện CUỐI của marker `toc_split` để né khối lặp; dừng khi trang không thêm chương
+        mới (trang quá cuối nguồn trả lại trang cuối / rỗng)."""
+        self.last_toc_status = None
+        pattern = re.compile(
+            r'<a href="[^"]*?/' + re.escape(source_novel_id) + r'/(\d+)\.html"[^>]*>([^<]+)</a>')
+        split = self.config.get("toc_split") or ""
+        page_path = self.config["toc_page_path"]
+        max_pages = int(self.config.get("toc_max_pages", 300))
+        seen: dict[str, str] = {}
+        for page in range(1, max_pages + 1):
+            path = (self._novel_url(source_novel_id) if page == 1 else
+                    page_path.format(book_id=source_novel_id, page=page))
+            html = self._get(path)
+            body = html.rsplit(split, 1)[-1] if split else html
+            fresh = 0
+            for m in pattern.finditer(body):
+                cid = m.group(1)
+                if cid not in seen:
+                    seen[cid] = unescape(m.group(2)).strip()
+                    fresh += 1
+            if not fresh:
+                break
+        refs = [
+            ChapterRef(index=i + 1, source_chapter_id=f"{source_novel_id}/{cid}", title_zh=title)
+            for i, (cid, title) in enumerate(seen.items())
+        ]
+        if not refs:
+            raise ValueError(f"Không lấy được mục lục {self.name} cho {source_novel_id}")
+        return refs
+
     def fetch_chapter_list(self, source_novel_id: str) -> list[ChapterRef]:
+        # Khuôn phân trang riêng → tách luồng, không trộn với logic div#list của biquge gốc.
+        if self.config.get("toc_page_path"):
+            return self._fetch_toc_paginated(source_novel_id)
         self.last_toc_status = None  # xoá giá trị truyện trước, phòng lấy nhầm khi fetch fail
         html = self._get(self._novel_url(source_novel_id))
         # trang truyện = trang mục lục → parse ké trạng thái, khỏi tốn fetch_novel_meta riêng
@@ -368,7 +424,14 @@ class BiqugeAdapter(SourceAdapter):
                 break
             page += 1
         markers = [k.lower() for k in self._ad_markers]
-        lines = [ln.strip() for ln in unescape("\n".join(pages)).split("\n")]
+        raw = unescape("\n".join(pages))
+        # Nguồn nhồi WATERMARK vào GIỮA văn (tên site xáo trộn bằng ký tự lạ, ví dụ
+        # qiushubang: "…收尾工作。￡?微2趣:小[?说#_? $免.费(\{阅±[读′°") — dòng chứa nó
+        # vẫn có văn thật nên KHÔNG lọc theo dòng được; config junk_re khai regex để
+        # xoá đúng đoạn rác (≥3 cặp chữ-Hán/ký-lạ liên tiếp — văn thường không bao giờ).
+        for pat in self.config.get("junk_re", []):
+            raw = re.compile(pat).sub("", raw)
+        lines = [ln.strip() for ln in raw.split("\n")]
         lines = [ln for ln in lines
                  if ln and not self._is_pagination_junk(ln)
                  and not any(k in ln.lower() for k in markers)]
@@ -399,13 +462,16 @@ class XinBiqugeAdapter(BiqugeAdapter):
     def fetch_ranking(self, limit: int = 100) -> list[tuple[str, int]]:
         best: dict[str, int] = {}
         order = 0
+        # Khuôn gốc link 2 tầng "/book/{a}/{b}/"; site nào để trực tiếp /{a}/{b}/
+        # khai ranking_link_re trong config thay vì sửa code.
+        link_re = re.compile(self.config.get("ranking_link_re", r'href="/book/(\d+/\d+)/"'))
         for path in self.config.get("ranking_paths", ["/top/", "/full/"]):
             try:
                 html = self._get(path)
             except Exception:
                 log.warning("Không lấy được ranking %s (%s)", path, self.name)
                 continue
-            for bid in re.findall(r'href="/book/(\d+/\d+)/"', html):
+            for bid in link_re.findall(html):
                 if bid not in best:
                     best[bid] = order
                     order += 1

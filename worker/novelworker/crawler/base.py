@@ -214,6 +214,80 @@ class SourceAdapter(ABC):
             raise SourceTransient(str(last)) from last
         raise last  # type: ignore[misc]
 
+    def _toc_probe_path(self, source_novel_id: str) -> str:
+        """URL trang mục lục trang-1 để probe điều kiện. Mặc định = trang truyện
+        (khuôn biquge/piaotia/shuba đều có _novel_url; khuôn nào không có thì phải
+        override — chỉ nguồn bật conditional_toc mới đi vào đây)."""
+        return self._novel_url(source_novel_id)
+
+    def _get_if_changed(
+        self, path: str, *, etag: str | None = None,
+        last_modified: str | None = None,
+    ) -> tuple[str | None, str | None, str | None]:
+        """GET CÓ ĐIỀU KIỆN (If-None-Match / If-Modified-Since): nguồn trả 304 khi
+        trang không đổi → caller bỏ qua tải body + parse hoàn toàn. Trả
+        (html | None, etag_mới, last_modified_mới); html=None nghĩa là 304.
+        304 vẫn tính là fetch_ok (nguồn trả lời khỏe)."""
+        url = path if path.startswith("http") else f"{self.base_url}/{path.lstrip('/')}"
+        headers: dict[str, str] = {}
+        if etag:
+            headers["If-None-Match"] = etag
+        if last_modified:
+            headers["If-Modified-Since"] = last_modified
+        last_exc: Exception | None = None
+        status: int | None = None
+        for attempt in range(2):
+            if attempt:
+                time.sleep(2 * attempt + random.random())
+            t0 = time.monotonic()
+            try:
+                r = self._session.get(url, timeout=_TIMEOUT, headers=headers)
+                status = getattr(r, "status_code", None)
+                self.fetch_ok += 1  # 304 cũng là nguồn sống
+                _record_fetch(self.name, time.monotonic() - t0)
+                if status == 304:
+                    return None, etag, last_modified
+                r.raise_for_status()
+                h = r.headers
+                return (r.content.decode(self.encoding, "ignore"),
+                        h.get("etag"), h.get("last-modified"))
+            except Exception as e:
+                last_exc = e
+                resp = getattr(e, "response", None)
+                status = getattr(resp, "status_code", None) or status
+                _record_fetch(self.name, None,
+                              timeout="timeout" in type(e).__name__.lower(),
+                              http429=status == 429)
+                if status in {400, 401, 403, 404, 410}:
+                    break  # lỗi cứng (URL sai / bị cấm) — retry vô ích
+        self.fetch_err += 1
+        if _is_transient_status(status):
+            raise SourceTransient(str(last_exc)) from last_exc
+        raise last_exc  # type: ignore[misc]
+
+    def fetch_chapter_list_conditional(
+        self, source_novel_id: str, *, etag: str | None = None,
+        last_modified: str | None = None,
+    ) -> tuple[list[ChapterRef] | None, str | None, str | None]:
+        """Soi mục lục TIẾT KIỆM: probe trang mục lục trang-1 kèm điều kiện; nguồn trả
+        304 → (None, …) là mục lục KHÔNG đổi, sync bỏ qua parse/upsert hoàn toàn.
+        Nguồn trả 200 (có chương mới hoặc lần đầu chưa có mốc) thì mới tải mục lục đầy
+        đủ bằng fetch_chapter_list — trang 1 bị tải 2 lần chỉ với truyện VỪA ra chương
+        mới (hiếm), đánh đổi hợp lý so với tiết kiệm của phần lớn truyện không đổi.
+
+        CHỈ bật cho nguồn khai `config.conditional_toc` (probe thật 2026-08-22:
+        qiushubang/69shuba trả ETag+Last-Modified, ptwxz Last-Modified và đều 304 đúng;
+        ddxs/xslou không có header nên không bật — probe chỉ tốn thêm 1 request rác)."""
+        text, etag2, lm2 = self._get_if_changed(
+            self._toc_probe_path(source_novel_id),
+            etag=etag, last_modified=last_modified)
+        if text is None:
+            # giữ bất biến last_toc_status: 304 không mang trạng thái, đừng để giá trị
+            # của truyện SOI TRƯỚC đó sót lại gây flip trạng thái nhầm.
+            self.last_toc_status = None
+            return None, etag2, lm2
+        return self.fetch_chapter_list(source_novel_id), etag2, lm2
+
     def search(self, keyword: str) -> list[tuple[str, str]]:
         """Tìm truyện theo tên trên nguồn → [(source_novel_id, title_zh)].
         Mặc định []: nguồn không có search dùng được (ddxs render kết quả bằng JS)."""

@@ -728,6 +728,7 @@ def queue_sample_chapters(novel_id: int, count: int, priority: int) -> int:
 def sync_chapter_list(
     adapter: SourceAdapter, novel_id: int, source_novel_id: str,
     limit_stubs: int | None = None,
+    allow_conditional: bool = False,
 ) -> tuple[int, int]:
     """Cập nhật mục lục 1 truyện; trả (tổng chương trên nguồn, số stub mới upsert).
 
@@ -737,11 +738,35 @@ def sync_chapter_list(
     - limit_stubs=0    → không đụng stub, chỉ cập nhật số chương/last_chapter_at
       (refresh định kỳ truyện lười).
 
+    allow_conditional=True (CHỈ refresh_canonical_updates dùng) → nguồn khai
+    config.conditional_toc được probe If-None-Match/If-Modified-Since trước: trả 304
+    nghĩa là mục lục y nguyên → bỏ qua tải body + parse + upsert hoàn toàn. KHÔNG bật
+    cho luồng khác: TOC-lười/pending_fetch cần stub thật kể cả khi trang không đổi
+    (stub có thể đang thiếu từ lần sync mẫu trước), mà 304 không cho biết stub hiện trạng.
+
     Chỉ upsert phần CHƯA có: trường hợp thường gặp nhất khi soi định kỳ là "không
     đổi gì" → 1 query count là xong, khỏi kéo 4000 index + re-upsert 4000 stub.
     ponytail: chương đã có KHÔNG được refresh title/source_chapter_id — nguồn đánh
     lại số chương thì _rescue_stale_chapter tự làm mới khi phát hiện."""
-    refs = _normalize_chapter_refs(adapter.fetch_chapter_list(source_novel_id), adapter.name)
+    new_cond: dict[str, str | None] = {}
+    if allow_conditional and adapter.config.get("conditional_toc"):
+        cur = (
+            db.sb().table("novels")
+            .select("chapter_count_source, toc_etag, toc_last_modified")
+            .eq("id", novel_id).single().execute()
+        ).data or {}
+        refs_or_none, etag2, lm2 = adapter.fetch_chapter_list_conditional(
+            source_novel_id,
+            etag=cur.get("toc_etag"), last_modified=cur.get("toc_last_modified"))
+        new_cond = {"toc_etag": etag2, "toc_last_modified": lm2}
+        if refs_or_none is None:
+            # 304: trang mục lục y nguyên → tổng lấy từ lần soi trước, khỏi đụng gì.
+            total = cur.get("chapter_count_source") or 0
+            log.info("TOC 304 novel %s (%s) — mục lục không đổi, bỏ qua parse", novel_id, adapter.name)
+            return total, 0
+        refs = _normalize_chapter_refs(refs_or_none, adapter.name)
+    else:
+        refs = _normalize_chapter_refs(adapter.fetch_chapter_list(source_novel_id), adapter.name)
     total = len(refs)
     if limit_stubs is not None:
         refs = refs[:limit_stubs]
@@ -813,6 +838,9 @@ def sync_chapter_list(
     if src_status and src_status != row.get("status"):
         log.info("Truyện %s đổi trạng thái %s → %s (theo nguồn)",
                  novel_id, row.get("status"), src_status)
+    if new_cond:
+        # lưu mốc ETag/Last-Modified để lần soi sau được 304 (dù không có gì khác)
+        fields = {**(fields or {}), **new_cond}
     if fields:
         db.sb().table("novels").update(fields, returning="minimal").eq("id", novel_id).execute()
     return total, added
@@ -932,10 +960,13 @@ def refresh_canonical_updates(adapter: SourceAdapter, limit: int) -> None:
         db.heartbeat("crawler", note=f"soi mục lục novel {nv['id']} ({i + 1}/{len(rows)})")
         synced = False
         try:
-            # truyện lười (chưa ai đọc) → limit_stubs=0: chỉ cập nhật số chương, không đẻ stub
+            # truyện lười (chưa ai đọc) → limit_stubs=0: chỉ cập nhật số chương, không đẻ stub.
+            # Cho phép conditional GET (ETag/Last-Modified): nguồn trả 304 là bỏ qua
+            # hoàn toàn — phần lớn truyện giữa 2 chu kỳ KHÔNG có chương mới.
             total, n = sync_chapter_list(
                 adapter, nv["id"], nv["source_novel_id"],
-                limit_stubs=None if nv.get("toc_synced_at") else 0)
+                limit_stubs=None if nv.get("toc_synced_at") else 0,
+                allow_conditional=True)
             if n:
                 log.info("Truyện %s +%d chương mới", nv["id"], n)
             if n or total:
@@ -970,7 +1001,9 @@ def refresh_canonical_updates(adapter: SourceAdapter, limit: int) -> None:
         if synced:
             db.sb().table("novels").update(
                 {"last_checked_at": db.utc_now()}, returning="minimal").eq("id", nv["id"]).execute()
-        time.sleep(2.0)
+        # 1s (từ 2s): với nguồn conditional, 304 gần như free; nguồn còn lại vẫn đủ
+        # lịch sự vì mỗi truyện chỉ 1 request mục lục.
+        time.sleep(1.0)
 
 
 def _maybe_unhide_grown(nv: dict) -> None:
@@ -1068,8 +1101,61 @@ def _rescue_stale_chapter(adapter: SourceAdapter, novel_id: int, ch: dict, err) 
     return False
 
 
+def _fetch_one_chapter(adapter: SourceAdapter, novel_id: int, ch: dict) -> bool:
+    """Tải + ghi 1 chương. Trả True khi nên DỪNG cả batch (nguồn chặn IP / lỗi tạm —
+    các chương sau gần như chắc chắn cùng số phận, đừng đốt request)."""
+    if not ch["source_chapter_id"]:
+        return False
+    try:
+        content = clean_source(adapter.fetch_chapter(ch["source_chapter_id"]))
+        if not content:
+            raise ValueError(f"Chương {ch['source_chapter_id']} rỗng sau khi làm sạch")
+        db.save_chapter_raw(ch["id"], content)
+        _not_ready_count.pop(ch["id"], None)
+        log.info("Đã tải chương %s (novel %s)", ch["chapter_index"], novel_id)
+    except SourceBlocked as e:
+        log.warning("Nguồn %s đang chặn IP (%s) — dừng tải chương chu kỳ này",
+                    adapter.name, e)
+        return True
+    except SourceTransient as e:
+        log.warning("Nguồn %s lỗi tạm thời (%s) — giữ chương queued, thử lại chu kỳ sau",
+                    adapter.name, e)
+        return True
+    except ChapterNotReady as e:
+        # Lỗi TẠM: nguồn liệt kê chương nhưng trang chưa sinh → giữ queued thử lại.
+        # Quá NOT_READY_GIVE_UP lần liên tiếp → kiểm chứng trang truyện rồi mới kết luận.
+        n = _not_ready_count[ch["id"]] = _not_ready_count.get(ch["id"], 0) + 1
+        if n >= NOT_READY_GIVE_UP:
+            _not_ready_count.pop(ch["id"], None)
+            if _rescue_stale_chapter(adapter, novel_id, ch, e):
+                return True  # id đã làm mới — chương còn lại cũng stale, để chu kỳ sau tải bằng id mới
+        else:
+            log.info("Chương %s chưa sẵn trên nguồn (lần %d) — thử lại vòng sau", ch["id"], n)
+    except Exception as e:
+        # Lỗi tải (đổi cấu trúc/mạng): đánh dấu failed để thôi retry mỗi vòng crawl.
+        db.sb().table("chapters").update(
+            {"translation_status": "failed"}, returning="minimal").eq("id", ch["id"]).execute()
+        # Job dịch kèm chương cũng phải failed — để pending là job "kẹt" mãi:
+        # translator không claim (thiếu content_zh), admin retry lại chỉ reset job failed.
+        db.sb().table("translation_jobs").update(
+            {"status": "failed", "error": f"crawl: {e}"[:500]}, returning="minimal").eq("chapter_id", ch["id"]).eq("status", "pending").execute()
+        # Chương VIP/không công khai là tình huống ĐÃ BIẾT → 1 dòng gọn, khỏi
+        # traceback lấp lỗi thật. Còn lại (đổi cấu trúc/mạng) mới in đủ stack.
+        if isinstance(e, ChapterUnavailable):
+            log.warning("Chương %s không công khai/VIP → failed: %s", ch["id"], e)
+        else:
+            log.exception("Lỗi tải chương %s → failed", ch["id"])
+    time.sleep(0.5)  # nghỉ giữa các chương — lịch sự với host (nhịp tổng ≈ bản cũ × workers)
+    return False
+
+
 def ensure_chapters_fetched(adapter: SourceAdapter, novel_id: int) -> None:
-    """Tải content_zh cho các chương đã queued dịch mà chưa có nội dung gốc."""
+    """Tải content_zh cho các chương đã queued dịch mà chưa có nội dung gốc.
+
+    Tải SONG SONG trong một nguồn (settings.crawl_fetch_workers luồng): curl_cffi tạo
+    handle curl theo từng luồng nên session chia sẻ an toàn; db dùng client theo luồng
+    riêng. Gặp SourceBlocked/SourceTransient → hủy các chương chưa kịp bắt đầu và dừng
+    (giữ nguyên hành vi "dừng batch" của bản tuần tự)."""
     rows = (
         db.sb().table("chapters")
         .select("id, source_chapter_id, chapter_index")
@@ -1080,51 +1166,37 @@ def ensure_chapters_fetched(adapter: SourceAdapter, novel_id: int) -> None:
         .limit(max(1, settings.crawl_fetch_batch))
         .execute()
     ).data or []
-    for i, ch in enumerate(rows):
-        if not ch["source_chapter_id"]:
-            continue
-        db.heartbeat("crawler",
-                     note=f"tải chương {ch['chapter_index']} novel {novel_id} ({i + 1}/{len(rows)})")
-        try:
-            content = clean_source(adapter.fetch_chapter(ch["source_chapter_id"]))
-            if not content:
-                raise ValueError(f"Chương {ch['source_chapter_id']} rỗng sau khi làm sạch")
-            db.save_chapter_raw(ch["id"], content)
-            _not_ready_count.pop(ch["id"], None)
-            log.info("Đã tải chương %s (novel %s)", ch["chapter_index"], novel_id)
-        except SourceBlocked as e:
-            log.warning("Nguồn %s đang chặn IP (%s) — dừng tải chương chu kỳ này",
-                        adapter.name, e)
-            return
-        except SourceTransient as e:
-            log.warning("Nguồn %s lỗi tạm thời (%s) — giữ chương queued, thử lại chu kỳ sau",
-                        adapter.name, e)
-            return
-        except ChapterNotReady as e:
-            # Lỗi TẠM: nguồn liệt kê chương nhưng trang chưa sinh → giữ queued thử lại.
-            # Quá NOT_READY_GIVE_UP lần liên tiếp → kiểm chứng trang truyện rồi mới kết luận.
-            n = _not_ready_count[ch["id"]] = _not_ready_count.get(ch["id"], 0) + 1
-            if n >= NOT_READY_GIVE_UP:
-                _not_ready_count.pop(ch["id"], None)
-                if _rescue_stale_chapter(adapter, novel_id, ch, e):
-                    return  # id đã làm mới — chương còn lại cũng stale, để chu kỳ sau tải bằng id mới
-            else:
-                log.info("Chương %s chưa sẵn trên nguồn (lần %d) — thử lại vòng sau", ch["id"], n)
-        except Exception as e:
-            # Lỗi tải (đổi cấu trúc/mạng): đánh dấu failed để thôi retry mỗi vòng crawl.
-            db.sb().table("chapters").update(
-                {"translation_status": "failed"}, returning="minimal").eq("id", ch["id"]).execute()
-            # Job dịch kèm chương cũng phải failed — để pending là job "kẹt" mãi:
-            # translator không claim (thiếu content_zh), admin retry lại chỉ reset job failed.
-            db.sb().table("translation_jobs").update(
-                {"status": "failed", "error": f"crawl: {e}"[:500]}, returning="minimal").eq("chapter_id", ch["id"]).eq("status", "pending").execute()
-            # Chương VIP/không công khai là tình huống ĐÃ BIẾT → 1 dòng gọn, khỏi
-            # traceback lấp lỗi thật. Còn lại (đổi cấu trúc/mạng) mới in đủ stack.
-            if isinstance(e, ChapterUnavailable):
-                log.warning("Chương %s không công khai/VIP → failed: %s", ch["id"], e)
-            else:
-                log.exception("Lỗi tải chương %s → failed", ch["id"])
-        time.sleep(1.5)
+    rows = [ch for ch in rows if ch["source_chapter_id"]]
+    if not rows:
+        return
+    workers = max(1, min(settings.crawl_fetch_workers, len(rows)))
+    if workers == 1:
+        for i, ch in enumerate(rows):
+            db.heartbeat("crawler", note=f"tải chương {ch['chapter_index']} novel {novel_id} "
+                                         f"({i + 1}/{len(rows)})")
+            if _fetch_one_chapter(adapter, novel_id, ch):
+                return
+        return
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    with ThreadPoolExecutor(max_workers=workers, thread_name_prefix=f"cf-{adapter.name}") as ex:
+        futs = {ex.submit(_fetch_one_chapter, adapter, novel_id, ch): ch for ch in rows}
+        done = 0
+        stop = False
+        for fut in as_completed(futs):
+            done += 1
+            db.heartbeat("crawler", note=f"tải chương {futs[fut]['chapter_index']} "
+                                         f"novel {novel_id} ({done}/{len(rows)}, {workers} luồng)")
+            try:
+                if fut.result():
+                    stop = True
+            except Exception:
+                log.exception("Lỗi luồng tải chương novel %s", novel_id)
+            if stop:
+                # Hủy mọi việc CHƯA kịp bắt đầu; các luồng đang chạy để hoàn tất rồi thoát.
+                for f in futs:
+                    f.cancel()
+                break
 
 
 def _pick_revivable(chs: list[dict], refs: list[ChapterRef]) -> list[tuple[dict, ChapterRef]]:
