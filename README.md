@@ -125,8 +125,30 @@ flutter run --release --dart-define-from-file=.env
 Lệnh trên build + cài + mở app luôn; rút cáp thoải mái, app nằm lại máy như cài từ store.
 (Nhiều thiết bị thì thêm `-d <device-id>`. Chỉ muốn lấy file APK: `flutter build apk --release --dart-define-from-file=.env` → `build/app/outputs/flutter-apk/app-release.apk`.)
 
-**Không muốn cắm USB** (bật USB debugging làm app ngân hàng chặn): xem
-`app/ANDROID_WIFI_DEBUG.md` — chạy `flutter run` qua Wireless debugging cùng Wi-Fi.
+**Không muốn cắm USB (Gỡ lỗi qua Wi-Fi / Wireless debugging):**
+Phù hợp khi không có cáp hoặc tránh bị app ngân hàng chặn do bật USB debugging (Android 11+ cùng mạng Wi-Fi):
+
+1. **Ghép đôi (chỉ làm 1 lần đầu):**
+   - Trên điện thoại: *Cài đặt* → *Tùy chọn nhà phát triển* → *Gỡ lỗi không dây* (bật) → chọn *Ghép nối thiết bị bằng mã ghép nối*.
+   - Lấy `IP:PORT_PAIR` trong popup và chạy trên PC:
+     ```bash
+     adb pair <IP:PORT_PAIR>   # Ví dụ: adb pair 192.168.4.239:37129
+     # Nhập mã 6 số hiển thị trên điện thoại
+     ```
+2. **Kết nối (làm mỗi lần bật lại Wi-Fi debugging):**
+   - Đóng popup, lấy `IP:PORT_CONNECT` ở màn hình Gỡ lỗi không dây chính và kết nối:
+     ```bash
+     adb connect <IP:PORT_CONNECT>   # Ví dụ: adb connect 192.168.4.239:43933
+     adb devices                     # Kiểm tra: hiện 192.168.4.239:43933 device là xong
+     ```
+3. **Chạy app:**
+   ```bash
+   cd app
+   flutter run -d <IP:PORT_CONNECT> --dart-define-from-file=.env
+   # Hoặc nếu adb đã connect, chỉ cần:
+   flutter run --dart-define-from-file=.env
+   ```
+   *(Chi tiết cách xử lý lỗi mạng/firewall xem thêm tại [`app/ANDROID_WIFI_DEBUG.md`](app/ANDROID_WIFI_DEBUG.md)).*
 
 **iPhone**: xem `app/IPHONE.md` — build IPA bằng GitHub Actions (workflow "iOS unsigned IPA",
 bấm Run workflow trên tab Actions) rồi cài qua SideStore.

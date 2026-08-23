@@ -237,23 +237,16 @@ Future<void> updateCrawlSetting(String key, String value) => sb
     .update({'value': value, 'updated_at': DateTime.now().toUtc().toIso8601String()})
     .eq('key', key);
 
-/// Nguồn crawl (bật/tắt + sức khỏe + quota riêng) cho tab Crawl.
+/// Nguồn crawl (bật/tắt + sức khỏe) cho tab Crawl.
 final crawlSourcesProvider = FutureProvider.autoDispose<List<Rec>>((ref) async =>
     List<Rec>.from(await sb
         .from('sources')
-        .select('id, name, base_url, enabled, fail_count, last_ok_at, discover_quota')
+        .select('id, name, base_url, enabled, fail_count, last_ok_at')
         .order('enabled', ascending: false)
         .order('name')));
 
 Future<void> setSourceEnabled(int id, bool enabled) =>
     sb.from('sources').update({'enabled': enabled}).eq('id', id);
-
-/// Quota truyện MỚI mỗi chu kỳ discovery của riêng nguồn; null = dùng chung
-/// worker_settings.discover_new_per_cycle. Worker tự nhận ở tick kế (~10s).
-Future<void> setSourceQuota(int id, int? quota) => sb
-    .from('sources')
-    .update({'discover_quota': quota})
-    .eq('id', id);
 
 // ---------- Theo dõi VPS ----------
 
@@ -264,6 +257,9 @@ final hostMetricsProvider = FutureProvider.autoDispose<List<Rec>>((ref) async =>
         .from('host_metrics')
         .select('*')
         .order('updated_at', ascending: false)));
+
+Future<void> deleteHostMetrics(String host) =>
+    sb.from('host_metrics').delete().eq('host', host);
 
 /// Nhãn/địa chỉ hiển thị của 1 host — lưu worker_settings để chỉnh từ app mà không
 /// đụng DB schema (key có gắn hostname nên nhiều host không giẫm nhau).
