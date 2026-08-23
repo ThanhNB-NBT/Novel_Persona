@@ -62,15 +62,18 @@ class SearchFilter {
   final int minChapters;
   final String? genre;
   final String? status; // 'ongoing' | 'completed' | null
+  final List<int>? sources; // source_id chọn lọc; null/empty = mọi nguồn
   const SearchFilter({
     this.query = '',
     this.minChapters = 0,
     this.genre,
     this.status,
+    this.sources,
   });
 
   bool get isEmpty =>
-      query.isEmpty && minChapters == 0 && genre == null && status == null;
+      query.isEmpty && minChapters == 0 && genre == null && status == null &&
+      (sources == null || sources!.isEmpty);
 
   @override
   bool operator ==(Object other) =>
@@ -78,9 +81,17 @@ class SearchFilter {
       other.query == query &&
       other.minChapters == minChapters &&
       other.genre == genre &&
-      other.status == status;
+      other.status == status &&
+      _listEq(other.sources, sources);
   @override
-  int get hashCode => Object.hash(query, minChapters, genre, status);
+  int get hashCode => Object.hash(query, minChapters, genre, status,
+      Object.hashAll(sources ?? const []));
+}
+
+bool _listEq(List<int>? a, List<int>? b) {
+  if (a == null || a.isEmpty) return b == null || b.isEmpty;
+  if (b == null || b.isEmpty) return false;
+  return a.length == b.length && {...a}.containsAll(b);
 }
 
 final searchProvider = FutureProvider.autoDispose.family<List<Rec>, SearchFilter>((
@@ -104,6 +115,9 @@ final searchProvider = FutureProvider.autoDispose.family<List<Rec>, SearchFilter
   if (f.minChapters > 0) q = q.gte('chapter_count_source', f.minChapters);
   if (f.status != null) q = q.eq('status', f.status!);
   if (f.genre != null) q = q.contains('genres', [f.genre!]);
+  if (f.sources != null && f.sources!.isNotEmpty) {
+    q = q.inFilter('source_id', f.sources!);
+  }
   // Sắp theo độ MỚI (chương mới nhất) chứ không theo số chương — lọc "tối thiểu N chương"
   // chỉ là điều kiện, không phải tiêu chí sắp xếp.
   return List<Rec>.from(
@@ -131,6 +145,21 @@ final genresProvider = FutureProvider.autoDispose<List<String>>((ref) async {
   }
   final list = set.toList()..sort();
   return list;
+});
+
+/// Nguồn đang có truyện trong kho (cho bộ lọc theo nguồn). Suy từ novels chứ không
+/// đọc bảng sources — user thường không cần quyền admin để mở bộ lọc.
+final filterSourcesProvider = FutureProvider.autoDispose<List<(int, String)>>((ref) async {
+  final rows = List<Rec>.from(await sb.from('novels').select(
+      'source_id, sources(name)').eq('hidden', false).limit(1000));
+  final map = <int, String>{};
+  for (final r in rows) {
+    final id = r['source_id'] as int?;
+    final name = ((r['sources'] as Map?)?['name'] ?? '?').toString();
+    if (id != null && !map.containsKey(id)) map[id] = name;
+  }
+  final out = map.entries.toList()..sort((a, b) => a.value.compareTo(b.value));
+  return [for (final e in out) (e.key, e.value)];
 });
 
 // ---------- Trang chủ ----------
@@ -203,7 +232,15 @@ Future<List<Rec>> fetchNovelPage(SectionKind kind, int offset, int limit) async 
       .order('last_chapter_at', ascending: false, nullsFirst: false)
       .order('id', ascending: false)
       .limit(_mixPoolSize));
-  final mixed = _roundRobinBySource(pool);
+  var mixed = _roundRobinBySource(pool);
+  // Xoay vòng theo NGÀY: rank là số tĩnh nên trộn xong thứ tự vẫn đứng yên nhiều ngày
+  // ("Nổi bật" nhìn như đóng băng). Chạy đầu danh sách đi một bước mỗi ngày — cùng ngày
+  // thì home và xem-tất-cả thấy cùng danh sách (phân trang không nhảy), hôm sau đổi mới.
+  if (mixed.length > 6) {
+    final day = DateTime.now().toUtc().difference(DateTime.utc(2024)).inDays;
+    final off = day % mixed.length;
+    mixed = [...mixed.sublist(off), ...mixed.sublist(0, off)];
+  }
   if (offset >= mixed.length) return const [];
   return mixed.sublist(offset, (offset + limit).clamp(0, mixed.length));
 }
