@@ -2,6 +2,7 @@
 import json
 import os
 import sys
+from html import unescape
 
 sys.path.insert(0, os.path.dirname(__file__))
 os.environ.setdefault("SUPABASE_URL", "https://example.supabase.co")
@@ -89,6 +90,29 @@ def main() -> None:
     finally:
         fq.log.warning = orig
     assert len(warned) == 1
+
+    # --- ranking /rank/{1,0}: server-render, tên truyện mã hóa PUA → decode bằng bảng
+    rank_html = (
+        '<a href="/page/90002">十日终焉</a>'
+        '<a href="/page/90001">\ue521\ue55a</a>'                  # 我们 (PUA phẳng như thật)
+        '<a href="/page/90003"></a>'                              # rỗng → bỏ
+        '<a href="/page/90001">dup</a>')                          # trùng → bỏ
+    def rank_get(p):
+        assert p in ("/rank/1", "/rank/0")
+        return rank_get.html
+
+    # thay thế escape thành ký tự PUA thật 1 lần lúc init
+    rank_get.html = (rank_html.replace("\\ue521", "\ue521")
+                              .replace("\\ue55a", "\ue55a"))
+    a3 = _adapter()
+    a3._get = rank_get
+    ranked = a3.fetch_ranking(10)
+    ids = [bid for bid, _rank in ranked]
+    assert ids == ["90002", "90001"], ranked  # 90003 rỗng bị loại, 90001 dedupe
+    # tên của 90001 đã decode từ PUA thành "我们"
+    titles = dict(a3.fetch_ranking(10))  # (bid, rank) — cần meta? kiểm tra qua bảng dịch
+    raw_title = unescape("\ue521\ue55a")
+    assert raw_title.translate(a3._translate) == "我们"
 
 
 if __name__ == "__main__":

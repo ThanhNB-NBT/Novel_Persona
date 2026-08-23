@@ -13,8 +13,10 @@ Khác hoàn toàn các khuôn HTML biquge: mọi dữ liệu nằm trong JSON nh
     1 URL) nên bảng tĩnh đủ dùng; nếu ByteDance đổi font, URL khác mốc đã lưu →
     log cảnh báo để người vận hành build lại bảng (script builder trong docs).
 
-Không hỗ trợ search/discovery pool (trang chủ render bằng JS) → nguồn dùng qua
-`add --book-id <id>` lấy từ URL /page/{id}. Không VIP: chỉ chương free công khai.
+Discovery: trang chủ/ranking JS-render phần lớn, nhưng /rank/1 và /rank/0 là
+SERVER-RENDER (~10 truyện/bảng, tên cũng mã hóa PUA) → fetch_ranking đọc 2 bảng đó
+làm pool khám phá; không có search → thêm truyện tay vẫn bằng
+`add --source fanqie --book-id <id từ URL /page/{id}>`. Không VIP: chỉ chương free.
 """
 from __future__ import annotations
 
@@ -120,9 +122,34 @@ class FanqieAdapter(SourceAdapter):
     # ---------- SourceAdapter ----------
 
     def fetch_latest(self, limit: int = 30, page: int | None = None) -> list[NovelMeta]:
-        """Trang chủ/ranking render bằng JS → không có discovery tự động.
-        Nguồn dùng qua `add --book-id <id>` lấy từ URL /page/{id}."""
+        """Không có trang "mới cập nhật" dùng được (JS-render) → pool tắt."""
         return []
+
+    def fetch_ranking(self, limit: int = 100) -> list[tuple[str, int]]:
+        """Discovery qua bảng xếp hạng /rank/1 (nổi bật) và /rank/0 (hot mới) — trang
+        này SERVER-RENDER nên đọc thẳng được, mỗi bảng ~10 truyện. Tên truyện trên
+        rank cũng bị mã hóa font PUA → decode bằng bảng tĩnh trước khi trả."""
+        out: dict[str, NovelMeta] = {}
+        order = 0
+        for path in ("/rank/1", "/rank/0"):
+            try:
+                html = self._get(path)
+            except Exception:
+                log.warning("%s: không lấy được ranking %s", self.name, path)
+                continue
+            for bid, raw_title in re.findall(
+                    r'href="/page/(\d+)"[^>]*>([^<]{2,60})</a>', html):
+                if bid in out:
+                    continue
+                title = unescape(raw_title).translate(self._translate).strip()
+                if not 2 <= len(title) <= 60:
+                    continue
+                out[bid] = NovelMeta(
+                    source_novel_id=bid,
+                    source_url=f"{self.base_url}/page/{bid}",
+                    title_zh=title,
+                )
+        return [(m.source_novel_id, i) for i, m in enumerate(out.values())][:limit]
 
     def fetch_novel_meta(self, source_novel_id: str) -> NovelMeta:
         p = (self._fetch_state(f"/page/{source_novel_id}").get("page") or {})

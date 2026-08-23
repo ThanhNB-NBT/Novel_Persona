@@ -103,6 +103,61 @@ def _novels_needing_fetch(enabled_source_ids: set[int]) -> list[dict]:
     return out
 
 
+_DOCKER_SOCK = "/var/run/docker.sock"
+
+# Lệnh app gửi → danh sách service compose cần restart.
+_RESTART_SERVICES: dict[str, tuple[str, ...]] = {
+    "restart": ("crawler", "translator"),
+    "restart_crawler": ("crawler",),
+    "restart_translator": ("translator",),
+}
+
+
+def _docker_api(method: str, path: str, timeout: int = 60) -> tuple[int, bytes]:
+    """Gọi Docker Engine API qua unix socket (không cần docker CLI trong image)."""
+    import http.client
+    import socket
+
+    conn = http.client.HTTPConnection("localhost", timeout=timeout)
+    sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    sock.settimeout(timeout)
+    sock.connect(_DOCKER_SOCK)
+    conn.sock = sock
+    try:
+        conn.request(method, path, headers={"Host": "docker"})
+        resp = conn.getresponse()
+        body = resp.read()
+        return resp.status, body
+    finally:
+        conn.close()
+
+
+def _compose_container(service: str) -> str | None:
+    """Tên container của 1 service compose (label do docker-compose tự gắn)."""
+    import json as _json
+    from urllib.parse import quote
+
+    filt = quote(_json.dumps(
+        {"label": [f"com.docker.compose.service={service}"]}))
+    status, body = _docker_api(
+        "GET", f"/v1.43/containers/json?filters={filt}", timeout=15)
+    if status != 200:
+        log.warning("Docker API list containers → HTTP %s", status)
+        return None
+    arr = _json.loads(body or b"[]")
+    return arr[0]["Names"][0].lstrip("/") if arr else None
+
+
+def _docker_restart_service(service: str) -> bool:
+    cid = _compose_container(service)
+    if not cid:
+        log.warning("Restart %s: không tìm thấy container (service chưa chạy?)", service)
+        return False
+    status, _ = _docker_api("POST", f"/v1.43/containers/{cid}/restart?t=30")
+    log.info("Restart %s (%s) → HTTP %s", service, cid, status)
+    return status in (200, 204)
+
+
 def _eval_source_health(adapter: SourceAdapter) -> bool:
     """Cuối mỗi tick: có fetch OK → nguồn sống; toàn fail → fail++ và có thể tự tắt.
     Không fetch gì thì bỏ qua. Sau đó reset counter cho tick kế tiếp."""
@@ -276,6 +331,34 @@ def run_crawler() -> None:
             time.sleep(55)
 
     threading.Thread(target=_host_metrics_loop, daemon=True).start()
+
+    # Quản lí VPS từ app: poll hàng đợi host_commands (admin chèn lệnh) và thực thi
+    # qua Docker API (socket mount từ compose). Whitelist cứng — lệnh lạ bị đánh error.
+    def _commands_loop() -> None:
+        host = db.host_identity()
+        log.info("Host commands: định danh '%s', poll mỗi 10s", host)
+        while True:
+            try:
+                cmd = db.claim_host_command(host)
+                if cmd and cmd.get("command"):
+                    name = str(cmd["command"])
+                    services = _RESTART_SERVICES.get(name)
+                    if services is None:
+                        db.finish_host_command(int(cmd["id"]), "error",
+                                               f"lệnh không nằm trong whitelist: {name}")
+                    else:
+                        # Chốt done TRƯỚC khi restart: container restart là chết đi sống
+                        # lại, không kịp ghi sau. Restart vốn đáng tin nên best-effort.
+                        db.finish_host_command(
+                            int(cmd["id"]), "done",
+                            f"đã gửi restart: {', '.join(services)}")
+                        for svc in services:
+                            _docker_restart_service(svc)
+            except Exception:
+                log.exception("commands loop lỗi")
+            time.sleep(10)
+
+    threading.Thread(target=_commands_loop, daemon=True).start()
 
     threads: dict[str, tuple[threading.Thread, threading.Event]] = {}
     while True:

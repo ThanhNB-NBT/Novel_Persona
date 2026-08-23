@@ -497,6 +497,38 @@ def report_host_metrics(stats: dict) -> None:
         log.debug("report_host_metrics bỏ qua: %s", e)
 
 
+def claim_host_command(host: str) -> dict | None:
+    """Lấy 1 lệnh pending cho host này và đánh 'running'. Mỗi host 1 crawler nên
+    không cần khoá phức tạp; 2 luồng đua nhau thì worst case chạy 2 lần lệnh idempotent."""
+    try:
+        rows = (
+            sb().table("host_commands").select("id, command")
+            .eq("host", host).eq("status", "pending")
+            .order("created_at").limit(1).execute().data or []
+        )
+    except Exception as e:
+        log.debug("claim_host_command bỏ qua: %s", e)
+        return None
+    if not rows:
+        return None
+    cmd = rows[0]
+    try:
+        sb().table("host_commands").update(
+            {"status": "running", "updated_at": utc_now()}).eq("id", cmd["id"]).execute()
+    except Exception:
+        pass
+    return cmd
+
+
+def finish_host_command(cmd_id: int, status: str, output: str = "") -> None:
+    try:
+        sb().table("host_commands").update(
+            {"status": status, "output": output[:2000], "updated_at": utc_now()}
+        ).eq("id", cmd_id).execute()
+    except Exception:
+        log.debug("finish_host_command lỗi (bỏ qua)")
+
+
 def host_identity() -> str:
     """Định danh ỔN ĐỊNH của máy chạy worker cho host_metrics. Thứ tự ưu tiên:
     env WORKER_HOST > /etc/machine-id (docker-compose mount file của HOST vào nên
