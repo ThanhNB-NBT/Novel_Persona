@@ -929,7 +929,7 @@ def refresh_canonical_updates(adapter: SourceAdapter, limit: int) -> None:
     sid = _source_id(adapter)
     rows = (
         db.sb().table("novels")
-        .select("id, source_novel_id, hidden, meta_translated, status, toc_synced_at")
+        .select("id, source_novel_id, hidden, meta_translated, status, toc_synced_at, title_vi, title_zh")
         .eq("source_id", sid).eq("is_canonical", True)
         # Truyện HOÀN THÀNH không bao giờ ra chương mới → soi lại mục lục là phí trắng
         # (từng chiếm 56% kho canonical). Ngân sách refresh dồn cho truyện đang-ra, mới
@@ -943,7 +943,7 @@ def refresh_canonical_updates(adapter: SourceAdapter, limit: int) -> None:
     # nguồn nói ongoing thì sync_chapter_list tự flip status → quay lại vòng chính.
     rows += (
         db.sb().table("novels")
-        .select("id, source_novel_id, hidden, meta_translated, status, toc_synced_at")
+        .select("id, source_novel_id, hidden, meta_translated, status, toc_synced_at, title_vi, title_zh")
         .eq("source_id", sid).eq("is_canonical", True).eq("status", "completed")
         .order("last_checked_at", desc=False, nullsfirst=True)
         .limit(max(1, limit // 10)).execute()
@@ -957,7 +957,7 @@ def refresh_canonical_updates(adapter: SourceAdapter, limit: int) -> None:
             log.info("Refresh %s: nhường chỗ tải chương người đọc (đã soi %d/%d)",
                      adapter.name, i, len(rows))
             break
-        db.heartbeat("crawler", note=f"soi mục lục novel {nv['id']} ({i + 1}/{len(rows)})")
+        db.heartbeat("crawler", note=f"soi mục lục {nv.get('title_vi') or nv.get('title_zh') or nv['id']} ({i + 1}/{len(rows)})")
         synced = False
         try:
             # truyện lười (chưa ai đọc) → limit_stubs=0: chỉ cập nhật số chương, không đẻ stub.
@@ -1158,7 +1158,8 @@ def ensure_chapters_fetched(adapter: SourceAdapter, novel_id: int) -> None:
     (giữ nguyên hành vi "dừng batch" của bản tuần tự)."""
     rows = (
         db.sb().table("chapters")
-        .select("id, source_chapter_id, chapter_index")
+        .select("id, source_chapter_id, chapter_index, "
+                "novels!inner(title_vi, title_zh, sources(name))")
         .eq("novel_id", novel_id)
         .eq("translation_status", "queued")
         .is_("content_zh", "null")
@@ -1166,13 +1167,19 @@ def ensure_chapters_fetched(adapter: SourceAdapter, novel_id: int) -> None:
         .limit(max(1, settings.crawl_fetch_batch))
         .execute()
     ).data or []
+    # Nhãn hiển thị trên heartbeat: nguồn + tên truyện (Việt ưu tiên) để tab Worker
+    # đọc phát hiểu đang cào gì, khỏi phải tra ID.
+    nv0 = (rows[0].get("novels") or {}) if rows else {}
+    src_name = ((nv0.get("sources") or {}).get("name")) or getattr(adapter, "name", "")
+    novel_label = nv0.get("title_vi") or nv0.get("title_zh") or f"novel {novel_id}"
+    label = f"{src_name} · {novel_label}"
     rows = [ch for ch in rows if ch["source_chapter_id"]]
     if not rows:
         return
     workers = max(1, min(settings.crawl_fetch_workers, len(rows)))
     if workers == 1:
         for i, ch in enumerate(rows):
-            db.heartbeat("crawler", note=f"tải chương {ch['chapter_index']} novel {novel_id} "
+            db.heartbeat("crawler", note=f"tải chương {ch['chapter_index']} · {label} "
                                          f"({i + 1}/{len(rows)})")
             if _fetch_one_chapter(adapter, novel_id, ch):
                 return
@@ -1185,8 +1192,8 @@ def ensure_chapters_fetched(adapter: SourceAdapter, novel_id: int) -> None:
         stop = False
         for fut in as_completed(futs):
             done += 1
-            db.heartbeat("crawler", note=f"tải chương {futs[fut]['chapter_index']} "
-                                         f"novel {novel_id} ({done}/{len(rows)}, {workers} luồng)")
+            db.heartbeat("crawler", note=f"tải chương {futs[fut]['chapter_index']} · {label} "
+                                         f"({done}/{len(rows)}, {workers} luồng)")
             try:
                 if fut.result():
                     stop = True

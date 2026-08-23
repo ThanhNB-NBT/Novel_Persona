@@ -497,6 +497,16 @@ def report_host_metrics(stats: dict) -> None:
         log.debug("report_host_metrics bỏ qua: %s", e)
 
 
+def prune_stale_hosts(days: int = 30) -> None:
+    """Xoá dòng host_metrics không cập nhật lâu (host ma từ container-ID cũ / VPS đã
+    bỏ). Gọi thưa từ vòng metrics; lỗi thì bỏ qua."""
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    try:
+        sb().table("host_metrics").delete().lt("updated_at", cutoff).execute()
+    except Exception as e:
+        log.debug("prune_stale_hosts bỏ qua: %s", e)
+
+
 def claim_host_command(host: str) -> dict | None:
     """Lấy 1 lệnh pending cho host này và đánh 'running'. Mỗi host 1 crawler nên
     không cần khoá phức tạp; 2 luồng đua nhau thì worst case chạy 2 lần lệnh idempotent."""

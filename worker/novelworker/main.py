@@ -315,9 +315,10 @@ def run_crawler() -> None:
             time.sleep(10)
     threading.Thread(target=_requests_loop, daemon=True).start()
 
-    # Số liệu máy chủ cho màn "Theo dõi VPS" trong app: đẩy mỗi 60s, best-effort.
+    # Số liệu máy chủ cho màn "Theo dõi VPS" trong app: đẩy mỗi ~30s, best-effort.
     # Đổi VPS = worker trên máy mới tự đẩy dòng host mới, app không phải sửa gì.
     def _host_metrics_loop() -> None:
+        pushes = 0
         while True:
             try:
                 busy1, idle1 = db.read_cpu_jiffies()
@@ -326,9 +327,13 @@ def run_crawler() -> None:
                 dtot = (busy2 - busy1) + (idle2 - idle1)
                 cpu = (busy2 - busy1) / dtot * 100 if dtot > 0 else None
                 db.report_host_metrics(db.collect_host_stats(cpu))
+                pushes += 1
+                # dọn dòng host ma mỗi ~2 giờ: 30 ngày không cập nhật coi là chết
+                if pushes % 240 == 0:
+                    db.prune_stale_hosts(days=30)
             except Exception:
                 log.exception("Không thu được số liệu máy chủ")
-            time.sleep(55)
+            time.sleep(25)
 
     threading.Thread(target=_host_metrics_loop, daemon=True).start()
 
