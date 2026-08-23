@@ -122,8 +122,39 @@ class FanqieAdapter(SourceAdapter):
     # ---------- SourceAdapter ----------
 
     def fetch_latest(self, limit: int = 30, page: int | None = None) -> list[NovelMeta]:
-        """Không có trang "mới cập nhật" dùng được (JS-render) → pool tắt."""
-        return []
+        """Feed 'MỚI CẬP NHẬT' TOÀN NỀN TẢNG qua /api/rank/recent/update/list —
+        phân trang vô hạn (page_index), mỗi mục = 1 chương vừa cập nhật kèm bookId/
+        tên/thể loại/tác giả/updateTime. Đây là mỏ discovery chính của fanqie: mọi
+        sách đang ra chương đều chảy qua đây, không giới hạn như bảng rank.
+        Trả metadata đầy đủ luôn (API cho sẵn) → discovery khỏi fetch_novel_meta lại."""
+        page_index = (page or 1) - 1
+        try:
+            data = json.loads(self._get(
+                f"/api/rank/recent/update/list?page_count={limit}&page_index={page_index}"))
+        except Exception:
+            log.warning("%s: không lấy được feed mới cập nhật", self.name)
+            return []
+        out: dict[str, NovelMeta] = {}
+        for item in ((data.get("data") or {}).get("data") or []):
+            bid = str(item.get("bookId") or "")
+            title = (item.get("bookName") or "").strip()
+            if not bid or not 2 <= len(title) <= 60 or bid in out:
+                continue
+            last_at = None
+            ts = str(item.get("updateTime") or "")
+            if ts.isdigit():
+                from datetime import datetime, timezone
+                last_at = datetime.fromtimestamp(int(ts), tz=timezone.utc)
+            cat = (item.get("category") or "").strip()
+            out[bid] = NovelMeta(
+                source_novel_id=bid,
+                source_url=f"{self.base_url}/page/{bid}",
+                title_zh=title,
+                author_zh=item.get("author"),
+                genres_zh=[cat] if cat else [],
+                last_chapter_at=last_at,
+            )
+        return list(out.values())[:limit]
 
     def fetch_ranking(self, limit: int = 100) -> list[tuple[str, int]]:
         """Discovery fanqie — 2 tầng:

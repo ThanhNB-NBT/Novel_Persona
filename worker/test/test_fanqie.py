@@ -75,6 +75,24 @@ def main() -> None:
     # PUA không còn sót trong kết quả
     assert not any(0xE000 <= ord(c) <= 0xF8FF for c in txt)
 
+    # --- fetch_latest: feed mới-cập-nhật toàn nền tảng (API, phân trang)
+    feed = json.dumps({"data": {"data": [
+        {"bookId": "801", "bookName": "Sách mới 1", "author": "Tác giả A",
+         "category": "玄幻", "updateTime": "1787491632",
+         "title": "Chương 9"},
+        {"bookId": "801", "bookName": "Sách mới 1", "updateTime": "1787491632",
+         "title": "Chương 10"},                                # trùng book → dedupe
+        {"bookId": "", "bookName": "Không id"},                # bỏ
+    ]}}, ensure_ascii=False)
+    a4 = _adapter()
+    a4._get = lambda p: (feed if "recent/update" in p and "page_index=0" in p
+                         else feed)  # mọi trang trả cùng feed cho mục đích test
+    latest = a4.fetch_latest(30, page=1)
+    assert [m.source_novel_id for m in latest] == ["801"], latest
+    m1 = latest[0]
+    assert m1.author_zh == "Tác giả A" and m1.genres_zh == ["玄幻"]
+    assert m1.last_chapter_at is not None
+
     # font đổi URL → cảnh báo 1 lần (không crash)
     a2 = _adapter()
     a2._known_font_url = "https://old.example/aaa.woff2"
