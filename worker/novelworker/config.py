@@ -92,10 +92,6 @@ class Settings(BaseSettings):
     prio_idle: int = 75          # chương đọc thử + chương truyện không ai đọc — nền
     sample_chapters: int = 1     # số chương dịch sẵn "đọc thử" khi có truyện mới
     crawl_fetch_batch: int = 20  # số chương tải nguồn tối đa cho một novel mỗi tick
-    # "Crawl cho xong luôn rồi dịch dần": 1 = sau khi có mục lục, tự tải nội dung TOÀN
-    # BỘ chương theo lô nhỏ mỗi tick (không chờ ai bấm đọc); 0 = chỉ tải khi có người đọc.
-    # Dịch vẫn đi theo hàng đợi ưu tiên — prefetch chỉ đổ đầy kho content_zh.
-    crawl_prefetch_content: int = Field(default=1, ge=0, le=1)
     # Số luồng tải chương SONG SONG trong một nguồn (curl_cffi session tạo handle curl
     # theo từng luồng → an toàn). 1 = tuần tự như cũ; 3 = nhanh ~3× mà vẫn lịch sự với
     # host (mỗi luồng vẫn nghỉ giữa các chương). Nâng quá 8 dễ nuôi rate-limit nguồn TQ.

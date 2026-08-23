@@ -157,27 +157,6 @@ def backfill_dedup_keys() -> int:
     return len(rows)
 
 
-def reader_fetch_waiting() -> bool:
-    """Có chương NGƯỜI ĐỌC chờ (job ưu tiên cao hơn nền) mà chưa tải nguồn → việc bảo trì
-    (discovery/refresh, có thể cả tiếng) phải NHƯỜNG: dừng sớm, chu kỳ sau làm nốt.
-    Không có guard này, vòng crawl 1 luồng để 'nguồn 0/1' treo suốt chu kỳ discovery."""
-    jobs = (
-        db.sb().table("translation_jobs").select("chapter_id")
-        .eq("type", "chapter").eq("status", "pending")
-        .lt("priority", settings.prio_idle)
-        .not_.is_("chapter_id", "null")
-        .limit(50).execute()
-    ).data or []
-    ids = [j["chapter_id"] for j in jobs]
-    if not ids:
-        return False
-    n = (
-        db.sb().table("chapters").select("id", count="exact")
-        .in_("id", ids).is_("content_zh", "null").limit(1).execute()
-    ).count or 0
-    return n > 0
-
-
 _STORAGE_COVERS_MARK = "/storage/v1/object/public/covers/"
 
 
@@ -866,9 +845,6 @@ def sync_followed_novels(adapter: SourceAdapter) -> None:
         nv = row["novels"]
         if nv["id"] in seen:
             continue
-        if reader_fetch_waiting():
-            log.info("Sync tủ sách %s: nhường chỗ tải chương người đọc", adapter.name)
-            break
         seen.add(nv["id"])
         try:
             total, n = sync_chapter_list(adapter, nv["id"], nv["source_novel_id"])
@@ -960,10 +936,6 @@ def refresh_canonical_updates(adapter: SourceAdapter, limit: int) -> None:
     # sleep/truyện. 5 lỗi liên tiếp coi như nguồn chết, bỏ vòng cho nguồn khác chạy.
     fail_streak = 0
     for i, nv in enumerate(rows):
-        if reader_fetch_waiting():
-            log.info("Refresh %s: nhường chỗ tải chương người đọc (đã soi %d/%d)",
-                     adapter.name, i, len(rows))
-            break
         db.heartbeat("crawler", note=f"soi mục lục {nv.get('title_vi') or nv.get('title_zh') or nv['id']} ({i + 1}/{len(rows)})")
         synced = False
         try:
@@ -1217,60 +1189,6 @@ def ensure_chapters_fetched(adapter: SourceAdapter, novel_id: int) -> None:
                 break
 
 
-def prefetch_recent_novels(adapter: SourceAdapter, batch: int = 20,
-                           scan: int = 30) -> None:
-    """'Crawl cho xong luôn rồi dịch dần': với các truyện MỚI NHẤT của nguồn còn thiếu
-    nội dung, tự tải thêm `batch` chương/tick (không đụng translation_status/job —
-    dịch vẫn theo hàng đợi ưu tiên riêng). Xoay theo created_at giảm dần nên truyện
-    mới về được đổ đầy kho trước; truyện cũ đủ nội dung bị bỏ qua nhanh bằng 1 count.
-    Nhường người đọc: reader_fetch_waiting thì dừng ngay."""
-    sid = _source_id(adapter)
-    novels = (
-        db.sb().table("novels").select("id")
-        .eq("source_id", sid).not_("toc_synced_at", "null")
-        .order("created_at", ascending=False)
-        .limit(scan).execute().data or []
-    )
-    for nv in novels:
-        if reader_fetch_waiting():
-            return
-        nid = nv["id"]
-        missing = (
-            db.sb().table("chapters").select("id", count="exact")
-            .eq("novel_id", nid).is_("content_zh", "null")
-            .not_.is_("source_chapter_id", "null")
-            .limit(1).execute()
-        ).count or 0
-        if not missing:
-            continue  # đã đầy kho → truyện kế
-        rows = (
-            db.sb().table("chapters")
-            .select("id, source_chapter_id, chapter_index")
-            .eq("novel_id", nid).is_("content_zh", "null")
-            .not_.is_("source_chapter_id", "null")
-            .order("chapter_index")
-            .limit(batch).execute().data or []
-        )
-        db.heartbeat("crawler", note=f"prefetch kho chương {nid} "
-                                     f"(còn {missing} chương, lô {len(rows)})")
-        for ch in rows:
-            if reader_fetch_waiting():
-                return
-            try:
-                content = clean_source(adapter.fetch_chapter(ch["source_chapter_id"]))
-                if content:
-                    db.save_chapter_raw(ch["id"], content)
-            except (SourceBlocked, SourceTransient) as e:
-                log.warning("Prefetch %s dừng: %s", adapter.name, e)
-                return
-            except ChapterNotReady:
-                continue  # chương chưa sinh — lượt sau thử lại
-            except Exception as e:
-                log.debug("Prefetch bỏ qua chương %s: %s", ch["id"], e)
-            time.sleep(0.5)
-        return  # 1 truyện/tick — truyện kế sang tick sau
-
-
 def _pick_revivable(chs: list[dict], refs: list[ChapterRef]) -> list[tuple[dict, ChapterRef]]:
     """Chương 'failed' nào có source_chapter_id đã LỆCH mục lục hiện tại → (chương, ref
     đúng) để hồi sinh. Id còn KHỚP mục lục mà vẫn fail = nguồn thật sự thiếu trang chương
@@ -1309,8 +1227,6 @@ def revive_stale_failed_chapters(adapter: SourceAdapter, limit: int = 30) -> int
         by_novel.setdefault(r["novel_id"], []).append(r)
     revived = 0
     for novel_id, chs in by_novel.items():
-        if reader_fetch_waiting():
-            break
         try:
             refs = _normalize_chapter_refs(
                 adapter.fetch_chapter_list(chs[0]["novels"]["source_novel_id"]), adapter.name)
