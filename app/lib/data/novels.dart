@@ -147,19 +147,16 @@ final genresProvider = FutureProvider.autoDispose<List<String>>((ref) async {
   return list;
 });
 
-/// Nguồn đang có truyện trong kho (cho bộ lọc theo nguồn). Suy từ novels chứ không
-/// đọc bảng sources — user thường không cần quyền admin để mở bộ lọc.
+/// Nguồn crawl đang bật (cho bộ lọc theo nguồn). Đọc thẳng bảng sources — bảng này
+/// có policy đọc công khai nên user thường xem được; suy từ novels thì sót nguồn
+/// chưa có/khó có truyện hiển thị.
 final filterSourcesProvider = FutureProvider.autoDispose<List<(int, String)>>((ref) async {
-  final rows = List<Rec>.from(await sb.from('novels').select(
-      'source_id, sources(name)').eq('hidden', false).limit(1000));
-  final map = <int, String>{};
-  for (final r in rows) {
-    final id = r['source_id'] as int?;
-    final name = ((r['sources'] as Map?)?['name'] ?? '?').toString();
-    if (id != null && !map.containsKey(id)) map[id] = name;
-  }
-  final out = map.entries.toList()..sort((a, b) => a.value.compareTo(b.value));
-  return [for (final e in out) (e.key, e.value)];
+  final rows = List<Rec>.from(await sb
+      .from('sources')
+      .select('id, name')
+      .eq('enabled', true)
+      .order('name'));
+  return [for (final r in rows) (r['id'] as int, '${r['name']}')];
 });
 
 // ---------- Trang chủ ----------

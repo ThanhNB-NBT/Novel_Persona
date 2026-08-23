@@ -18,8 +18,12 @@ x-common: &common
 services:
   crawler:
     <<: *common
-    build: .          # chỉ crawler build; translator tái dùng image → build 1 lần thay vì 2
+    build: .          # ch��% crawler build; translator tA�i dA1ng image �+' build 1 l��?n thay vA� 2
     command: python -m novelworker.main crawl
+    # /etc/machine-id của HOST mount vào để host_metrics có định danh ỔN ĐỊNH —
+    # hostname trong container là ID ngẫu nhiên, mỗi lần recreate lại thành "VPS mới".
+    volumes:
+      - /etc/machine-id:/etc/machine-id:ro
 
   translator:
     <<: *common

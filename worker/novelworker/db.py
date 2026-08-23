@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 import re
 import threading
+import time as _time
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -496,11 +497,36 @@ def report_host_metrics(stats: dict) -> None:
         log.debug("report_host_metrics bỏ qua: %s", e)
 
 
+def host_identity() -> str:
+    """Định danh ỔN ĐỊNH của máy chạy worker cho host_metrics. Thứ tự ưu tiên:
+    env WORKER_HOST > /etc/machine-id (docker-compose mount file của HOST vào nên
+    sống qua mọi lần recreate container) > hostname. Không có cái này thì hostname
+    trong Docker là ID ngẫu nhiên → mỗi lần rebuild thành 'một VPS mới'."""
+    import os
+    import socket
+
+    env = os.environ.get("WORKER_HOST", "").strip()
+    if env:
+        return env
+    try:
+        with open("/etc/machine-id", encoding="ascii") as f:
+            mid = f.read().strip()
+        if mid:
+            return mid[:12]  # đủ phân biệt, khỏi lôi chuỗi 32 ký tự vào UI
+    except OSError:
+        pass
+    return socket.gethostname()
+
+
+# Mẫu mạng lần trước để tự tính tốc độ down/up giữa 2 lần đẩy (kB/s).
+_net_prev: tuple[float, int, int] | None = None  # (monotonic, rx_bytes, tx_bytes)
+
+
 def collect_host_stats(cpu_pct: float | None = None) -> dict:
     """Đọc số liệu hệ điều hành (Linux/VPS) KHÔNG cần psutil: /proc/meminfo,
-    /proc/loadavg, /proc/uptime, statvfs('/'). cpu_pct truyền vào từ vòng đo riêng
-    (/proc/stat 2 lần) vì một lần đọc không ra được %. Trên Windows trả đủ key với
-    giá trị rác tối thiểu — chỉ để script chạy được khi dev local."""
+    /proc/loadavg, /proc/uptime, /proc/net/dev, statvfs('/'). cpu_pct truyền vào từ
+    vòng đo riêng (/proc/stat 2 lần) vì một lần đọc không ra được %. Trên Windows trả
+    dict tối thiểu — chỉ để script chạy được khi dev local."""
     import os
     import socket
 
@@ -508,7 +534,7 @@ def collect_host_stats(cpu_pct: float | None = None) -> dict:
         with open(path, encoding="ascii") as f:
             return f.read()
 
-    stats: dict = {"host": socket.gethostname()}
+    stats: dict = {"host": host_identity()}
     try:
         mem = {}
         for line in _read("/proc/meminfo").splitlines():
@@ -518,6 +544,9 @@ def collect_host_stats(cpu_pct: float | None = None) -> dict:
         avail = mem.get("MemAvailable", 0)
         stats["mem_total_mb"] = total // 1024
         stats["mem_used_mb"] = max(0, (total - avail)) // 1024
+        swap_total = mem.get("SwapTotal", 0)
+        swap_free = mem.get("SwapFree", 0)
+        stats["swap_used_mb"] = max(0, swap_total - swap_free) // 1024
     except OSError:
         pass
     try:
@@ -536,6 +565,28 @@ def collect_host_stats(cpu_pct: float | None = None) -> dict:
         pass
     try:
         stats["uptime_h"] = round(float(_read("/proc/uptime").split()[0]) / 3600, 1)
+    except (OSError, ValueError, IndexError):
+        pass
+    # Mạng: tổng tích luỹ + tốc độ so với mẫu lần trước (trừ loopback).
+    global _net_prev
+    try:
+        rx = tx = 0
+        for line in _read("/proc/net/dev").splitlines()[2:]:
+            iface, _, data = line.partition(":")
+            if iface.strip() == "lo":
+                continue
+            cols = data.split()
+            rx += int(cols[0])
+            tx += int(cols[8])
+        stats["net_rx_gb"] = round(rx / (1 << 30), 2)
+        stats["net_tx_gb"] = round(tx / (1 << 30), 2)
+        now = _time.monotonic()
+        if _net_prev is not None:
+            dt, prx, ptx = _net_prev
+            if now > dt:
+                stats["net_rx_kbps"] = round((rx - prx) / (now - dt) / 1024, 1)
+                stats["net_tx_kbps"] = round((tx - ptx) / (now - dt) / 1024, 1)
+        _net_prev = (now, rx, tx)
     except (OSError, ValueError, IndexError):
         pass
     if cpu_pct is not None:

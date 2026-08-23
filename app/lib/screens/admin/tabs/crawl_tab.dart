@@ -183,13 +183,6 @@ class _CrawlTabState extends ConsumerState<CrawlTab> {
               ),
             ]),
           ),
-          // Quota riêng của nguồn: truyện MỚI tối đa mỗi đợt discovery. NULL = theo
-          // giá trị chung; bấm để chỉnh, worker tự nhận ở tick kế.
-          const SizedBox(width: 8),
-          _QuotaPill(
-            quota: s['discover_quota'] as int?,
-            onTap: () => _editQuota(context, ref, s),
-          ),
           const SizedBox(width: 4),
           Switch(
             value: enabled,
@@ -325,42 +318,6 @@ class _CrawlTabState extends ConsumerState<CrawlTab> {
       ),
     );
   }
-  /// Dialog chỉnh quota riêng của 1 nguồn: số truyện MỚI tối đa mỗi đợt discovery.
-  /// Để trống = về mặc định chung (worker_settings.discover_new_per_cycle).
-  void _editQuota(BuildContext context, WidgetRef ref, Rec s) {
-    final ctrl = TextEditingController(
-        text: s['discover_quota'] == null ? '' : '${s['discover_quota']}');
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('Quota ${s['name']}'),
-        content: TextField(
-          controller: ctrl,
-          autofocus: true,
-          keyboardType: TextInputType.number,
-          decoration: InputDecoration(
-            labelText: 'Số truyện mới / đợt',
-            helperText:
-                'Bỏ trống = theo giá trị chung (discover_new_per_cycle).',
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Huỷ')),
-          FilledButton(
-            onPressed: () async {
-              final raw = ctrl.text.trim();
-              final q = raw.isEmpty ? null : int.tryParse(raw);
-              if (raw.isNotEmpty && (q == null || q < 0)) return;
-              await setSourceQuota(s['id'] as int, q);
-              if (ctx.mounted) Navigator.pop(ctx);
-              ref.invalidate(crawlSourcesProvider);
-            },
-            child: const Text('Lưu'),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 /// Nhịp 24 giờ ở đầu tab Crawl: crawl về bao nhiêu, dịch xong bao nhiêu, còn kẹt bao
@@ -420,39 +377,6 @@ class _CrawlPulseCard extends ConsumerWidget {
               workerPulse(context, beats, 'translator', 'Translator'),
             ]),
           ),
-        ]),
-      ),
-    );
-  }
-}
-
-/// Pill quota của nguồn: "10/đợt" khi có riêng, "chung" khi theo mặc định — cả pill
-/// là affordance bấm để chỉnh. Ẩn màu nhẹ để không lấn át chip trạng thái.
-class _QuotaPill extends StatelessWidget {
-  final int? quota;
-  final VoidCallback onTap;
-  const _QuotaPill({required this.quota, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final t = Theme.of(context).textTheme;
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(20),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-        decoration: BoxDecoration(
-          color: cs.surfaceContainerHighest.withValues(alpha: 0.6),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.6)),
-        ),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Icon(Icons.filter_alt_outlined,
-              size: 12, color: cs.onSurfaceVariant),
-          const SizedBox(width: 4),
-          Text(quota == null ? 'chung' : '$quota/đợt',
-              style: t.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
         ]),
       ),
     );
