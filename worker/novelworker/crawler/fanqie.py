@@ -126,12 +126,12 @@ class FanqieAdapter(SourceAdapter):
         return []
 
     def fetch_ranking(self, limit: int = 100) -> list[tuple[str, int]]:
-        """Discovery qua bảng xếp hạng /rank/1 (nổi bật) và /rank/0 (hot mới) — trang
-        này SERVER-RENDER nên đọc thẳng được, mỗi bảng ~10 truyện. Tên truyện trên
-        rank cũng bị mã hóa font PUA → decode bằng bảng tĩnh trước khi trả."""
+        """Discovery qua các bảng server-render: /rank/1 (nổi bật), /rank/0 (hot mới),
+        /rank/2 + trang chủ (khi còn trả HTML). Mỗi bảng ~10 truyện — trần thật của
+        web anon là ~25-30 sách/đợt; tên truyện mã hóa PUA → decode bằng bảng tĩnh."""
         out: dict[str, NovelMeta] = {}
         order = 0
-        for path in ("/rank/1", "/rank/0"):
+        for path in ("/rank/1", "/rank/0", "/rank/2", "/"):
             try:
                 html = self._get(path)
             except Exception:

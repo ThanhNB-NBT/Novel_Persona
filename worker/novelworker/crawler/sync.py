@@ -183,19 +183,26 @@ _STORAGE_COVERS_MARK = "/storage/v1/object/public/covers/"
 
 def cache_cover(adapter: SourceAdapter, novel_id: int, external_url: str | None) -> str | None:
     """Tải bìa ngoài về Storage bucket 'covers' → trả public URL (khỏi phụ thuộc hotlink
-    CDN nguồn). Idempotent: URL đã là storage của mình → trả lại. Lỗi/không có → None."""
+    CDN nguồn). Idempotent: URL đã là storage của mình → trả lại. Lỗi/không có → None.
+    CDN nguồn (vd byteimg của fanqie) chặn 403 khi bị tải dồn dập → retry backoff."""
     if not external_url or _STORAGE_COVERS_MARK in external_url:
         return external_url or None
-    try:
-        data, ctype = adapter.fetch_bytes(external_url)
-    except Exception:
-        log.warning("Không tải được bìa %s (novel %s)", external_url, novel_id)
-        return None
+    data = ctype = None
+    for attempt in range(3):
+        try:
+            data, ctype = adapter.fetch_bytes(external_url)
+            break
+        except Exception:
+            if attempt == 2:
+                log.warning("Không tải được bìa %s (novel %s) sau 3 lần", external_url, novel_id)
+                return None
+            time.sleep(3 * (attempt + 1))  # 3s → 6s: đủ qua đợt throttle ngắn
     if not data or len(data) < 100:   # ảnh hỏng/trống → giữ hotlink cũ
         return None
     ext = "png" if "png" in ctype else "webp" if "webp" in ctype else "jpg"
     try:
         db.upload_cover(f"{novel_id}.{ext}", data, ctype)
+        time.sleep(1.0)  # nhịp giữa các bìa — CDN nguồn dễ cáu
         return db.cover_public_url(f"{novel_id}.{ext}")
     except Exception:
         log.exception("Upload bìa lỗi (novel %s)", novel_id)
@@ -997,6 +1004,10 @@ def refresh_canonical_updates(adapter: SourceAdapter, limit: int) -> None:
                 log.error("Nguồn %s lỗi %d truyện liên tiếp — bỏ vòng refresh này",
                           adapter.name, fail_streak)
                 break
+            if "429" in str(e):
+                # nguồn bảo giảm tốc (vd 69shuba chặn conditional probe dồn dập) —
+                # nghỉ dài trước khi soi truyện kế, đừng đốt tiếp
+                time.sleep(20)
         # Chỉ đánh dấu đã soi khi parse thành công; lỗi tạm phải được retry sớm.
         if synced:
             db.sb().table("novels").update(
@@ -1204,6 +1215,60 @@ def ensure_chapters_fetched(adapter: SourceAdapter, novel_id: int) -> None:
                 for f in futs:
                     f.cancel()
                 break
+
+
+def prefetch_recent_novels(adapter: SourceAdapter, batch: int = 20,
+                           scan: int = 30) -> None:
+    """'Crawl cho xong luôn rồi dịch dần': với các truyện MỚI NHẤT của nguồn còn thiếu
+    nội dung, tự tải thêm `batch` chương/tick (không đụng translation_status/job —
+    dịch vẫn theo hàng đợi ưu tiên riêng). Xoay theo created_at giảm dần nên truyện
+    mới về được đổ đầy kho trước; truyện cũ đủ nội dung bị bỏ qua nhanh bằng 1 count.
+    Nhường người đọc: reader_fetch_waiting thì dừng ngay."""
+    sid = _source_id(adapter)
+    novels = (
+        db.sb().table("novels").select("id")
+        .eq("source_id", sid).not_("toc_synced_at", "null")
+        .order("created_at", ascending=False)
+        .limit(scan).execute().data or []
+    )
+    for nv in novels:
+        if reader_fetch_waiting():
+            return
+        nid = nv["id"]
+        missing = (
+            db.sb().table("chapters").select("id", count="exact")
+            .eq("novel_id", nid).is_("content_zh", "null")
+            .not_.is_("source_chapter_id", "null")
+            .limit(1).execute()
+        ).count or 0
+        if not missing:
+            continue  # đã đầy kho → truyện kế
+        rows = (
+            db.sb().table("chapters")
+            .select("id, source_chapter_id, chapter_index")
+            .eq("novel_id", nid).is_("content_zh", "null")
+            .not_.is_("source_chapter_id", "null")
+            .order("chapter_index")
+            .limit(batch).execute().data or []
+        )
+        db.heartbeat("crawler", note=f"prefetch kho chương {nid} "
+                                     f"(còn {missing} chương, lô {len(rows)})")
+        for ch in rows:
+            if reader_fetch_waiting():
+                return
+            try:
+                content = clean_source(adapter.fetch_chapter(ch["source_chapter_id"]))
+                if content:
+                    db.save_chapter_raw(ch["id"], content)
+            except (SourceBlocked, SourceTransient) as e:
+                log.warning("Prefetch %s dừng: %s", adapter.name, e)
+                return
+            except ChapterNotReady:
+                continue  # chương chưa sinh — lượt sau thử lại
+            except Exception as e:
+                log.debug("Prefetch bỏ qua chương %s: %s", ch["id"], e)
+            time.sleep(0.5)
+        return  # 1 truyện/tick — truyện kế sang tick sau
 
 
 def _pick_revivable(chs: list[dict], refs: list[ChapterRef]) -> list[tuple[dict, ChapterRef]]:

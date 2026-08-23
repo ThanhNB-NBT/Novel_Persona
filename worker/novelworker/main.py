@@ -192,6 +192,8 @@ def _refresh_cfg(cfg: dict) -> None:
         rs, "sample_chapters", settings.sample_chapters, lo=0)  # 0 = tắt dịch đọc thử
     settings.crawl_fetch_batch = db.runtime_int(
         rs, "crawl_fetch_batch", settings.crawl_fetch_batch)
+    settings.crawl_prefetch_content = db.runtime_int(
+        rs, "crawl_prefetch_content", settings.crawl_prefetch_content, lo=0)
 
 
 def _source_tick(adapter: SourceAdapter, pending_fetch: list[dict], due: bool,
@@ -234,6 +236,13 @@ def _source_tick(adapter: SourceAdapter, pending_fetch: list[dict], due: bool,
         if missing_stub:
             sync.sync_chapter_list(adapter, nv["id"], nv["source_novel_id"])
         sync.ensure_chapters_fetched(adapter, nv["id"])
+    # 1.5) "crawl cho xong luôn rồi dịch dần": truyện mới về có mục lục thì tự tải
+    # dần TOÀN BỘ nội dung (lô nhỏ mỗi tick, nhường người đọc như mọi việc khác).
+    if settings.crawl_prefetch_content:
+        try:
+            sync.prefetch_recent_novels(adapter, batch=settings.crawl_fetch_batch)
+        except Exception:
+            log.exception("Prefetch nội dung lỗi (%s)", adapter.name)
     # 2) discovery + sync truyện theo dõi — theo chu kỳ dài. Cào MỌI mục để truyện dày dần.
     if due:
         sync.discover_ranking(adapter, max_new=max_new)
