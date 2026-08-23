@@ -26,11 +26,13 @@ class _FilterFormState extends ConsumerState<_FilterForm> {
   late int _min = widget.initial.minChapters;
   late String? _genre = widget.initial.genre;
   late String? _status = widget.initial.status;
+  late List<int> _sources = [...?widget.initial.sources];
 
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).textTheme;
     final genres = ref.watch(genresProvider).value ?? const [];
+    final sources = ref.watch(filterSourcesProvider).value ?? const <(int, String)>[];
     final facets = ref.watch(filterFacetsProvider).value;
     final mins = minChapterThresholds(facets?.maxChapters ?? 0);
     final statuses = facets?.statuses ?? const <String>[];
@@ -46,6 +48,7 @@ class _FilterFormState extends ConsumerState<_FilterForm> {
                 _min = 0;
                 _genre = null;
                 _status = null;
+                _sources = [];
               }),
               child: const Text('Đặt lại'),
             ),
@@ -77,12 +80,36 @@ class _FilterFormState extends ConsumerState<_FilterForm> {
               ),
             ),
           ],
+          if (sources.isNotEmpty) ...[
+            _label('Nguồn'),
+            // Chọn ĐA nguồn (bấm bật/tắt): cùng một truyện có thể về từ nhiều nguồn,
+            // lọc để chỉ thấy nguồn mình tin. Không chọn gì = mọi nguồn.
+            Wrap(
+              spacing: 8,
+              runSpacing: 0,
+              children: [
+                for (final (id, name) in sources)
+                  FilterChip(
+                    label: Text(name),
+                    selected: _sources.contains(id),
+                    showCheckmark: false,
+                    onSelected: (sel) =>
+                        setState(() => sel ? _sources.add(id) : _sources.remove(id)),
+                  ),
+              ],
+            ),
+          ],
           const SizedBox(height: 20),
           SizedBox(
             width: double.infinity,
             child: FilledButton(
               onPressed: () => Navigator.pop(
-                  context, SearchFilter(minChapters: _min, genre: _genre, status: _status)),
+                  context,
+                  SearchFilter(
+                      minChapters: _min,
+                      genre: _genre,
+                      status: _status,
+                      sources: _sources.isEmpty ? null : [..._sources])),
               child: const Text('Xem kết quả'),
             ),
           ),
@@ -217,11 +244,16 @@ class _FilterResultsScreenState extends ConsumerState<FilterResultsScreen> {
   }
 
   Widget _activeChips(BuildContext context) {
+    final sourceNames = {
+      for (final (id, name) in ref.watch(filterSourcesProvider).value ?? const <(int, String)>[])
+        id: name,
+    };
     final parts = <String>[
       if (_filter.minChapters > 0) '≥ ${_filter.minChapters} chương',
       if (_filter.status != null)
         _filter.status == 'completed' ? 'Hoàn thành' : 'Đang ra',
       if (_filter.genre != null) _filter.genre!,
+      for (final id in _filter.sources ?? const <int>[]) 'Nguồn: ${sourceNames[id] ?? id}',
     ];
     if (parts.isEmpty) return const SizedBox.shrink();
     return Padding(

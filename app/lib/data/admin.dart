@@ -237,16 +237,68 @@ Future<void> updateCrawlSetting(String key, String value) => sb
     .update({'value': value, 'updated_at': DateTime.now().toUtc().toIso8601String()})
     .eq('key', key);
 
-/// Nguồn crawl (bật/tắt + sức khỏe) cho tab Crawl.
+/// Nguồn crawl (bật/tắt + sức khỏe + quota riêng) cho tab Crawl.
 final crawlSourcesProvider = FutureProvider.autoDispose<List<Rec>>((ref) async =>
     List<Rec>.from(await sb
         .from('sources')
-        .select('id, name, base_url, enabled, fail_count, last_ok_at')
+        .select('id, name, base_url, enabled, fail_count, last_ok_at, discover_quota')
         .order('enabled', ascending: false)
         .order('name')));
 
 Future<void> setSourceEnabled(int id, bool enabled) =>
     sb.from('sources').update({'enabled': enabled}).eq('id', id);
+
+/// Quota truyện MỚI mỗi chu kỳ discovery của riêng nguồn; null = dùng chung
+/// worker_settings.discover_new_per_cycle. Worker tự nhận ở tick kế (~10s).
+Future<void> setSourceQuota(int id, int? quota) => sb
+    .from('sources')
+    .update({'discover_quota': quota})
+    .eq('id', id);
+
+// ---------- Theo dõi VPS ----------
+
+/// Số liệu máy chủ chạy worker (crawler đẩy mỗi phút). Nhiều host cùng lúc cũng được:
+/// đổi VPS = máy mới tự xuất hiện, dòng cũ đứng yên cho tới khi admin xoá.
+final hostMetricsProvider = FutureProvider.autoDispose<List<Rec>>((ref) async =>
+    List<Rec>.from(await sb
+        .from('host_metrics')
+        .select('*')
+        .order('updated_at', ascending: false)));
+
+/// Nhãn/địa chỉ hiển thị của 1 host — lưu worker_settings để chỉnh từ app mà không
+/// đụng DB schema (key có gắn hostname nên nhiều host không giẫm nhau).
+String _vpsKey(String host, String field) => 'vps_${field}_$host';
+
+Future<Map<String, String>> loadVpsLabels(String host) async {
+  final rows = List<Rec>.from(await sb
+      .from('worker_settings')
+      .select('key, value')
+      .inFilter('key', [_vpsKey(host, 'label'), _vpsKey(host, 'address')]));
+  return {
+    for (final r in rows)
+      if ((r['value'] as String? ?? '').isNotEmpty)
+        r['key'].toString().split('_')[1]: r['value'] as String,
+  };
+}
+
+Future<void> saveVpsLabels(String host,
+    {required String label, required String address}) async {
+  final now = DateTime.now().toUtc().toIso8601String();
+  await Future.wait([
+    sb.from('worker_settings').upsert({
+      'key': _vpsKey(host, 'label'),
+      'value': label,
+      'note': 'Nhãn hiển thị VPS ($host)',
+      'updated_at': now
+    }),
+    sb.from('worker_settings').upsert({
+      'key': _vpsKey(host, 'address'),
+      'value': address,
+      'note': 'Địa chỉ/IP hiển thị VPS ($host)',
+      'updated_at': now
+    }),
+  ]);
+}
 
 /// Truyện crawler mới đem về trong 24 giờ — tab Crawl (soi discovery có chạy không).
 final newNovels24hProvider = FutureProvider.autoDispose<List<Rec>>((ref) async {

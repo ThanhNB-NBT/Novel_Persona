@@ -20,6 +20,7 @@ import 'screens/account/edit_profile.dart';
 import 'screens/account/guide.dart';
 import 'screens/cultivation/cultivation.dart';
 import 'screens/admin/errors.dart';
+import 'screens/admin/vps.dart';
 import 'screens/novel/glossary.dart';
 import 'screens/account/login.dart';
 import 'screens/library/notifications.dart';
@@ -205,6 +206,9 @@ final _router = GoRouter(routes: [
   GoRoute(
       path: '/errors',
       pageBuilder: (_, s) => inkPage(key: s.pageKey, child: const ErrorLogScreen())),
+  GoRoute(
+      path: '/admin/vps',
+      pageBuilder: (_, s) => inkPage(key: s.pageKey, child: const VpsMonitorScreen())),
   GoRoute(
       path: '/admin',
       pageBuilder: (_, s) => inkPage(key: s.pageKey, child: const AdminScreen())),
