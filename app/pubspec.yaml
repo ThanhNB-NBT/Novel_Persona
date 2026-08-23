@@ -1,7 +1,7 @@
-name: novel_reader
+﻿name: novel_reader
 description: "Gac Truyen - doc tieu thuyet mang Trung Quoc dich sang tieng Viet bang LLM."
 publish_to: 'none'
-version: 1.0.18+19
+version: 1.0.19+20
 
 environment:
   sdk: ^3.12.2
@@ -18,15 +18,15 @@ dependencies:
   flutter_local_notifications: ^22.0.1
   google_fonts: ^8.1.0
   palette_generator: ^0.3.3
-  # Đọc offline: sqflite (Android/iOS) + ffi (Windows/Linux/macOS dev) + path cho join()
+  # Äá»c offline: sqflite (Android/iOS) + ffi (Windows/Linux/macOS dev) + path cho join()
   sqflite: ^2.4.1
   sqflite_common_ffi: ^2.3.4
   path: ^1.9.0
-  # Nghe truyện: TTS hệ thống đọc bản dịch (iOS giọng Việt khá, Android tuỳ máy)
+  # Nghe truyá»‡n: TTS há»‡ thá»‘ng Ä‘á»c báº£n dá»‹ch (iOS giá»ng Viá»‡t khÃ¡, Android tuá»³ mÃ¡y)
   flutter_tts: ^4.2.0
-  # Tu luyện: md5 xác định chương có quà (mirror công thức SQL cult_gift_at)
+  # Tu luyá»‡n: md5 xÃ¡c Ä‘á»‹nh chÆ°Æ¡ng cÃ³ quÃ  (mirror cÃ´ng thá»©c SQL cult_gift_at)
   crypto: ^3.0.6
-  # Cập nhật trong app: so version với GitHub Releases + mở link tải APK
+  # Cáº­p nháº­t trong app: so version vá»›i GitHub Releases + má»Ÿ link táº£i APK
   package_info_plus: ^9.0.1
   url_launcher: ^6.3.1
   lottie: ^3.5.1
@@ -42,7 +42,7 @@ dev_dependencies:
   flutter_lints: ^6.0.0
   flutter_launcher_icons: ^0.14.3
 
-# Icon app "Gác Truyện" — GT thư pháp trên nền chàm. Sinh lại:
+# Icon app "GÃ¡c Truyá»‡n" â€” GT thÆ° phÃ¡p trÃªn ná»n chÃ m. Sinh láº¡i:
 #   flutter pub run flutter_launcher_icons
 flutter_launcher_icons:
   android: true
@@ -57,22 +57,22 @@ flutter:
   uses-material-design: true
 
   assets:
-    # font google_fonts bundle sẵn (test + lần chạy đầu không cần mạng)
+    # font google_fonts bundle sáºµn (test + láº§n cháº¡y Ä‘áº§u khÃ´ng cáº§n máº¡ng)
     - assets/google_fonts/
-    - assets/icon/gt_ink.png     # logo GT mực đậm — chế độ sáng
-    - assets/icon/gt_white.png   # logo GT trắng — chế độ tối
-    - assets/hanviet.tsv         # bảng tra Hán-Việt (đồng bộ từ worker/novelworker/data/)
+    - assets/icon/gt_ink.png     # logo GT má»±c Ä‘áº­m â€” cháº¿ Ä‘á»™ sÃ¡ng
+    - assets/icon/gt_white.png   # logo GT tráº¯ng â€” cháº¿ Ä‘á»™ tá»‘i
+    - assets/hanviet.tsv         # báº£ng tra HÃ¡n-Viá»‡t (Ä‘á»“ng bá»™ tá»« worker/novelworker/data/)
 
-    # cả thư mục (chỉ chứa webp) — thả frame idle phụ _f2.._f4 vào là tự bundle
+    # cáº£ thÆ° má»¥c (chá»‰ chá»©a webp) â€” tháº£ frame idle phá»¥ _f2.._f4 vÃ o lÃ  tá»± bundle
     - assets/cultivators/
     - assets/bg/cultivation_bg.webp
     - assets/bg/cultivation_bg_night.webp
     - assets/cult_fx/
     - assets/cult_items/
-    - assets/cult_halo/            # trận pháp hào quang hậu Phi Thăng (webp có alpha)
+    - assets/cult_halo/            # tráº­n phÃ¡p hÃ o quang háº­u Phi ThÄƒng (webp cÃ³ alpha)
 
-  # Fragment shader hiệu ứng Độ Kiếp/đại cảnh giới (nấc 2 — bloom + godray)
+  # Fragment shader hiá»‡u á»©ng Äá»™ Kiáº¿p/Ä‘áº¡i cáº£nh giá»›i (náº¥c 2 â€” bloom + godray)
   shaders:
     - shaders/breakthrough.frag
-    # Dock chất lỏng (metaball + khúc xạ) cho 5 tab
+    # Dock cháº¥t lá»ng (metaball + khÃºc xáº¡) cho 5 tab
     - shaders/liquid_dock.frag
