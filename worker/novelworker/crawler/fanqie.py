@@ -126,11 +126,31 @@ class FanqieAdapter(SourceAdapter):
         return []
 
     def fetch_ranking(self, limit: int = 100) -> list[tuple[str, int]]:
-        """Discovery qua các bảng server-render: /rank/1 (nổi bật), /rank/0 (hot mới),
-        /rank/2 + trang chủ (khi còn trả HTML). Mỗi bảng ~10 truyện — trần thật của
-        web anon là ~25-30 sách/đợt; tên truyện mã hóa PUA → decode bằng bảng tĩnh."""
+        """Discovery fanqie — 2 tầng:
+        1. API nội bộ web `/api/rank/list?type={0,1,2}`: JSON sạch, tên KHÔNG mã hóa
+           (mỗi type một bảng ~7-10 sách; type ≥3 rỗng). Ưu tiên vì dữ liệu giàu.
+        2. HTML server-render `/rank/{0,1,2}` + trang chủ: tên mã hóa PUA → decode
+           bằng bảng tĩnh; dùng bù những sách API không có.
+        Trần thật của web ẩn danh ~48 truyện độc lập/đợt (đã đếm thực tế 2026-08-23);
+        sâu hơn cần API di động có ký số — không đáng."""
         out: dict[str, NovelMeta] = {}
-        order = 0
+
+        def _add(bid: str, title: str) -> None:
+            title = title.strip()
+            if bid and bid not in out and 2 <= len(title) <= 60:
+                out[bid] = NovelMeta(
+                    source_novel_id=bid,
+                    source_url=f"{self.base_url}/page/{bid}",
+                    title_zh=title,
+                )
+
+        for t in range(3):
+            try:
+                data = json.loads(self._get(f"/api/rank/list?type={t}"))
+                for b in ((data.get("data") or {}).get("list") or []):
+                    _add(str(b.get("bookId") or ""), b.get("bookName") or "")
+            except Exception:
+                log.warning("%s: không lấy được api/rank/list type=%s", self.name, t)
         for path in ("/rank/1", "/rank/0", "/rank/2", "/"):
             try:
                 html = self._get(path)
@@ -139,16 +159,7 @@ class FanqieAdapter(SourceAdapter):
                 continue
             for bid, raw_title in re.findall(
                     r'href="/page/(\d+)"[^>]*>([^<]{2,60})</a>', html):
-                if bid in out:
-                    continue
-                title = unescape(raw_title).translate(self._translate).strip()
-                if not 2 <= len(title) <= 60:
-                    continue
-                out[bid] = NovelMeta(
-                    source_novel_id=bid,
-                    source_url=f"{self.base_url}/page/{bid}",
-                    title_zh=title,
-                )
+                _add(bid, unescape(raw_title).translate(self._translate))
         return [(m.source_novel_id, i) for i, m in enumerate(out.values())][:limit]
 
     def fetch_novel_meta(self, source_novel_id: str) -> NovelMeta:

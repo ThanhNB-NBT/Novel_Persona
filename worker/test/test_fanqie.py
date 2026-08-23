@@ -91,14 +91,20 @@ def main() -> None:
         fq.log.warning = orig
     assert len(warned) == 1
 
-    # --- ranking /rank/{1,0}: server-render, tên truyện mã hóa PUA → decode bằng bảng
+    # --- ranking: API JSON (tên sạch) trước, HTML server-render (PUA) bù sau
+    api_json = json.dumps({"data": {"list": [
+        {"bookId": "90003", "bookName": "API sách"},
+        {"bookId": "90002", "bookName": "十日终焉"},
+    ]}}, ensure_ascii=False)
     rank_html = (
         '<a href="/page/90002">十日终焉</a>'
         '<a href="/page/90001">\ue521\ue55a</a>'                  # 我们 (PUA phẳng như thật)
         '<a href="/page/90003"></a>'                              # rỗng → bỏ
-        '<a href="/page/90001">dup</a>')                          # trùng → bỏ
+        '<a href="/page/90004">HTML sách</a>')
     def rank_get(p):
-        assert p in ("/rank/1", "/rank/0")
+        if p.startswith("/api/rank/list"):
+            return api_json
+        assert p in ("/rank/1", "/rank/0", "/rank/2", "/")
         return rank_get.html
 
     # thay thế escape thành ký tự PUA thật 1 lần lúc init
@@ -108,9 +114,9 @@ def main() -> None:
     a3._get = rank_get
     ranked = a3.fetch_ranking(10)
     ids = [bid for bid, _rank in ranked]
-    assert ids == ["90002", "90001"], ranked  # 90003 rỗng bị loại, 90001 dedupe
+    # API cho 90003/90002; HTML bù 90001 (PUA decode) + 90004; 90002 trùng giữ lần đầu
+    assert ids == ["90003", "90002", "90001", "90004"], ranked
     # tên của 90001 đã decode từ PUA thành "我们"
-    titles = dict(a3.fetch_ranking(10))  # (bid, rank) — cần meta? kiểm tra qua bảng dịch
     raw_title = unescape("\ue521\ue55a")
     assert raw_title.translate(a3._translate) == "我们"
 
