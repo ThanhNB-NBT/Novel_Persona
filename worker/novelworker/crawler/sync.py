@@ -375,91 +375,119 @@ def _mark_candidate(row_id: int, status: str, **fields) -> None:
     db.sb().table("crawl_candidates").update(fields).eq("id", row_id).execute()
 
 
-def process_discovery_candidates(adapter: SourceAdapter, max_new: int = 10) -> None:
-    """Rút hàng đợi bền vững; tối đa 2× quota lần kiểm tra để không hammer nguồn."""
+def process_discovery_candidates(adapter: SourceAdapter, max_new: int = 10,
+                                 refills: int = 6) -> None:
+    """Rút hàng đợi ứng viên và kiểm tra tới khi ĐỦ quota. Hết ứng viên mà chưa đủ thì
+    ĐÀO THÊM: gọi lại các pool discovery — frontier tự đi sâu trang kế, ứng viên mới
+    nạp vào queue — thay vì bỏ qua nguồn khi chưa đủ số (hành vi cũ: pool 20 ứng viên
+    lọc thể loại rớt nửa là về tay 9, đợi chu kỳ sau 45 phút).
+
+    Trần `refills` lần đào + trần 8 lỗi liên tiếp giữ nhịp lịch sự với nguồn; pool
+    quét lại trang cũ chỉ cho ứng viên đã done/rejected (không nằm trong hàng đợi
+    pending) → đào cạn thật thì vòng lặp tự dừng."""
     sid = _source_id(adapter)
-    rows = _candidate_batch(sid, max_new * 2)
-    if not rows:
-        return
-    known = _existing_novels(sid, [r["source_novel_id"] for r in rows])
+    known: dict = {}
     bl_ids, bl_keys = _blacklist(sid)
-    added = checked = 0
-    consec_fail = 0
-    for row in rows:
-        if added >= max_new:
-            break
-        source_novel_id = row["source_novel_id"]
-        if source_novel_id in known:
-            _mark_candidate(row["id"], "done")
+    added = checked = consec_fail = 0
+    refill = 0
+    while added < max_new and refill <= refills:
+        rows = _candidate_batch(sid, (max_new - added) * 2)
+        if not rows:
+            if refill >= refills:
+                break  # đào cạn thật sự — nguồn hết truyện mới đạt chuẩn
+            refill += 1
+            log.info("Discovery %s: mới %d/%d — đào thêm lần %d",
+                     adapter.name, added, max_new, refill)
+            try:
+                discover_ranking(adapter, max_new=max_new)
+            except Exception:
+                log.exception("Discovery ranking %s lỗi khi đào thêm", adapter.name)
+            for method, lbl in (("fetch_recommended", "Recommended"),
+                                ("fetch_top", "Top"),
+                                ("fetch_completed", "Completed"),
+                                ("fetch_latest", "Latest")):
+                try:
+                    discover_pool(adapter, method, lbl)
+                except Exception:
+                    log.exception("Discovery pool %s/%s lỗi khi đào thêm",
+                                  adapter.name, lbl)
             continue
-        if source_novel_id in bl_ids or (sid, source_novel_id) in _genre_skipped:
-            _mark_candidate(row["id"], "rejected")
-            continue
-        checked += 1
-        try:
-            meta = adapter.fetch_novel_meta(source_novel_id)
-        except SourceBlocked as exc:
-            # Chặn theo IP là lỗi của CHU KỲ, không phải của truyện: giữ candidate
-            # pending nguyên trạng, dừng ngay để không nuôi mức chặn.
-            log.warning("Discovery queue %s: %s — dừng chu kỳ này", adapter.name, exc)
-            break
-        except Exception as exc:
-            consec_fail += 1
-            retry = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
-            _mark_candidate(row["id"], "failed", attempts=(row.get("attempts") or 0) + 1,
-                            retry_after=retry, last_error=str(exc)[:500])
-            log.warning("Discovery queue %s: lỗi %s — %s", adapter.name, source_novel_id, exc)
-            if consec_fail >= 8:
-                log.warning("Discovery queue %s: 8 lỗi liên tiếp, dừng để tránh bị chặn",
-                            adapter.name)
+        for row in rows:
+            if added >= max_new:
                 break
-            time.sleep(1.0)
-            continue
-        consec_fail = 0
-        if row.get("status_hint") == "completed":
-            meta.status = "completed"
-        if _skip_by_source_policy(adapter, meta):
-            retry = (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()
-            _mark_candidate(row["id"], "too_short", attempts=(row.get("attempts") or 0) + 1,
-                            free_chapter_count=meta.chapter_count, retry_after=retry,
+            source_novel_id = row["source_novel_id"]
+            if source_novel_id in known:
+                _mark_candidate(row["id"], "done")
+                continue
+            if source_novel_id in bl_ids or (sid, source_novel_id) in _genre_skipped:
+                _mark_candidate(row["id"], "rejected")
+                continue
+            checked += 1
+            try:
+                meta = adapter.fetch_novel_meta(source_novel_id)
+            except SourceBlocked as exc:
+                # Chặn theo IP là lỗi của CHU KỲ, không phải của truyện: giữ candidate
+                # pending nguyên trạng, dừng ngay để không nuôi mức chặn.
+                log.warning("Discovery queue %s: %s — dừng chu kỳ này", adapter.name, exc)
+                return
+            except Exception as exc:
+                consec_fail += 1
+                retry = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
+                _mark_candidate(row["id"], "failed", attempts=(row.get("attempts") or 0) + 1,
+                                retry_after=retry, last_error=str(exc)[:500])
+                log.warning("Discovery queue %s: lỗi %s — %s", adapter.name, source_novel_id, exc)
+                if consec_fail >= 8:
+                    log.warning("Discovery queue %s: 8 lỗi liên tiếp, dừng để tránh bị chặn",
+                                adapter.name)
+                    return
+                time.sleep(1.0)
+                continue
+            consec_fail = 0
+            if row.get("status_hint") == "completed":
+                meta.status = "completed"
+            if _skip_by_source_policy(adapter, meta):
+                retry = (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()
+                _mark_candidate(row["id"], "too_short", attempts=(row.get("attempts") or 0) + 1,
+                                free_chapter_count=meta.chapter_count, retry_after=retry,
+                                last_error=None)
+                continue
+            if _skip_by_genre(sid, meta):
+                _mark_candidate(row["id"], "rejected")
+                continue
+            key = dedup_key(meta.title_zh, meta.author_zh)
+            if key in bl_keys:
+                _mark_candidate(row["id"], "rejected")
+                continue
+            novel = db.upsert_novel({
+                "source_id": sid,
+                "source_novel_id": meta.source_novel_id,
+                "source_url": meta.source_url,
+                "title_zh": meta.title_zh,
+                "author_zh": meta.author_zh,
+                "cover_url": meta.cover_url,
+                "description_zh": meta.description_zh,
+                "genres": meta.genres_zh,
+                "word_count": meta.word_count,
+                "source_stats": meta.stats or None,
+                "status": meta.status,
+                "dedup_key": key,
+                "last_chapter_at": meta.last_chapter_at.isoformat() if meta.last_chapter_at else None,
+                "updated_at": db.utc_now(),
+            })
+            known[source_novel_id] = novel
+            recompute_canonical(key)
+            _cache_cover_and_update(adapter, novel["id"], meta.cover_url)
+            queued = _queue_canonical_work(
+                adapter, novel, meta, prio_meta=8 if meta.status == "completed" else 10)
+            _mark_candidate(row["id"], "done", attempts=(row.get("attempts") or 0) + 1,
+                            free_chapter_count=meta.chapter_count, retry_after=None,
                             last_error=None)
-            continue
-        if _skip_by_genre(sid, meta):
-            _mark_candidate(row["id"], "rejected")
-            continue
-        key = dedup_key(meta.title_zh, meta.author_zh)
-        if key in bl_keys:
-            _mark_candidate(row["id"], "rejected")
-            continue
-        novel = db.upsert_novel({
-            "source_id": sid,
-            "source_novel_id": meta.source_novel_id,
-            "source_url": meta.source_url,
-            "title_zh": meta.title_zh,
-            "author_zh": meta.author_zh,
-            "cover_url": meta.cover_url,
-            "description_zh": meta.description_zh,
-            "genres": meta.genres_zh,
-            "word_count": meta.word_count,
-            "source_stats": meta.stats or None,
-            "status": meta.status,
-            "dedup_key": key,
-            "last_chapter_at": meta.last_chapter_at.isoformat() if meta.last_chapter_at else None,
-            "updated_at": db.utc_now(),
-        })
-        known[source_novel_id] = novel
-        recompute_canonical(key)
-        _cache_cover_and_update(adapter, novel["id"], meta.cover_url)
-        queued = _queue_canonical_work(
-            adapter, novel, meta, prio_meta=8 if meta.status == "completed" else 10)
-        _mark_candidate(row["id"], "done", attempts=(row.get("attempts") or 0) + 1,
-                        free_chapter_count=meta.chapter_count, retry_after=None,
-                        last_error=None)
-        if queued:
-            added += 1
-        time.sleep(1.0)
-    log.info("Discovery queue %s: kiểm tra %d/%d, nhận %d/%d",
-             adapter.name, checked, len(rows), added, max_new)
+            if queued:
+                added += 1
+            time.sleep(1.0)
+    log.info("Discovery queue %s: kiểm tra %d, nhận %d/%d%s",
+             adapter.name, checked, added, max_new,
+             f" (đào thêm {refill} lần)" if refill else "")
 
 
 def discover_ranking(adapter: SourceAdapter, max_new: int = 30) -> None:
