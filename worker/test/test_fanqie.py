@@ -21,7 +21,7 @@ BOOK_STATE = {
     "page": {
         "bookName": "十日终焉", "author": "杀虫队队员",
         "abstract": "24年番茄年度巅峰榜TOP1",
-        "thumbUrl": "https://p9.example/cover.jpg",
+        "thumbUrl": "https://p3-novel-sign.example/novel-pic/abc~tplv-resize:225:300.image",
         "categoryV2": '[{"Name": "悬疑脑洞"}, {"Name": "环环相扣"}]',
         "wordNumber": 3201288, "chapterTotal": 3, "readCount": 12345,
         "lastChapterItemId": "333",
@@ -51,7 +51,8 @@ def main() -> None:
     assert m.title_zh == "十日终焉" and m.author_zh == "杀虫队队员"
     assert m.genres_zh == ["悬疑脑洞", "环环相扣"]
     assert m.chapter_count == 3 and m.word_count == 3201288
-    assert m.cover_url.endswith("cover.jpg")
+    # host CDN p3 hỏng → phải được ép về p9 để cache_cover tải được bìa
+    assert m.cover_url.startswith("https://p9-novel-sign.example/"), m.cover_url
 
     # mục lục: đảo mới-nhất-trước → 1→N
     refs = a.fetch_chapter_list("7143038691944959011")

@@ -139,12 +139,17 @@ class FanqieAdapter(SourceAdapter):
                 pass
         if not genres and p.get("category"):
             genres = [str(p["category"])]
+        cover = p.get("thumbUrl")
+        if cover:
+            # CDN host p3 hay chặn/timeout (cả VPS lẫn máy dân dụng), p9 ổn định
+            # → ép về p9 để cache_cover tải được bìa về Storage.
+            cover = re.sub(r"//p\d+(-novel-sign)\.", r"//p9\1.", str(cover))
         return NovelMeta(
             source_novel_id=source_novel_id,
             source_url=f"{self.base_url}/page/{source_novel_id}",
             title_zh=title,
             author_zh=p.get("author"),
-            cover_url=p.get("thumbUrl"),
+            cover_url=cover,
             description_zh=p.get("abstract") or p.get("description"),
             genres_zh=genres,
             status="ongoing",  # fanqie không lộ cờ hoàn thành đáng tin trên web
