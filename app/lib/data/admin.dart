@@ -261,6 +261,20 @@ final hostMetricsProvider = FutureProvider.autoDispose<List<Rec>>((ref) async =>
 Future<void> deleteHostMetrics(String host) =>
     sb.from('host_metrics').delete().eq('host', host);
 
+/// Lệnh quản lí gần đây (mọi host) — tab Theo dõi VPS hiển thị lịch sử.
+final hostCommandsProvider = FutureProvider.autoDispose<List<Rec>>((ref) async =>
+    List<Rec>.from(await sb
+        .from('host_commands')
+        .select('id, host, command, status, output, created_at')
+        .order('created_at', ascending: false)
+        .limit(10)));
+
+/// Chèn lệnh vào hàng đợi — worker trên host tương ứng nhận thực thi trong ~10s.
+/// Whitelist phía worker: restart | restart_crawler | restart_translator.
+Future<void> sendHostCommand(String host, String command, {String? by}) =>
+    sb.from('host_commands')
+        .insert({'host': host, 'command': command, 'created_by': by});
+
 /// Nhãn/địa chỉ hiển thị của 1 host — lưu worker_settings để chỉnh từ app mà không
 /// đụng DB schema (key có gắn hostname nên nhiều host không giẫm nhau).
 String _vpsKey(String host, String field) => 'vps_${field}_$host';

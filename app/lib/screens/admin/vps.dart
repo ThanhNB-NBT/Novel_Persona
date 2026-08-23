@@ -77,6 +77,8 @@ class _VpsMonitorScreenState extends ConsumerState<VpsMonitorScreen> {
                   _HostCard(h),
                   const SizedBox(height: 4),
                 ],
+                const SizedBox(height: 12),
+                _CommandsHistory(),
               ],
             );
           },
@@ -164,6 +166,17 @@ class _HostCard extends ConsumerWidget {
               tooltip: 'Sửa nhãn / địa chỉ hiển thị',
               icon: const Icon(Icons.edit_outlined, size: 17),
               onPressed: () => _editLabels(context, ref, h),
+            ),
+            PopupMenuButton<String>(
+              tooltip: 'Quản lí: khởi động lại worker',
+              icon: Icon(Icons.settings_power_rounded,
+                  size: 18, color: cs.primary),
+              onSelected: (cmd) => _sendRestart(context, ref, host, cmd),
+              itemBuilder: (_) => const [
+                PopupMenuItem(value: 'restart', child: Text('Khởi động lại toàn bộ worker')),
+                PopupMenuItem(value: 'restart_crawler', child: Text('Chỉ crawler')),
+                PopupMenuItem(value: 'restart_translator', child: Text('Chỉ translator')),
+              ],
             ),
             IconButton(
               tooltip: 'Xoá dòng này (host cũ/không còn dùng)',
@@ -267,6 +280,39 @@ class _HostCard extends ConsumerWidget {
     }
   }
 
+  Future<void> _sendRestart(
+      BuildContext context, WidgetRef ref, String host, String command) async {
+    final labels = {
+      'restart': 'toàn bộ worker',
+      'restart_crawler': 'crawler',
+      'restart_translator': 'translator',
+    };
+    final messenger = ScaffoldMessenger.of(context); // bắt trước async gap
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Khởi động lại?'),
+        content: Text('Gửi lệnh restart ${labels[command]} cho host $host?\n\n'
+            'Worker nhận lệnh trong ~10 giây. Người đang đọc có thể bị ngắt '
+            'giữa chương — chỉ làm khi bị treo.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Huỷ')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Gửi lệnh')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await sendHostCommand(host, command);
+      if (!context.mounted) return;
+      ref.invalidate(hostCommandsProvider);
+      messenger.showSnackBar(SnackBar(
+          content: Text('Đã gửi lệnh — worker nhận trong ~10 giây')));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Lỗi gửi lệnh: $e')));
+    }
+  }
+
   Future<void> _confirmDelete(BuildContext context, WidgetRef ref, String host) async {
     final ok = await showDialog<bool>(
       context: context,
@@ -285,5 +331,63 @@ class _HostCard extends ConsumerWidget {
       await deleteHostMetrics(host);
       ref.invalidate(hostMetricsProvider);
     }
+  }
+}
+
+/// Lịch sử lệnh quản lí gần đây (mọi host): lệnh gì, lúc nào, trạng thái thực thi.
+class _CommandsHistory extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = Theme.of(context).textTheme;
+    final cs = Theme.of(context).colorScheme;
+    final cmds = ref.watch(hostCommandsProvider).value ?? const <Rec>[];
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text('LỆNH GẦN ĐÂY', style: t.labelSmall?.copyWith(
+            letterSpacing: 1.5, color: cs.onSurfaceVariant)),
+        const SizedBox(height: 8),
+        if (cmds.isEmpty)
+          Text('Chưa có lệnh nào được gửi.',
+              style: t.labelSmall?.copyWith(color: cs.onSurfaceVariant))
+        else
+          Container(
+            decoration: BoxDecoration(
+              color: cs.surface,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.7)),
+            ),
+            child: Column(children: [
+              for (final (i, c) in cmds.indexed) ...[
+                if (i > 0) Divider(height: 1, color: cs.outlineVariant.withValues(alpha: 0.5)),
+                ListTile(
+                  dense: true,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+                  leading: Icon(_statusIcon('${c['status']}'),
+                      size: 16, color: _statusColor(context, '${c['status']}')),
+                  title: Text('${c['command']}',
+                      style: monoStyle(context, size: 11.5)),
+                  subtitle: Text(
+                      '${c['host']} · ${elapsed(c['created_at'])} trước'
+                      '${'${c['output'] ?? ''}'.isNotEmpty ? ' · ${c['output']}' : ''}',
+                      maxLines: 1, overflow: TextOverflow.ellipsis,
+                      style: t.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
+                ),
+              ],
+            ]),
+          ),
+      ]),
+    );
+  }
+
+  IconData _statusIcon(String s) => switch (s) {
+        'done' => Icons.check_circle_outline_rounded,
+        'error' || 'running' => Icons.error_outline_rounded,
+        _ => Icons.schedule_rounded,
+      };
+
+  Color _statusColor(BuildContext context, String s) {
+    final cs = Theme.of(context).colorScheme;
+    return switch (s) { 'done' => kLive, 'error' => cs.error, _ => cs.onSurfaceVariant };
   }
 }
