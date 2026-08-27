@@ -527,6 +527,11 @@ def discover_ranking(adapter: SourceAdapter, max_new: int = 30) -> None:
         scanned += 1
         try:
             meta = adapter.fetch_novel_meta(source_novel_id)
+        except SourceBlocked as e:
+            # Chặn IP: thử tiếp 7 truyện nữa mới nhận ra thì đã đốt 7 request vô ích.
+            blocked = True
+            log.warning("Ranking %s: %s — dừng thêm mới", adapter.name, e)
+            continue
         except Exception as e:
             consec_fail += 1
             if isinstance(e, ValueError):
@@ -993,6 +998,11 @@ def refresh_canonical_updates(adapter: SourceAdapter, limit: int) -> None:
                 db.sb().table("novels").update(
                     {"hidden": True}, returning="minimal").eq("id", nv["id"]).execute()
                 log.info("Refresh: ẩn truyện %s vì %s", nv["id"], e)
+        except SourceBlocked as e:
+            # Chặn theo IP là lỗi của CHU KỲ, không của truyện: soi tiếp 4 truyện nữa chỉ
+            # tốn request và nuôi mức chặn. Dừng luôn, chu kỳ sau thử lại.
+            log.warning("Refresh %s: %s — bỏ vòng này", adapter.name, e)
+            break
         except Exception as e:
             fail_streak += 1
             # traceback 1 lần là đủ hiểu; nguồn sập thì 45 traceback giống hệt chỉ làm rác log
