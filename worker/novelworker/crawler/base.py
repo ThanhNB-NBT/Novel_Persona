@@ -164,7 +164,26 @@ class SourceAdapter(ABC):
         proxies = {"http": proxy, "https": proxy} if proxy.startswith(
             ("http://", "https://", "socks5://")) else None
         # timeout đặt PER-REQUEST (_TIMEOUT tuple) thay vì cứng ở Session để tách connect/read
-        self._session = cffi_requests.Session(impersonate="chrome", proxies=proxies)
+        self._session_kwargs = {"impersonate": "chrome", "proxies": proxies}
+        self._session_headers: dict[str, str] = {}
+        self._local = threading.local()
+
+    @property
+    def _session(self):
+        """MỖI LUỒNG một Session. curl_cffi.Session bọc một curl handle, KHÔNG an toàn
+        đa luồng: pool prefetch 3 luồng (sync._fetch_chapters) xài chung 1 session làm
+        body về cụt — chương chỉ còn ~160 ký tự, trang fanqie mất __INITIAL_STATE__,
+        trang faloo mất <h1> → cả 2 nguồn fail sạch mỗi chu kỳ (27/08)."""
+        s = getattr(self._local, "session", None)
+        if s is None:
+            s = cffi_requests.Session(**self._session_kwargs)
+            s.headers.update(self._session_headers)
+            self._local.session = s
+        return s
+
+    @_session.setter
+    def _session(self, value) -> None:
+        self._local.session = value  # test tiêm session giả
 
     def reset_health_counters(self) -> None:
         self.fetch_ok = self.fetch_err = 0
@@ -196,9 +215,22 @@ class SourceAdapter(ABC):
                 r = self._session.get(url, timeout=_TIMEOUT)
                 status = getattr(r, "status_code", None)
                 r.raise_for_status()
+                if not r.content.strip():
+                    # HTTP 200 + body RỖNG = chặn mềm theo IP, không phải trang hỏng.
+                    # Fanqie 27/08: hai session khác nhau cùng chuyển sang 200/0-byte
+                    # đúng một giây → không phải lỗi session hay đa luồng. Vì là 200 nên
+                    # raise_for_status im lặng, adapter mới vỡ ở tận nơi parse với thông
+                    # báo lạc đề ("không thấy __INITIAL_STATE__") và cả chu kỳ đánh oan
+                    # hàng chục truyện thành failed.
+                    raise SourceBlocked(
+                        f"{self.name}: HTTP 200 nhưng body rỗng ({url}) — nhiều khả năng bị chặn IP")
                 self.fetch_ok += 1
                 _record_fetch(self.name, time.monotonic() - t0)  # P2b-0: đo request OK
                 return r.content.decode(self.encoding, "ignore")
+            except SourceBlocked:
+                self.fetch_err += 1
+                _record_fetch(self.name, None)
+                raise  # chặn IP: retry chỉ nuôi mức chặn, để caller bỏ vòng
             except Exception as e:
                 last = e
                 resp = getattr(e, "response", None)
@@ -248,9 +280,16 @@ class SourceAdapter(ABC):
                 if status == 304:
                     return None, etag, last_modified
                 r.raise_for_status()
+                if not r.content.strip():
+                    raise SourceBlocked(  # xem _get: 200 body rỗng = chặn IP
+                        f"{self.name}: HTTP 200 nhưng body rỗng ({url}) — nhiều khả năng bị chặn IP")
                 h = r.headers
                 return (r.content.decode(self.encoding, "ignore"),
                         h.get("etag"), h.get("last-modified"))
+            except SourceBlocked:
+                self.fetch_err += 1
+                self.fetch_ok -= 1  # đã cộng lạc quan phía trên, body rỗng thì trả lại
+                raise
             except Exception as e:
                 last_exc = e
                 resp = getattr(e, "response", None)

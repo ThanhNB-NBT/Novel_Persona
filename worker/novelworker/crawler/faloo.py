@@ -121,7 +121,8 @@ class FalooAdapter(SourceAdapter):
         if not title_match:
             if _blocked(html):
                 raise SourceBlocked(f"Faloo chặn IP (trang 系统提示) khi đọc metadata {source_novel_id}")
-            raise ValueError(f"Faloo WAP và desktop đều thiếu metadata {source_novel_id}")
+            raise ValueError(f"Faloo WAP và desktop đều thiếu metadata {source_novel_id} "
+                             f"(body desktop {len(html)} ký tự)")
 
         def meta_value(name: str) -> str | None:
             match = re.search(

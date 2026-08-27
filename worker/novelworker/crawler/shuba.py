@@ -42,8 +42,8 @@ class ShubaAdapter(SourceAdapter):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         # /txt/ trả 403 nếu thiếu Referer (kiểm chứng live 2026-07-25) — gắn 1 lần cho
-        # cả session thay vì truyền header từng request.
-        self._session.headers["Referer"] = f"{self.base_url}/"
+        # mọi session thay vì truyền header từng request (session tạo theo LUỒNG, xem base).
+        self._session_headers["Referer"] = f"{self.base_url}/"
 
     def _novel_url(self, book_id: str) -> str:
         return self.config.get("novel_path", "/book/{book_id}.htm").format(book_id=book_id)

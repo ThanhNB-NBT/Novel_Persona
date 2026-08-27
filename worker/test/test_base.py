@@ -1,4 +1,5 @@
 """Parser Retry-After (P3) + gom latency (P2b-0) — nhánh nhỏ chi phối backoff/đo, giữ check."""
+import pytest
 from novelworker.crawler import base
 from novelworker.crawler.base import _is_transient_status, _record_fetch, _retry_after_seconds
 
@@ -41,3 +42,29 @@ def test_record_fetch_accumulates_then_resets(monkeypatch):
     src, n, ok, _p50, _p95, mx, timeouts, r429 = written[0]
     assert (src, n, ok, timeouts, r429) == ("t", base._STATS_EVERY, base._STATS_EVERY - 1, 1, 0)
     assert mx == 1.0
+
+
+def test_empty_200_body_is_blocked_not_success(monkeypatch):
+    """Fanqie 27/08 trả HTTP 200 body 0 byte khi chặn IP. Trước đây _get coi là thành
+    công → adapter vỡ ở nơi parse và cả chu kỳ đánh oan hàng chục truyện thành failed."""
+    from novelworker.crawler.base import SourceBlocked
+    from novelworker.crawler.biquge import BiqugeAdapter
+
+    a = BiqugeAdapter(base_url="https://ex.com", config={"novel_path": "/b/{book_id}/"},
+                      source_row={"name": "ex"})
+    calls = []
+
+    class _R:
+        status_code = 200
+        content = b"  \n "
+        headers: dict = {}
+
+        def raise_for_status(self):
+            pass
+
+    a._session = type("S", (), {"get": staticmethod(
+        lambda *args, **kw: (calls.append(1), _R())[1])})()
+    with pytest.raises(SourceBlocked):
+        a._get("/b/1/")
+    assert len(calls) == 1        # chặn IP: KHÔNG retry, retry chỉ nuôi mức chặn
+    assert a.fetch_ok == 0        # và không được tính là fetch khỏe

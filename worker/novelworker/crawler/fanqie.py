@@ -57,7 +57,10 @@ class FanqieAdapter(SourceAdapter):
         html = self._get(path)
         m = _STATE_RE.search(html)
         if not m:
-            raise ValueError(f"{self.name}: không thấy __INITIAL_STATE__ tại {path}")
+            # Kèm cỡ body: "thiếu state" mà body cụt = lỗi phía ta (session dùng chung
+            # đa luồng), body đủ dài = fanqie đổi trang / chặn. Phân biệt được ngay từ log.
+            raise ValueError(f"{self.name}: không thấy __INITIAL_STATE__ tại {path} "
+                             f"(body {len(html)} ký tự)")
         start = html.index("{", m.end())
         end = html.find("</script>", start)
         seg = _UNDEFINED_RE.sub("null", html[start:end if end != -1 else len(html)])
