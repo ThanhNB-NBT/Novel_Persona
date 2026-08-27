@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Gác Truyện — Tải ứng dụng</title>
+<meta name="description" content="Ứng dụng đọc truyện dịch Gác Truyện. Tải bản mới nhất cho Android và iOS.">
+<style>
+:root{
+  --bg:#0d1520; --card:#152233; --line:#24374f;
+  --fg:#e8eef6; --muted:#8fa3ba; --accent:#4fd1c5; --accent-ink:#06302c;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);
+  font-family:"Plus Jakarta Sans",system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  display:flex;flex-direction:column;align-items:center;
+  padding:48px 20px;min-height:100vh}
+h1{font-size:2.2rem;margin:0 0 8px;letter-spacing:-.02em}
+.sub{color:var(--muted);margin:0 0 36px;text-align:center}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;
+  padding:28px;width:100%;max-width:440px}
+.ver{display:flex;justify-content:space-between;align-items:baseline;
+  padding-bottom:16px;margin-bottom:20px;border-bottom:1px solid var(--line)}
+.tag{font-size:1.35rem;font-weight:700}
+.date{color:var(--muted);font-size:.85rem}
+a.dl{display:flex;justify-content:space-between;align-items:center;gap:12px;
+  background:var(--accent);color:var(--accent-ink);text-decoration:none;
+  padding:14px 18px;border-radius:10px;font-weight:700;margin-bottom:10px}
+a.dl.alt{background:transparent;color:var(--fg);border:1px solid var(--line)}
+a.dl:hover{opacity:.9}
+.size{font-weight:500;font-size:.85rem;opacity:.75}
+.note{color:var(--muted);font-size:.82rem;line-height:1.6;margin-top:20px}
+.err{color:#f6a5a5}
+</style>
+</head>
+<body>
+<h1>Gác Truyện</h1>
+<p class="sub">Ứng dụng đọc truyện dịch</p>
+<div class="card" id="app">Đang tải bản phát hành…</div>
+
+<script>
+const REPO = "ThanhNB-NBT/Novel_Persona";
+const mb = b => (b / 1048576).toFixed(1) + " MB";
+
+fetch(`https://api.github.com/repos/${REPO}/releases/latest`)
+  .then(r => r.ok ? r.json() : Promise.reject(r.status))
+  .then(rel => {
+    const find = ext => rel.assets.find(a => a.name.toLowerCase().endsWith(ext));
+    const row = (asset, label, alt) => asset
+      ? `<a class="dl${alt ? " alt" : ""}" href="${asset.browser_download_url}">
+           <span>${label}</span><span class="size">${mb(asset.size)}</span></a>`
+      : "";
+    document.getElementById("app").innerHTML = `
+      <div class="ver">
+        <span class="tag">${rel.tag_name}</span>
+        <span class="date">${new Date(rel.published_at).toLocaleDateString("vi-VN")}</span>
+      </div>
+      ${row(find(".apk"), "Tải cho Android", false)}
+      ${row(find(".ipa"), "Tải cho iPhone", true)}
+      <p class="note">
+        <b>Android:</b> mở file APK, nếu máy hỏi thì cho phép cài từ nguồn này.<br>
+        <b>iPhone:</b> file IPA cần SideStore hoặc AltStore để cài,
+        xem hướng dẫn trong repo.
+      </p>`;
+  })
+  .catch(() => {
+    document.getElementById("app").innerHTML =
+      `<p class="err">Không tải được thông tin bản phát hành.</p>
+       <a class="dl alt" href="https://github.com/${REPO}/releases/latest">Mở trang phát hành trên GitHub</a>`;
+  });
+</script>
+</body>
+</html>
