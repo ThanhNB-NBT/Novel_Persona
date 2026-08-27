@@ -45,8 +45,14 @@ class Settings(BaseSettings):
     # Nhiều model cách nhau dấu phẩy = chuỗi dự phòng, con đầu treo thì thử con kế NGAY
     # trong cùng job (xem build_chain). Model THẬT chỉnh ở app (worker_settings.llm_model,
     # worker đọc mỗi 60s) — hằng số dưới CHỈ là fallback khi không đọc được DB.
-    nvidia_model: str = ("meta/llama-3.1-70b-instruct,minimaxai/minimax-m3,"
-                         "nvidia/llama-3.3-nemotron-super-49b-v1")
+    # 2026-08-26: NVIDIA khai tử llama-3.1-70b + nemotron-super-49b cùng ngày (410 Gone)
+    # → chain chết sạch, job metadata retry vô hạn. Chấm lại trên prompt thật:
+    #   gemma-4-31b-it     19s  JSON sạch, tên chuẩn (Tô Uyển Nhi, sư tỷ/sư đệ)  ← chọn
+    #   gpt-oss-120b        8s  nhanh nhất nhưng sai tên (Tô Oán Nhi, "sư chi")
+    #   nemotron-3-*            rò suy luận "We need to output JSON..." → parse hỏng
+    #   mistral-nemotron        timeout >180s
+    nvidia_model: str = ("google/gemma-4-31b-it,openai/gpt-oss-120b,"
+                         "minimaxai/minimax-m3")
     # Pacing theo từng API key, thấp hơn trần NVIDIA 40 RPM để chừa biên đồng hồ/retry.
     nvidia_rpm_limit: int = Field(default=30, ge=1, le=39)
 
