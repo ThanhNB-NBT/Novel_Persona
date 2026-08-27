@@ -13,7 +13,8 @@ from novelworker.crawler.base import SourceTransient
 class _Resp:
     def __init__(self, ok: bool):
         self._ok = ok
-        self.content = b"<html>x</html>"
+        # đủ dài để không bị _is_stub_body coi là trang chặn mềm
+        self.content = b"<html>" + b"x" * 300 + b"</html>"
 
     def raise_for_status(self):
         if not self._ok:

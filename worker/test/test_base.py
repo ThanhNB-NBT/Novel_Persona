@@ -68,3 +68,15 @@ def test_empty_200_body_is_blocked_not_success(monkeypatch):
         a._get("/b/1/")
     assert len(calls) == 1        # chặn IP: KHÔNG retry, retry chỉ nuôi mức chặn
     assert a.fetch_ok == 0        # và không được tính là fetch khỏe
+
+
+def test_stub_body_detection():
+    """Chặn mềm: fanqie trả 0 byte, faloo trả stub ~55 byte. Nhưng JSON ngắn (feed
+    fanqie hết trang) là câu trả lời hợp lệ — không được coi là bị chặn."""
+    from novelworker.crawler.base import _is_stub_body
+    assert _is_stub_body(b"")
+    assert _is_stub_body(b"   \n ")
+    assert _is_stub_body(b"<html><head><title>error</title></head><body></body></html>")
+    assert not _is_stub_body(b'{"data":{"book_list":[]}}')          # feed hết trang
+    assert not _is_stub_body(b"[]")
+    assert not _is_stub_body(b"<html>" + b"x" * 300 + b"</html>")   # trang thật

@@ -49,13 +49,15 @@ def main() -> None:
 
     # --- 200 kèm header mới → trả html + mốc mới (curl_cffi headers phân loại hoa-thường,
     # fake dùng key viết thường như thực tế server trả về)
+    _TOC_HTML = "<html>" + "toc" * 100 + "</html>"  # dài hơn ngưỡng _is_stub_body
+
     def sess_get_200(url, timeout=None, headers=None):
-        return _Resp(200, "<html>toc</html>".encode(),
+        return _Resp(200, _TOC_HTML.encode(),
                      {"etag": '"v2"', "last-modified": "Wed, 23 Aug 2026"})
 
     a._session = type("S", (), {"get": staticmethod(sess_get_200)})()
     html, e2, lm2 = a._get_if_changed("/index/77/", etag='"abc"')
-    assert html == "<html>toc</html>" and e2 == '"v2"' and lm2 == "Wed, 23 Aug 2026"
+    assert html == _TOC_HTML and e2 == '"v2"' and lm2 == "Wed, 23 Aug 2026"
 
     # --- fetch_chapter_list_conditional: 304 → None + xoá last_toc_status sót
     a.last_toc_status = "completed"  # giá trị của truyện SOI TRƯỚC

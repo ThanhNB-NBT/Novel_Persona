@@ -81,6 +81,21 @@ class ChapterUnavailable(Exception):
     crash): đánh failed nhưng log 1 dòng gọn, khỏi traceback lấp mất lỗi thật."""
 
 
+def _is_stub_body(body: bytes) -> bool:
+    """Body HTTP 200 mà cụt ngủn = trang chặn mềm, không phải nội dung thật.
+
+    Đo tận tay 27/08: fanqie chặn IP bằng 200 + 0 byte (hai session khác nhau cùng
+    chết đúng một giây → chặn ở tầng IP), faloo bằng 200 + stub ~55 byte. Vì vẫn là
+    200 nên raise_for_status im lặng, adapter mới vỡ ở tận nơi parse với thông báo
+    lạc đề và cả chu kỳ đánh oan hàng chục truyện thành failed.
+
+    Chừa JSON: feed phân trang của fanqie hết trang trả object rỗng vài chục byte —
+    đó là câu trả lời hợp lệ, không phải bị chặn.
+    """
+    body = body.strip()
+    return not body or (len(body) < 200 and body[:1] not in (b"{", b"["))
+
+
 def _is_transient_status(status: int | None) -> bool:
     return status is None or status in {401, 403, 429} or status >= 500
 
@@ -215,15 +230,10 @@ class SourceAdapter(ABC):
                 r = self._session.get(url, timeout=_TIMEOUT)
                 status = getattr(r, "status_code", None)
                 r.raise_for_status()
-                if not r.content.strip():
-                    # HTTP 200 + body RỖNG = chặn mềm theo IP, không phải trang hỏng.
-                    # Fanqie 27/08: hai session khác nhau cùng chuyển sang 200/0-byte
-                    # đúng một giây → không phải lỗi session hay đa luồng. Vì là 200 nên
-                    # raise_for_status im lặng, adapter mới vỡ ở tận nơi parse với thông
-                    # báo lạc đề ("không thấy __INITIAL_STATE__") và cả chu kỳ đánh oan
-                    # hàng chục truyện thành failed.
+                if _is_stub_body(r.content):
                     raise SourceBlocked(
-                        f"{self.name}: HTTP 200 nhưng body rỗng ({url}) — nhiều khả năng bị chặn IP")
+                        f"{self.name}: HTTP 200 nhưng body cụt {len(r.content)} byte "
+                        f"({url}) — nhiều khả năng bị chặn IP · {r.content[:120]!r}")
                 self.fetch_ok += 1
                 _record_fetch(self.name, time.monotonic() - t0)  # P2b-0: đo request OK
                 return r.content.decode(self.encoding, "ignore")
@@ -280,9 +290,10 @@ class SourceAdapter(ABC):
                 if status == 304:
                     return None, etag, last_modified
                 r.raise_for_status()
-                if not r.content.strip():
-                    raise SourceBlocked(  # xem _get: 200 body rỗng = chặn IP
-                        f"{self.name}: HTTP 200 nhưng body rỗng ({url}) — nhiều khả năng bị chặn IP")
+                if _is_stub_body(r.content):
+                    raise SourceBlocked(  # xem _is_stub_body: 200 body cụt = chặn IP
+                        f"{self.name}: HTTP 200 nhưng body cụt {len(r.content)} byte "
+                        f"({url}) — nhiều khả năng bị chặn IP · {r.content[:120]!r}")
                 h = r.headers
                 return (r.content.decode(self.encoding, "ignore"),
                         h.get("etag"), h.get("last-modified"))
