@@ -3,6 +3,17 @@
 Ứng dụng đọc tiểu thuyết mạng Trung → Việt. Repo này chứa schema Supabase + worker crawl/dịch.
 Kế hoạch tổng thể: xem `docs/ke-hoach.md`.
 
+## 📱 Tải app
+
+**<https://novel-persona.novelnbt.workers.dev>** — trang tải, tự lấy bản phát hành mới nhất
+qua GitHub API nên không phải sửa tay mỗi lần tag. Cài trực tiếp APK từ
+[Releases](https://github.com/ThanhNB-NBT/Novel_Persona/releases) cũng được; iOS thì xem
+[`app/IPHONE.md`](app/IPHONE.md).
+
+<sub>Trang do Cloudflare Workers Builds tự dựng lại mỗi lần push (thư mục `web/`) — không deploy
+tay bằng wrangler. Dịch vụ trên Cloudflare tên **`novel-persona`**, không phải tên trong
+`wrangler.jsonc`.</sub>
+
 **Dịch:** engine mặc định là **Hachimi** (model CT2 60M chạy local trên worker, không tốn token);
 LLM chỉ dùng khi truyện được ghim provider hoặc khi Hachimi fallback. Script/dataset
 fine-tune model Hachimi nằm ở `worker/hachimi_finetune/` (không đi kèm production).
