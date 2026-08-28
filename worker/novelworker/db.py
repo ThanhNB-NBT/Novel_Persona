@@ -690,7 +690,15 @@ def upload_cover(path: str, data: bytes, content_type: str) -> None:
 
 
 def cover_public_url(path: str) -> str:
-    return sb().storage.from_("covers").get_public_url(path)
+    """URL bìa để LƯU VÀO DB — phải là địa chỉ app ngoài Internet đọc được.
+    get_public_url dựng theo supabase_url, mà khi worker chạy cùng máy với Supabase thì
+    đó là địa chỉ nội bộ → phải thay bằng public_base_url, không thì bìa mới chết đường dẫn."""
+    url = sb().storage.from_("covers").get_public_url(path)
+    base = settings.public_base_url.rstrip("/")
+    internal = settings.supabase_url.rstrip("/")
+    if base and url.startswith(internal):
+        url = base + url[len(internal):]
+    return url
 
 
 # ---------- sức khoẻ nguồn ----------

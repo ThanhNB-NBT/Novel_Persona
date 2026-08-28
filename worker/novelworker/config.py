@@ -14,6 +14,11 @@ class Settings(BaseSettings):
     # Supabase
     supabase_url: str
     supabase_service_role_key: str
+    # Địa chỉ CÔNG KHAI của Supabase, dùng khi dựng URL cho app đọc (bìa truyện).
+    # Cần khi worker chạy CÙNG MÁY với Supabase: lúc đó supabase_url là địa chỉ nội bộ
+    # (http://host.docker.internal:8000) — nhanh hơn nhưng app ngoài Internet không đọc nổi.
+    # Rỗng = dùng luôn supabase_url (đúng cho bản cloud, hoặc worker ở máy khác).
+    public_base_url: str = ""
 
     # LLM — chỉ NVIDIA NIM (bỏ openrouter/fireworks 2026-07-10: fallback deepseek làm lệch giọng dịch).
     llm_provider: str = "nvidia"

@@ -21,7 +21,37 @@ class _FakeAdapter:
         return self._result
 
 
+def _check_public_url() -> None:
+    """URL bìa lưu vào DB phải là địa chỉ CÔNG KHAI. Khi worker chạy CÙNG MÁY với Supabase,
+    supabase_url là địa chỉ nội bộ — quên đổi thì bìa vẫn tải về đúng chỗ nhưng đường dẫn
+    trong DB chết, mà không có gì báo lỗi. Đúng kiểu hỏng lặng nên phải có check."""
+    from novelworker.config import settings
+
+    class _Store:
+        def get_public_url(self, path):
+            return f"{settings.supabase_url.rstrip('/')}/storage/v1/object/public/covers/{path}"
+
+    class _Client:
+        storage = type("_S", (), {"from_": staticmethod(lambda name: _Store())})()
+
+    real_sb, real_url, real_base = db.sb, settings.supabase_url, settings.public_base_url
+    db.sb = lambda: _Client()
+    try:
+        # worker cùng máy Supabase → phải thay địa chỉ nội bộ bằng địa chỉ công khai
+        settings.supabase_url = "http://host.docker.internal:8000"
+        settings.public_base_url = "https://api.120203.xyz"
+        assert db.cover_public_url("42.jpg") == (
+            "https://api.120203.xyz/storage/v1/object/public/covers/42.jpg")
+
+        # không khai public_base_url → giữ nguyên (bản cloud, hoặc worker ở máy khác)
+        settings.public_base_url = ""
+        assert db.cover_public_url("42.jpg").startswith("http://host.docker.internal:8000/")
+    finally:
+        db.sb, settings.supabase_url, settings.public_base_url = real_sb, real_url, real_base
+
+
 def main() -> None:
+    _check_public_url()   # chạy TRƯỚC, vì bên dưới thay luôn db.cover_public_url bằng hàm giả
     uploaded = {}
     db.upload_cover = lambda path, data, ctype: uploaded.update(path=path, ctype=ctype, n=len(data))
     db.cover_public_url = lambda path: f"https://x.supabase.co/storage/v1/object/public/covers/{path}"

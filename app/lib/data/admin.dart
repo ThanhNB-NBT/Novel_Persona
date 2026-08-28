@@ -19,25 +19,40 @@ final isAdminProvider = FutureProvider.autoDispose<bool>((ref) async {
 });
 
 /// Danh sách truyện cho màn quản trị — GỒM cả truyện đã ẩn.
+/// Cột tab Truyện THẬT SỰ đọc. Bỏ source_rank/meta_translated/is_canonical/updated_at:
+/// kéo về mà không ai dùng (updated_at chỉ để sắp xếp — máy chủ tự lo, khỏi tải).
+const _kAdminNovelCols =
+    'id, title_vi, title_zh, author_vi, status, hidden, source_id, genres, '
+    'last_chapter_at, chapter_count_source, chapter_count_translated, cover_url, sources(name)';
+
 final adminNovelsProvider = FutureProvider.autoDispose<List<Rec>>((ref) async {
-  // tải ĐỦ mọi truyện, page qua trần 1000 dòng/query của PostgREST — limit(200) cũ
-  // làm số đếm chip Tất cả/Hiển thị/Ẩn lệch với thống kê (đếm count toàn DB)
+  // Tải ĐỦ mọi truyện: chip đếm + ô tìm kiếm của tab Truyện lọc phía client nên cần cả
+  // danh sách (limit(200) cũ làm số đếm lệch với thống kê).
+  // PostgREST trần 1000 dòng/query → 21k truyện = 22 lượt. Trước gọi NỐI TIẾP nên phải
+  // chờ đủ 22 lần đi-về, đó là lý do tab này ì. Giờ hỏi tổng trước rồi bắn SONG SONG.
+  // Sắp thêm theo id để phân trang ổn định: crawler sửa updated_at liên tục, chỉ xếp theo
+  // mỗi cột đó thì dòng trôi giữa các trang gây trùng/sót.
+  // ponytail: trần của cách này là bộ nhớ + băng thông (21k dòng mỗi lần mở tab). Khi nào
+  //   thấy nặng thì chuyển lọc/tìm kiếm sang máy chủ và chỉ tải một trang.
+  const page = 1000;
+  const wave = 6; // số query song song mỗi đợt — nhanh mà không dội DB
+  final total = await sb.from('novels').count();
   final out = <Rec>[];
-  for (var from = 0;; from += 1000) {
-    final batch = List<Rec>.from(
-      await sb
-          .from('novels')
-          .select(
-            'id, title_vi, title_zh, author_vi, status, hidden, source_id, is_canonical, '
-            'genres, meta_translated, source_rank, last_chapter_at, updated_at, '
-            'chapter_count_source, chapter_count_translated, cover_url, sources(name)',
-          )
-          .order('updated_at', ascending: false)
-          .range(from, from + 999),
-    );
-    out.addAll(batch);
-    if (batch.length < 1000) return out;
+  for (var start = 0; start < total; start += page * wave) {
+    final batches = await Future.wait([
+      for (var from = start; from < start + page * wave && from < total; from += page)
+        sb
+            .from('novels')
+            .select(_kAdminNovelCols)
+            .order('updated_at', ascending: false)
+            .order('id', ascending: false)
+            .range(from, from + page - 1),
+    ]);
+    for (final rows in batches) {
+      out.addAll(List<Rec>.from(rows));
+    }
   }
+  return out;
 });
 
 /// Thống kê toàn app cho tab Truyện (admin): đếm bằng count head — không kéo dữ liệu.
