@@ -121,3 +121,44 @@ cột per-truyện nên đây là việc của DỮ LIỆU, không cần sửa c
 
 Điều kiện bắt buộc trước khi bật: vá termguard cho nhánh LLM, chặn dòng tiêu đề tự thêm,
 siết đại từ trong thoại.
+
+---
+
+# Vòng v6 — kết quả train (30/08/2026)
+
+Pack v6 = v5 + `epub_anchor` 4.024 cặp + `poem_booster` 2.651 bài (+ 120 bài thơ khoá).
+Train **trên máy dev CPU**, 84.725 dòng, 2.647 step, **3,2 giờ**, train_loss 1,347.
+
+## Văn xuôi: KHÔNG cải thiện
+
+| 55 chương sạch | bịa chủ ngữ/100 câu | đại từ hiện đại/chương | lint/chương |
+|---|---|---|---|
+| v5 production | 0,03 | **1,13** | **3,07** |
+| v6 | **0,02** | 1,16 | 3,64 |
+
+4.024 cặp epub trên 84.725 dòng (4,7%) là quá loãng để dịch chuyển thứ gì. Khớp đúng bài học
+cũ: "booster vài chục dòng không đè nổi prior" — và khớp `DATA_CHUAN` trục 2 (lượng không
+thay được đa dạng, mà 4k cặp thì chưa đủ cả lượng).
+
+## Thơ: CÓ cải thiện rõ
+
+Thước cũ (sạch Hán / không lặp) cho cả hai 100% nên vô dụng. Thước phân biệt được là
+**tỉ lệ câu bị phiên âm thô** (≥3 từ Hán-Việt viết hoa liên tiếp, kiểu "Cửu Mạch Tận Phong Trần"
+thay vì dịch nghĩa):
+
+| model | câu phiên âm thô / 770 | tỉ lệ |
+|---|---|---|
+| v5 production | 241 | **31,3%** |
+| **v6** | **174** | **22,6%** |
+| gemma-4-31b (nguồn data) | 9 | 1,2% |
+
+2.651 bài thơ = 3% pack, kéo lỗi xuống hơn một phần tư. Còn xa gemma nhưng chứng minh
+**hướng đúng**: model học được thể thơ nếu có data thơ.
+
+## Việc tiếp nếu theo hướng này
+
+- Tăng data thơ: đã có 37.003 bài Đường luật giản thể sạch (`chinese-poetry`, MIT) trong
+  `data/poem_tang_simp.jsonl`, mới dịch 3.110. Sinh tiếp bằng gemma-4-31b (1,63s/bài, 4 làn).
+- Cân nhắc nhân trọng số shard thơ (như `--gold-repeat`) thay vì chỉ tăng số dòng.
+- **Lọc rác trong data thơ**: bộ khoá lộ ra bản gemma có cả chữ Hàn ("평 sinh sơ chí") mà cổng
+  hiện tại không bắt. Phải thêm cổng chặn ký tự ngoài Latin/Việt.

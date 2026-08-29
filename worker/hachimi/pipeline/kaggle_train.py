@@ -276,10 +276,25 @@ def load_replay(
     pro_limit: int,
     replay_limit: int,
     blocked_zh: set[str],
+    local_jsonl: Path | None = None,
 ) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
-    from datasets import load_dataset
+    """`local_jsonl` = bản `tran-vi-teacher` đã tải sẵn.
 
-    stream = load_dataset(DATASET_ID, split="train", streaming=True, token=token, revision=DATASET_REVISION)
+    Dataset đó GATED nên máy không có HF token (ví dụ kernel Kaggle) sẽ chết ngay ở đây.
+    Có file local thì đọc thẳng, khỏi mạng và khỏi token — nội dung y hệt bản trên HF.
+    """
+    if local_jsonl is not None:
+        def _stream():
+            with local_jsonl.open(encoding="utf-8") as fh:
+                for line in fh:
+                    if line.strip():
+                        yield json.loads(line)
+        stream = _stream()
+    else:
+        from datasets import load_dataset
+
+        stream = load_dataset(DATASET_ID, split="train", streaming=True, token=token,
+                              revision=DATASET_REVISION)
     pro: list[dict[str, str]] = []
     replay: list[dict[str, str]] = []
     selected: dict[str, tuple[str, str]] = {}
@@ -515,6 +530,8 @@ def main() -> None:
     parser.add_argument("--extra-replay-limit", type=int, default=20_000)
     parser.add_argument("--output-dir", type=Path, default=Path("/kaggle/working/hachimi-60-cophong"))
     parser.add_argument("--hf-token", default=os.environ.get("HF_TOKEN"))
+    parser.add_argument("--teacher-jsonl", type=Path, default=None,
+                        help="Bản tran-vi-teacher tải sẵn; có thì KHÔNG cần token/mạng")
     parser.add_argument("--pro-limit", type=int, default=9_000)
     parser.add_argument("--replay-limit", type=int, default=24_000)
     parser.add_argument("--gold-repeat", type=int, choices=(1, 3), default=1)
@@ -599,6 +616,7 @@ def main() -> None:
             args.pro_limit,
             args.replay_limit,
             blocked_zh,
+            args.teacher_jsonl,
         )
 
     rows = build_train_rows(gold, pro, replay, args.gold_repeat, extra_replay)

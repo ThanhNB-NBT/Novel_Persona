@@ -24,11 +24,13 @@ Model production KHÔNG nằm trong thư mục này — nó ở `worker/models/h
 Mọi lệnh cần `PYTHONPATH` trỏ vào `worker/` (để import `novelworker`):
 
 ```bash
-cd E:/Novel_Project/worker/hachimi/pipeline && PYTHONPATH=E:/Novel_Project/worker python 09_gate_rhythm_gold.py
+cd ~/code/Novel_Project/worker && PYTHONPATH=. python3 hachimi/pipeline/09_gate_rhythm_gold.py
 ```
 
 | Việc | Lệnh |
 |---|---|
+| **Kiểm eval khoá + rò rỉ (chạy trước mọi lần đo)** | `PYTHONPATH=. python3 hachimi/eval/run_suite.py check` |
+| **Đo một model CT2 trên tập khoá** | `PYTHONPATH=. python3 hachimi/eval/run_suite.py score models/hachimi-ct2` |
 | Sinh booster xưng hô + 枪 | `python 07_make_booster_v3.py` |
 | Gom pool câu chuỗi phẩy từ DB | `python 08_make_rhythm_pool.py [số dòng]` |
 | Chấm bản thầy viết | `python 09_gate_rhythm_gold.py [file.jsonl]` |

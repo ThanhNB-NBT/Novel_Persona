@@ -10,8 +10,6 @@ import re
 from difflib import SequenceMatcher
 from pathlib import Path
 
-from novelworker import db
-
 
 HUB = Path(__file__).resolve().parents[1]
 WORKER = Path(__file__).resolve().parents[2]
@@ -36,6 +34,8 @@ def balanced_quotes(text: str) -> bool:
 
 def load_terms(novel_id: int) -> list[dict]:
     """Chỉ đọc term đã duyệt; không gọi get_glossary vì hàm đó có thể lành hóa và ghi DB."""
+    from novelworker import db  # import muộn: similarity/balanced_quotes phải chạy được khi không có supabase
+
     return (
         db.sb().table("glossary_terms")
         .select("term_zh,correct_vi,wrong_vi,term_type,approved")
@@ -53,6 +53,7 @@ def production_terms(novel_id: int) -> list[dict]:
     lành hoá trong bộ nhớ. Đo bằng `load_terms` (chỉ approved) sẽ thổi phồng lỗi tên riêng
     vì termguard không có gì để cưỡng chế.
     """
+    from novelworker import db
     from novelworker.db import _is_safe_pending_term, heal_glossary_terms
     from novelworker.translator import hanviet
 

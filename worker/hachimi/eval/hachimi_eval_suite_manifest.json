@@ -85,5 +85,20 @@
     "e347888795a9eb295e5a34de9f8e290d3ee61472728f8f34518b5e53ae4ed807",
     "c1813c0163f64faa1d8cf3fc6bfd29f2ffcd134a0f209c2c40891e1c3e05271b",
     "a0dfae9a4252186e7085a2ba37c09a99644233f44d61b6911cb7f5598d8d0439"
-  ]
+  ],
+  "reference_60": {
+    "path": "data/eval_locked/eval_reference_60.jsonl",
+    "rows": 60,
+    "sha256": "a967f4a23742e7cd72f5f458617195085e2c1c7681cec60a4e71bb24f2c33fdf"
+  },
+  "game_english": {
+    "path": "data/eval_locked/eval_game_english_locked.jsonl",
+    "rows": 36,
+    "sha256": "90d972d76cc2e2c0ae5c6f7b745cf5f765a59cf3f65bbe510b00c40dec780d98"
+  },
+  "fullchapters": {
+    "path": "data/eval_locked/hachimi_vnext_e_fullchapters.jsonl",
+    "rows": 6,
+    "sha256": "2b0232001ed72ad6c18c58da8d795120b9ea83822175f2d54588a66e051537ec"
+  }
 }

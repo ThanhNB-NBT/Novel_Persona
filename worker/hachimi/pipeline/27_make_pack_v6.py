@@ -26,6 +26,10 @@ import re
 import zipfile
 from pathlib import Path
 
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from text_clean import clean_source  # noqa: E402  (cùng hàm kaggle_train dùng để so trùng)
+
 ROOT = Path(__file__).resolve().parent
 DATA = ROOT.parent / "data"
 PACKS = ROOT.parent / "packs"
@@ -55,28 +59,67 @@ def gate_poem(row: dict) -> bool:
     return len(lines) == _verses(row["zh"])
 
 
-def load_epub(labse_min: float) -> list[str]:
+def blocked_zh(pack: zipfile.ZipFile) -> set[str]:
+    """ZH của MỌI shard đã có trong pack v5 (gold + eval + kaihe + teacher).
+
+    `combine_clean_shards` raise nếu hai shard cùng một nguồn Trung mà bản dịch khác nhau —
+    nên shard mới phải tự tránh, y như `pipeline/20` làm với kaihe."""
+    out: set[str] = set()
+    for name in pack.namelist():
+        if not name.endswith(".jsonl"):
+            continue
+        for line in pack.read(name).decode("utf-8").splitlines():
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            zh = clean_source(str(row.get("zh") or row.get("source_zh") or ""))
+            if zh:
+                out.add(zh)
+    return out
+
+
+def load_epub(labse_min: float, blocked: set[str]) -> list[str]:
+    """Khử trùng theo zh, giữ bản LaBSE cao nhất — `load_clean_shard` raise nếu một nguồn
+    Trung có hai bản dịch khác nhau (chuyện thường gặp: cùng câu xuất hiện ở nhiều chương)."""
     if not EPUB.exists():
         return []
-    out = []
+    # Khoá theo clean_source(zh) — kaggle_train so trùng SAU khi làm sạch nên khử trùng
+    # trên chuỗi thô là không đủ (đo: vẫn vấp ở dòng 1336).
+    best: dict[str, dict] = {}
     for line in EPUB.read_text(encoding="utf-8").splitlines():
         if not line.strip():
             continue
         r = json.loads(line)
+        key = clean_source(r["zh"])
+        if key in blocked:
+            continue
+        cur = best.get(key)
+        if cur is None or (r.get("labse") or 0) > (cur.get("labse") or 0):
+            best[key] = r
+    out = []
+    for r in best.values():
         if r.get("labse") is None or r["labse"] >= labse_min:
-            out.append(json.dumps({"zh": r["zh"], "vi": r["vi"]}, ensure_ascii=False))
+            # kaggle_train.load_clean_shard đòi nhãn này cho mọi shard --clean-replay
+            out.append(json.dumps({"zh": r["zh"], "vi": r["vi"], "domain": "epub_anchor",
+                                   "status": "approved_replay"}, ensure_ascii=False))
     return out
 
 
-def load_poems(n_eval: int) -> tuple[list[str], list[str]]:
+def load_poems(n_eval: int, blocked: set[str]) -> tuple[list[str], list[str]]:
     if not POEM.exists():
         return [], []
     rows = [json.loads(l) for l in POEM.read_text(encoding="utf-8").splitlines() if l.strip()]
-    good = [r for r in rows if gate_poem(r)]
+    good, seen = [], set()
+    for r in rows:
+        key = clean_source(r["zh"])
+        if gate_poem(r) and key not in seen and key not in blocked:
+            seen.add(key)
+            good.append(r)
     random.Random(20260829).shuffle(good)
     evalset = good[:n_eval]
     train = good[n_eval:]
-    to_line = lambda r: json.dumps({"zh": r["zh"], "vi": r["vi"]}, ensure_ascii=False)
+    to_line = lambda r: json.dumps({"zh": r["zh"], "vi": r["vi"], "domain": "poem",
+                                    "status": "approved_replay"}, ensure_ascii=False)
     return [to_line(r) for r in train], [to_line(r) for r in evalset]
 
 
@@ -88,8 +131,10 @@ def main() -> None:
     if not V5_PACK.exists():
         raise SystemExit("Chưa có pack v5 — chạy pipeline/20 trước.")
 
-    epub = load_epub(args.labse_min)
-    poem_train, poem_eval = load_poems(args.poem_eval)
+    with zipfile.ZipFile(V5_PACK) as _p:
+        blocked = blocked_zh(_p)
+    epub = load_epub(args.labse_min, blocked)
+    poem_train, poem_eval = load_poems(args.poem_eval, blocked)
     if not epub and not poem_train:
         raise SystemExit("Không có data mới nào (epub_anchor.jsonl / poem_vi.jsonl đều trống).")
 

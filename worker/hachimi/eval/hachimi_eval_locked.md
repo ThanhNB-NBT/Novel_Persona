@@ -985,3 +985,22 @@
 - teacher_v3: “Xin mời thí sinh IG.Rookie và thí sinh IG.K'aiVen hai phút sau sẽ đến hậu đài để phỏng vấn sau trận đấu. Sau khi phỏng vấn còn phải tiến hành nghi thức xuất chinh khu vực LPL của chúng ta, xin tất cả thí sinh và giám mục hãy chuẩn bị sẵn sàng nhé.” `sim=0.5356; han=0; modern=0; quote=True; digits=True`
 - teacher_v4: “Xin mời thí sinh IG.Rookie và thí sinh IG.K'aiVen hai phút sau sẽ đến hậu trường để phỏng vấn sau trận đấu. Sau khi phỏng vấn còn phải tiến hành nghi thức xuất chinh khu vực LPL của chúng ta, xin tất cả thí sinh và giám mục hãy chuẩn bị sẵn sàng nhé.” `sim=0.5650; han=0; modern=0; quote=True; digits=True`
 
+
+---
+
+## Đo lại 29/08/2026 — bằng `run_suite.py` trên máy dev Linux
+
+Model production `worker/models/hachimi-ct2`, **raw model** (không termguard, không glossary),
+chạy `PYTHONPATH=. python3 hachimi/eval/run_suite.py score models/hachimi-ct2` — 25 giây cho cả hai tập.
+
+| Tập | Số câu | Similarity TB | Quote lỗi | Hán sót |
+|---|---:|---:|---:|---:|
+| `reference_60` | 60 | 0.7257 | 0 | 0 |
+| `game_english` | 36 | 0.6603 | 0 | 0 |
+
+Đối chiếu bảng trên: `game_english` khớp `current` (0.6604) tới 4 chữ số — cùng là raw model,
+nên đây là **bằng chứng suite mới tái tạo đúng phương pháp đo cũ**.
+
+`reference_60` (0.7257) **không so thẳng** được với cột `current` (0.7107) trong bảng đầu trang:
+bảng đó chạy qua pipeline production có termguard + glossary approved, còn số này là raw.
+Nó chỉ nói model production hiện tại nhỉnh hơn `teacher_v4` (0.7246) ở cùng điều kiện raw.
