@@ -10,6 +10,8 @@ import itertools
 import re
 from collections.abc import Callable
 
+from . import hanviet
+
 # Mã chữ HOA hiếm 2-4 ký tự, chỉ dùng chữ không xuất hiện trong tiếng Việt thuần.
 _L = "JWZF"
 _CODES = ["JW"] + [
@@ -235,6 +237,45 @@ def _drop_leaked(lines: list[str], plain: list[str]) -> list[str]:
     ]
 
 
+# Chữ có thể đứng trong một từ tiếng Việt — dùng để chặn thay nhầm giữa từ.
+_WORD = "A-Za-zÀ-ỹ0-9"
+
+
+def _forced_variants(term: dict) -> list[str]:
+    """Các dạng model tự bịa mà ta CHẮC CHẮN là cùng một term — chỉ dạng suy được từ term_zh.
+
+    Ca thật đo được 29/08: glossary có 哈里 → 'Harry', gemma tự phiên thành 'Ha Lý'.
+    Phiên âm Hán-Việt suy ra được từ chính term_zh nên thay là an toàn; ngược lại
+    (glossary Hán-Việt mà model ra tên Latin) thì không có đường suy, chỉ báo thiếu.
+    """
+    hv = hanviet.han_viet(term["term_zh"])
+    # ≥4 ký tự: chặn thay nhầm âm đơn ('Thiên', 'Hoa') vốn là chữ thường gặp trong văn xuôi.
+    return [hv] if hv and len(hv) >= 4 and hv != term["correct_vi"] else []
+
+
+def enforce_llm(zh: str, vi: str, terms: list[dict]) -> tuple[str, list[dict]]:
+    """Cưỡng chế glossary cho bản dịch LLM. Trả (bản đã sửa, các term VẪN thiếu).
+
+    KHÔNG dùng lại đường placeholder của `translate_text`: LLM viết lại cả khối nên nó
+    gộp/tách đoạn (đo được 4/36 chương) và còn 'sửa' mã hộ mình — hai thứ làm mã lạc chỗ
+    rồi rơi thẳng ra bản dịch. Ở đây soát SAU khi dịch và chỉ thay khi bắt được biến thể
+    chắc chắn của đúng term đó, nên trường hợp xấu nhất là tên lệch, không phải rác mã.
+    """
+    fixed = vi
+    missing: list[dict] = []
+    for term in _eligible(terms, zh):
+        need = zh.count(term["term_zh"])
+        if _count_correct(fixed, term["correct_vi"]) >= need:
+            continue
+        for variant in _forced_variants(term):
+            pattern = re.compile(rf"(?<![{_WORD}]){re.escape(variant)}(?![{_WORD}])")
+            if pattern.search(fixed):
+                fixed = pattern.sub(term["correct_vi"], fixed)
+        if _count_correct(fixed, term["correct_vi"]) < need:
+            missing.append(term)
+    return fixed, missing
+
+
 def _self_check() -> None:
     terms = [{"term_zh": "睚眦", "correct_vi": "Nhai Tý"},
              {"term_zh": "冥想项链", "correct_vi": "Dây Chuyền Thiền Định"}]
@@ -302,6 +343,22 @@ def _self_check() -> None:
         done = _restore_complete(prot, prot, digit_map, alphabet)
         assert done is not None and "ZX" not in done and "⟦" not in done, (family[0], done)
         assert "001" in done and "编号 00" in done, done
+    # enforce_llm: model tự phiên âm Hán-Việt thay vì dùng glossary → phải ép về đúng.
+    llm_terms = [{"term_zh": "哈里", "correct_vi": "Harry", "approved": True},
+                 {"term_zh": "玛利亚", "correct_vi": "Maria", "approved": True}]
+    src = "哈里男爵看着玛利亚。"
+    got, miss = enforce_llm(src, "Nam tước Ha Lý nhìn Mã Lợi Á.", llm_terms)
+    assert got == "Nam tước Harry nhìn Maria." and not miss, (got, miss)
+    # Model đã dùng đúng glossary → không đụng gì.
+    ok_vi = "Nam tước Harry nhìn Maria."
+    assert enforce_llm(src, ok_vi, llm_terms) == (ok_vi, []), enforce_llm(src, ok_vi, llm_terms)
+    # Không suy ngược được (glossary Hán-Việt, model ra tên Latin) → báo thiếu, KHÔNG bịa.
+    ship = [{"term_zh": "大天使号", "correct_vi": "Đại Thiên Sứ Hào", "approved": True}]
+    got2, miss2 = enforce_llm("登陆大天使号", "đổ bộ lên tàu Archangel", ship)
+    assert got2 == "đổ bộ lên tàu Archangel" and [t["term_zh"] for t in miss2] == ["大天使号"]
+    # Không thay nhầm khi biến thể nằm GIỮA một từ tiếng Việt khác.
+    inner = [{"term_zh": "哈里", "correct_vi": "Harry", "approved": True}]
+    assert enforce_llm("哈里", "Chalybite Ha Lýnh", inner)[0] == "Chalybite Ha Lýnh"
     print("termguard OK:", out)
 
 

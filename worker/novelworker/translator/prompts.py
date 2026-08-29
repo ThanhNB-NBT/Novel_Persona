@@ -145,6 +145,25 @@ def build_main_chapter_system() -> str:
     )
 
 
+def glossary_block(src: str, terms: list[dict] | None) -> str | None:
+    """Khối thuật ngữ cho prompt: chỉ term CÓ trong đoạn nguồn, cụm dài và đã duyệt trước.
+
+    Nhánh LLM không cưỡng chế được bằng placeholder như Hachimi (xem termguard.enforce_llm)
+    nên prompt là lớp giữ tên riêng ĐẦU TIÊN, không phải lớp trang trí."""
+    relevant = [
+        t for t in sorted(
+            terms or [],
+            key=lambda t: (not bool(t.get("approved")), -len(t.get("term_zh") or "")),
+        )
+        if t.get("term_zh") and t.get("correct_vi") and _injectable(t) and t["term_zh"] in src
+    ][:MAX_TERMS_IN_PROMPT]
+    if not relevant:
+        return None
+    lines = "\n".join(f"- {t['term_zh']} → {t['correct_vi']}" for t in relevant)
+    return ("[Bảng thuật ngữ BẮT BUỘC — dùng ĐÚNG các bản dịch này, không tự phiên âm "
+            "hay đặt tên khác:\n" + lines + "]")
+
+
 def build_chapter_user(
     title_zh: str | None, content_zh: str,
     prev_summary: str | None = None,
@@ -153,6 +172,7 @@ def build_chapter_user(
     register_line: str | None = None,
     style_line: str | None = None,
     synopsis: str | None = None,
+    glossary_terms: list[dict] | None = None,
 ) -> str:
     parts = []
     # tên truyện + thể loại → model chọn ĐÚNG register xưng hô (tu tiên: ta-ngươi;
@@ -173,6 +193,10 @@ def build_chapter_user(
     # đuôi bản dịch liền trước → nối mạch giọng văn + xưng hô qua ranh giới chương/chunk
     if prev_tail:
         parts.append(f"[Đoạn dịch LIỀN TRƯỚC — nối tiếp đúng giọng văn và xưng hô, KHÔNG dịch lại phần này:\n…{prev_tail}]")
+    # glossary đặt SÁT nội dung: đặt trên cùng thì model đọc xong đã quên khi tới đoạn cuối
+    terms_block = glossary_block(f"{title_zh or ''}{content_zh}", glossary_terms)
+    if terms_block:
+        parts.append(terms_block)
     if title_zh:
         parts.append(f"Tiêu đề chương: {title_zh}")
     parts.append("Nội dung chương:\n" + content_zh)

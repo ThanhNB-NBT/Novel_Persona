@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 
 from .. import blob, db
 from ..config import settings
-from . import hanviet, lint, prompts
+from . import hanviet, lint, prompts, termguard
 from . import providers
 from .providers import build_chain
 from .text_clean import clean_source
@@ -1282,7 +1282,8 @@ def handle_chapter(job: dict, llm) -> None:
             res = chapter_llm.complete(
                 prompts.build_main_chapter_system(),
                 prompts.build_chapter_user(
-                    title_zh_clean if i == 0 else None, chunk, register_line=register_line),
+                    title_zh_clean if i == 0 else None, chunk, register_line=register_line,
+                    glossary_terms=terms),
                 temperature=prompts.CHAPTER_TEMPERATURE,
             )
             if not nv.get("translation_model"):
@@ -1300,6 +1301,17 @@ def handle_chapter(job: dict, llm) -> None:
             if m:
                 text = text[: m.start()].rstrip()
             text = _fix_han_residue(chapter_llm, _clean_output(text), terms)
+            # Cưỡng chế glossary: LLM đọc bảng thuật ngữ trong prompt nhưng vẫn tự phiên âm
+            # (đo 29/08: glossary 'Harry', gemma ra 'Ha Lý'). Placeholder kiểu Hachimi không
+            # dùng được cho LLM — nó gộp/tách đoạn nên mã lạc chỗ; soát sau khi dịch an toàn hơn.
+            text, missing_terms = termguard.enforce_llm(chunk, text, terms)
+            if missing_terms:
+                # Không tự bịa được thì phải NÓI RA: tên trôi âm thầm là thứ đã hỏng glossary
+                # mấy lần mà không ai thấy.
+                log.warning("Chương %s chunk %d: %d term glossary không ép được (%s)",
+                            ch["id"], i + 1, len(missing_terms),
+                            ", ".join(f"{t['term_zh']}→{t['correct_vi']}"
+                                      for t in missing_terms[:5]))
             parts.append(text)
             prompt_tokens += res.prompt_tokens or 0
             completion_tokens += res.completion_tokens or 0
