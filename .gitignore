@@ -105,3 +105,6 @@ worker/glossary_unanchored_backup_*.json
 
 # config MCP cua may dev (path cuc bo)
 .mcp.json
+
+# Ban doi chieu dich (chua noi dung truyen co ban quyen) - khong commit
+worker/hachimi/eval/compare_*.html
