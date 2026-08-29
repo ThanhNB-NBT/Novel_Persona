@@ -4,10 +4,18 @@ import 'core.dart';
 
 /// Cột SELECT chung cho mọi query truyện (Khám phá, Tủ sách, Tìm kiếm…).
 /// Kèm source_id + sources(name) để hiện badge nguồn và trộn nguồn (round-robin).
+///
+/// KHÔNG có description_vi: chỉ màn chi tiết cần, mà màn đó select('*') riêng rồi.
+/// Nó chiếm ~65% khối lượng mọi danh sách (đo trên hồ 240 truyện: 362KB → 128KB),
+/// và không danh sách nào vẽ nó ra cả.
 const novelCols =
     'id, title_vi, title_zh, author_vi, author_zh, cover_url, status, '
-    'chapter_count_source, chapter_count_translated, genres, description_vi, '
+    'chapter_count_source, chapter_count_translated, genres, '
     'last_chapter_at, source_rank, source_id, sources(name)';
+
+/// Cột tối thiểu đủ để TRỘN NGUỒN + phân trang, chưa cần vẽ gì. Hồ 240 truyện với
+/// bộ cột này là ~24KB thay vì 362KB.
+const _mixCols = 'id, source_id, source_rank, last_chapter_at';
 
 /// Danh sách truyện cho tab Khám phá (mới cập nhật trước).
 final novelsProvider = FutureProvider.autoDispose<List<Rec>>((ref) async {
@@ -200,20 +208,24 @@ const _mixPoolSize = 240;
 
 /// 1 lô truyện của 1 mục (cho màn "Xem tất cả" phân trang). offset = số đã có.
 Future<List<Rec>> fetchNovelPage(SectionKind kind, int offset, int limit) async {
-  var f = sb
-      .from('novels')
-      .select(novelCols)
-      .eq('hidden', false)
-      .eq('meta_translated', true) // đồng bộ với homeSectionsProvider — ẩn tên tiếng Trung
-      .eq('is_canonical', true);
-  if (kind == SectionKind.completed) f = f.eq('status', 'completed');
-  if (kind == SectionKind.latest) f = f.neq('status', 'completed'); // Mới cập nhật: chỉ đang ra
-  if (kind == SectionKind.recommended) f = f.neq('status', 'completed');
+  // Cùng bộ điều kiện, hai bộ cột khác nhau (hồ trộn vs. hàng đem vẽ) → nhận cols.
+  filtered(String cols) {
+    var f = sb
+        .from('novels')
+        .select(cols)
+        .eq('hidden', false)
+        .eq('meta_translated', true) // đồng bộ với homeSectionsProvider — ẩn tên tiếng Trung
+        .eq('is_canonical', true);
+    if (kind == SectionKind.completed) f = f.eq('status', 'completed');
+    if (kind == SectionKind.latest) f = f.neq('status', 'completed'); // Mới cập nhật: chỉ đang ra
+    if (kind == SectionKind.recommended) f = f.neq('status', 'completed');
+    return f;
+  }
 
   // Mới cập nhật / Đã hoàn thành: sort thẳng theo độ mới rồi phân trang bằng range.
   // tie-break id: nhiều truyện cùng last_chapter_at → phân trang ổn định, không lặp/sót.
   if (kind == SectionKind.latest || kind == SectionKind.completed) {
-    return List<Rec>.from(await f
+    return List<Rec>.from(await filtered(novelCols)
         .order('last_chapter_at', ascending: false, nullsFirst: false)
         .order('id', ascending: false)
         .range(offset, offset + limit - 1));
@@ -224,7 +236,9 @@ Future<List<Rec>> fetchNovelPage(SectionKind kind, int offset, int limit) async 
   // GIAN). Nên lấy 1 "hồ" rồi TRỘN NGUỒN (round-robin) phía client: nguồn có rank dẫn
   // đầu, nguồn NULL xếp theo độ mới nên mục tự đổi khi có chương mới. Phạm vi khác
   // nhau: Nổi bật = toàn kho; Đề cử = chỉ truyện đang ra. Phân trang = cắt trên hồ đã trộn.
-  final pool = List<Rec>.from(await f
+  // Hồ lấy CỘT TỐI THIỂU rồi mới nạp đủ cột cho đúng 1 trang: trộn cần cả 240 hàng,
+  // nhưng vẽ chỉ cần 15. Kéo cả 240 hàng đầy đủ là ném đi 94% những gì vừa tải.
+  final pool = List<Rec>.from(await filtered(_mixCols)
       .order('source_rank', ascending: true, nullsFirst: false)
       .order('last_chapter_at', ascending: false, nullsFirst: false)
       .order('id', ascending: false)
@@ -239,7 +253,18 @@ Future<List<Rec>> fetchNovelPage(SectionKind kind, int offset, int limit) async 
     mixed = [...mixed.sublist(off), ...mixed.sublist(0, off)];
   }
   if (offset >= mixed.length) return const [];
-  return mixed.sublist(offset, (offset + limit).clamp(0, mixed.length));
+  final page = mixed.sublist(offset, (offset + limit).clamp(0, mixed.length));
+  return _hydrate([for (final n in page) n['id'] as int]);
+}
+
+/// Nạp đủ cột hiển thị cho đúng các id của 1 trang, GIỮ NGUYÊN thứ tự đã trộn —
+/// PostgREST trả về theo thứ tự của nó, không theo thứ tự id truyền vào.
+Future<List<Rec>> _hydrate(List<int> ids) async {
+  if (ids.isEmpty) return const [];
+  final rows = List<Rec>.from(
+      await sb.from('novels').select(novelCols).inFilter('id', ids));
+  final byId = {for (final r in rows) r['id'] as int: r};
+  return [for (final id in ids) if (byId.containsKey(id)) byId[id]!];
 }
 
 /// Trộn truyện theo nguồn (round-robin) để Nổi bật/Đề cử không bị 1 nguồn đè.

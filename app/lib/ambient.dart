@@ -35,7 +35,9 @@ final ambientProvider = FutureProvider.family<Ambient, String?>((ref, url) async
   ref.keepAlive();
   try {
     final p = await PaletteGenerator.fromImageProvider(
-      NetworkImage(imageUrl),
+      // Chỉ đi lấy MÀU, mà vẫn decode ở 96px — nên xin thẳng bản 96 (~2.7KB) thay
+      // vì kéo bìa gốc ~122KB rồi vứt. Đích không biến đổi ảnh thì dùng bản gốc.
+      NetworkImage(endpointThumbUrl(url, 96) ?? imageUrl),
       size: const Size(96, 128), // decode nhỏ — đủ để lấy màu, rẻ
       maximumColorCount: 12,
     );

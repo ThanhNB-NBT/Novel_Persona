@@ -68,6 +68,26 @@ void main() {
     );
   });
 
+  test('bìa xin bản thu nhỏ theo bậc, bìa ngoài Storage thì chịu', () {
+    activeEndpointUrl = 'https://db-new.example.com';
+    const obj = 'https://old.supabase.co/storage/v1/object/public/covers/42.webp';
+
+    // 122dp × dpr 2.6 = 317px → làm tròn LÊN bậc 320, không sinh biến thể 317.
+    expect(
+      endpointThumbUrl(obj, 317),
+      'https://db-new.example.com/storage/v1/render/image/public/covers/42.webp'
+      '?width=320&resize=contain&quality=70',
+    );
+    // Cùng một bậc cho các bề rộng lệch nhau chút ít → cache không vỡ vụn.
+    expect(endpointThumbUrl(obj, 241), endpointThumbUrl(obj, 320));
+    // Vượt bậc lớn nhất thì dừng ở đó, không xin ảnh to vô hạn.
+    expect(endpointThumbUrl(obj, 9999), endpointThumbUrl(obj, 320));
+    // Bìa không nằm trong Storage: không bịa đường render, trả null để chỗ gọi
+    // rơi về URL gốc.
+    expect(endpointThumbUrl('https://cdn.example.com/42.webp', 240), isNull);
+    expect(endpointThumbUrl(null, 240), isNull);
+  });
+
   test('phiên đăng nhập được tách riêng theo host backend', () {
     expect(
       endpointAuthStorageKey('https://api.one.example.com'),
