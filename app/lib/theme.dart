@@ -12,12 +12,13 @@ class Pal {
   static const surface = Color(0xFFFFFFFF); // thẻ
   static const surfaceAlt = Color(0xFFE9EDF2);
   static const ink = Color(0xFF1D2129); // chữ chính (không đen tuyền)
-  static const inkSoft = Color(0xFF848B96); // chữ phụ
-  static const accent = Color(0xFF3576F5); // xanh dương thanh tân
+  static const inkSoft = Color(0xFF6B727E); // chữ phụ (WCAG AA: 4.5:1 trên cả bg lẫn surface)
+  static const accent = Color(0xFF296EF4); // xanh dương thanh tân (đậm vừa đủ: chữ trắng trên nút đạt 4.5:1)
   static const accentDeep = Color(0xFF2A5BC7);
   static const accentSoft = Color(0xFFE1EBFE);
-  static const gold = Color(0xFFE8913C); // streak / thành tựu (cam ấm)
-  static const ok = Color(0xFF2E9E5B); // thành công / positive (đã thêm, đã lưu…)
+  static const gold = Color(0xFFE8913C); // streak / thành tựu (cam ấm) — CHỈ dùng làm NỀN (chữ ink đè lên: 6.6:1)
+  static const goldDeep = Color(0xFFB16215); // gold khi làm CHỮ/ICON trên nền sáng (gold gốc chỉ 2.5:1)
+  static const ok = Color(0xFF27864D); // thành công / positive (đã thêm, đã lưu…) — chữ trắng đè lên đạt 4.5:1
   static const line = Color(0xFFE6EAF0);
 
   // tối — Dạ Lam, bản OLED "tech-minimal": nền gần đen (tiết kiệm pin, chất công nghệ),
@@ -107,10 +108,14 @@ ThemeData _build({required bool dark}) {
       secondary: dark ? Pal.dGold : Pal.gold,
       // gold/cam sáng → chữ TỐI mới đủ tương phản (white trên gold tụt dưới AA)
       onSecondary: Pal.ink,
+      // nền vàng NHẠT + chữ vàng ĐẬM: dùng cho chip/badge. Đừng lấy `secondary`
+      // làm chữ trên nền sáng — gold gốc chỉ 2,5:1.
+      secondaryContainer: (dark ? Pal.dGold : Pal.gold).withValues(alpha: 0.14),
+      onSecondaryContainer: dark ? Pal.dGold : Pal.goldDeep,
       // tertiary = màu THÀNH CÔNG/positive (đã thêm, đã lưu) — trước phải hardcode xanh
       tertiary: ok,
       onTertiary: Colors.white,
-      error: const Color(0xFFD1544A),
+      error: dark ? const Color(0xFFD1544A) : const Color(0xFFCE493F),
       onError: Colors.white,
       surface: surface,
       onSurface: ink,

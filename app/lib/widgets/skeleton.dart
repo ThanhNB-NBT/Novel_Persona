@@ -26,23 +26,33 @@ class _ShimmerState extends State<_Shimmer> with SingleTickerProviderStateMixin 
     final onSurf = Theme.of(context).colorScheme.onSurface;
     final base = onSurf.withValues(alpha: 0.09); // ô nền
     final glow = onSurf.withValues(alpha: 0.22); // vệt sáng lướt qua
-    // người dùng tắt hoạt ảnh → đứng yên (không có ShaderMask nhấp nháy)
-    if (MediaQuery.of(context).disableAnimations) return widget.child;
-    return AnimatedBuilder(
-      animation: _c,
-      child: widget.child,
-      builder: (context, child) => ShaderMask(
-        blendMode: BlendMode.srcATop,
-        shaderCallback: (bounds) => LinearGradient(
+    // srcIn: màu vẽ ra = gradient này, CẮT theo hình các ô bên dưới (chỗ trong suốt
+    // vẫn trong suốt). Nên ô phải ĐỤC — xem _skelBox — và toàn bộ alpha nhìn thấy
+    // do gradient quyết định, kể cả khi đứng yên. Bỏ ShaderMask đi thì ô đen kịt.
+    // (srcATop thì ngược: nó GIỮ nền ở chỗ nguồn mờ, ô đục sẽ lòi ra nguyên màu.)
+    Widget mask(ShaderCallback shader, Widget? child) => ShaderMask(
+          blendMode: BlendMode.srcIn,
+          shaderCallback: shader,
+          child: child,
+        );
+    LinearGradient gradient(double slide) => LinearGradient(
           begin: Alignment.centerLeft,
           end: Alignment.centerRight,
           colors: [base, glow, base],
           stops: const [0.3, 0.5, 0.7],
           // vệt (rộng ~40% ô) trượt từ ngoài trái sang ngoài phải mỗi vòng
-          transform: _SlideGradient(_c.value * 1.8 - 0.9),
-        ).createShader(bounds),
-        child: child,
-      ),
+          transform: _SlideGradient(slide),
+        );
+    // người dùng tắt hoạt ảnh → đứng yên (vệt nằm ngoài khung, chỉ còn nền)
+    if (MediaQuery.of(context).disableAnimations) {
+      return mask((bounds) => gradient(-0.9).createShader(bounds), widget.child);
+    }
+    // child dựng 1 lần rồi tái dùng: mỗi frame chỉ vẽ lại shader, không rebuild cây.
+    return AnimatedBuilder(
+      animation: _c,
+      child: widget.child,
+      builder: (context, child) =>
+          mask((bounds) => gradient(_c.value * 1.8 - 0.9).createShader(bounds), child),
     );
   }
 }
@@ -56,13 +66,17 @@ class _SlideGradient extends GradientTransform {
       Matrix4.translationValues(bounds.width * ratio, 0, 0);
 }
 
-/// Một ô xám bo góc — viên gạch dựng skeleton.
+/// Một ô bo góc — viên gạch dựng skeleton. Ô này chỉ đóng vai KHUÔN CẮT cho
+/// _Shimmer (srcIn), nên màu phải ĐỤC và màu gì cũng được; alpha nhìn thấy thật
+/// (0.09 nền, 0.22 chỗ vệt sáng quét qua) nằm ở gradient bên đó.
+/// Bản cũ để ô ở alpha 0.09 rồi phủ srcATop: vệt sáng bị nhân với 0.09, còn ~1%
+/// alpha — chạy thật mà mắt không thấy. Xem test/skeleton_shimmer_test.dart.
 Widget _skelBox(BuildContext context, {double? width, double height = 12, double radius = 7}) {
   return Container(
     width: width,
     height: height,
     decoration: BoxDecoration(
-      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.09),
+      color: Theme.of(context).colorScheme.onSurface,
       borderRadius: BorderRadius.circular(radius),
     ),
   );

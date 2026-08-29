@@ -1830,18 +1830,18 @@ class _BuffCountdownState extends State<_BuffCountdown> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
       decoration: BoxDecoration(
-        color: cs.secondary.withValues(alpha: 0.14),
+        color: cs.secondaryContainer,
         borderRadius: BorderRadius.circular(9),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.bolt_rounded, size: 12, color: cs.secondary),
+          Icon(Icons.bolt_rounded, size: 12, color: cs.onSecondaryContainer),
           const SizedBox(width: 4),
           Text(
             '${widget.label} +${widget.pct}% · ${h > 0 ? '${h}g ' : ''}$m′${s.toString().padLeft(2, '0')}″',
             style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: cs.secondary,
+              color: cs.onSecondaryContainer,
               fontWeight: FontWeight.w700,
               letterSpacing: 0,
             ),

@@ -1,9 +1,37 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../data.dart';
 import '../endpoint.dart';
 import '../theme.dart' show monoStyle;
 import 'common.dart';
+
+/// Ảnh bìa có CACHE ĐĨA. Image.network chỉ nhớ trong RAM: mở lại app là tải lại
+/// sạch cả trang bìa — trên đường truyền chậm đó là vài MB mỗi lần mở.
+/// Không hiện vòng quay lúc chờ: bìa nhỏ và nhiều, mỗi ô một spinner thành rối;
+/// giữ nguyên placeholder rồi hiện ảnh khi có.
+Widget _cached(String url,
+    {required double width,
+    required double height,
+    required int px,
+    required Widget placeholder,
+    Widget? onError}) {
+  return CachedNetworkImage(
+    imageUrl: url,
+    width: width,
+    height: height,
+    fit: BoxFit.cover,
+    // giải mã đúng cỡ hiển thị (theo pixel màn hình thật) thay vì cỡ ảnh gốc
+    memCacheWidth: px,
+    filterQuality: FilterQuality.medium,
+    fadeInDuration: const Duration(milliseconds: 180),
+    // Chờ và hỏng là HAI chuyện khác nhau: lúc chờ chỉ hiện ô placeholder tĩnh,
+    // đừng đặt ảnh dự phòng vào đây — nó sẽ tải song song ngay cả khi ảnh chính
+    // về ngon, đúng thứ mình đang tìm cách tránh.
+    placeholder: (_, _) => placeholder,
+    errorWidget: (_, _, _) => onError ?? placeholder,
+  );
+}
 
 /// Ảnh bìa truyện: bo góc 14, đổ bóng mềm (chiều sâu), placeholder gradient.
 class Cover extends StatelessWidget {
@@ -22,6 +50,8 @@ class Cover extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final initial = (label ?? '').trim();
     final imageUrl = endpointStorageUrl(url);
+    // Bề rộng theo pixel màn hình thật, để ảnh xin về đúng cỡ cần chứ không thừa.
+    final px = (width * MediaQuery.of(context).devicePixelRatio).round();
     // placeholder phẳng (tech-minimal): nền nhấn nhạt + chữ cái màu nhấn — không gradient
     Widget fallback = Container(
       width: width,
@@ -62,21 +92,17 @@ class Cover extends StatelessWidget {
         borderRadius: radius,
         child: (imageUrl == null || imageUrl.isEmpty)
             ? fallback
-            : Image.network(
-                imageUrl,
+            // Hỏi bản THU NHỎ trước (≈13KB thay vì ≈122KB); đích không hỗ trợ
+            // biến đổi ảnh thì rơi xuống URL gốc, rồi mới tới placeholder.
+            : _cached(
+                endpointThumbUrl(url, px) ?? imageUrl,
                 width: width,
                 height: h,
-                fit: BoxFit.cover,
-                // decode ở độ phân giải màn hình thật (gấp devicePixelRatio) cho nét,
-                // + filterQuality medium để scale mượt thay vì rỗ/mờ.
-                cacheWidth:
-                    (width * MediaQuery.of(context).devicePixelRatio).round(),
-                filterQuality: FilterQuality.medium,
-                isAntiAlias: true,
-                errorBuilder: (_, _, _) => fallback,
-                loadingBuilder: (c, child, prog) => prog == null
-                    ? child
-                    : SizedBox(width: width, height: h, child: fallback),
+                px: px,
+                placeholder: fallback,
+                // chỉ khi bản thu nhỏ HỎNG mới đụng tới bìa gốc
+                onError: _cached(imageUrl,
+                    width: width, height: h, px: px, placeholder: fallback),
               ),
       ),
     ));

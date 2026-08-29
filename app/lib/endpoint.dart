@@ -80,3 +80,27 @@ String? endpointStorageUrl(String? url) {
       ? url
       : '${activeEndpointUrl.replaceAll(RegExp(r'/+$'), '')}${url.substring(markerAt)}';
 }
+
+/// Bậc bề rộng ảnh bìa được phép hỏi Storage. Làm tròn LÊN theo bậc để cache
+/// (cả đĩa máy lẫn CDN) không vỡ vụn thành hàng chục biến thể chỉ vì lệch vài px
+/// giữa các máy có devicePixelRatio khác nhau.
+///
+/// Trần 320 là cố ý. Bìa gốc 600×800 (~122KB); đo thật từng bậc: 96→2.7KB,
+/// 160→6.9KB, 240→15KB, 320→28KB, 480→66KB, 640→117KB. Từ 480 trở lên gần như
+/// tải lại nguyên bản, mà chỗ hiển thị rộng nhất trong app chỉ 132dp. Trên máy
+/// 3x thì 320 hơi thiếu so với 396px lý tưởng — với một tấm bìa cỡ ngón tay,
+/// đổi chút mềm nét lấy 4 lần nhẹ hơn là đáng.
+const _thumbSteps = [96, 160, 240, 320];
+
+/// URL ảnh bìa đã THU NHỎ phía máy chủ (Storage image transformation → imgproxy).
+/// Bìa gốc ~122KB; ở bậc 240 chỉ còn ~13KB, mà chỗ hiển thị rộng nhất trong app
+/// cũng chỉ 132dp. Trả null nếu URL không phải object Storage (bìa cắm tay từ
+/// nguồn ngoài) — chỗ gọi tự dùng lại URL gốc.
+String? endpointThumbUrl(String? url, int width) {
+  final full = endpointStorageUrl(url);
+  const marker = '/storage/v1/object/';
+  if (full == null || !full.contains(marker)) return null;
+  final step = _thumbSteps.firstWhere((s) => s >= width, orElse: () => _thumbSteps.last);
+  final base = full.replaceFirst(marker, '/storage/v1/render/image/');
+  return '$base${base.contains('?') ? '&' : '?'}width=$step&resize=contain&quality=70';
+}
