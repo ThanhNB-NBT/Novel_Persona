@@ -7,7 +7,7 @@ Dán nguyên phần dưới vào session mới.
 Tiếp tục dự án dịch truyện Trung→Việt ở `E:\Novel_Project`. Trả lời bằng tiếng Việt.
 Trạng thái tới cuối 25/07:
 
-## Đang chạy production (VPS 103.72.57.133, đã deploy + push)
+## Đang chạy production (trên VPS thuê lúc đó — nay đã dời về box nhà, xem worker/LAPVPS.md)
 
 - **Engine dịch: Hachimi teacher-v4** (CT2 57M) ở `worker/models/hachimi-ct2/`, bản backup
   cũ ở `/root/model_backup/hachimi-ct2-20260725` trên VPS.

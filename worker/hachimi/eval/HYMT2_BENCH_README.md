@@ -48,10 +48,10 @@
 
 File `hymt2_bench_input.jsonl` chứa 4 chương mẫu thật (zh gốc + bản v5 để đối
 chiếu) — **không vào git** theo chính sách ignore jsonl của thư mục hachimi.
-Đã sinh sẵn ở máy nhà; đưa lên VPS bằng:
+Đã sinh sẵn ở máy nhà; đưa lên box bằng:
 
-```powershell
-scp worker\hachimi\eval\hymt2_bench_input.jsonl root@103.72.57.133:/root/Novel_Project/worker/hachimi/eval/
+```bash
+scp worker/hachimi/eval/hymt2_bench_input.jsonl thanhnb@thanhvps:~/Novel_Project/worker/hachimi/eval/
 ```
 
 Muốn đổi chương mẫu khác: chạy lại `make_hymt2_bench_input.py <pairs.json> hymt2_bench_input.jsonl`.

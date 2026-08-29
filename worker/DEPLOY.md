@@ -1,8 +1,15 @@
-# Deploy worker lên VPS
+# Deploy worker
 
-Worker chỉ cần ~1GB RAM (chủ yếu chờ mạng). Gói VPS bé nhất là dư.
+Worker chỉ cần ~1GB RAM (chủ yếu chờ mạng). Gói máy bé nhất là dư.
 
-## 1. Mua VPS
+> **Production hiện tại chạy trên máy self-host tự quản, không phải VPS thuê** (đổi từ
+> 28/8/2026). Máy đó không phải bản sao git — mã nguồn worker được đẩy sang bằng `rsync`,
+> chi tiết trong sổ tay nội bộ `worker/LAPVPS.md` (không commit) và menu `worker/lapvps.sh`.
+> Phần dưới là hướng dẫn tổng quát cho một máy Linux trống bất kỳ.
+
+## 1. Chuẩn bị máy
+
+Có sẵn máy Linux chạy 24/7 (kể cả máy nhà) thì dùng luôn, bỏ qua mục này. Nếu phải thuê:
 
 - **Vultr / DigitalOcean** — $5-6/tháng, chọn region **Singapore** (gần VN + cào site TQ ổn). Đăng ký dễ, nhận thẻ VN + PayPal.
 - **Hetzner** — ~€3.8/tháng (CX22: 2 vCPU/4GB), rẻ nhất nhưng server ở EU.
@@ -33,7 +40,9 @@ docker compose up -d --build
 ```bash
 docker compose logs -f            # xem log
 docker compose logs -f translator # log 1 service
-git pull && docker compose up -d --build   # cập nhật code
+git pull && docker compose up -d --build   # cập nhật code (máy có bản sao git)
+# Máy KHÔNG có bản sao git: rsync worker/novelworker + Dockerfile + requirements.lock
+# + docker-compose.yml từ repo sang, rồi `docker compose build && docker compose up -d`.
 ```
 
 ## 4. Bảo mật tối thiểu
