@@ -20,7 +20,12 @@ env/
 # IDE / AI agents
 .vscode/
 .idea/
-.claude/
+.claude/*
+!.claude/settings.json
+!.claude/hooks/
+!.claude/commands/
+!.claude/skills/
+.claude/settings.local.json
 .agents/
 .codex/
 .codex-remote-attachments/
