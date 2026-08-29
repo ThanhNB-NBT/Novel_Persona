@@ -58,10 +58,9 @@ out/
 
 .codegraph/
 
-# so tay VPS chua IP/ha tang — repo public, khong commit
-worker/VPS.md
-worker/vps.bat
-worker/vps.ps1
+# so tay + menu quan ly may chay worker (chua IP/ha tang) — repo public, khong commit
+worker/LAPVPS.md
+worker/lapvps.sh
 
 # ket qua eval dich (noi dung chuong) va benchmark model — ket luan ghi vao docs, khong commit artifact
 worker/eval_out*/
