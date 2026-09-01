@@ -9,6 +9,7 @@ import '../../chapter_paras.dart';
 import '../../cultivation.dart';
 import '../../data.dart';
 import '../../hanviet.dart';
+import '../../theme.dart';
 import '../../tts.dart';
 import '../../widgets.dart';
 import '../cultivation/pixel.dart';
@@ -793,7 +794,11 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
         child: Material(
         elevation: 8,
         color: cs.surface,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(18)),
+        // viền contour như hộp thoại/menu — tấm này tự dựng nên không ăn theme
+        shape: RoundedRectangleBorder(
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(18)),
+          side: BorderSide(color: panelRim(context)),
+        ),
         child: Padding(
           // đáy: né bàn phím (viewInsets) HOẶC thanh điều hướng (viewPadding) + chừa 16.
           // Dùng *Of theo khía cạnh (không phải MediaQuery.of) để chỉ overlay này
