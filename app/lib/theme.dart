@@ -79,6 +79,13 @@ TextStyle monoStyle(BuildContext context, {double size = 12, FontWeight w = Font
         height: 1.2, // mono mặc định line-height cao → tràn các ô cố định chiều cao
         color: color ?? Theme.of(context).colorScheme.onSurfaceVariant);
 
+/// Sợi viền ôm mép tấm nổi (hộp thoại/menu/sheet). Nền tối là ánh sáng hắt lên
+/// rìa kính; nền sáng thì đổi vai thành nét mảnh cho cạnh dứt khoát.
+/// Tấm nổi tự dựng (không qua dialogTheme) gọi [panelRim] để lấy đúng màu này.
+Color _rim(bool dark, Color line) => dark
+    ? Colors.white.withValues(alpha: 0.16)
+    : line.withValues(alpha: 0.75);
+
 ThemeData _build({required bool dark}) {
   final bg = dark ? Pal.dBg : Pal.bg;
   final surface = dark ? Pal.dSurface : Pal.surface;
@@ -225,14 +232,48 @@ ThemeData _build({required bool dark}) {
         borderSide: BorderSide(color: accent, width: 1.6),
       ),
     ),
+    // ---- Contour glow (ColorOS 17) cho HỘP THOẠI / MENU / BOTTOM SHEET ----
+    // Đây mới là chỗ của viền phát sáng — KHÔNG phải thanh điều hướng (đối chiếu
+    // video thật: thanh menu trơn, không viền sáng, không màu nhấn).
+    // Nền tối: sợi trắng mờ ôm mép = ánh sáng hắt lên rìa tấm kính.
+    // Nền sáng: tấm nổi trên nền trắng nên "sáng" không đọc được, dùng nét mảnh
+    // cho cạnh dứt khoát — cùng vai trò, khác cách thể hiện.
     dialogTheme: DialogThemeData(
       backgroundColor: surface,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+      surfaceTintColor: Colors.transparent, // tắt nhuộm-theo-elevation của M3
+      elevation: 12,
+      shadowColor: Colors.black.withValues(alpha: dark ? 0.6 : 0.22),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(22),
+        side: BorderSide(color: _rim(dark, line), width: 1),
+      ),
       titleTextStyle: GoogleFonts.plusJakartaSans(
         color: ink,
         fontSize: 19,
         fontWeight: FontWeight.w700,
         letterSpacing: -0.3,
+      ),
+    ),
+    popupMenuTheme: PopupMenuThemeData(
+      color: surface,
+      surfaceTintColor: Colors.transparent,
+      elevation: 10,
+      shadowColor: Colors.black.withValues(alpha: dark ? 0.6 : 0.22),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: _rim(dark, line), width: 1),
+      ),
+      textStyle: GoogleFonts.plusJakartaSans(
+          color: ink, fontSize: 14, fontWeight: FontWeight.w500),
+    ),
+    bottomSheetTheme: BottomSheetThemeData(
+      backgroundColor: surface,
+      surfaceTintColor: Colors.transparent,
+      elevation: 12,
+      shadowColor: Colors.black.withValues(alpha: dark ? 0.6 : 0.22),
+      shape: RoundedRectangleBorder(
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
+        side: BorderSide(color: _rim(dark, line), width: 1),
       ),
     ),
     floatingActionButtonTheme: FloatingActionButtonThemeData(
@@ -269,3 +310,11 @@ ThemeData _build({required bool dark}) {
 
 final lightTheme = _build(dark: false);
 final darkTheme = _build(dark: true);
+
+
+/// Màu viền contour cho tấm nổi TỰ DỰNG bằng Material/Container — form sửa bản
+/// dịch trong trình đọc chẳng hạn, nó không đi qua dialogTheme/bottomSheetTheme.
+Color panelRim(BuildContext context) {
+  final t = Theme.of(context);
+  return _rim(t.brightness == Brightness.dark, t.colorScheme.outlineVariant);
+}
