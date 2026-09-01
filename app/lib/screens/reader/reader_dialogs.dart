@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../widgets.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../data.dart';
@@ -18,7 +19,7 @@ Future<bool> editWholeParaDialog(BuildContext context,
   }
   final ctrl = TextEditingController(text: block);
   final messenger = ScaffoldMessenger.of(context);
-  final saved = await showDialog<bool>(
+  final saved = await showBlurDialog<bool>(
     context: context,
     builder: (ctx) => AlertDialog(
       title: const Text('Sửa cả đoạn'),
@@ -64,7 +65,7 @@ Future<void> translationReportDialog(BuildContext context,
   }
   final note = TextEditingController();
   var type = 'Sai nghĩa';
-  await showDialog<void>(
+  await showBlurDialog<void>(
     context: context,
     builder: (dialogContext) => StatefulBuilder(
       builder: (context, setState) => AlertDialog(

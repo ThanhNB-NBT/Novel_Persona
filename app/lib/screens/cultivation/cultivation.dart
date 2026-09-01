@@ -483,7 +483,7 @@ void _showSpeedBreakdown(BuildContext context, Rec st) {
       ('Linh thạch', '+$stonePct%', true),
   ];
 
-  showDialog(
+  showBlurDialog(
     context: context,
     builder: (ctx) {
       final cs = Theme.of(ctx).colorScheme;

@@ -281,7 +281,7 @@ class _CrawlTabState extends ConsumerState<CrawlTab> {
     // Knob số thì bắt số như cũ; knob CHUỖI (llm_model = danh sách model dự phòng) trước
     // đây rơi vào int.tryParse → bấm Lưu không có gì xảy ra, không sửa được từ app.
     final isNumber = int.tryParse('${s['value']}') != null;
-    showDialog(
+    showBlurDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(s['note'] ?? s['key']),
