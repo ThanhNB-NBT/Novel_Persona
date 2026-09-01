@@ -237,7 +237,10 @@ final _router = GoRouter(routes: [
   GoRoute(
     path: '/novel/:id/read/:index',
     // Transition đổi chương theo chế độ đọc: lật trang giữ trượt NGANG (khớp thao tác
-    // vuốt ngang); cuộn dọc dùng fade trung tính (trượt ngang lệch cảm giác cuộn).
+    // vuốt ngang); cuộn dọc trượt DỌC theo đúng hướng vừa vuốt — chương sau trồi lên
+    // từ đáy, chương trước hạ xuống từ đỉnh, nối liền cảm giác đang cuộn.
+    // Hướng do _goChapter gửi qua `extra` (1 = xuống chương sau, -1 = lên chương trước);
+    // vào thẳng bằng link/deep-link thì không có hướng → fade như cũ.
     pageBuilder: (context, s) {
       final pageMode =
           ProviderScope.containerOf(context).read(readerSettingsProvider).pageMode;
@@ -245,12 +248,21 @@ final _router = GoRouter(routes: [
         key: s.pageKey,
         transitionDuration: const Duration(milliseconds: 200),
         reverseTransitionDuration: const Duration(milliseconds: 200),
-        transitionsBuilder: (_, anim, _, child) => pageMode
-            ? SlideTransition(
+        transitionsBuilder: (_, anim, _, child) {
+          if (pageMode) {
+            return SlideTransition(
                 position: Tween(begin: const Offset(1, 0), end: Offset.zero)
                     .animate(CurvedAnimation(parent: anim, curve: Curves.easeOut)),
-                child: child)
-            : FadeTransition(opacity: anim, child: child),
+                child: child);
+          }
+          final dir = s.extra is int ? s.extra as int : 0;
+          if (dir == 0) return FadeTransition(opacity: anim, child: child);
+          return SlideTransition(
+            position: Tween(begin: Offset(0, dir.toDouble()), end: Offset.zero)
+                .animate(CurvedAnimation(parent: anim, curve: Curves.easeOutCubic)),
+            child: child,
+          );
+        },
         child: ReaderScreen(
           novelId: _intParam(s, 'id'),
           chapterIndex: _intParam(s, 'index'),
