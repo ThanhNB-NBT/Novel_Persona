@@ -75,5 +75,3 @@ flutter:
   # Fragment shader hiệu ứng Độ Kiếp/đại cảnh giới (nấc 2 — bloom + godray)
   shaders:
     - shaders/breakthrough.frag
-    # Dock chất lỏng (metaball + khúc xạ) cho 5 tab
-    - shaders/liquid_dock.frag
