@@ -62,7 +62,10 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   // Vuốt quá mép để đổi chương (cuộn dọc): cộng dồn độ overscroll, quá ngưỡng thì nhảy.
   double _overNext = 0, _overPrev = 0;
   bool _navigating = false;
-  static const _kOverscroll = 90.0;
+  // Đỉnh kéo căng (px) để đổi chương. Nhỏ hơn mốc 90 cũ vì cách đo đã đổi:
+  // trước là TỔNG overscroll cộng dồn, giờ là ĐỈNH khoảng cách vượt mép,
+  // mà physics đàn hồi có ma sát nên đỉnh luôn nhỏ hơn tổng.
+  static const _kOverscroll = 55.0;
 
   @override
   void initState() {
@@ -485,13 +488,18 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
         if (n is ScrollStartNotification) {
           _overNext = 0;
           _overPrev = 0;
-        } else if (n is OverscrollNotification) {
-          if (n.overscroll > 0) {
-            _overNext += n.overscroll;
-          } else {
-            _overPrev += -n.overscroll;
-          }
-        } else if (n is ScrollEndNotification) {
+          return false;
+        }
+        // Đo KHOẢNG CÁCH vượt mép chứ không cộng dồn OverscrollNotification:
+        // từ khi cuộn đàn hồi (BouncingScrollPhysics) thì physics nuốt overscroll
+        // vào chính vị trí, notification kia gần như không bắn nữa nên cách cũ
+        // làm chết hẳn thao tác vuốt-quá-đáy-sang-chương-sau.
+        final m = n.metrics;
+        final over = m.pixels - m.maxScrollExtent;
+        final under = m.minScrollExtent - m.pixels;
+        if (over > _overNext) _overNext = over;
+        if (under > _overPrev) _overPrev = under;
+        if (n is ScrollEndNotification) {
           if (_overNext > _kOverscroll) {
             _goChapter(chapterIndex + 1);
           } else if (_overPrev > _kOverscroll) {

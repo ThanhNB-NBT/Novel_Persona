@@ -272,18 +272,20 @@ final _router = GoRouter(routes: [
   ),
 ]);
 
-/// Bỏ hiệu ứng kéo giãn (stretch) của Material 3, thay bằng vòng glow mờ ở mép
-/// khi cuộn hết — nội dung đứng yên, người dùng biết đã hết.
-class _GlowScrollBehavior extends MaterialScrollBehavior {
+/// Cuộn đàn hồi toàn app: kéo quá mép thì nội dung căng ra rồi bật lại.
+class _FluidScrollBehavior extends MaterialScrollBehavior {
+  // Fluid Fusion (ColorOS 17): cuộn hết thì nội dung CĂNG RA theo ngón tay rồi
+  // bật lại, thay cho vòng sáng ở mép. Đây là đảo ngược quyết định cũ ("nội dung
+  // đứng yên, người dùng biết đã hết") — user chốt đổi 2026-09-01.
+  @override
+  ScrollPhysics getScrollPhysics(BuildContext context) =>
+      const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics());
+
+  // Đã đàn hồi thì không cần vòng sáng nữa — hai thứ cùng lúc là thừa.
   @override
   Widget buildOverscrollIndicator(
-      BuildContext context, Widget child, ScrollableDetails details) {
-    return GlowingOverscrollIndicator(
-      axisDirection: details.direction,
-      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.25),
-      child: child,
-    );
-  }
+          BuildContext context, Widget child, ScrollableDetails details) =>
+      child;
 }
 
 class NovelApp extends ConsumerWidget {
@@ -295,7 +297,7 @@ class NovelApp extends ConsumerWidget {
     return MaterialApp.router(
       title: 'Gác Truyện',
       debugShowCheckedModeBanner: false,
-      scrollBehavior: _GlowScrollBehavior(),
+      scrollBehavior: _FluidScrollBehavior(),
       theme: lightTheme,
       darkTheme: darkTheme,
       themeMode: switch (mode) { 1 => ThemeMode.light, 2 => ThemeMode.dark, _ => ThemeMode.system },
