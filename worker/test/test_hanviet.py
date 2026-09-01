@@ -122,7 +122,9 @@ def main() -> None:
     assert pinyin_written("仓库", "Cangku", "place") == "Thương Khố"
     assert pinyin_written("体育馆", "Tiyuguan", "place") == "Thể Dục Quán"
     assert pinyin_written("迅雷", "Xunlei", "other") == "Tấn Lôi"
-    assert pinyin_written("幻化", "Huan Hua", "skill") == "Huyễn Hoa"
+    # 化 = "hoá" (幻化 huyễn hoá, 变化 biến hoá). Mốc cũ là "Hoa" vì bảng tra
+    # lấy nhầm âm đầu — đã sửa ở fcfd955, mốc kỳ vọng sửa theo.
+    assert pinyin_written("幻化", "Huan Hua", "skill") == "Huyễn Hoá"
     # tên nước ngoài phiên qua chữ Hán cũng khớp pinyin y hệt — nhận ra bằng CHỮ dùng
     # để viết (toàn chữ chuyên phiên âm) chứ không bằng âm
     assert pinyin_written("安娜", "Anna", "other") is None
