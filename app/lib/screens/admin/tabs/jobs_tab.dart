@@ -214,7 +214,7 @@ void _confirmDeleteNovelFromJobs(
             if (ctx.mounted) Navigator.pop(ctx);
             ref.invalidate(adminJobsProvider);
             ref.invalidate(translateQueueProvider);
-            ref.invalidate(adminNovelsProvider);
+            ref.read(adminNovelsRevProvider.notifier).bump();
             ref.invalidate(appStatsProvider);
             ref.invalidate(homeSectionsProvider);
             messenger.showSnackBar(SnackBar(content: Text('Đã xoá "$title"')));

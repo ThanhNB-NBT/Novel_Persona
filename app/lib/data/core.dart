@@ -4,7 +4,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// Các file data khác chỉ import `core.dart`; re-export để chúng dùng được
 /// `.count(CountOption.exact)` mà không phải kéo thêm supabase_flutter.
-export 'package:supabase_flutter/supabase_flutter.dart' show CountOption;
+export 'package:supabase_flutter/supabase_flutter.dart'
+    show CountOption, PostgrestFilterBuilder;
 
 final sb = Supabase.instance.client;
 
