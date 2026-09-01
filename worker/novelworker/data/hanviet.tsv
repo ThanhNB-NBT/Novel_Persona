@@ -1,6 +1,9 @@
 # chữ Hán → âm Hán-Việt ('|' ngăn cách nếu đa âm, âm đầu = mặc định).
 # Nguồn: github.com/ph0ngp/hanviet-pinyin-words (MIT) + Unihan kTraditionalVariant
 # (giản thể hợp nhất cả âm của dạng phồn thể). Sinh bởi build_hv3.py 2026-07.
+# 2026-09: xếp lại âm mặc định cho 62 chữ đa âm theo tần suất trên 413k chữ
+# văn bản truyện thật (pinyin ngữ cảnh bằng pypinyin làm mốc). Sai 2,93% -> 0,44%.
+# Âm ưu tiên cho TÊN RIÊNG nằm ở _PREFERRED (worker) / _preferred (app), không ở đây.
 ⻏	ấp
 㐷	mạ
 㑩	la
@@ -57,14 +60,14 @@
 七	thất
 丄	thượng
 丅	hạ
-万	mặc|vạn
+万	vạn|mặc
 丈	trượng
 三	tam
-上	thướng|thượng
+上	thượng|thướng
 下	hạ
 丌	cơ|kỳ
 不	bất
-与	dư|dữ|dự
+与	dữ|dư|dự
 丏	miễn
 丐	cái
 丑	sửu|xú
@@ -87,7 +90,7 @@
 两	lưỡng|lượng|lạng
 严	nghiêm
 並	tịnh|tính
-丧	tang|táng
+丧	táng|tang
 丨	cổn
 丩	cưu
 个	cá
@@ -103,10 +106,10 @@
 丶	chủ
 丸	hoàn
 丹	đan
-为	vi|vị|vì
+为	vị|vi|vì
 主	chủ|chúa
 丼	đảm|tỉnh
-丽	ly|lệ
+丽	lệ|ly
 举	cử
 丿	phẩy|triệt
 乀	phật|phất
@@ -115,7 +118,7 @@
 久	cửu
 乆	cửu
 乇	thác|trách
-么	yêu|ma
+么	ma|yêu
 义	nghĩa
 之	chi
 乌	ô
@@ -154,7 +157,7 @@
 亄	ý
 亅	quyết
 了	liễu|liêu
-予	dư|dữ
+予	dữ|dư
 争	tranh
 亊	sự
 事	sự
@@ -206,7 +209,7 @@
 仄	trắc
 仅	cận
 仆	bộc
-仇	cừu|thù
+仇	thù|cừu
 仉	chưởng
 今	kim
 介	giới
@@ -216,7 +219,7 @@
 仏	phật
 仑	luân
 仓	thương|thảng
-仔	tể|tử
+仔	tử|tể
 仕	sĩ
 他	tha
 仗	trượng
@@ -240,7 +243,7 @@
 仵	ngỗ
 件	kiện
 价	giá|giới
-任	nhâm|nhiệm
+任	nhiệm|nhâm
 份	phần
 仿	phỏng|phảng
 伀	chung
@@ -495,7 +498,7 @@
 偽	nguỵ
 偾	phẫn
 偿	thường
-傀	khôi|quỷ
+傀	quỷ|khôi
 傅	phó|phụ
 傈	lật
 傌	mạ
@@ -607,7 +610,7 @@
 儻	thảng
 儼	nghiễm
 儽	luy
-儿	nhân|nhi
+儿	nhi|nhân
 兀	ngột
 允	duẫn
 元	nguyên
@@ -684,7 +687,7 @@
 军	quân
 农	nông
 冞	my
-冠	quán|quan
+冠	quan|quán
 冡	mông
 冢	trủng
 冣	tối
@@ -721,7 +724,7 @@
 凜	lẫm
 凝	ngưng
 凟	độc
-几	cơ|ky|kỷ
+几	kỷ|cơ|ky
 凡	phàm
 凢	phàm
 凤	phượng
@@ -748,21 +751,21 @@
 刂	đao
 刃	nhận
 分	phân|phận|phần
-切	tiếp|thiết
+切	thiết|tiếp
 刈	ngải
 刊	san
 刌	thiển
 刍	sô
 刎	vẫn
 刑	hình
-划	hoa|hoạch
+划	hoạch|hoa
 刓	ngoan
 刖	ngoạt
 列	liệt
 刘	lưu
 则	tắc
 刚	cương
-创	thương|sang|sáng
+创	sáng|thương|sang
 刜	phất
 初	sơ
 删	san
@@ -938,7 +941,7 @@
 匑	cung
 匔	cung
 匕	chuỷ
-化	hoa|hoá
+化	hoá|hoa
 北	bắc
 匙	thi
 匚	phương
@@ -961,7 +964,7 @@
 匶	cữu
 匸	hệ
 匹	thất|thớt
-区	âu|khu
+区	khu|âu
 医	y
 匽	yển
 匾	biển
@@ -987,7 +990,7 @@
 卒	thốt|tốt|tuất
 卓	trác
 協	hiệp
-单	thiện|thiền|đơn|đan
+单	đơn|thiện|thiền|đan
 卖	mại
 南	nam
 博	bác
@@ -995,7 +998,7 @@
 卝	quán|khoáng
 卞	biện
 卟	kê
-占	chiêm|chiếm
+占	chiếm|chiêm
 卡	ca|tạp|khải
 卢	lô
 卣	dữu
@@ -1013,7 +1016,7 @@
 即	tức
 却	khước
 卵	noãn
-卷	cuộn|quyển|cuốn
+卷	quyển|cuộn|cuốn
 卸	tá
 卹	tuất
 卻	khước
@@ -1021,7 +1024,7 @@
 卽	tức
 卿	khanh
 厀	tất
-厂	hán|xưởng
+厂	xưởng|hán
 厄	ách
 厅	sảnh|thính
 历	lịch
@@ -1065,7 +1068,7 @@
 厾	đâu
 县	huyện
 叁	tam
-参	tam|tham|sâm
+参	tham|tam|sâm
 參	tam|tham|sâm
 叄	tam
 叅	tham
@@ -1100,7 +1103,7 @@
 叩	khấu
 只	chỉ|kỳ|chích
 叫	khiếu
-召	thiệu|triệu|chiêu
+召	triệu|thiệu|chiêu
 叭	bá
 叮	đinh
 可	khả|khắc
@@ -1109,8 +1112,8 @@
 史	sử
 右	hữu
 叵	phả
-叶	hiệp|diệp
-号	gào|hào|hiệu
+叶	diệp|hiệp
+号	hiệu|gào|hào
 司	ti|tư
 叹	thán
 叻	lặc
@@ -1121,7 +1124,7 @@
 各	các
 吅	tụng|huyên
 吆	yêu
-合	cáp|hợp|hiệp|hạp
+合	hợp|cáp|hiệp|hạp
 吉	cát
 吊	điếu
 吋	thốn
@@ -1149,8 +1152,8 @@
 吩	phân
 吪	ngoa
 含	hàm
-听	dẫn|thính
-吭	hàng|hạng|khang
+听	thính|dẫn
+吭	khang|hàng|hạng
 吮	duyện
 启	khởi|khải
 吰	hoành
@@ -1183,7 +1186,7 @@
 呓	nghệ
 呕	ẩu
 呖	lịch
-呗	bái|bối
+呗	bối|bái
 员	viên
 呙	qua|quai|oai
 呛	sặc|sang
@@ -1203,7 +1206,7 @@
 呲	thử
 味	vị
 呴	hú
-呵	a|ha
+呵	ha|a
 呶	nao
 呷	hạp
 呸	phì
@@ -1253,13 +1256,13 @@
 咯	khách|cách|lạc|khạc
 咱	ta
 咲	tiếu
-咳	hài|khái
+咳	khái|hài
 咷	đào
 咸	hàm
 咺	tuyển
 咻	hưu
 咼	qua|quai|oai
-咽	yết|yến|ế
+咽	yến|yết|ế
 咿	y
 哀	ai
 品	phẩm
@@ -1272,7 +1275,7 @@
 响	hưởng
 哎	ai
 哏	ngận
-哑	nha|á|ách
+哑	á|nha|ách
 哒	đát
 哓	hiêu
 哔	tất
@@ -1385,7 +1388,7 @@
 啾	thu
 喀	ca
 喁	ngung
-喂	uy|ê|ơi|uý
+喂	uý|uy|ê|ơi
 喃	nam
 善	thiện
 喆	triết
@@ -1659,7 +1662,7 @@
 圞	loan
 土	thổ
 圢	đinh
-圣	khốt|thánh
+圣	thánh|khốt
 在	tại
 圩	vu
 圪	khất
@@ -1670,7 +1673,7 @@
 地	địa
 圳	quyến
 圹	khoáng
-场	tràng|trường
+场	trường|tràng
 圻	kỳ
 圾	sắc
 址	chỉ
@@ -1920,7 +1923,7 @@
 壿	chung
 夀	thọ
 夂	tri
-处	xử|xứ
+处	xứ|xử
 夅	hàng
 夆	phùng
 备	bị
@@ -1959,7 +1962,7 @@
 奁	liêm
 奂	hoán
 奄	yểm|yêm
-奇	cơ|kỳ
+奇	kỳ|cơ
 奈	nại
 奉	phụng
 奋	phấn
@@ -1970,7 +1973,7 @@
 奓	xỉ|xa|tra
 奔	bôn
 奕	dịch
-奖	tưởng|thưởng
+奖	thưởng|tưởng
 套	sáo
 奘	trang
 奚	hề
@@ -2127,7 +2130,7 @@
 媕	an
 媖	anh
 媚	mị
-媛	viên|viện
+媛	viện|viên
 媞	thị
 媟	tiết
 媠	noạ|đoạ
@@ -2244,7 +2247,7 @@
 孽	nghiệt
 孿	loan
 宀	miên
-宁	trữ|ninh
+宁	ninh|trữ
 宂	nhũng
 它	tha
 宄	quỹ
@@ -2345,7 +2348,7 @@
 将	tương|tướng|thương
 將	tương|tướng|thương
 專	chuyên
-尉	uý|uất
+尉	uất|uý
 尊	tôn
 尋	tầm
 尌	thụ
@@ -2430,7 +2433,7 @@
 屼	ngột
 屿	tự
 岁	tuế
-岂	khải|khởi
+岂	khởi|khải
 岅	phản
 岈	ha
 岊	tiết
@@ -2517,7 +2520,7 @@
 崧	tung
 崩	băng
 崬	đông
-崭	sàm|tiệm
+崭	tiệm|sàm
 崮	cố
 崱	trắc
 崳	du
@@ -2627,7 +2630,7 @@
 帑	thảng
 帔	bí
 帕	phách
-帖	thiếp|thiệp
+帖	thiệp|thiếp
 帗	phạt
 帘	liêm
 帙	trật
@@ -2694,7 +2697,7 @@
 平	bình
 年	niên
 幵	kiên
-并	tinh|tịnh|tính
+并	tịnh|tinh|tính
 幷	tịnh|tính
 幸	hạnh
 幹	cán
@@ -2702,7 +2705,7 @@
 幼	ấu
 幽	u
 幾	cơ|ky|kỷ
-广	nghiễm|quảng
+广	quảng|nghiễm
 庀	phỉ
 庁	sảnh|thính
 庄	trang
@@ -2714,7 +2717,7 @@
 庐	lư
 庑	vu|vũ
 库	khố
-应	ưng|ứng
+应	ứng|ưng
 底	để
 庖	bào
 店	điếm
@@ -2815,7 +2818,7 @@
 弢	thao
 弣	phủ
 弤	để
-弥	di|my
+弥	my|di
 弦	huyền
 弧	hồ
 弨	siêu
@@ -2843,7 +2846,7 @@
 彐	kệ
 彑	kệ
 归	quy
-当	đang|đương|đáng
+当	đương|đang|đáng
 彔	lục
 录	lục
 彖	thoán
@@ -2872,7 +2875,7 @@
 彲	si
 彳	xích
 彴	chước
-彷	phảng|bàng
+彷	bàng|phảng
 彸	chung
 役	dịch
 彻	triệt
@@ -3326,11 +3329,11 @@
 戾	lệ
 房	phòng
 所	sở
-扁	thiên|biển
+扁	biển|thiên
 扂	điệm
 扃	quynh
 扆	ỷ
-扇	thiên|phiến
+扇	phiến|thiên
 扈	hỗ
 扉	phi
 扊	diễm
@@ -3341,7 +3344,7 @@
 扐	lặc
 扑	phác
 扒	bái|bóc|bát
-打	tá|đả
+打	đả|tá
 扔	nhưng
 托	thác
 扛	khiêng|gánh
@@ -3393,7 +3396,7 @@
 抟	đoàn
 抠	khu
 抡	luân
-抢	thương|thưởng
+抢	thưởng|thương
 护	hộ
 报	báo
 抨	phanh
@@ -3407,7 +3410,7 @@
 押	áp
 抽	trừu
 抿	mân
-拂	bật|phất|phật
+拂	phất|bật|phật
 拃	tra
 拄	trụ
 担	đảm|đam
@@ -3456,7 +3459,7 @@
 拷	khảo
 拼	bính
 拽	duệ
-拾	thiệp|thập
+拾	thập|thiệp
 拿	nã
 持	trì
 挂	quải
@@ -3475,7 +3478,7 @@
 挜	á
 挝	qua
 挞	thát
-挟	giáp|hiệp
+挟	hiệp|giáp
 挠	nạo
 挡	đảng|đáng
 挢	kiểu
@@ -3523,7 +3526,7 @@
 捩	liệt
 捫	môn
 捭	bãi|phách
-据	cư|cứ
+据	cứ|cư
 捱	ai
 捲	cuốn|quyển
 捶	chuỷ
@@ -3803,7 +3806,7 @@
 攉	hoắc
 攏	long
 攐	khiên
-攒	toàn|toản
+攒	toản|toàn
 攓	kiển
 攔	lan
 攖	anh
@@ -3859,13 +3862,13 @@
 敝	tệ
 敞	sưởng
 敢	cảm
-散	tản|tán
+散	tán|tản
 敦	đôn
 敪	xuyết
 敫	kiểu
 敬	kính
 敭	dương
-数	sổ|số|sác
+数	số|sổ|sác
 敱	ngai
 敲	xao
 整	chỉnh
@@ -4709,7 +4712,7 @@
 歠	xuyết
 歡	hoan
 止	chỉ
-正	chinh|chính|chánh
+正	chính|chinh|chánh
 此	thử
 步	bộ
 武	võ
@@ -5037,7 +5040,7 @@
 流	lưu
 浃	tiếp
 浄	tịnh
-浅	tiên|thiển
+浅	thiển|tiên
 浆	tương
 浇	kiêu
 浈	trinh
@@ -5045,7 +5048,7 @@
 浊	trọc
 测	trắc
 浍	quái
-济	tể|tế
+济	tế|tể
 浏	lưu
 浐	sản
 浑	hồn
@@ -5096,7 +5099,7 @@
 涝	lạo
 涞	lai
 涟	liên
-涡	qua|oa
+涡	oa|qua
 涢	vân
 涣	hoán
 涤	địch
@@ -5165,7 +5168,7 @@
 渌	lục
 渍	tý
 渎	độc
-渐	tiêm|tiệm
+渐	tiệm|tiêm
 渑	thằng
 渔	ngư
 渖	thẩm
@@ -5309,7 +5312,7 @@
 滾	cổn
 滿	mãn
 漁	ngư
-漂	phiêu|phiếu
+漂	phiếu|phiêu
 漆	tất
 漈	tế
 漉	lộc
@@ -5456,7 +5459,7 @@
 瀌	tiêu
 瀍	triền
 瀏	lưu
-瀑	bạo|bộc
+瀑	bộc|bạo
 瀕	tần
 瀘	lô
 瀚	hãn
@@ -5531,13 +5534,13 @@
 炫	huyễn
 炬	cự
 炭	thán
-炮	bào|pháo
+炮	pháo|bào
 炯	quýnh
 炰	bào
 炱	đài
 炳	bỉnh
 炷	chú
-炸	trác|tạc
+炸	tạc|trác
 点	điểm
 為	vi|vị|vì
 炻	thạch
@@ -5674,7 +5677,7 @@
 燐	lân
 燒	thiêu
 燔	phần
-燕	yên|yến
+燕	yến|yên
 燖	tầm
 燙	năng
 燜	muộn
@@ -5931,7 +5934,7 @@
 玄	huyền
 玅	diệu
 玆	tư
-率	luật|suất|soái|suý|soát
+率	suất|luật|soái|suý|soát
 玈	lô
 玉	ngọc
 玊	túc
@@ -6205,7 +6208,7 @@
 略	lược
 畦	huề
 畧	lược
-番	phan|phiên
+番	phiên|phan
 畫	hoạ|hoạch
 畬	xa|dư
 畮	mẫu
@@ -6696,7 +6699,7 @@
 碃	thanh
 碇	đính
 碉	điêu
-碌	lựu|lục
+碌	lục|lựu
 碍	ngại
 碎	toái
 碏	thước
@@ -6818,7 +6821,7 @@
 祧	thiêu
 票	phiếu
 祫	hợp
-祭	sái|tế
+祭	tế|sái
 祯	trinh
 祲	tẩm
 祷	đảo
@@ -6828,7 +6831,7 @@
 祼	quán
 祿	lộc
 禀	bẩm
-禁	cầm|câm|cấm
+禁	cấm|cầm|câm
 禂	đảo
 禄	lộc
 禅	thiền|thiện
@@ -6892,7 +6895,7 @@
 秬	cự
 秭	tỷ
 积	tích
-称	xứng|xưng
+称	xưng|xứng
 秷	xứng
 秸	kiết
 移	di
@@ -7283,7 +7286,7 @@
 粟	túc
 粢	tư
 粤	việt
-粥	dục|chúc
+粥	chúc|dục
 粦	lân
 粧	trang
 粪	phân
@@ -7603,9 +7606,9 @@
 纡	hu
 红	hồng|công
 纣	trụ
-纤	khiên|tiêm
+纤	tiêm|khiên
 纥	hột
-约	yêu|ước
+约	ước|yêu
 级	cấp
 纨	hoàn
 纩	khoáng
@@ -7689,7 +7692,7 @@
 绹	đào
 绺	lữu
 绻	quyển
-综	tống|tổng|tông
+综	tổng|tống|tông
 绽	trán
 绾	oản
 绿	lục
@@ -7721,7 +7724,7 @@
 缚	buộc|phược
 缛	nhục
 缜	chẩn
-缝	phùng|phúng
+缝	phúng|phùng
 缞	thôi
 缟	cảo
 缠	triền
@@ -7974,7 +7977,7 @@
 肐	cách
 肓	hoang
 肕	nhận
-肖	tiêu|tiếu
+肖	tiếu|tiêu
 肘	chỏ
 肚	đỗ
 肛	giang
@@ -8092,7 +8095,7 @@
 脿	biểu
 腄	chuỷ
 腆	thiển
-腊	tịch|lạp
+腊	lạp|tịch
 腋	dịch
 腌	yêm
 腍	nhẫm
@@ -8223,7 +8226,7 @@
 舊	cựu
 舋	hấn
 舌	thiệt
-舍	xá|xả
+舍	xả|xá
 舎	xá
 舐	thỉ
 舒	thư
@@ -8528,7 +8531,7 @@
 華	hoa|hoá
 菰	cô
 菱	lăng
-菲	phi|phỉ
+菲	phỉ|phi
 菴	am
 菶	bổng
 菷	chổi
@@ -8579,7 +8582,7 @@
 葑	phong
 葒	hồng
 葖	đột
-著	trước|trứ
+著	trứ|trước
 葙	tương
 葚	thậm
 葛	cát
@@ -8677,12 +8680,12 @@
 蔌	tốc
 蔎	thiết
 蔑	miệt
-蔓	man|mạn
+蔓	mạn|man
 蔔	bặc
 蔕	đế
 蔗	giá
 蔘	sâm
-蔚	uất|uý
+蔚	uý|uất
 蔞	lâu
 蔟	thốc
 蔡	thái
@@ -8781,11 +8784,11 @@
 薿	nghĩ
 藁	cảo
 藇	tự
-藉	tá|tạ|tịch
+藉	tịch|tá|tạ
 藊	biển
 藍	lam
 藎	tẫn
-藏	tạng|tàng
+藏	tàng|tạng
 藐	miểu
 藓	tiển
 藕	ngẫu
@@ -9142,7 +9145,7 @@
 衉	khách
 衊	miệt
 衋	hức
-行	hàng|hạng|hành|hạnh
+行	hành|hàng|hạng|hạnh
 衍	diễn
 衎	khản
 衒	huyễn
@@ -9168,7 +9171,7 @@
 衬	sấn
 衭	phu
 衮	cổn
-衰	thôi|suy
+衰	suy|thôi
 衲	nạp
 衵	nật
 衷	trung
@@ -9271,7 +9274,7 @@
 褥	nhục
 褦	nại
 褧	quýnh
-褪	thoái|thốn
+褪	thốn|thoái
 褫	sỉ
 褭	niểu
 褯	tạ
@@ -9323,7 +9326,7 @@
 襾	á
 西	tây
 覀	á
-要	yêu|yếu
+要	yếu|yêu
 覂	phủng
 覃	đàm
 覅	phiếu
@@ -9359,13 +9362,13 @@
 覿	địch
 觀	quán|quan
 见	kiến|hiện
-观	quán|quan
+观	quan|quán
 规	quy
 觅	mịch
 视	thị
 觇	chiêm
 览	lãm
-觉	giáo|giác
+觉	giác|giáo
 觊	ký
 觋	hích
 觌	địch
@@ -9730,7 +9733,7 @@
 诸	chư|gia
 诹	tưu
 诺	nặc
-读	đậu|đọc|độc
+读	đọc|đậu|độc
 诼	trác
 诽	phỉ
 课	khoá
@@ -10042,7 +10045,7 @@
 趯	địch|dược
 趱	toản
 趲	toản
-足	tú|túc
+足	túc|tú
 趴	bát
 趵	báo
 趸	độn
@@ -10100,7 +10103,7 @@
 踅	thệ|tuyệt
 踆	thuân
 踈	sơ
-踉	lương|lượng
+踉	lượng|lương
 踊	dũng
 踋	cước
 踌	trù
@@ -10373,7 +10376,7 @@
 辛	tân
 辜	cô
 辞	từ
-辟	tích|tịch
+辟	tịch|tích
 辠	tội
 辢	lạt
 辣	lạt
@@ -10425,7 +10428,7 @@
 迨	đãi
 迩	nhĩ
 迪	địch
-迫	bài|bách|bức
+迫	bách|bài|bức
 迭	điệt
 迮	trách
 述	thuật
@@ -10437,11 +10440,11 @@
 迹	tích
 迺	nãi
 迻	di
-追	đôi|truy
+追	truy|đôi
 迿	tuân
 退	thoái
 送	tống
-适	quát|thích
+适	thích|quát
 逃	đào
 逄	bàng
 逅	cấu
@@ -10772,7 +10775,7 @@
 释	thích
 釋	thích
 里	lý
-重	trùng|trọng
+重	trọng|trùng
 野	dã
 量	lượng
 釐	ly
@@ -11348,7 +11351,7 @@
 長	trường|trưởng
 镸	trường
 镻	điệt
-长	trường|trưởng
+长	trưởng|trường
 門	môn
 閂	soan
 閃	thiểm
@@ -11674,7 +11677,7 @@
 靝	thiên
 非	phi
 靠	kháo
-靡	my|mỹ
+靡	mỹ|my
 面	diện|miến
 靣	diện
 靥	yếp
@@ -11837,7 +11840,7 @@
 顴	quyền
 页	hiệt
 顶	đỉnh
-顷	khuynh|khoảnh
+顷	khoảnh|khuynh
 顸	han
 项	hạng
 顺	thuận

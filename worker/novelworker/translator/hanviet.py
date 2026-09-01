@@ -19,6 +19,12 @@ _table: dict[str, list[str]] | None = None
 _PREFERRED = {
     "宁": "ninh",   # 宁 tên → Ninh (mặc định bảng cũng ninh, giữ chắc)
     "曾": "tăng",   # họ 曾 → Tăng (曾国藩 Tăng Quốc Phiên); mặc định 'tằng' là nghĩa "đã từng"
+    # 2026-09: bảng đã xếp lại mặc định theo VĂN XUÔI (任 nhiệm, 燕 yến, 仇 thù). Trong TÊN
+    # thì ngược lại, nên ghim ở đây — han_viet() chỉ chạy trên person/place/sect.
+    "任": "nhâm",   # họ 任 → Nhâm; văn xuôi 任务 = nhiệm vụ
+    "燕": "yên",    # 燕京 Yên Kinh, nước Yên; văn xuôi 燕子 = yến
+    "仇": "cừu",    # họ 仇 → Cừu; văn xuôi 仇恨 = thù hận
+    "区": "âu",     # họ 区 → Âu; văn xuôi 地区 = địa khu
 }
 
 # term_type áp quy tắc Hán-Việt bắt buộc; item/skill có thể dịch nghĩa ("Kiếm Lửa") → không ép

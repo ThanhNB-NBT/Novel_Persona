@@ -19,7 +19,14 @@ final hanVietOnly = RegExp(
 
 // chữ đa âm mà âm ưu tiên trong TÊN RIÊNG khác âm đầu bảng — khớp worker
 // hanviet._PREFERRED để mặc định app trùng mặc định worker auto-điền glossary.
-const _preferred = {'宁': 'ninh', '曾': 'tăng'};
+const _preferred = {
+  '宁': 'ninh',
+  '曾': 'tăng',
+  '任': 'nhâm', // bảng xếp mặc định theo văn xuôi (nhiệm); trong tên là họ Nhâm
+  '燕': 'yên',  // 燕京 Yên Kinh; văn xuôi 燕子 = yến
+  '仇': 'cừu',  // họ Cừu; văn xuôi 仇恨 = thù hận
+  '区': 'âu',   // họ Âu; văn xuôi 地区 = địa khu
+};
 
 /// Gọi 1 lần lúc khởi động (fire-and-forget). Chưa nạp xong thì hanVietOf trả null.
 Future<void> loadHanViet() async {
