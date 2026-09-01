@@ -178,11 +178,29 @@ ThemeData _build({required bool dark}) {
         // bo 15 nửa vời nhìn "sao sao" đúng như cảm giác
         shape: const StadiumBorder(),
         padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
-        // Hào quang màu nhấn hắt xuống dưới nút — cùng ngôn ngữ "glow" với dock
-        // (ColorOS 17): nút phát sáng chứ không nằm phẳng trên nền.
-        elevation: 8,
-        shadowColor: accent.withValues(alpha: dark ? 0.75 : 0.55),
+        // PHẲNG, không hào quang. Đối chiếu ảnh ColorOS 17 thật: nút hành động
+        // (FAB xanh lá, nút play xanh dương) đều là khối đặc phẳng, không đổ sáng.
+        elevation: 0,
       ),
+    ),
+    // Chip: trước đây để mặc định Material nên lạc hẳn khỏi hệ pill của app
+    // (hộp bo góc + viền xám). Giờ pill như FilledButton/dock, chọn thì nhuộm
+    // màu nhấn. Cố ý KHÔNG thêm hào quang: chip lọc đứng thành hàng, mỗi cái
+    // phát sáng là rối.
+    chipTheme: ChipThemeData(
+      shape: const StadiumBorder(),
+      side: BorderSide(color: line),
+      backgroundColor: Colors.transparent,
+      selectedColor: accent.withValues(alpha: dark ? 0.28 : 0.14),
+      checkmarkColor: accent,
+      labelStyle: GoogleFonts.plusJakartaSans(
+          fontSize: 13, fontWeight: FontWeight.w600, color: soft),
+      secondaryLabelStyle: GoogleFonts.plusJakartaSans(
+          fontSize: 13, fontWeight: FontWeight.w700, color: accent),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      showCheckmark: true,
+      elevation: 0,
+      pressElevation: 0,
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
