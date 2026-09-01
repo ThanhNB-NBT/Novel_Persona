@@ -58,8 +58,10 @@ jobs:
 
       - uses: subosito/flutter-action@v2
         with:
-          # ghim theo bản đang dev local — channel:stable trôi version, build lệch khó lần
-          flutter-version: 3.44.4
+          # ghim theo bản đang dev local — channel:stable trôi version, build lệch khó lần.
+          # 2026-09-02: 3.44.4 -> 3.47.2 cho khớp máy dev (đã trôi 2 bản stable,
+          # nghĩa là APK phát hành build một đằng còn thử một nẻo).
+          flutter-version: 3.47.2
           cache: true
 
       - name: Giải keystore từ secret
@@ -100,7 +102,7 @@ jobs:
 
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: 3.44.4
+          flutter-version: 3.47.2
           cache: true
 
       - name: Build iOS (no codesign) + đóng gói .ipa
