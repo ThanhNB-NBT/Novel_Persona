@@ -333,6 +333,25 @@ class _DockState extends State<_Dock> with TickerProviderStateMixin {
                 ),
               ),
             ),
+            // Vệt sáng mép trên — ColorOS 17 gọi là contour lighting: một sợi sáng
+            // ôm rìa trên làm thanh nổi khỏi nền thay vì viền xám phẳng.
+            Positioned(
+              top: 0,
+              left: 12,
+              right: 12,
+              height: 1.5,
+              child: IgnorePointer(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(colors: [
+                      Colors.white.withValues(alpha: 0),
+                      Colors.white.withValues(alpha: dark ? 0.55 : 0.95),
+                      Colors.white.withValues(alpha: 0),
+                    ]),
+                  ),
+                ),
+              ),
+            ),
             // Vũng linh dịch chạy 120fps trên canvas
             Positioned.fill(
               child: IgnorePointer(
@@ -341,7 +360,9 @@ class _DockState extends State<_Dock> with TickerProviderStateMixin {
                     amb: _amb,
                     shader: _liquid,
                     color: liquid,
-                    alpha: dark ? 0.52 : 0.46,
+                    // hạ xuống vì nút tròn phát sáng đã gánh phần "đang ở tab nào";
+                    // để nguyên 0.52/0.46 thì hai lớp chồng nhau thành bệt.
+                    alpha: dark ? 0.30 : 0.26,
                     selX: _pad + (x + 0.5) * cell,
                     cent: cent,
                     flow: flow,
@@ -393,6 +414,40 @@ class _DockState extends State<_Dock> with TickerProviderStateMixin {
           child: Stack(
             alignment: Alignment.center,
             children: [
+              // Quầng sáng tròn sau icon đang chọn — "contour glow" kiểu ColorOS 17:
+              // nút sáng từ trong ra thay vì nằm trên nền phẳng. Mờ dần theo `near`
+              // nên lúc vuốt giữa 2 tab nó chuyển mượt chứ không bật/tắt.
+              if (near > 0.01)
+                IgnorePointer(
+                  child: Container(
+                    width: 30 + 8 * near,
+                    height: 30 + 8 * near,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      // ruột sáng nhẹ + viền sáng rõ: nút TRÒN nổi hẳn khỏi mặt kính,
+                      // đúng kiểu Control Center ColorOS 17 (bỏ nền phẳng)
+                      color: cs.primary.withValues(alpha: 0.16 * near),
+                      border: Border.all(
+                        color: cs.primary.withValues(alpha: 0.55 * near),
+                        width: 1.2,
+                      ),
+                      boxShadow: [
+                        // hào quang toả ra ngoài — "contour glow"
+                        BoxShadow(
+                          color: cs.primary.withValues(alpha: 0.38 * near),
+                          blurRadius: 16 * near,
+                          spreadRadius: 1.0 * near,
+                        ),
+                        // lõi sáng bên trong cho cảm giác đèn thật
+                        BoxShadow(
+                          color: Colors.white.withValues(alpha: 0.22 * near),
+                          blurRadius: 6 * near,
+                          spreadRadius: -2,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               // Icon viền nét mờ
               Opacity(
                 opacity: (1.0 - near).clamp(0.0, 1.0),
