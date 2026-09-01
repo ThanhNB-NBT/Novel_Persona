@@ -165,22 +165,38 @@ final adminJobsProvider = FutureProvider.autoDispose<List<Rec>>((ref) async {
   return jobs;
 });
 
-/// Chương của 1 truyện kèm thông tin SAU DỊCH (model, token, thời điểm) — cho màn quản trị.
-final adminChaptersProvider = FutureProvider.autoDispose.family<List<Rec>, int>(
-  (ref, novelId) async {
-    return List<Rec>.from(
-      await sb
-          .from('chapters')
-          .select(
-            'chapter_index, title_vi, translation_status, model_used, '
-            'prompt_tokens, completion_tokens, translated_at',
-          )
-          .eq('novel_id', novelId)
-          .order('chapter_index', ascending: true)
-          .limit(2000),
-    );
-  },
-);
+/// Số chương mỗi lô ở màn quản trị 1 truyện (cuộn tới đâu tải tới đó).
+const kAdminChaptersPage = 60;
+
+/// 1 lô chương của 1 truyện kèm thông tin SAU DỊCH (model, token, thời điểm).
+///
+/// Trước đây kéo thẳng .limit(2000): truyện 6.111 chương vừa tải thiếu vừa ì lúc mở.
+/// chapter_index tăng dần và duy nhất trong 1 truyện nên range() phân trang ổn định.
+Future<List<Rec>> fetchAdminChapterPage(
+    int novelId, int offset, int limit) async {
+  return List<Rec>.from(
+    await sb
+        .from('chapters')
+        .select(
+          'chapter_index, title_vi, translation_status, model_used, '
+          'prompt_tokens, completion_tokens, translated_at',
+        )
+        .eq('novel_id', novelId)
+        .order('chapter_index', ascending: true)
+        .range(offset, offset + limit - 1),
+  );
+}
+
+/// Cờ "danh sách chương đã cũ" — như [adminNovelsRevProvider], cho các thao tác
+/// xếp dịch / huỷ hàng đợi báo màn chương nạp lại từ trang đầu.
+class AdminChaptersRev extends Notifier<int> {
+  @override
+  int build() => 0;
+  void bump() => state++;
+}
+
+final adminChaptersRevProvider =
+    NotifierProvider<AdminChaptersRev, int>(AdminChaptersRev.new);
 
 /// Dữ liệu động cho bộ lọc: số chương lớn nhất (để sinh mốc "N+") + các trạng thái đang có.
 /// Trạng thái lấy thẳng từ DB → sau này crawl thêm trạng thái mới là tự hiện.
