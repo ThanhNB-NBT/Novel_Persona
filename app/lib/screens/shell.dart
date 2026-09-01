@@ -120,6 +120,9 @@ class _RootShellState extends ConsumerState<RootShell> {
           // Vùng có list cuộn ngang (carousel, rail) thì gesture của list thắng.
           PageView(
             controller: _pc,
+            // Đàn hồi kiểu Fluid Fusion (ColorOS 17): vuốt tới tab đầu/cuối thì
+            // trang căng ra rồi bật lại theo ngón tay, thay vì khựng cứng.
+            physics: const PageScrollPhysics(parent: BouncingScrollPhysics()),
             onPageChanged: changed,
             children: [for (final p in _pages) _KeepAlive(child: p)],
           ),

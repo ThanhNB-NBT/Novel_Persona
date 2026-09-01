@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'common.dart';
+
 import '../data.dart';
 import '../offline.dart';
 
@@ -17,7 +19,7 @@ Future<void> toggleOffline(
   }
 
   if (downloaded) {
-    final ok = await showDialog<bool>(
+    final ok = await showBlurDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Xoá bản offline?'),
@@ -36,7 +38,7 @@ Future<void> toggleOffline(
   }
 
   // Tải: hiện vòng quay chặn thao tác tới khi xong (tải theo lô, vài giây).
-  showDialog(
+  showBlurDialog(
     context: context,
     barrierDismissible: false,
     builder: (_) => const AlertDialog(
@@ -84,7 +86,7 @@ void translateRangeDialog(BuildContext context, WidgetRef ref, int novelId,
     onDone?.call();
   }
 
-  showDialog(
+  showBlurDialog(
     context: context,
     builder: (ctx) => AlertDialog(
       title: const Text('Yêu cầu dịch'),

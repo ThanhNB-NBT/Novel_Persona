@@ -303,7 +303,7 @@ class _NovelRow extends StatelessWidget {
   /// bằng dialog rõ ràng vì không hoàn tác được (ẩn mới là thao tác "mềm" hằng ngày).
   void _deleteNovel(BuildContext context, Rec n, WidgetRef ref) {
     final title = n['title_vi'] ?? n['title_zh'] ?? 'Truyện #${n['id']}';
-    showDialog(
+    showBlurDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Xoá vĩnh viễn?'),
@@ -336,7 +336,7 @@ class _NovelRow extends StatelessWidget {
     final titleVi = TextEditingController(text: n['title_vi'] ?? '');
     final authorVi = TextEditingController(text: n['author_vi'] ?? '');
     String status = n['status'] ?? 'ongoing';
-    showDialog(
+    showBlurDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Sửa truyện'),

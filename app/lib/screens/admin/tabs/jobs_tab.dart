@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../data.dart';
@@ -197,7 +198,7 @@ class _NovelJobsRow extends StatelessWidget {
 /// cùng cascade như tab Truyện, kèm xác nhận vì không hoàn tác được.
 void _confirmDeleteNovelFromJobs(
     BuildContext context, WidgetRef ref, int novelId, String title) {
-  showDialog(
+  showBlurDialog(
     context: context,
     builder: (ctx) => AlertDialog(
       title: const Text('Xoá vĩnh viễn?'),
@@ -322,7 +323,7 @@ class _JobRow extends StatelessWidget {
           final id = j['id'] as int;
           if (v == 'cancel') {
             // dialog trước mọi await → không dùng context qua async gap
-            final ok = await showDialog<bool>(
+            final ok = await showBlurDialog<bool>(
               context: context,
               builder: (ctx) => AlertDialog(
                 title: const Text('Huỷ job này?'),
@@ -361,7 +362,7 @@ class _JobRow extends StatelessWidget {
 
 /// Dialog hiện đầy đủ lỗi 1 job (có thể copy) — error DB cắt ở 2000 ký tự.
 void _showError(BuildContext context, Object? chIdx, String error) {
-  showDialog(
+  showBlurDialog(
     context: context,
     builder: (ctx) => AlertDialog(
       title: Text(chIdx != null ? 'Lỗi chương $chIdx' : 'Lỗi job'),

@@ -250,7 +250,7 @@ class _HostCard extends ConsumerWidget {
     final host = '${h['host']}';
     final labelCtrl = TextEditingController(text: '${h['label'] ?? ''}');
     final addrCtrl = TextEditingController(text: '${h['address'] ?? ''}');
-    final saved = await showDialog<bool>(
+    final saved = await showBlurDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text('Nhãn máy chủ ($host)'),
@@ -288,7 +288,7 @@ class _HostCard extends ConsumerWidget {
       'restart_translator': 'translator',
     };
     final messenger = ScaffoldMessenger.of(context); // bắt trước async gap
-    final ok = await showDialog<bool>(
+    final ok = await showBlurDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Khởi động lại?'),
@@ -314,7 +314,7 @@ class _HostCard extends ConsumerWidget {
   }
 
   Future<void> _confirmDelete(BuildContext context, WidgetRef ref, String host) async {
-    final ok = await showDialog<bool>(
+    final ok = await showBlurDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Xoá dòng host này?'),

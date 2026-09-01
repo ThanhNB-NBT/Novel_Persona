@@ -597,6 +597,8 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
       final total = pages.length + lead + 2;
 
       return PageView.builder(
+        // cùng độ đàn hồi với PageView đổi tab ở shell
+        physics: const PageScrollPhysics(parent: BouncingScrollPhysics()),
         controller: _pageCtrl,
         itemCount: total,
         onPageChanged: (i) {
@@ -1115,7 +1117,7 @@ class _EndPanelState extends ConsumerState<_EndPanel> {
     }
     final reason = TextEditingController();
     final messenger = ScaffoldMessenger.of(context);
-    final ok = await showDialog<bool>(
+    final ok = await showBlurDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Báo cáo chương lỗi'),
@@ -1494,7 +1496,7 @@ class _GiftButtonState extends ConsumerState<_GiftButton> {
       final flavor = giftFlavors[giftHash(sb.auth.currentUser!.id,
               widget.novelId, widget.chapterIndex) %
           giftFlavors.length];
-      showDialog(
+      showBlurDialog(
         context: context,
         builder: (ctx) => AlertDialog(
           title: const Text('Cơ duyên!'),

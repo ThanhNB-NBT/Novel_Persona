@@ -1,3 +1,5 @@
+import 'dart:ui' show ImageFilter;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -262,4 +264,39 @@ class TagChip extends StatelessWidget {
       ),
     );
   }
+}
+
+
+/// Hộp thoại có NỀN SAU MỜ DẦN (progressive blur — ColorOS 17) thay cho màn che
+/// phẳng của [showDialog]. Trùng chữ ký với showDialog nên thay tại chỗ gọi là xong.
+///
+/// Sigma cố định chứ không chạy theo animation: blur là phép đắt, đổi sigma mỗi
+/// khung làm giật máy yếu; fade + phóng nhẹ đã đủ cảm giác "trồi lên".
+Future<T?> showBlurDialog<T>({
+  required BuildContext context,
+  required WidgetBuilder builder,
+  bool barrierDismissible = true,
+}) {
+  return showGeneralDialog<T>(
+    context: context,
+    barrierDismissible: barrierDismissible,
+    barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
+    // Màn che rất nhạt: phần "tách khỏi nền" do blur lo, tô đậm nữa thành đục.
+    barrierColor: Colors.black.withValues(alpha: 0.18),
+    transitionDuration: const Duration(milliseconds: 180),
+    pageBuilder: (ctx, _, _) => builder(ctx),
+    transitionBuilder: (ctx, anim, _, child) {
+      final t = CurvedAnimation(parent: anim, curve: Curves.easeOutCubic);
+      return FadeTransition(
+        opacity: t,
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+          child: ScaleTransition(
+            scale: Tween(begin: 0.96, end: 1.0).animate(t),
+            child: child,
+          ),
+        ),
+      );
+    },
+  );
 }

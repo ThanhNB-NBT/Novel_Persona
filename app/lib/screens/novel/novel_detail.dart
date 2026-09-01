@@ -392,7 +392,7 @@ class _ChapterListTabState extends ConsumerState<_ChapterListTab> {
           content: Text('Chỉ dịch lại được chương ĐÃ dịch — chưa chọn chương nào hợp lệ')));
       return;
     }
-    final ok = await showDialog<bool>(
+    final ok = await showBlurDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text('Dịch lại ${picked.length} chương?'),

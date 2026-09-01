@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -78,7 +79,7 @@ void showUpdateDialog(BuildContext context, UpdateInfo info) {
   final body = Platform.isAndroid
       ? (info.notes.isEmpty ? 'Tải bản mới rồi cài đè bản đang dùng.' : info.notes)
       : 'Tải IPA về máy rồi lưu vào Tệp / mở bằng SideStore để cài đè.';
-  showDialog(
+  showBlurDialog(
     context: context,
     builder: (ctx) => AlertDialog(
       title: Text('Có bản mới ${info.version}'),
@@ -113,7 +114,7 @@ void showUpdateDialog(BuildContext context, UpdateInfo info) {
 /// "Kiểm tra cập nhật" trong Cài đặt.
 Future<void> _downloadAndInstall(BuildContext context, Asset asset) async {
   final progress = ValueNotifier<double>(0);
-  showDialog(
+  showBlurDialog(
     context: context,
     barrierDismissible: false,
     builder: (_) => AlertDialog(

@@ -180,7 +180,7 @@ class _GlossaryScreenState extends ConsumerState<GlossaryScreen> {
         .length;
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
-    final ok = await showDialog<bool>(
+    final ok = await showBlurDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Vá chương đã dịch'),
@@ -314,7 +314,7 @@ class _GlossaryScreenState extends ConsumerState<GlossaryScreen> {
 
   Future<void> _deleteSelected() async {
     final n = _sel.length;
-    final ok = await showDialog<bool>(
+    final ok = await showBlurDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text('Xoá $n thuật ngữ?'),
@@ -351,7 +351,7 @@ class _GlossaryScreenState extends ConsumerState<GlossaryScreen> {
       return;
     }
     final reason = TextEditingController();
-    showDialog(
+    showBlurDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Báo cáo dịch sai'),
@@ -398,7 +398,7 @@ class _GlossaryScreenState extends ConsumerState<GlossaryScreen> {
     String? hanViet = const ['đậm', 'vừa', 'nhạt'].contains(style['han_viet']) ? style['han_viet'] : null;
     final setting = TextEditingController(text: style['setting'] is String ? style['setting'] : '');
     final tone = TextEditingController(text: style['tone'] is String ? style['tone'] : '');
-    final ok = await showDialog<bool>(
+    final ok = await showBlurDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Văn phong dịch'),
@@ -477,7 +477,7 @@ class _GlossaryScreenState extends ConsumerState<GlossaryScreen> {
     final wrong = TextEditingController(text: term?['wrong_vi'] ?? '');
     final narr = TextEditingController(text: term?['narrator_term'] ?? '');
     String type = term?['term_type'] ?? 'other';
-    showDialog(
+    showBlurDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(term == null ? 'Thêm thuật ngữ' : 'Sửa thuật ngữ'),
