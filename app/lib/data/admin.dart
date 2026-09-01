@@ -18,41 +18,69 @@ final isAdminProvider = FutureProvider.autoDispose<bool>((ref) async {
   return r?['is_admin'] == true;
 });
 
-/// Danh sách truyện cho màn quản trị — GỒM cả truyện đã ẩn.
 /// Cột tab Truyện THẬT SỰ đọc. Bỏ source_rank/meta_translated/is_canonical/updated_at:
 /// kéo về mà không ai dùng (updated_at chỉ để sắp xếp — máy chủ tự lo, khỏi tải).
 const _kAdminNovelCols =
     'id, title_vi, title_zh, author_vi, status, hidden, source_id, genres, '
     'last_chapter_at, chapter_count_source, chapter_count_translated, cover_url, sources(name)';
 
-final adminNovelsProvider = FutureProvider.autoDispose<List<Rec>>((ref) async {
-  // Tải ĐỦ mọi truyện: chip đếm + ô tìm kiếm của tab Truyện lọc phía client nên cần cả
-  // danh sách (limit(200) cũ làm số đếm lệch với thống kê).
-  // PostgREST trần 1000 dòng/query → 21k truyện = 22 lượt. Trước gọi NỐI TIẾP nên phải
-  // chờ đủ 22 lần đi-về, đó là lý do tab này ì. Giờ hỏi tổng trước rồi bắn SONG SONG.
-  // Sắp thêm theo id để phân trang ổn định: crawler sửa updated_at liên tục, chỉ xếp theo
-  // mỗi cột đó thì dòng trôi giữa các trang gây trùng/sót.
-  // ponytail: trần của cách này là bộ nhớ + băng thông (21k dòng mỗi lần mở tab). Khi nào
-  //   thấy nặng thì chuyển lọc/tìm kiếm sang máy chủ và chỉ tải một trang.
-  const page = 1000;
-  const wave = 6; // số query song song mỗi đợt — nhanh mà không dội DB
-  final total = await sb.from('novels').count();
-  final out = <Rec>[];
-  for (var start = 0; start < total; start += page * wave) {
-    final batches = await Future.wait([
-      for (var from = start; from < start + page * wave && from < total; from += page)
-        sb
-            .from('novels')
-            .select(_kAdminNovelCols)
-            .order('updated_at', ascending: false)
-            .order('id', ascending: false)
-            .range(from, from + page - 1),
-    ]);
-    for (final rows in batches) {
-      out.addAll(List<Rec>.from(rows));
-    }
+/// Bộ lọc tab Truyện. tab: 0 = tất cả, 1 = đang hiển thị, 2 = đã ẩn.
+typedef AdminNovelFilter = ({String q, int tab});
+
+/// Số truyện mỗi lô khi cuộn tải dần (khớp _pageSize của màn "Xem tất cả").
+const kAdminNovelsPage = 30;
+
+/// Ghép điều kiện tìm/lọc dùng chung cho cả trang dữ liệu lẫn ô đếm — hai bên phải
+/// đúng CÙNG một tập truyện, lệch một điều kiện là chip đếm nói dối.
+PostgrestFilterBuilder<T> _adminNovelWhere<T>(
+    PostgrestFilterBuilder<T> q, AdminNovelFilter f) {
+  final s = f.q.trim().replaceAll(',', ' '); // dấu phẩy phá cú pháp or() của PostgREST
+  var out = q;
+  if (s.isNotEmpty) {
+    out = out.or('title_vi.ilike.%$s%,title_zh.ilike.%$s%,author_vi.ilike.%$s%');
   }
+  if (f.tab == 1) out = out.eq('hidden', false);
+  if (f.tab == 2) out = out.eq('hidden', true);
   return out;
+}
+
+/// 1 lô truyện cho màn quản trị (GỒM cả truyện đã ẩn). offset = số đã có.
+///
+/// Trước đây tab này tải ĐỦ 21k truyện (22 lượt PostgREST) rồi lọc phía client, nên vừa
+/// ì lúc mở vừa giật mỗi phím gõ vào ô tìm. Giờ máy chủ lọc, app chỉ giữ vài chục dòng.
+/// Sắp thêm theo id để phân trang ổn định: crawler sửa updated_at liên tục, chỉ xếp theo
+/// mỗi cột đó thì dòng trôi giữa các trang gây trùng/sót.
+Future<List<Rec>> fetchAdminNovelPage(
+    AdminNovelFilter f, int offset, int limit) async {
+  final q = _adminNovelWhere(sb.from('novels').select(_kAdminNovelCols), f);
+  return List<Rec>.from(
+    await q
+        .order('updated_at', ascending: false)
+        .order('id', ascending: false)
+        .range(offset, offset + limit - 1),
+  );
+}
+
+/// Cờ "danh sách truyện đã cũ". Tab Truyện tự giữ trang đã cuộn (không phải provider),
+/// nên các thao tác ẩn/sửa/xoá gọi bump() để tab nạp lại từ trang đầu.
+class AdminNovelsRev extends Notifier<int> {
+  @override
+  int build() => 0;
+  void bump() => state++;
+}
+
+final adminNovelsRevProvider =
+    NotifierProvider<AdminNovelsRev, int>(AdminNovelsRev.new);
+
+/// Số đếm cho 3 chip phân loại — count head, không kéo dòng nào về.
+/// Chỉ phụ thuộc ô tìm: chip "Hiển thị/Đã ẩn" phải đếm trong cùng kết quả tìm kiếm,
+/// không đổi theo chip đang chọn.
+final adminNovelCountsProvider = FutureProvider.autoDispose
+    .family<({int all, int visible, int hidden}), String>((ref, query) async {
+  count(int tab) => _adminNovelWhere(
+      sb.from('novels').count(CountOption.exact), (q: query, tab: tab));
+  final r = await Future.wait([count(0), count(1), count(2)]);
+  return (all: r[0], visible: r[1], hidden: r[2]);
 });
 
 /// Thống kê toàn app cho tab Truyện (admin): đếm bằng count head — không kéo dữ liệu.

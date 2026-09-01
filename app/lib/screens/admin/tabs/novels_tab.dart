@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -14,87 +16,180 @@ class NovelsTab extends ConsumerStatefulWidget {
 }
 
 class _NovelsTabState extends ConsumerState<NovelsTab> {
+  final _scroll = ScrollController();
+  final _qCtrl = TextEditingController();
+  final _items = <Rec>[];
+  Timer? _debounce;
   String _q = '';
   int _filter = 0; // 0 = tất cả, 1 = đang hiển thị, 2 = đã ẩn
+  bool _loading = false;
+  bool _hasMore = true;
+  Object? _error;
+
+  AdminNovelFilter get _f => (q: _q, tab: _filter);
+
+  @override
+  void initState() {
+    super.initState();
+    _scroll.addListener(_onScroll);
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _scroll.dispose();
+    _qCtrl.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (_scroll.position.pixels >= _scroll.position.maxScrollExtent - 400) {
+      _load();
+    }
+  }
+
+  /// Đổi ô tìm / chip phân loại → về trang đầu. Gõ phím thì đợi 300ms mới bắn query,
+  /// không thì mỗi ký tự là một lượt đi-về.
+  void _reset({String? q, int? filter, bool debounced = false}) {
+    _debounce?.cancel();
+    apply() {
+      setState(() {
+        if (q != null) _q = q;
+        if (filter != null) _filter = filter;
+        _items.clear();
+        _hasMore = true;
+        _error = null;
+      });
+      _load();
+    }
+
+    if (debounced) {
+      _debounce = Timer(const Duration(milliseconds: 300), apply);
+    } else {
+      apply();
+    }
+  }
+
+  Future<void> _load() async {
+    if (_loading || !_hasMore) return;
+    setState(() => _loading = true);
+    final f = _f;
+    try {
+      final rows = await fetchAdminNovelPage(f, _items.length, kAdminNovelsPage);
+      if (!mounted || f != _f) return; // bộ lọc đổi giữa chừng → lô này đã lạc hậu
+      setState(() {
+        _items.addAll(rows);
+        _hasMore = rows.length == kAdminNovelsPage;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e;
+        _loading = false;
+        _hasMore = false;
+      });
+    }
+  }
+
+  Future<void> _refresh() async {
+    ref.invalidate(appStatsProvider);
+    ref.invalidate(adminNovelCountsProvider(_q));
+    _reset();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return AdminRefreshable(
-      async: ref.watch(adminNovelsProvider),
-      onRefresh: () async {
-        ref.invalidate(adminNovelsProvider);
-        ref.invalidate(appStatsProvider);
-      },
-      emptyText: 'Chưa có truyện nào.',
-      builder: (novels) {
-        // lọc client-side trên toàn bộ truyện đã tải (provider page đủ) — đủ nhanh, khỏi query
-        final q = _q.trim().toLowerCase();
-        final list = q.isEmpty
-            ? novels
-            : novels.where((n) =>
-                '${n['title_vi'] ?? ''} ${n['title_zh'] ?? ''} ${n['author_vi'] ?? ''}'
-                    .toLowerCase()
-                    .contains(q)).toList();
-        // nút phân loại: tất cả / đang hiển thị / đã ẩn
-        final nVisible = list.where((n) => n['hidden'] != true).length;
-        final nHidden = list.length - nVisible;
-        final shown = switch (_filter) {
-          1 => list.where((n) => n['hidden'] != true).toList(),
-          2 => list.where((n) => n['hidden'] == true).toList(),
-          _ => list,
-        };
-        return ListView.separated(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          itemCount: shown.length + 1,
-          separatorBuilder: (_, i) =>
-              i == 0 ? const SizedBox.shrink() : const Divider(height: 1),
-          itemBuilder: (_, i) {
-            if (i > 0) return _NovelRow(shown[i - 1], ref);
-            // item 0 = thống kê + ô tìm + chip phân loại
-            return Column(children: [
-                const _StatsCard(),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                  child: TextField(
-                    onChanged: (v) => setState(() => _q = v),
-                    decoration: InputDecoration(
-                      hintText: 'Tìm truyện (tên Việt/Trung, tác giả)…',
-                      prefixIcon: const Icon(Icons.search_rounded, size: 20),
-                      isDense: true,
-                      suffixIcon: _q.isEmpty
-                          ? null
-                          : IconButton(
-                              icon: const Icon(Icons.clear_rounded, size: 18),
-                              onPressed: () => setState(() => _q = '')),
-                    ),
-                  ),
-                ),
-                // cuộn ngang: số đếm dài (nghìn truyện) làm 3 chip tràn bề ngang
-                // vài px trên máy hẹp (lỗi "right overflowed by 2.9px")
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                  child: Row(children: [
-                    for (final (i, label) in [
-                      'Tất cả (${list.length})',
-                      'Hiển thị ($nVisible)',
-                      'Đã ẩn ($nHidden)',
-                    ].indexed) ...[
-                      if (i > 0) const SizedBox(width: 8),
-                      ChoiceChip(
-                        label: Text(label),
-                        selected: _filter == i,
-                        visualDensity: VisualDensity.compact,
-                        onSelected: (_) => setState(() => _filter = i),
-                      ),
-                    ],
-                  ]),
-                ),
-              ]);
-          },
-        );
-      },
+    // Thao tác ẩn/sửa/xoá ở dòng con → nạp lại từ trang đầu.
+    ref.listen(adminNovelsRevProvider, (_, _) => _refresh());
+
+    // Chỉ nhường cả màn cho lỗi. KHÔNG nhường cho vòng quay: mỗi lần gõ ô tìm là
+    // danh sách rỗng tạm thời, thay cả trang thì ô tìm biến mất và mất luôn con trỏ.
+    if (_items.isEmpty && _error != null) {
+      return AppError(_error!, onRetry: _refresh);
+    }
+    return RefreshIndicator(
+      onRefresh: _refresh,
+      child: ListView.separated(
+        controller: _scroll,
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        itemCount: _items.length + 1 + (_hasMore || _loading ? 1 : 0),
+        separatorBuilder: (_, i) =>
+            i == 0 ? const SizedBox.shrink() : const Divider(height: 1),
+        itemBuilder: (_, i) {
+          if (i == 0) return _header();
+          if (i > _items.length) {
+            return const Padding(
+              padding: EdgeInsets.symmetric(vertical: 20),
+              child: Center(child: CircularProgressIndicator()),
+            );
+          }
+          return _NovelRow(_items[i - 1], ref);
+        },
+      ),
     );
+  }
+
+  /// item 0 = thống kê + ô tìm + chip phân loại.
+  Widget _header() {
+    // Số đếm lấy từ máy chủ (count head) — trước đây đếm độ dài danh sách đã tải nên
+    // bây giờ chỉ tải 1 trang thì đếm kiểu cũ sẽ nói dối.
+    final counts = ref.watch(adminNovelCountsProvider(_q)).value;
+    String n(int? v) => v == null ? '…' : fmtThousands(v);
+    return Column(children: [
+      const _StatsCard(),
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+        child: TextField(
+          controller: _qCtrl,
+          onChanged: (v) => _reset(q: v.trim(), debounced: true),
+          decoration: InputDecoration(
+            hintText: 'Tìm truyện (tên Việt/Trung, tác giả)…',
+            prefixIcon: const Icon(Icons.search_rounded, size: 20),
+            isDense: true,
+            suffixIcon: _q.isEmpty
+                ? null
+                : IconButton(
+                    icon: const Icon(Icons.clear_rounded, size: 18),
+                    onPressed: () {
+                      _qCtrl.clear();
+                      _reset(q: '');
+                    }),
+          ),
+        ),
+      ),
+      // cuộn ngang: số đếm dài (nghìn truyện) làm 3 chip tràn bề ngang
+      // vài px trên máy hẹp (lỗi "right overflowed by 2.9px")
+      SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+        child: Row(children: [
+          for (final (i, label) in [
+            'Tất cả (${n(counts?.all)})',
+            'Hiển thị (${n(counts?.visible)})',
+            'Đã ẩn (${n(counts?.hidden)})',
+          ].indexed) ...[
+            if (i > 0) const SizedBox(width: 8),
+            ChoiceChip(
+              label: Text(label),
+              selected: _filter == i,
+              visualDensity: VisualDensity.compact,
+              onSelected: (_) => _reset(filter: i),
+            ),
+          ],
+        ]),
+      ),
+      if (_items.isEmpty)
+        Padding(
+          padding: const EdgeInsets.only(top: 60),
+          child: Center(
+            child: _loading
+                ? const CircularProgressIndicator()
+                : const Text('Không có truyện nào khớp.'),
+          ),
+        ),
+    ]);
   }
 }
 
@@ -186,7 +281,7 @@ class _NovelRow extends StatelessWidget {
           if (v == 'edit') return _editNovel(context, n, ref);
           if (v == 'delete') return _deleteNovel(context, n, ref);
           await setNovelHidden(n['id'], !hidden);
-          ref.invalidate(adminNovelsProvider);
+          ref.read(adminNovelsRevProvider.notifier).bump();
           // Khám phá/trang chủ/tìm kiếm đang cache → invalidate để back ra là mất ngay.
           ref.invalidate(novelsProvider);
           ref.invalidate(homeSectionsProvider);
@@ -224,7 +319,7 @@ class _NovelRow extends StatelessWidget {
               final messenger = ScaffoldMessenger.of(context);
               await deleteNovel(n['id'] as int);
               if (ctx.mounted) Navigator.pop(ctx);
-              ref.invalidate(adminNovelsProvider);
+              ref.read(adminNovelsRevProvider.notifier).bump();
               ref.invalidate(appStatsProvider);
               ref.invalidate(homeSectionsProvider);
               messenger.showSnackBar(
@@ -284,7 +379,7 @@ class _NovelRow extends StatelessWidget {
                 'status': status,
               });
               if (ctx.mounted) Navigator.pop(ctx);
-              ref.invalidate(adminNovelsProvider);
+              ref.read(adminNovelsRevProvider.notifier).bump();
             },
             child: const Text('Lưu'),
           ),
