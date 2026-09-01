@@ -162,7 +162,9 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     if (index < 1 || _navigating) return;
     _navigating = true; // chặn nhảy 2 lần; pushReplacement tạo state mới nên cờ tự reset
     // tự dịch trước 15 chương: initState của màn mới lo (một chỗ duy nhất)
-    context.pushReplacement('/novel/$novelId/read/$index');
+    // extra = hướng vuốt → route chọn chiều trượt dọc cho khớp (main.dart)
+    context.pushReplacement('/novel/$novelId/read/$index',
+        extra: index > chapterIndex ? 1 : -1);
   }
 
   /// Chạm vào 1 từ trong đoạn → chọn từ đó + mở form sửa ngay (không cần giữ/chọn tay).
@@ -295,6 +297,9 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     final previous = chapterIndex > 1
         ? ref.watch(chapterProvider(ChapterKey(novelId, chapterIndex - 1))).value
         : null;
+    // Nạp SẴN chương sau ngay khi mở chương này: vuốt qua đáy là có dữ liệu liền,
+    // không còn vòng quay chiếm cả màn giữa hai chương. Chương cuối trả null — vô hại.
+    ref.watch(chapterProvider(ChapterKey(novelId, chapterIndex + 1)));
     ref.watch(glossaryProvider(novelId)); // nạp sẵn glossary để gợi ý khi sửa từ
     final s = ref.watch(readerSettingsProvider);
     // "Hệ thống" của reader = theo chế độ sáng/tối của app (chứ không phải OS thô),
@@ -496,39 +501,56 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
         }
         return false;
       },
-      child: ListView(
+      // .builder chứ KHÔNG phải ListView(children:): bản cũ dựng widget cho MỌI đoạn
+      // của cả chương ngay lúc mở (chương 3-4 nghìn chữ = cả trăm đoạn, mỗi đoạn một
+      // ValueListenableBuilder cho TTS). Đo được 74 frame rơi lúc mở chương, và mỗi
+      // lần bàn phím đẩy Scaffold co lại (mở form sửa) là bố cục lại toàn bộ.
+      // item 0 = tiêu đề, 1..n = đoạn, cuối = phần hết chương.
+      child: ListView.builder(
         controller: _scroll,
         padding: EdgeInsets.fromLTRB(s.sideMargin, 10, s.sideMargin, 40),
-        children: [
-          Text(title, style: titleStyle),
-          const SizedBox(height: 18),
-          for (var i = 0; i < paras.length; i++) ...[
-            Padding(
+        itemCount: paras.length + 2,
+        itemBuilder: (context, i) {
+          if (i == 0) {
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 18),
+              child: Text(title, style: titleStyle),
+            );
+          }
+          if (i <= paras.length) {
+            final p = i - 1;
+            final para = Padding(
               padding: const EdgeInsets.only(bottom: 14),
               child: _TapPara(
-                para: paras[i],
+                para: paras[p],
                 style: textStyle,
                 align: s.justify ? TextAlign.justify : TextAlign.left,
                 sel: _sel,
                 onTapWord: _onTapWord,
                 ttsPara: _localTtsPara,
-                paraIndex: i,
+                paraIndex: p,
                 ttsHlColor: col.fg.withValues(alpha: 0.10),
               ),
-            ),
-            if (i == giftAfter)
+            );
+            // quà nằm NGAY DƯỚI đoạn của nó → gộp chung 1 item, khỏi lệch chỉ số
+            if (p != giftAfter) return para;
+            return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              para,
               _GiftButton(novelId: novelId, chapterIndex: chapterIndex, fg: col.fg),
-          ],
-          const SizedBox(height: 12),
-          Divider(color: col.fg.withValues(alpha: 0.15)),
-          const SizedBox(height: 8),
-          Center(
-            child: Text('Hết chương $chapterIndex · vuốt lên để đọc tiếp ↑', style: hint),
-          ),
-          const SizedBox(height: 16),
-          _EndPanel(novelId: novelId, chapterIndex: chapterIndex, fg: col.fg),
-          _CommentsPanel(novelId: novelId, chapterIndex: chapterIndex, fg: col.fg),
-        ],
+            ]);
+          }
+          return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            const SizedBox(height: 12),
+            Divider(color: col.fg.withValues(alpha: 0.15)),
+            const SizedBox(height: 8),
+            Center(
+              child: Text('Hết chương $chapterIndex · vuốt lên để đọc tiếp ↑', style: hint),
+            ),
+            const SizedBox(height: 16),
+            _EndPanel(novelId: novelId, chapterIndex: chapterIndex, fg: col.fg),
+            _CommentsPanel(novelId: novelId, chapterIndex: chapterIndex, fg: col.fg),
+          ]);
+        },
       ),
     );
   }
@@ -675,6 +697,13 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     final a = sel.start.clamp(0, block.length);
     final b = sel.end.clamp(0, block.length);
     final wrong = block.substring(a, b);
+    // Ngữ cảnh 2 bên, cắt bớt cho gọn — đủ để biết câu nào mà không đẩy form cao lên.
+    const kCtx = 60;
+    final pre = block.substring(0, a);
+    final post = block.substring(b);
+    final ctxBefore =
+        pre.length > kCtx ? '…${pre.substring(pre.length - kCtx)}' : pre;
+    final ctxAfter = post.length > kCtx ? '${post.substring(0, kCtx)}…' : post;
 
     // Gợi ý bản đúng từ glossary truyện (tên/thuật ngữ đã có zh↔Hán-Việt khi dịch).
     // Khớp: từ đang chọn == correct_vi (đúng, hiện chữ Trung gốc) hoặc == wrong_vi /
@@ -774,6 +803,15 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                       ? MediaQuery.viewInsetsOf(context).bottom
                       : MediaQuery.viewPaddingOf(context).bottom) +
                   16),
+          // Chặn trần chiều cao: form + bàn phím từng ăn trọn màn hình. Chừa lại phần
+          // trang đọc phía trên, phần thừa của form thì cuộn trong chính nó.
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: (MediaQuery.sizeOf(context).height -
+                      MediaQuery.viewInsetsOf(context).bottom) *
+                  0.62,
+            ),
+            child: SingleChildScrollView(
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children: [
               Text('Sửa bản dịch', style: t.titleMedium),
@@ -794,15 +832,32 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
               Expanded(
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  alignment: Alignment.center,
                   decoration: BoxDecoration(
-                    color: cs.error.withValues(alpha: 0.12),
+                    color: cs.error.withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(color: cs.error.withValues(alpha: 0.45)),
                   ),
-                  child: Text(wrong,
-                      maxLines: 1, overflow: TextOverflow.ellipsis,
-                      style: t.bodyLarge?.copyWith(color: cs.error, fontWeight: FontWeight.w600)),
+                  // Hiện CẢ NGỮ CẢNH quanh từ sai, không chỉ mỗi từ: bàn phím mở là
+                  // form + bàn phím phủ kín trang đọc, không còn thấy đang sửa ở đâu.
+                  child: RichText(
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    text: TextSpan(
+                      style: t.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+                      children: [
+                        TextSpan(text: ctxBefore),
+                        TextSpan(
+                          text: wrong,
+                          style: t.bodyMedium?.copyWith(
+                            color: cs.error,
+                            fontWeight: FontWeight.w700,
+                            backgroundColor: cs.error.withValues(alpha: 0.16),
+                          ),
+                        ),
+                        TextSpan(text: ctxAfter),
+                      ],
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(width: 8),
@@ -878,6 +933,8 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
               ),
             ),
           ]),
+            ),
+          ),
         ),
       )),
     );
