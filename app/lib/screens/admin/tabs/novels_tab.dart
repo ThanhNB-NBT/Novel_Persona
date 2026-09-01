@@ -405,7 +405,7 @@ class AdminNovelScreen extends ConsumerWidget {
       error: (e, _) => Scaffold(
           body: AppError(e, onRetry: () => ref.invalidate(isAdminProvider))),
       data: (ok) => ok
-          ? _buildBody(context, ref)
+          ? _AdminNovelBody(novelId: novelId)
           : Scaffold(
               appBar: AppBar(title: const Text('Quản trị truyện')),
               body: const Center(child: Text('Bạn không có quyền quản trị.')),
@@ -413,9 +413,79 @@ class AdminNovelScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildBody(BuildContext context, WidgetRef ref) {
+}
+
+/// Thân màn quản trị 1 truyện. Stateful vì danh sách chương cuộn-tải-dần (truyện
+/// 6.111 chương không thể kéo một phát) — cùng khuôn với tab Truyện.
+class _AdminNovelBody extends ConsumerStatefulWidget {
+  final int novelId;
+  const _AdminNovelBody({required this.novelId});
+  @override
+  ConsumerState<_AdminNovelBody> createState() => _AdminNovelBodyState();
+}
+
+class _AdminNovelBodyState extends ConsumerState<_AdminNovelBody> {
+  int get novelId => widget.novelId;
+  final _scroll = ScrollController();
+  final _items = <Rec>[];
+  bool _loading = false;
+  bool _hasMore = true;
+  Object? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _scroll.addListener(_onScroll);
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (_scroll.position.pixels >= _scroll.position.maxScrollExtent - 400) {
+      _load();
+    }
+  }
+
+  Future<void> _load() async {
+    if (_loading || !_hasMore) return;
+    setState(() => _loading = true);
+    try {
+      final rows = await fetchAdminChapterPage(
+          novelId, _items.length, kAdminChaptersPage);
+      if (!mounted) return;
+      setState(() {
+        _items.addAll(rows);
+        _hasMore = rows.length == kAdminChaptersPage;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e;
+        _loading = false;
+        _hasMore = false;
+      });
+    }
+  }
+
+  Future<void> _reload() async {
+    setState(() {
+      _items.clear();
+      _hasMore = true;
+      _error = null;
+    });
+    await _load();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    ref.listen(adminChaptersRevProvider, (_, _) => _reload());
     final novel = ref.watch(novelProvider(novelId)).value;
-    final chapters = ref.watch(adminChaptersProvider(novelId));
     final t = Theme.of(context).textTheme;
     final cs = Theme.of(context).colorScheme;
     final title = novel?['title_vi'] ?? novel?['title_zh'] ?? 'Truyện #$novelId';
@@ -445,14 +515,14 @@ class AdminNovelScreen extends ConsumerWidget {
             onPressed: () => translateRangeDialog(context, ref, novelId,
                 translated: (novel?['chapter_count_translated'] ?? 0) as int,
                 source: (novel?['chapter_count_source'] ?? 0) as int,
-                onDone: () => ref.invalidate(adminChaptersProvider(novelId))),
+                onDone: () => ref.read(adminChaptersRevProvider.notifier).bump()),
           ),
           IconButton(
             tooltip: 'Huỷ toàn bộ chương đang chờ dịch',
             icon: const Icon(Icons.playlist_remove_rounded),
             onPressed: () async {
               await cancelNovelQueue(novelId);
-              ref.invalidate(adminChaptersProvider(novelId));
+              ref.read(adminChaptersRevProvider.notifier).bump();
               ref.invalidate(translateQueueProvider);
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -462,21 +532,27 @@ class AdminNovelScreen extends ConsumerWidget {
           ),
         ],
       ),
-      body: chapters.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => AppError(e, onRetry: () => ref.invalidate(adminChaptersProvider(novelId))),
-        data: (list) => RefreshIndicator(
+      body: _error != null && _items.isEmpty
+          ? AppError(_error!, onRetry: _reload)
+          : RefreshIndicator(
           onRefresh: () async {
-            ref.invalidate(adminChaptersProvider(novelId));
             ref.invalidate(novelProvider(novelId));
+            await _reload();
           },
           child: ListView.separated(
-            itemCount: list.length + 1,
+            controller: _scroll,
+            itemCount: _items.length + 1 + (_hasMore || _loading ? 1 : 0),
             separatorBuilder: (_, i) =>
                 i == 0 ? const SizedBox.shrink() : const Divider(height: 1),
             itemBuilder: (_, i) {
               if (i == 0) return _NovelInfoCard(novel);
-              final c = list[i - 1];
+              if (i > _items.length) {
+                return const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 20),
+                  child: Center(child: CircularProgressIndicator()),
+                );
+              }
+              final c = _items[i - 1];
               final st = c['translation_status'] as String;
               final tok = (c['prompt_tokens'] ?? 0) + (c['completion_tokens'] ?? 0);
               final info = [
@@ -496,7 +572,6 @@ class AdminNovelScreen extends ConsumerWidget {
             },
           ),
         ),
-      ),
     );
   }
 
