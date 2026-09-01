@@ -1,5 +1,4 @@
-import 'dart:math' as math;
-import 'dart:ui' show FragmentProgram, FragmentShader, ImageFilter;
+import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -214,48 +213,8 @@ class _Dock extends StatefulWidget {
 }
 
 class _DockState extends State<_Dock> with TickerProviderStateMixin {
-  // Nhịp thở chất lỏng tuần hoàn (2π/vòng)
-  late final _amb =
-      AnimationController(vsync: this, duration: const Duration(seconds: 8))
-        ..repeat();
-
-  // Animation controller chuyên dụng cho sóng chạm và giọt bắn 120fps
-  late final _splashCtrl = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 650),
-  );
-
-  static FragmentShader? _liquid;
-  static bool _tried = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    if (_tried) return;
-    _tried = true;
-    try {
-      final p = await FragmentProgram.fromAsset('shaders/liquid_dock.frag');
-      if (mounted) setState(() => _liquid = p.fragmentShader());
-    } catch (e) {
-      debugPrint('liquid_dock.frag không nạp được: $e');
-    }
-  }
-
-  @override
-  void dispose() {
-    _amb.dispose();
-    _splashCtrl.dispose();
-    super.dispose();
-  }
-
   static const _h = 56.0, _pad = 6.0;
   static const _n = 5;
-
-  double _tapX = 0;
 
   double _calcX() {
     final pc = widget.pageController;
@@ -276,10 +235,9 @@ class _DockState extends State<_Dock> with TickerProviderStateMixin {
       minimum: const EdgeInsets.fromLTRB(24, 0, 24, 14),
       child: LayoutBuilder(builder: (_, c) {
         final cell = (c.maxWidth - _pad * 2) / _n;
-        // AnimatedBuilder hợp nhất Vsync ticker: lắng nghe cử chỉ vuốt PageController
-        // + nhịp sóng amb + hiệu ứng chạm splashCtrl
+        // Chỉ còn bám cử chỉ vuốt PageController — dock đã bỏ hoạt ảnh chất lỏng.
         return AnimatedBuilder(
-          animation: Listenable.merge([widget.pageController, _amb, _splashCtrl]),
+          animation: widget.pageController,
           builder: (_, _) {
             final x = _calcX();
             return _body(cs, t, dark, cell, c.maxWidth, x);
@@ -291,13 +249,8 @@ class _DockState extends State<_Dock> with TickerProviderStateMixin {
 
   Widget _body(ColorScheme cs, TextTheme t, bool dark, double cell, double w,
       double x) {
-    final liquid = cs.primary;
-    // Độ dãn dính khi chuyển giữa các tab (0 = đứng yên tại tab, 1 = giữa 2 tab)
-    final flow = ((x - x.round()).abs() * 2.0).clamp(0.0, 1.0);
+    // Khoảng cách tới tab giữa — emblem Tu Tiên vẫn dùng để nảy nhẹ khi tới gần.
     final cent = (1.0 - (x - 2.0).abs()).clamp(0.0, 1.0);
-    final splashVal = _splashCtrl.isAnimating
-        ? (1.0 - _splashCtrl.value).clamp(0.0, 1.0)
-        : 0.0;
 
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -307,10 +260,6 @@ class _DockState extends State<_Dock> with TickerProviderStateMixin {
             color: Colors.black.withValues(alpha: dark ? 0.45 : 0.16),
             blurRadius: 26,
             offset: const Offset(0, 10),
-          ),
-          BoxShadow(
-            color: liquid.withValues(alpha: dark ? 0.14 : 0.09),
-            blurRadius: 34,
           ),
         ],
       ),
@@ -324,50 +273,12 @@ class _DockState extends State<_Dock> with TickerProviderStateMixin {
                 filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
                 child: DecoratedBox(
                   decoration: BoxDecoration(
-                    color: cs.surface.withValues(alpha: dark ? 0.55 : 0.68),
+                    // trong hơn hẳn: bản thật nhìn xuyên thấy nội dung phía sau
+                    color: cs.surface.withValues(alpha: dark ? 0.42 : 0.55),
                     border: Border.all(
                       color: cs.outlineVariant.withValues(alpha: 0.6),
                     ),
                     borderRadius: BorderRadius.circular(32),
-                  ),
-                ),
-              ),
-            ),
-            // Vệt sáng mép trên — ColorOS 17 gọi là contour lighting: một sợi sáng
-            // ôm rìa trên làm thanh nổi khỏi nền thay vì viền xám phẳng.
-            Positioned(
-              top: 0,
-              left: 12,
-              right: 12,
-              height: 1.5,
-              child: IgnorePointer(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(colors: [
-                      Colors.white.withValues(alpha: 0),
-                      Colors.white.withValues(alpha: dark ? 0.55 : 0.95),
-                      Colors.white.withValues(alpha: 0),
-                    ]),
-                  ),
-                ),
-              ),
-            ),
-            // Vũng linh dịch chạy 120fps trên canvas
-            Positioned.fill(
-              child: IgnorePointer(
-                child: CustomPaint(
-                  painter: _LiquidPainter(
-                    amb: _amb,
-                    shader: _liquid,
-                    color: liquid,
-                    // hạ xuống vì nút tròn phát sáng đã gánh phần "đang ở tab nào";
-                    // để nguyên 0.52/0.46 thì hai lớp chồng nhau thành bệt.
-                    alpha: dark ? 0.30 : 0.26,
-                    selX: _pad + (x + 0.5) * cell,
-                    cent: cent,
-                    flow: flow,
-                    splash: splashVal,
-                    tapX: _tapX,
                   ),
                 ),
               ),
@@ -380,11 +291,7 @@ class _DockState extends State<_Dock> with TickerProviderStateMixin {
                   for (var i = 0; i < _n; i++)
                     Expanded(
                       child: GestureDetector(
-                        onTap: () {
-                          _tapX = _pad + (i + 0.5) * cell;
-                          _splashCtrl.forward(from: 0);
-                          widget.onTap(i);
-                        },
+                        onTap: () => widget.onTap(i),
                         behavior: HitTestBehavior.opaque,
                         child: i == 2
                             ? _Emblem(proximity: cent)
@@ -403,7 +310,9 @@ class _DockState extends State<_Dock> with TickerProviderStateMixin {
   /// Icon + chữ cross-fade mượt mà theo khoảng cách x thực tế
   Widget _label(ColorScheme cs, TextTheme t, int i, double x) {
     final near = (1.0 - (i - x).abs()).clamp(0.0, 1.0);
-    final color = Color.lerp(cs.onSurfaceVariant, cs.primary, near)!;
+    // ColorOS 17 KHÔNG tô màu nhấn cho tab đang chọn: chỉ icon đặc + chữ đậm,
+    // toàn thanh một tông mực. Thêm màu vào là thành thanh menu khác hẳn.
+    final color = Color.lerp(cs.onSurfaceVariant, cs.onSurface, near)!;
     final tab = _RootShellState._tabs[i];
 
     return Column(mainAxisAlignment: MainAxisAlignment.center, children: [
@@ -414,40 +323,6 @@ class _DockState extends State<_Dock> with TickerProviderStateMixin {
           child: Stack(
             alignment: Alignment.center,
             children: [
-              // Quầng sáng tròn sau icon đang chọn — "contour glow" kiểu ColorOS 17:
-              // nút sáng từ trong ra thay vì nằm trên nền phẳng. Mờ dần theo `near`
-              // nên lúc vuốt giữa 2 tab nó chuyển mượt chứ không bật/tắt.
-              if (near > 0.01)
-                IgnorePointer(
-                  child: Container(
-                    width: 30 + 8 * near,
-                    height: 30 + 8 * near,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      // ruột sáng nhẹ + viền sáng rõ: nút TRÒN nổi hẳn khỏi mặt kính,
-                      // đúng kiểu Control Center ColorOS 17 (bỏ nền phẳng)
-                      color: cs.primary.withValues(alpha: 0.16 * near),
-                      border: Border.all(
-                        color: cs.primary.withValues(alpha: 0.55 * near),
-                        width: 1.2,
-                      ),
-                      boxShadow: [
-                        // hào quang toả ra ngoài — "contour glow"
-                        BoxShadow(
-                          color: cs.primary.withValues(alpha: 0.38 * near),
-                          blurRadius: 16 * near,
-                          spreadRadius: 1.0 * near,
-                        ),
-                        // lõi sáng bên trong cho cảm giác đèn thật
-                        BoxShadow(
-                          color: Colors.white.withValues(alpha: 0.22 * near),
-                          blurRadius: 6 * near,
-                          spreadRadius: -2,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
               // Icon viền nét mờ
               Opacity(
                 opacity: (1.0 - near).clamp(0.0, 1.0),
@@ -456,7 +331,7 @@ class _DockState extends State<_Dock> with TickerProviderStateMixin {
               // Icon đặc phát sáng khi active
               Opacity(
                 opacity: near,
-                child: Icon(tab.active, size: 20, color: cs.primary),
+                child: Icon(tab.active, size: 20, color: cs.onSurface),
               ),
             ],
           ),
@@ -474,80 +349,6 @@ class _DockState extends State<_Dock> with TickerProviderStateMixin {
       ),
     ]);
   }
-}
-
-/// Vũng linh dịch vẽ tay + shader
-class _LiquidPainter extends CustomPainter {
-  final Animation<double> amb;
-  final FragmentShader? shader;
-  final Color color;
-  final double alpha, selX, cent, flow, splash, tapX;
-
-  _LiquidPainter({
-    required this.amb,
-    required this.shader,
-    required this.color,
-    required this.alpha,
-    required this.selX,
-    required this.cent,
-    required this.flow,
-    required this.splash,
-    required this.tapX,
-  }) : super(repaint: amb);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final t = amb.value * 2 * math.pi;
-    final sh = shader;
-    if (sh != null) {
-      sh
-        ..setFloat(0, size.width)
-        ..setFloat(1, size.height)
-        ..setFloat(2, t)
-        ..setFloat(3, selX)
-        ..setFloat(4, cent)
-        ..setFloat(5, flow)
-        ..setFloat(6, color.r)
-        ..setFloat(7, color.g)
-        ..setFloat(8, color.b)
-        ..setFloat(9, alpha)
-        ..setFloat(10, splash)
-        ..setFloat(11, tapX);
-      canvas.drawRect(Offset.zero & size, Paint()..shader = sh);
-      return;
-    }
-
-    final paint = Paint()..color = color.withValues(alpha: alpha);
-    final base = size.height * 0.82;
-    final path = Path()..moveTo(0, size.height);
-    for (var px = 0.0; px <= size.width; px += 3) {
-      final k = (px - selX) / (28 + 10 * flow);
-      final y = base -
-          (24 + 8 * flow) * math.exp(-k * k) +
-          1.2 * math.sin(px * 0.055 + t * 2) +
-          0.8 * math.sin(px * 0.090 - t * 3);
-      path.lineTo(px, y);
-    }
-    canvas.drawPath(
-      path
-        ..lineTo(size.width, size.height)
-        ..close(),
-      paint,
-    );
-    canvas.drawCircle(
-      Offset(size.width / 2, size.height / 2),
-      14 + 3.5 * cent,
-      paint,
-    );
-  }
-
-  @override
-  bool shouldRepaint(_LiquidPainter old) =>
-      old.selX != selX ||
-      old.cent != cent ||
-      old.flow != flow ||
-      old.splash != splash ||
-      old.color != color;
 }
 
 /// Ô giữa: Biểu tượng Tu Tiên đồng bộ thuần túy với các tab còn lại
