@@ -26,6 +26,9 @@ const _preferred = {
   '燕': 'yên',  // 燕京 Yên Kinh; văn xuôi 燕子 = yến
   '仇': 'cừu',  // họ Cừu; văn xuôi 仇恨 = thù hận
   '区': 'âu',   // họ Âu; văn xuôi 地区 = địa khu
+  // chữ phiên âm tên Tây — mặc định theo văn xuôi sẽ lệch khi ghép tên
+  '菲': 'phi', // 菲尔德 Phi Nhĩ Đức; văn xuôi 芳菲 = phỉ
+  '丽': 'ly',  // 玛丽 Mã Ly; văn xuôi 美丽 = mỹ lệ
 };
 
 /// Gọi 1 lần lúc khởi động (fire-and-forget). Chưa nạp xong thì hanVietOf trả null.
