@@ -25,6 +25,10 @@ _PREFERRED = {
     "燕": "yên",    # 燕京 Yên Kinh, nước Yên; văn xuôi 燕子 = yến
     "仇": "cừu",    # họ 仇 → Cừu; văn xuôi 仇恨 = thù hận
     "区": "âu",     # họ 区 → Âu; văn xuôi 地区 = địa khu
+    # Chữ chuyên phiên âm tên Tây (_TRANSLIT_CHARS): bảng xếp mặc định theo văn xuôi
+    # nên lệch khi ghép tên. 约 không cần ghim — "ước" đúng cả hai đường (约翰 Ước Hàn).
+    "菲": "phi",    # 菲尔德 Phi Nhĩ Đức, 菲律宾 Phi Luật Tân; văn xuôi 芳菲 = phỉ
+    "丽": "ly",     # 玛丽 Mã Ly; văn xuôi 美丽 = mỹ lệ
 }
 
 # term_type áp quy tắc Hán-Việt bắt buộc; item/skill có thể dịch nghĩa ("Kiếm Lửa") → không ép
