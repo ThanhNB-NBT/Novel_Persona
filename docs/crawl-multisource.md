@@ -29,9 +29,26 @@
 > **Quota discovery THEO TỪNG nguồn (migration 106):** cột `sources.discover_quota` (int, NULL = dùng chung `discover_new_per_cycle`). Admin sửa trong app (tab Crawl → hàng nguồn → pill "chung/N/đợt"); `_reconcile_adapters` giờ cập nhật cả source_row của adapter đang chạy nên đổi quota ăn ngay ở tick kế (~10s), không restart.
 >
 > **Qidian & Fanqie (2026-08-22):**
-> - **qidian** ❌ bỏ: chặn tầng HTTP (mọi request trả 202 + trang thách thức JS 209 byte), cần headless browser + login mới vào được mà chương free cũng chỉ phần nhỏ → không khả thi cho crawler HTTP thuần.
+> - **qidian** ❌ bỏ — **lý do đã ĐO LẠI 2026-09-03, khác với ghi chép cũ:**
+>   - `www.qidian.com` vẫn chặn y nguyên (202 + đúng 209 byte, trang thách thức JS sinh `buid` rồi nạp `probe.js`) — kiểm lại trang chủ, trang truyện, ranking, `ajax/book/category`; `book.qidian.com` chuyển hướng về `www` rồi dính chặn.
+>   - **NHƯNG `m.qidian.com` KHÔNG nằm sau lớp chặn đó.** Trang truyện 200/130KB, mục lục 200/152KB, chương đọc được, thân bài nằm thẳng trong div `content`, **KHÔNG mã hoá font PUA** như fanqie. Tức là ghi chép cũ "cần headless browser" giờ **SAI về kỹ thuật** — dựng adapter là chuyện vài giờ.
+>   - **Lý do bỏ thật sự là KINH TẾ, không phải kỹ thuật:** phần free quá mỏng và cố định. Đo 42 truyện qua 3 mẫu độc lập:
+>
+>     | Nhóm | Chương free (trung vị) | Tỷ lệ | >500 free |
+>     |---|---|---|---|
+>     | Hoàn thành (15) | 113 | 12% | 0/15 |
+>     | Đang ra (15) | 82 | 26% | 0/15 |
+>     | Mục `/free/` (12) | 85 | — | 0/12 |
+>
+>     Cao nhất cả 42 truyện mới 191 chương free; **không truyện nào free trọn bộ**. Qidian đặt tường phí ở mốc cố định sớm (truyện mổ mẫu: chương 59 đã ghi 上架了), nên tỷ lệ % chỉ phản ánh độ dài tổng chứ không phải chính sách. Ngưỡng free-only của faloo là 500 → **không ứng viên nào đạt**.
+>   - Mục `/free/` **không phải** truyện miễn phí toàn bộ, chỉ là khuyến mãi đọc thử — trung vị 85, còn thấp hơn nhóm hoàn thành.
+>   - Hệ quả nếu vẫn làm: kho sẽ có những truyện **luôn cụt ở khoảng chương 100**, người đọc chạm tường vĩnh viễn — khác mọi nguồn hiện có vốn cho trọn bộ.
+>   - **Mở lại khi nào:** chỉ khi qidian đổi chính sách free. Lúc đó không cần khảo sát kỹ thuật lại, chỉ cần đo lại phân bố chương free.
 > - **fanqie** ✅ ĐÃ THÊM (migration 105, adapter `FanqieAdapter` riêng — KHÁCH hoàn toàn với khuôn HTML biquge):
->   - Metadata/mục lục từ JSON nhúng `window.__INITIAL_STATE__` của `/page/{id}`; `itemIds` xếp MỚI-NHẤT-TRƯỚC (so `lastChapterItemId`) → đảo thành 1→N; chưa có title chương (stub title rỗng, app hiện "Chương N").
+>   - ~~Metadata/mục lục từ `window.__INITIAL_STATE__` của `/page/{id}`~~ **ĐỔI 2026-09-03:** fanqie biến `/page/{id}` thành endpoint cần ký — trả HTTP 200, content-type json, **body 0 byte** (header có `x-ms-token`). Đo 8 lượt: `/page/` **0/8**, `/api/book/info?bookId=` **8/8**, `/api/reader/directory/detail?bookId=` **8/8**. Mà `/page/` là nơi DUY NHẤT lấy cả `cover_url` LẪN mục lục → nó chết là fanqie chết.
+>     - `fetch_novel_meta` → `/api/book/info?bookId=`; `fetch_chapter_list` → `/api/reader/directory/detail?bookId=` (`allItemIds` xếp CŨ-TRƯỚC sẵn, bỏ bước đảo; `chapterListWithVolume` cho luôn **tên chương**, trước đây phải tải từng chương mới có).
+>     - **Bẫy:** API trả MỌI số dưới dạng CHUỖI (`"1"`, `"84303"`) ở chỗ `__INITIAL_STATE__` cũ trả SỐ. So thẳng `creationStatus == 1` thì **mọi truyện đang ra bị ghi thành `completed`** → dùng `_as_int()`.
+>   - **Bìa (sửa 2026-09-03):** bìa fanqie là URL KÝ có hạn (`x-expires`). ByteDance chặn hẳn host ký `*-novel-sign` — **403 ACCESS DENIED kể cả khi chữ ký còn hạn, kể cả từ IP khác** (đã thử 4G). Host KHÔNG ký `p1/p3/p6` vẫn phục vụ bình thường và không có `x-expires` nên bìa không tự chết. Dùng `normalize_cover_url()`. Lưu ý mã cũ ép mọi host về **p9** — giờ p9 chết CẢ hai kiểu. Hậu quả trước khi sửa: 1.391/2.018 truyện hotlink, 1.269 đã vỡ ảnh; đã vá hết, sao lưu ở bảng `novels_cover_backup_20260903`.
 >   - Nội dung `/reader/{chapter_id}` chứa ký tự PUA mã hóa font (0xE000–0xF8FF, font woff2 độc quyền). Decode bằng **bảng tĩnh** `crawler/fanqie_charset.json` (362 glyph so-khớp bitmap Noto Sans SC, script builder dev-time dùng fontTools+PIL — KHÔNG phải dependency runtime). Font là TOÀN CỤC mọi sách (2 sách cùng 1 URL woff2) nên bảng đủ dùng; adapter so hash tên file woff2, khác mốc → log cảnh báo build lại bảng.
 >   - Sửa tay theo ngữ cảnh sau khi build: `一` (bị nhận nhầm em-dash vì nét mảnh), `国` (biến thể 囯).
 >   - Không search/discovery pool (JS-render); thêm truyện tay `add --source fanqie --book-id <id>`. Chỉ chương free; live probe hàng chục request không bị chặn.
