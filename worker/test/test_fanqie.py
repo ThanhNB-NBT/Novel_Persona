@@ -22,7 +22,8 @@ BOOK_STATE = {
     "page": {
         "bookName": "十日终焉", "author": "杀虫队队员",
         "abstract": "24年番茄年度巅峰榜TOP1",
-        "thumbUrl": "https://p3-novel-sign.example/novel-pic/abc~tplv-resize:225:300.image",
+        "thumbUrl": "https://p9-novel-sign.example/novel-pic/abc~tplv-resize:225:300.image"
+                    "?lk3s=191c1ecc&x-expires=1787569770&x-signature=abc%3D",
         "categoryV2": '[{"Name": "悬疑脑洞"}, {"Name": "环环相扣"}]',
         "wordNumber": 3201288, "chapterTotal": 3, "readCount": 12345,
         "creationStatus": 0, "lastPublishTime": "1761919823",
@@ -56,8 +57,10 @@ def main() -> None:
     # creationStatus=0 = 完结; lastPublishTime unix → last_chapter_at
     assert m.status == "completed"
     assert m.last_chapter_at is not None and m.last_chapter_at.year == 2025
-    # host CDN p3 hỏng → phải được ép về p9 để cache_cover tải được bìa
-    assert m.cover_url.startswith("https://p9-novel-sign.example/"), m.cover_url
+    # ByteDance chặn host KÝ (*-novel-sign) từ ~24/8/2026 kể cả khi chữ ký còn hạn
+    # → phải đổi sang host KHÔNG ký và CẮT BỎ chữ ký (chữ ký còn thì bìa tự chết
+    # theo x-expires, đó là gốc của 1.391 bìa vỡ hồi 9/2026).
+    assert m.cover_url == "https://p3-novel.example/novel-pic/abc~tplv-resize:225:300.image", m.cover_url
 
     # mục lục: đảo mới-nhất-trước → 1→N
     refs = a.fetch_chapter_list("7143038691944959011")
@@ -139,6 +142,19 @@ def main() -> None:
     assert raw_title.translate(a3._translate) == "我们"
 
 
+def test_normalize_cover_url() -> None:
+    from novelworker.crawler.fanqie import normalize_cover_url as n
+    # host ký + chữ ký → host thường, cắt query
+    assert n("https://p9-novel-sign.byteimg.com/novel-pic/x~tplv-resize:225:300.image"
+             "?lk3s=1&x-expires=2&x-signature=3") == \
+        "https://p3-novel.byteimg.com/novel-pic/x~tplv-resize:225:300.image"
+    # host thường nhưng p9/p26 đều chết → vẫn ép về p3
+    assert n("https://p26-novel.byteimg.com/novel-pic/y~tplv.image") == \
+        "https://p3-novel.byteimg.com/novel-pic/y~tplv.image"
+    assert n(None) is None and n("") is None
+
+
 if __name__ == "__main__":
     main()
+    test_normalize_cover_url()
     print("OK — fanqie adapter test pass")

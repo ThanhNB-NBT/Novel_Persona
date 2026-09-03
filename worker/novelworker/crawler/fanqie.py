@@ -33,6 +33,24 @@ log = logging.getLogger(__name__)
 _CHARSET_PATH = Path(__file__).with_name("fanqie_charset.json")
 _STATE_RE = re.compile(r"window\.__INITIAL_STATE__\s*=\s*")
 _UNDEFINED_RE = re.compile(r"\bundefined\b")
+def normalize_cover_url(raw: object) -> str | None:
+    """Đưa URL bìa fanqie về host KHÔNG ký, bỏ chữ ký.
+
+    ByteDance chặn hẳn host ký (`*-novel-sign`) từ khoảng 24/8/2026: trả
+    403 ACCESS DENIED kể cả khi `x-expires` còn hạn, kể cả từ mạng khác (đã thử
+    bằng 4G trên máy khác IP). Host KHÔNG ký p1/p3/p6 vẫn phục vụ ảnh bình thường
+    (đo 6/6 ảnh ngẫu nhiên, cả từ worker trên box) và không có `x-expires` nên bìa
+    không tự chết theo đồng hồ như trước.
+
+    Mã cũ ép mọi host về p9 vì hồi đó p9 ổn định nhất; giờ p9 chết CẢ hai kiểu
+    (p9-novel-sign 403, p9-novel cũng 403) nên chính dòng đó làm hỏng toàn bộ bìa.
+    """
+    if not raw:
+        return None
+    url = re.sub(r"//p\d+-novel(-sign)?\.", "//p3-novel.", str(raw))
+    return url.split("?", 1)[0] or None
+
+
 _FONT_URL_RE = re.compile(r"url\((https://[^)\"]+\.woff2)")
 _TITLE_RE = re.compile(r"<h1[^>]*muye-reader-title[^>]*>(.*?)</h1>", re.S)
 _DEFAULT_AD_MARKERS = ["番茄小说", "扫码下载", "SVIP", "APP免费读", "免费阅读全本",
@@ -211,11 +229,7 @@ class FanqieAdapter(SourceAdapter):
                 pass
         if not genres and p.get("category"):
             genres = [str(p["category"])]
-        cover = p.get("thumbUrl")
-        if cover:
-            # CDN host p3 hay chặn/timeout (cả VPS lẫn máy dân dụng), p9 ổn định
-            # → ép về p9 để cache_cover tải được bìa về Storage.
-            cover = re.sub(r"//p\d+(-novel-sign)\.", r"//p9\1.", str(cover))
+        cover = normalize_cover_url(p.get("thumbUrl"))
         # Ngữ nghĩa đã đối chiếu thực tế (2026-08-22): status luôn =1 vô nghĩa;
         # creationStatus: 1 = 连载 đang ra (lastPublishTime hôm nay), 0 = 完结 xong.
         status = "ongoing" if p.get("creationStatus") == 1 else "completed"
