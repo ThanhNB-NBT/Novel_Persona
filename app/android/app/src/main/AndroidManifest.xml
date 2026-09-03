@@ -1,10 +1,24 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
     <!-- bản release BẮT BUỘC khai báo INTERNET (debug được tự cấp) — thiếu là app trắng trơn -->
     <uses-permission android:name="android.permission.INTERNET"/>
     <!-- flutter_local_notifications: hiện thông báo trên thanh hệ thống (Android 13+) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <!-- Tự cập nhật: tải APK mới rồi gọi trình cài hệ thống cài đè (open_filex) -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
+
+    <!-- GỠ quyền đọc media do open_filex tự khai trong manifest của nó rồi bị trình
+         gộp kéo vào đây. App chỉ dùng open_filex để mở file APK vừa tải trong
+         getTemporaryDirectory() = cacheDir, tức nằm trong thư mục dữ liệu riêng:
+         pathRequiresPermission() của plugin trả false nên nó đi thẳng startActivity(),
+         không hề đụng tới mấy quyền này. Để nguyên thì trang quyền doạ người dùng
+         rằng app đọc được ảnh/video/nhạc của họ, mà thực tế không đọc gì cả.
+         READ_MEDIA_VISUAL_USER_SELECTED là do hệ thống tự thêm khi có IMAGES/VIDEO. -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" tools:node="remove"/>
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" tools:node="remove"/>
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" tools:node="remove"/>
+    <uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" tools:node="remove"/>
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" tools:node="remove"/>
     <!-- label theo buildType (manifestPlaceholders): release "Gác Truyện", debug "Gác Truyện dev" -->
     <application
         android:label="${appName}"
