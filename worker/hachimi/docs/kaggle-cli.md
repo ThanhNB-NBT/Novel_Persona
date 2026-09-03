@@ -114,3 +114,85 @@ Nếu vẫn muốn dùng token HF trên Kaggle: **secret chỉ thêm được qu
 8-10 phút) vì vá từng lỗi một. Lượt đầu đáng lẽ in hết: phiên bản torch/transformers/
 tokenizers/hub, `torch.cuda.get_device_name()`, thử `import`, thử dựng
 `Seq2SeqTrainingArguments(**options)` — một lượt là biết đủ để sửa trọn gói.
+
+## Bổ sung 30/08/2026 (vòng v7)
+
+- **Không có lệnh cancel.** `kaggle kernels` chỉ có `delete`. Muốn dừng một kernel đang RUNNING
+  mà giữ lại nó thì phải bấm Stop trên web; qua CLI chỉ còn cách `kernels pull -m` sao lưu mã
+  rồi `kernels delete` (nhớ `echo y |` vì nó hỏi xác nhận, chạy không TTY sẽ `EOFError`).
+- **`datasets create` mặc định `--dir-mode skip`** → **thư mục con bị bỏ qua, KHÔNG báo lỗi**.
+  Để mọi file phẳng ở gốc, hoặc `-r zip`.
+- **Mặc định nó CHUYỂN file tabular sang CSV** — luôn thêm `-t/--keep-tabular` cho chắc.
+- **Zip được giải vào THƯ MỤC TRÙNG TÊN**, không phải ra gốc: `data.zip` → `data/corpus.jsonl`.
+  (Bản ghi cũ ở trên chỉ nói "tự giải nén" nên dễ hiểu nhầm là đổ ra gốc.) Kiểm bằng
+  `kaggle datasets files <slug>` sau khi status ra `ready`, đừng đoán đường dẫn.
+
+## Bổ sung 01/09/2026 (vòng LaBSE)
+
+- **Kernel KHÔNG được trùng slug với dataset** dù hai thứ khác namespace: `kernels push` với
+  `id` = `thnhnguyn003/hachimi-v7-labse` (đang là slug của một dataset) trả **409 Conflict**,
+  không kèm lý do. Đặt slug khác (`...-labse-run`) là qua.
+- **In cây `/kaggle/input` TRƯỚC mọi `assert`/`raise`.** Lượt 1 chết vì glob
+  `/kaggle/input/*/file.py` không khớp, mà phần in chẩn đoán lại đặt SAU `assert` — log chỉ
+  còn `AssertionError`, không biết thư mục thật chứa gì, phải push lại một lượt chỉ để nhìn.
+  Đây đúng là "lượt đầu để DÒ" ở mục trên, nhưng biết luật mà xếp sai thứ tự thì vẫn dính.
+  Và dò file bằng `os.walk` chứ đừng glob cố định độ sâu — zip giải vào thư mục con nên độ
+  sâu không đoán được.
+
+## GPU: đếm bằng `device_count()`, và mã phải biết dùng con thứ hai (01/09/2026)
+
+Ba chỗ dính liền nhau, dính đủ cả ba trong một lượt:
+
+**1. Không tra được `machine_shape` cho T4 ×2 — tài liệu Kaggle đã cũ.** Đã kiểm ba nguồn
+(01/09):
+
+| nguồn | nói gì |
+|---|---|
+| Tài liệu CLI chính thức (`Kaggle/kaggle-cli` → `docs/kernels_metadata.md`) | chỉ 3 giá trị: `NvidiaTeslaT4` · `NvidiaTeslaP100` · `Tpu1VmV38`. **Không có bản x2** |
+| `kaggle.com/docs/efficient-gpu-usage` | chỉ nhắc **P100**, không nhắc T4 — trang đã lạc hậu |
+| UI Notebook (Settings → Accelerator) | `None` · **`GPU T4 ×2`** · `GPU P100` · `TPU v5e-8`; **`GPU T4 ×2` là MẶC ĐỊNH** |
+
+**ĐÃ ĐO 02/09 bằng kernel `hachimi-gpuprobe` (in `torch.cuda.device_count()`):**
+
+| cấu hình metadata | máy nhận được |
+|---|---|
+| **bỏ trống** `machine_shape`, chỉ `enable_gpu: true` | **P100 · 1 GPU · sm_60** |
+| `machine_shape: "NvidiaTeslaT4"` | **T4 ×2 · 2 GPU · sm_75** (14,6 GiB mỗi con) |
+
+⇒ Hai điều chốt được:
+
+1. **`NvidiaTeslaT4` CHÍNH LÀ cỗ T4 ×2** — không có bản T4 đơn. Xin nó là được 2 GPU.
+2. **Mặc định của API ≠ mặc định của UI.** UI hiện `GPU T4 ×2`, nhưng qua API bỏ trống trường
+   này thì rơi về **P100**, và P100 `sm_60` **không chạy nổi** PyTorch của image (hỗ trợ từ
+   `sm_70`): `Tesla P100... is not compatible with the current PyTorch installation`.
+   ⇒ **LUÔN đặt `machine_shape` tường minh**, đừng bao giờ để trống.
+
+Mã CLI cũng tự thú nhận không kiểm giá trị này:
+
+```python
+# The allowed names are in an enum that is not currently included in kagglesdk.
+request.machine_shape = acc if acc else self.get_or_default(meta_data, "machine_shape", None)
+```
+
+⇒ Chuỗi được đẩy thẳng lên server, sai tên thì **im lặng rơi về mặc định P100** — tức hỏng
+theo đúng kiểu khó đoán nhất. Cờ `kaggle kernels push --accelerator` cũng đặt được trường này.
+
+Kernel dò để lâu: `~/hachimi-work/kg_gpuprobe/` (chạy ~2 phút, gần như không tốn quota).
+
+**2. `torch.cuda.get_device_name(0)` KHÔNG cho biết có mấy GPU.** Nó in tên của GPU số 0, máy
+2 con vẫn ra đúng một dòng `Tesla T4`. Đọc log rồi kết luận "chỉ được 1 GPU" là kết luận từ
+bằng chứng không đủ. Muốn biết thì in:
+
+```python
+print(torch.cuda.device_count(), [torch.cuda.get_device_name(i)
+                                  for i in range(torch.cuda.device_count())])
+```
+
+Cho vào khối "dò môi trường" của MỌI kernel, cùng chỗ in cây `/kaggle/input`.
+
+**3. Xin 2 GPU vô nghĩa nếu mã chỉ bám `cuda:0`.** `30_labse_filter_corpus.load_model` gọi
+`SentenceTransformer(MODEL, device="cuda")` — con thứ hai nằm không. Muốn dùng cả hai phải
+đổi sang `start_multi_process_pool()` + `encode_multi_process()` của sentence-transformers.
+Đáng sửa trước lần train bản thật (15-30 giờ GPU), không đáng sửa giữa chừng một job đang
+chạy: state `--resume` nằm ở `/kaggle/working`, mà thư mục đó bị xoá sạch giữa các lượt
+kernel ⇒ huỷ giữa chừng là mất trắng phần đã chạy.
