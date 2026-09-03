@@ -18,18 +18,31 @@ def _adapter(config=None):
                          config=config or {}, source_row={"name": "fanqie"})
 
 
-BOOK_STATE = {
-    "page": {
+# API /api/book/info?bookId= — nguồn metadata mới (fanqie khoá /page/ từ 3/9/2026)
+BOOK_INFO = {
+    "code": 0,
+    "data": {
         "bookName": "十日终焉", "author": "杀虫队队员",
         "abstract": "24年番茄年度巅峰榜TOP1",
         "thumbUrl": "https://p9-novel-sign.example/novel-pic/abc~tplv-resize:225:300.image"
                     "?lk3s=191c1ecc&x-expires=1787569770&x-signature=abc%3D",
         "categoryV2": '[{"Name": "悬疑脑洞"}, {"Name": "环环相扣"}]',
-        "wordNumber": 3201288, "chapterTotal": 3, "readCount": 12345,
-        "creationStatus": 0, "lastPublishTime": "1761919823",
-        "lastChapterItemId": "333",
-        # itemIds xếp MỚI-NHẤT-TRƯỚC → phải bị đảo thành 1→N
-        "itemIds": ["333", "222", "111"],
+        # API trả MỌI số dưới dạng chuỗi — fixture phải giống thật, nếu không
+        # lỗi ép kiểu (đang-ra bị đánh dấu hoàn thành) lọt qua test.
+        "wordNumber": "3201288", "readCount": "12345",
+        "creationStatus": "0", "lastPublishTime": "1761919823",
+    },
+}
+
+# API /api/reader/directory/detail?bookId= — mục lục, allItemIds xếp CŨ-TRƯỚC sẵn
+DIRECTORY = {
+    "code": 0,
+    "data": {
+        "allItemIds": ["111", "222", "333"],
+        "chapterListWithVolume": [[
+            {"itemId": "111", "title": "第1章 mở đầu"},
+            {"itemId": "222", "title": "第2章 tiếp"},
+        ]],
     },
 }
 
@@ -48,12 +61,20 @@ def main() -> None:
     assert TEMPLATE_REGISTRY["fanqie"] is FanqieAdapter
     a = _adapter()
 
-    # metadata từ state
-    a._fetch_state = lambda path: BOOK_STATE
+    # metadata từ API JSON (KHÔNG còn /page/ + __INITIAL_STATE__)
+    def api_get(path):
+        if path.startswith("/api/book/info"):
+            return json.dumps(BOOK_INFO)
+        if path.startswith("/api/reader/directory/detail"):
+            return json.dumps(DIRECTORY)
+        raise AssertionError(f"fetch_novel_meta gọi path lạ: {path}")
+
+    a._get = api_get
     m = a.fetch_novel_meta("7143038691944959011")
     assert m.title_zh == "十日终焉" and m.author_zh == "杀虫队队员"
     assert m.genres_zh == ["悬疑脑洞", "环环相扣"]
     assert m.chapter_count == 3 and m.word_count == 3201288
+    assert isinstance(m.word_count, int), m.word_count
     # creationStatus=0 = 完结; lastPublishTime unix → last_chapter_at
     assert m.status == "completed"
     assert m.last_chapter_at is not None and m.last_chapter_at.year == 2025
@@ -62,10 +83,11 @@ def main() -> None:
     # theo x-expires, đó là gốc của 1.391 bìa vỡ hồi 9/2026).
     assert m.cover_url == "https://p3-novel.example/novel-pic/abc~tplv-resize:225:300.image", m.cover_url
 
-    # mục lục: đảo mới-nhất-trước → 1→N
+    # mục lục: allItemIds đã cũ-trước, KHÔNG đảo nữa; kèm tên chương lấy sẵn
     refs = a.fetch_chapter_list("7143038691944959011")
     assert [r.source_chapter_id for r in refs] == ["111", "222", "333"], refs
     assert refs[0].index == 1
+    assert refs[0].title_zh == "第1章 mở đầu" and refs[2].title_zh is None
 
     # chương: decode PUA bằng bảng thật + lọc dòng quảng cáo (kèm phần sau nó)
     def fake_get(_path):
@@ -140,6 +162,26 @@ def main() -> None:
     # tên của 90001 đã decode từ PUA thành "我们"
     raw_title = unescape("\ue521\ue55a")
     assert raw_title.translate(a3._translate) == "我们"
+
+
+def test_fanqie_adapter() -> None:
+    """Bọc main() thành test pytest THẬT.
+
+    Trước đây main() chỉ chạy khi gọi thẳng file, nên `pytest` báo pass trong khi
+    hàm bên trong đang hỏng — đã dính đúng bẫy này ngày 3/9/2026.
+    """
+    main()
+
+
+def test_creation_status_la_chuoi() -> None:
+    """API trả creationStatus="1" (chuỗi). So thẳng với số 1 thì MỌI truyện đang ra
+    bị ghi thành 'completed' — lỗi này lọt qua vì fixture cũ để kiểu số."""
+    import json as _json
+    a = _adapter()
+    info = _json.loads(_json.dumps(BOOK_INFO))
+    info["data"]["creationStatus"] = "1"
+    a._get = lambda p: _json.dumps(info if p.startswith("/api/book/info") else DIRECTORY)
+    assert a.fetch_novel_meta("1").status == "ongoing"
 
 
 def test_normalize_cover_url() -> None:

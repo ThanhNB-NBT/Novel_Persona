@@ -33,6 +33,15 @@ log = logging.getLogger(__name__)
 _CHARSET_PATH = Path(__file__).with_name("fanqie_charset.json")
 _STATE_RE = re.compile(r"window\.__INITIAL_STATE__\s*=\s*")
 _UNDEFINED_RE = re.compile(r"\bundefined\b")
+def _as_int(v: object) -> int | None:
+    """API fanqie trả số dưới dạng CHUỖI ("1", "84303"). Ép về int để so sánh và lưu
+    đúng kiểu; giá trị lạ → None thay vì nổ."""
+    try:
+        return int(str(v).strip())
+    except (TypeError, ValueError):
+        return None
+
+
 def normalize_cover_url(raw: object) -> str | None:
     """Đưa URL bìa fanqie về host KHÔNG ký, bỏ chữ ký.
 
@@ -66,26 +75,30 @@ class FanqieAdapter(SourceAdapter):
             {chr(int(k, 16)): v for k, v in data["table"].items()})
         self._known_font_url = data.get("font_url", "")
         self._font_warned = False
+        self._dir_cache: tuple[str, dict] | None = None
 
     # ---------- helpers ----------
 
-    def _fetch_state(self, path: str) -> dict:
-        """GET trang và parse `window.__INITIAL_STATE__` (JSON lớn, có thể chứa chuỗi
-        lồng ngoặc — cắt theo </script> rồi raw_decode để khỏi đếm ngoặc tay)."""
-        html = self._get(path)
-        m = _STATE_RE.search(html)
-        if not m:
-            # Kèm cỡ body: "thiếu state" mà body cụt = lỗi phía ta (session dùng chung
-            # đa luồng), body đủ dài = fanqie đổi trang / chặn. Phân biệt được ngay từ log.
-            raise ValueError(f"{self.name}: không thấy __INITIAL_STATE__ tại {path} "
-                             f"(body {len(html)} ký tự)")
-        start = html.index("{", m.end())
-        end = html.find("</script>", start)
-        seg = _UNDEFINED_RE.sub("null", html[start:end if end != -1 else len(html)])
-        obj, _ = json.JSONDecoder().raw_decode(seg.lstrip())
-        if not isinstance(obj, dict):
-            raise ValueError(f"{self.name}: __INITIAL_STATE__ không phải dict ({path})")
-        return obj
+    def _api(self, path: str) -> dict:
+        """GET một API JSON của fanqie, trả `data`. Ném ValueError nếu code != 0."""
+        obj = json.loads(self._get(path))
+        if obj.get("code") not in (0, "0"):
+            raise ValueError(f"{self.name}: API {path} trả code={obj.get('code')} "
+                             f"msg={str(obj.get('message'))[:80]}")
+        data = obj.get("data")
+        if not isinstance(data, dict):
+            raise ValueError(f"{self.name}: API {path} không có data dict")
+        return data
+
+    def _directory(self, bid: str) -> dict:
+        """Mục lục. Nhớ lại kết quả cho ĐÚNG bookId vừa hỏi: fetch_novel_meta và
+        fetch_chapter_list thường được gọi liền nhau cho cùng một truyện, cache 1 ô
+        là đủ tiết kiệm một request mà không phình bộ nhớ trong lượt crawl dài."""
+        if self._dir_cache and self._dir_cache[0] == bid:
+            return self._dir_cache[1]
+        data = self._api(f"/api/reader/directory/detail?bookId={bid}")
+        self._dir_cache = (bid, data)
+        return data
 
     def _check_font(self, html: str) -> None:
         """Font woff2 đổi URL = ByteDance rebuild bảng mã → bảng tĩnh sẽ decode sai.
@@ -215,7 +228,10 @@ class FanqieAdapter(SourceAdapter):
         return [(m.source_novel_id, i) for i, m in enumerate(out.values())][:limit]
 
     def fetch_novel_meta(self, source_novel_id: str) -> NovelMeta:
-        p = (self._fetch_state(f"/page/{source_novel_id}").get("page") or {})
+        # ĐỔI TỪ /page/{id} SANG API JSON (2026-09-03): fanqie biến /page/ thành
+        # endpoint cần ký — trả HTTP 200 content-type json mà body 0 byte. Đo 8 lượt:
+        # /page/ 0/8, /api/book/info 8/8, /api/reader/directory/detail 8/8.
+        p = self._api(f"/api/book/info?bookId={source_novel_id}")
         title = (p.get("bookName") or "").strip()
         if not title:
             raise ValueError(f"Không parse được truyện {source_novel_id} ({self.name})")
@@ -232,7 +248,9 @@ class FanqieAdapter(SourceAdapter):
         cover = normalize_cover_url(p.get("thumbUrl"))
         # Ngữ nghĩa đã đối chiếu thực tế (2026-08-22): status luôn =1 vô nghĩa;
         # creationStatus: 1 = 连载 đang ra (lastPublishTime hôm nay), 0 = 完结 xong.
-        status = "ongoing" if p.get("creationStatus") == 1 else "completed"
+        # API trả CHUỖI ("1") ở chỗ __INITIAL_STATE__ cũ trả SỐ (1) — so thẳng với 1
+        # thì MỌI truyện đang ra bị đánh dấu hoàn thành. Ép kiểu trước khi so.
+        status = "ongoing" if _as_int(p.get("creationStatus")) == 1 else "completed"
         last_at = None
         raw_ts = str(p.get("lastPublishTime") or "")
         if raw_ts.isdigit():
@@ -247,21 +265,27 @@ class FanqieAdapter(SourceAdapter):
             description_zh=p.get("abstract") or p.get("description"),
             genres_zh=genres,
             status=status,
-            chapter_count=int(p.get("chapterTotal") or len(p.get("itemIds") or []) or 0),
-            word_count=p.get("wordNumber"),
+            # book/info KHÔNG có chapterTotal/itemIds → đếm từ mục lục (dùng chung
+            # cache với fetch_chapter_list nên không tốn thêm request)
+            chapter_count=len(self._directory(source_novel_id).get("allItemIds") or []),
+            word_count=_as_int(p.get("wordNumber")),
             last_chapter_at=last_at,
-            stats={"readCount": p.get("readCount")} if p.get("readCount") else {},
+            stats={"readCount": _as_int(p.get("readCount"))} if p.get("readCount") else {},
         )
 
     def fetch_chapter_list(self, source_novel_id: str) -> list[ChapterRef]:
         self.last_toc_status = None
-        p = (self._fetch_state(f"/page/{source_novel_id}").get("page") or {})
-        ids = [str(x) for x in (p.get("itemIds") or [])]
+        d = self._directory(source_novel_id)
+        ids = [str(x) for x in (d.get("allItemIds") or [])]
         if not ids:
             raise ValueError(f"Mục lục rỗng {self.name} cho {source_novel_id}")
-        if p.get("lastChapterItemId") and ids[0] == str(p["lastChapterItemId"]):
-            ids.reverse()  # itemIds xếp mới-nhất-trước → đảo thành 1→N
-        return [ChapterRef(index=i + 1, source_chapter_id=cid)
+        # allItemIds xếp CŨ-TRƯỚC sẵn (đối chiếu chapterListWithVolume: phần tử đầu là
+        # "第1章"), khác itemIds của /page/ vốn mới-trước và phải đảo.
+        titles = {str(c.get("itemId")): (c.get("title") or "").strip()
+                  for vol in (d.get("chapterListWithVolume") or [])
+                  for c in (vol or []) if c.get("itemId")}
+        return [ChapterRef(index=i + 1, source_chapter_id=cid,
+                           title_zh=titles.get(cid) or None)
                 for i, cid in enumerate(ids)]
 
     def fetch_chapter(self, source_chapter_id: str) -> str:
