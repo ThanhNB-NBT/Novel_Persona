@@ -112,13 +112,11 @@ final searchProvider = FutureProvider.autoDispose.family<List<Rec>, SearchFilter
       .eq('hidden', false)
       .eq('is_canonical', true);
   if (f.query.isNotEmpty) {
-    // Tìm cả tên/tác giả tiếng Việt LẪN tiếng Trung (truyện chưa dịch metadata, hoặc
-    // user gõ tên gốc). Bỏ dấu phẩy trong query để không phá cú pháp or() của PostgREST.
-    final s = f.query.replaceAll(',', ' ');
-    q = q.or(
-      'title_vi.ilike.%$s%,title_zh.ilike.%$s%,'
-      'author_vi.ilike.%$s%,author_zh.ilike.%$s%',
-    );
+    // search_norm (migration 111) gom tên + tác giả Việt LẪN Trung, bỏ dấu sẵn →
+    // gõ "Toan Dan" ra "Toàn Dân…"; trước đây ilike thẳng thì ra 0 kết quả.
+    // Chữ Trung không có dấu nên boDau() để nguyên, tìm tên gốc vẫn chạy.
+    final s = boDau(f.query).replaceAll(',', ' ');
+    q = q.ilike('search_norm', '%$s%');
   }
   if (f.minChapters > 0) q = q.gte('chapter_count_source', f.minChapters);
   if (f.status != null) q = q.eq('status', f.status!);
