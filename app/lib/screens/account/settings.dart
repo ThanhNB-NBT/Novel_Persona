@@ -19,24 +19,7 @@ class SettingsScreen extends ConsumerWidget {
     final profile = ref.watch(profileProvider).value;
     final mode = ref.watch(appThemeModeProvider);
 
-    if (user == null) {
-      return Scaffold(
-        body: SafeArea(
-          child: Column(children: [
-            const PageHeader('CÁ NHÂN', 'Cài đặt'),
-            Expanded(
-              child: Center(
-                child: FilledButton(
-                    onPressed: () => context.push('/login'),
-                    child: const Text('Đăng nhập')),
-              ),
-            ),
-          ]),
-        ),
-      );
-    }
-
-    final name = profile?['display_name'] ?? user.email?.split('@').first ?? 'Bạn đọc';
+    final name = profile?['display_name'] ?? user?.email?.split('@').first ?? 'Bạn đọc';
     return Scaffold(
       body: SafeArea(
         child: Column(children: [
@@ -46,36 +29,57 @@ class SettingsScreen extends ConsumerWidget {
               child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 110), // chừa chỗ dock nổi
             children: [
-          _ProfileCard(
-              name: name,
-              email: user.email ?? '',
-              avatar: profile?['avatar_url'] as String?,
-              onLogout: () async {
-                await sb.auth.signOut();
-                ref.invalidate(profileProvider);
-                ref.invalidate(readStatsProvider);
-                if (context.mounted) context.go('/');
-              }),
-          const SizedBox(height: 16),
-          // Bảng số liệu đọc kiểu dashboard: 3 cột mono + dải streak 7 ngày.
-          // Streak = số ngày đọc liên tiếp (RPC touch_reading_streak, tính giờ VN).
-          _ReadingPanel(
-            novels: stats?['novels'] ?? 0,
-            chapters: stats?['chapters'] ?? 0,
-            streak: liveStreak(profile),
-          ),
+          // Chưa đăng nhập vẫn được vào Cài đặt: chỉ ẩn phần CẦN tài khoản.
+          // Trước đây cả màn bị thay bằng một nút Đăng nhập, chôn theo cả nút đổi
+          // sáng/tối, Hướng dẫn sử dụng và Kiểm tra cập nhật — ba thứ không hề
+          // cần tài khoản, mà người mới vào lại cần nhất.
+          if (user == null)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 28),
+              child: Column(children: [
+                Text('Đăng nhập để lưu truyện đang đọc, tiến độ và tu luyện.',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodyMedium),
+                const SizedBox(height: 14),
+                FilledButton(
+                    onPressed: () => context.push('/login'),
+                    child: const Text('Đăng nhập')),
+              ]),
+            )
+          else ...[
+            _ProfileCard(
+                name: name,
+                email: user.email ?? '',
+                avatar: profile?['avatar_url'] as String?,
+                onLogout: () async {
+                  await sb.auth.signOut();
+                  ref.invalidate(profileProvider);
+                  ref.invalidate(readStatsProvider);
+                  if (context.mounted) context.go('/');
+                }),
+            const SizedBox(height: 16),
+            // Bảng số liệu đọc kiểu dashboard: 3 cột mono + dải streak 7 ngày.
+            // Streak = số ngày đọc liên tiếp (RPC touch_reading_streak, tính giờ VN).
+            _ReadingPanel(
+              novels: stats?['novels'] ?? 0,
+              chapters: stats?['chapters'] ?? 0,
+              streak: liveStreak(profile),
+            ),
+          ],
           const _SectionLabel('Giao diện'),
           _Segmented(
             value: mode,
             labels: const ['Hệ thống', 'Sáng', 'Tối'],
             onChanged: (i) => ref.read(appThemeModeProvider.notifier).set(i),
           ),
-          const _SectionLabel('Thư viện'),
-          _TileGroup(children: [
-            _Tile(Icons.download_done_rounded, 'Bản offline',
-                subtitle: 'Truyện đã tải để đọc không cần mạng',
-                onTap: () => context.push('/offline')),
-          ]),
+          if (user != null) ...[
+            const _SectionLabel('Thư viện'),
+            _TileGroup(children: [
+              _Tile(Icons.download_done_rounded, 'Bản offline',
+                  subtitle: 'Truyện đã tải để đọc không cần mạng',
+                  onTap: () => context.push('/offline')),
+            ]),
+          ],
           if (ref.watch(isAdminProvider).value == true) ...[
             const _SectionLabel('Quản trị'),
             _TileGroup(children: [
@@ -90,12 +94,14 @@ class SettingsScreen extends ConsumerWidget {
                   onTap: () => context.push('/errors')),
             ]),
           ],
-          const _SectionLabel('Tài khoản'),
-          _TileGroup(children: [
-            _Tile(Icons.person_outline, 'Sửa thông tin',
-                subtitle: 'Tên hiển thị và ảnh đại diện',
-                onTap: () => context.push('/profile/edit')),
-          ]),
+          if (user != null) ...[
+            const _SectionLabel('Tài khoản'),
+            _TileGroup(children: [
+              _Tile(Icons.person_outline, 'Sửa thông tin',
+                  subtitle: 'Tên hiển thị và ảnh đại diện',
+                  onTap: () => context.push('/profile/edit')),
+            ]),
+          ],
           const _SectionLabel('Ứng dụng'),
           _TileGroup(children: [
             _Tile(Icons.menu_book_outlined, 'Hướng dẫn sử dụng',

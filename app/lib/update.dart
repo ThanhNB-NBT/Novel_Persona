@@ -68,18 +68,23 @@ Future<void> maybePromptUpdate(BuildContext context, WidgetRef ref) async {
   final info = await ref.read(updateProvider.future);
   if (info == null || !context.mounted) return;
   if (prefs.getString('update_dismissed') == info.version) return;
-  await prefs.setString('update_dismissed', info.version);
   if (!context.mounted) return;
-  showUpdateDialog(context, info);
+  // Đánh dấu "đã mời" SAU khi hộp thoại thực sự đóng, không phải trước khi mở.
+  // Ghi trước thì app tắt ngang / lỡ tay chạm ra ngoài là phiên bản đó KHÔNG BAO
+  // GIỜ được mời lại — mà đây là đường cập nhật duy nhất (app không ở chợ ứng dụng).
+  await showUpdateDialog(context, info);
+  await prefs.setString('update_dismissed', info.version);
 }
 
-void showUpdateDialog(BuildContext context, UpdateInfo info) {
+/// Trả về Future đóng khi hộp thoại đóng — [maybePromptUpdate] đợi cái này
+/// rồi mới ghi cờ đã-mời.
+Future<void> showUpdateDialog(BuildContext context, UpdateInfo info) {
   // Android cần APK, iOS cần IPA. Thiếu asset đúng nền → chỉ mở trang release.
   final asset = Platform.isAndroid ? info.apk : (Platform.isIOS ? info.ipa : null);
   final body = Platform.isAndroid
       ? (info.notes.isEmpty ? 'Tải bản mới rồi cài đè bản đang dùng.' : info.notes)
       : 'Tải IPA về máy rồi lưu vào Tệp / mở bằng SideStore để cài đè.';
-  showBlurDialog(
+  return showBlurDialog(
     context: context,
     builder: (ctx) => AlertDialog(
       title: Text('Có bản mới ${info.version}'),

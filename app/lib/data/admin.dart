@@ -34,10 +34,11 @@ const kAdminNovelsPage = 30;
 /// đúng CÙNG một tập truyện, lệch một điều kiện là chip đếm nói dối.
 PostgrestFilterBuilder<T> _adminNovelWhere<T>(
     PostgrestFilterBuilder<T> q, AdminNovelFilter f) {
-  final s = f.q.trim().replaceAll(',', ' '); // dấu phẩy phá cú pháp or() của PostgREST
+  // Cùng cột search_norm với ô tìm ngoài app: admin gõ không dấu cũng phải ra.
+  final s = boDau(f.q.trim()).replaceAll(',', ' ');
   var out = q;
   if (s.isNotEmpty) {
-    out = out.or('title_vi.ilike.%$s%,title_zh.ilike.%$s%,author_vi.ilike.%$s%');
+    out = out.ilike('search_norm', '%$s%');
   }
   if (f.tab == 1) out = out.eq('hidden', false);
   if (f.tab == 2) out = out.eq('hidden', true);
