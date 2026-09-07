@@ -39,6 +39,12 @@ Workflow chạy `flutter analyze` trước, rồi build APK (ký sẵn bằng ke
 IPA, cuối cùng tạo GitHub Release kèm file. Keystore **không** nằm trong kho — mất là không
 cập nhật được app đã cài, nhớ giữ bản sao.
 
+Phát hành xong, workflow **tự xoá các bản cũ, chỉ giữ 2 bản mới nhất** (bản vừa ra + một bản
+trước đó để lùi khi cần), xoá kèm cả tag. Mỗi bản mang ~42 MB APK + IPA nên để tích lại thì
+repo phình vô ích. Muốn giữ nhiều hơn thì đổi `GIU_LAI` trong
+`.github/workflows/android-release.yml`; muốn giữ vĩnh viễn một bản thì tải file về trước —
+assets của Releases không nằm trong git nên `git clone` không cứu được.
+
 ## Cấu trúc
 
 ```

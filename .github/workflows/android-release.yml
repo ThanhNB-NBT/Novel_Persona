@@ -139,3 +139,27 @@ jobs:
             GacTruyen-*.apk
             GacTruyen-*.ipa
           generate_release_notes: true
+
+      # Mỗi bản mang theo ~42 MB APK + IPA; để tích lại thì repo phình và trang
+      # Releases dài vô ích. Giữ đúng GIU_LAI bản mới nhất — bản vừa phát hành cộng
+      # một bản trước đó, đủ để đối chiếu hoặc lùi khi bản mới có vấn đề.
+      # Xoá kèm tag (--cleanup-tag): tag rớt lại vừa vô dụng vừa giữ sống commit cũ.
+      # KHÔNG đụng bản mới nhất — app đã cài đọc `/releases/latest` để kiểm cập nhật.
+      - name: Dọn bản phát hành cũ
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GIU_LAI: "2"
+        run: |
+          set -euo pipefail
+          cu=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 100 \
+                 --json tagName,createdAt \
+                 --jq "sort_by(.createdAt) | reverse | .[$GIU_LAI:] | .[].tagName")
+          if [ -z "$cu" ]; then
+            echo "Không có bản nào quá $GIU_LAI — bỏ qua."
+            exit 0
+          fi
+          echo "$cu" | while read -r t; do
+            [ -n "$t" ] || continue
+            echo "xoá $t"
+            gh release delete "$t" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag
+          done
