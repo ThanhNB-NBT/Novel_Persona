@@ -214,9 +214,17 @@ class _CultivationScreenState extends ConsumerState<CultivationScreen> {
                     AppError(e, onRetry: () => ref.invalidate(cultStateProvider)),
                 data: (st) {
                   if (st == null) {
+                    // Nút mặc định là `primary` (xanh băng) — đặt giữa tranh thuỷ mặc
+                    // xanh đêm + vàng kim thì chỏi hẳn tông. Dùng `secondary` (vàng
+                    // thành tựu) cho hợp cảnh, vẫn là token chứ không hardcode.
+                    final cs = Theme.of(context).colorScheme;
                     return Center(
                       child: FilledButton(
                         onPressed: () => context.push('/login'),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: cs.secondary,
+                          foregroundColor: cs.onSecondary,
+                        ),
                         child: const Text('Đăng nhập để bắt đầu tu luyện'),
                       ),
                     );
@@ -425,6 +433,15 @@ Widget _infoChip(
     borderRadius: BorderRadius.circular(9),
     child: chip,
   );
+}
+
+/// 431580831 → "431,6M" · 25300 → "25,3K" · 940 → "940".
+/// Thanh tu vi chỉ cao 22px: in số thô thì "431580831 / 721022776" chi chít không đọc nổi.
+String _gonSo(num v) {
+  String so(num x) => x.toStringAsFixed(1).replaceAll('.', ',');
+  if (v >= 1000000) return '${so(v / 1000000)}M';
+  if (v >= 10000) return '${so(v / 1000)}K';
+  return '${v.floor()}';
 }
 
 /// Popup phân tích các yếu tố ảnh hưởng TỐC ĐỘ TU LUYỆN (mirror cult_base_rate 067).
@@ -1251,7 +1268,7 @@ class _RealmCard extends StatelessWidget {
                                                     : 'Hư Vô Đại Đạo Tổ · cực hạn chư thiên')
                                               : 'Viên mãn — có thể phi thăng')
                                         : 'Bình cảnh · ${major ? 'sẵn sàng đột phá' : 'sẵn sàng lên tầng'}')
-                                  : '${e.floor()} / ${req.floor()}',
+                                  : '${_gonSo(e)} / ${_gonSo(req)}',
                               style: monoStyle(
                                 context,
                                 size: 11,

@@ -385,7 +385,18 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
             : const SizedBox.shrink(),
       ),
       body: chapter.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
+        // Chương chưa dịch thì phải CHỜ worker dịch xong — đo trên máy thật là hơn
+        // 20 giây. Spinner trơn giữa màn đen không nói được điều đó, người đọc tưởng
+        // app treo. Không hiện % (tiến độ dịch không chia mốc được), chỉ một dòng chữ.
+        loading: () => Center(
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            const CircularProgressIndicator(),
+            const SizedBox(height: 16),
+            Text('Đang tải chương…',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: col.fg.withValues(alpha: 0.6))),
+          ]),
+        ),
         error: (e, _) => AppError(e,
             onRetry: () =>
                 ref.invalidate(chapterProvider(ChapterKey(novelId, chapterIndex)))),
