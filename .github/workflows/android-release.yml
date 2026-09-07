@@ -23,24 +23,24 @@ jobs:
   # Quality gate trước khi đốt công build: tag v* không chạy qua pr-check
   # (pr-check chỉ trigger PR/push main) nên phải tự kiểm tra tại đây — nếu không,
   # tag trên main hỏng vẫn phát hành được.
+  # 2026-09-07: gate cũ chạy `pytest worker`; worker đã tách sang repo backend riêng
+  # nên đổi sang `flutter analyze` — vẫn là kiểm-trước-khi-build, chỉ khác thứ được kiểm.
   check:
+    name: Flutter analyze
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v7
+      - uses: subosito/flutter-action@v2
         with:
-          python-version: "3.11"
+          flutter-version: 3.47.2
+          cache: true
 
-      - name: Pytest worker (không cần mạng/LLM)
-        working-directory: worker
-        run: |
-          pip install -r requirements.txt pytest
-          python -m pytest test/ -x -q --tb=short
-        env:
-          SUPABASE_URL: "https://placeholder.supabase.co"
-          SUPABASE_SERVICE_ROLE_KEY: "placeholder"
-          NVIDIA_API_KEY: "placeholder"
+      - run: flutter pub get
+      - run: flutter analyze
 
   apk:
     needs: [check]
