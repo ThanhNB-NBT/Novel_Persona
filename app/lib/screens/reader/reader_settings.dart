@@ -28,12 +28,20 @@ const readerColors = [
   ReaderColor('Nâu trầm', Color(0xFF1B1611), Color(0xFFCDBDA7)),
 ];
 
-/// Các font đã Việt hoá, dễ đọc — TOÀN sans (user bỏ serif 2026-07-16).
-/// Key cũ (lora/serif…) đã xoá: notifier fallback về 'bevietnam' khi gặp key lạ.
-const readerFonts = {
-  'bevietnam': 'Be Vietnam Pro',
+/// Font có chân (Serif) — kinh điển, dẫn mắt êm, đọc tiểu thuyết dài không mỏi mắt.
+const serifFonts = {
+  'lora': 'Lora',
+  'merriweather': 'Merriweather',
+  'literata': 'Literata',
+  'playfair': 'Playfair Display',
+};
+
+/// Font không chân (Sans) — hiện đại, nét đều, sắc nét trên màn hình điện thoại.
+const sansFonts = {
   'jakarta': 'Plus Jakarta Sans',
+  'bevietnam': 'Be Vietnam Pro',
   'inter': 'Inter',
+  'roboto': 'Roboto',
   'manrope': 'Manrope',
   'nunitosans': 'Nunito Sans',
   'mulish': 'Mulish',
@@ -45,6 +53,15 @@ const readerFonts = {
   'worksans': 'Work Sans',
   'quicksand': 'Quicksand',
 };
+
+/// Toàn bộ các font khả dụng trong app.
+const readerFonts = {
+  ...serifFonts,
+  ...sansFonts,
+};
+
+/// Font đã đóng gói sẵn trong asset (an toàn tuyệt đối khi offline).
+const offlineBundledFonts = {'jakarta'};
 
 /// Độ sáng hiệu lực của app: theo Cài đặt app (0=hệ thống→OS, 1=sáng, 2=tối).
 /// Reader lấy cái này làm mốc cho chế độ màu "Hệ thống".
@@ -66,6 +83,11 @@ TextStyle readerFontStyle(
   required Color color,
 }) {
   final f = switch (key) {
+    'lora' => GoogleFonts.lora,
+    'merriweather' => GoogleFonts.merriweather,
+    'literata' => GoogleFonts.literata,
+    'playfair' => GoogleFonts.playfairDisplay,
+    'roboto' => GoogleFonts.roboto,
     'jakarta' => GoogleFonts.plusJakartaSans,
     'inter' => GoogleFonts.inter,
     'manrope' => GoogleFonts.manrope,
@@ -78,9 +100,16 @@ TextStyle readerFontStyle(
     'montserrat' => GoogleFonts.montserrat,
     'worksans' => GoogleFonts.workSans,
     'quicksand' => GoogleFonts.quicksand,
-    _ => GoogleFonts.beVietnamPro, // gồm key serif cũ đã bỏ
+    _ => GoogleFonts.beVietnamPro,
   };
-  return f(fontSize: fontSize, height: height, color: color);
+  return f(
+    fontSize: fontSize,
+    height: height,
+    color: color,
+  ).copyWith(
+    // Fallback an toàn về font bundle nội bộ nếu mất mạng hoặc font ngoại chưa tải kịp
+    fontFamilyFallback: const ['Plus Jakarta Sans'],
+  );
 }
 
 class ReaderSettings {
@@ -324,51 +353,82 @@ void showReaderSettingsSheet(
                     ),
                   ]),
 
-                  label('Chữ'),
-                  SizedBox(
-                    height: 38,
-                    child: ListView(
-                      scrollDirection: Axis.horizontal,
-                      children: [
-                        for (final e in readerFonts.entries)
-                          Padding(
-                            padding: const EdgeInsets.only(right: 8),
-                            // chip tự vẽ: nền nhấn NHẠT + viền primary khi chọn —
-                            // ChoiceChip mặc định nền đặc quá chói giữa sheet dịu
-                            child: GestureDetector(
-                              onTap: () => n.update(s.copyWith(fontKey: e.key)),
-                              child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 150),
-                                alignment: Alignment.center,
-                                padding: const EdgeInsets.symmetric(horizontal: 14),
-                                decoration: BoxDecoration(
-                                  color: s.fontKey == e.key
-                                      ? cs.primary.withValues(alpha: 0.10)
-                                      : cs.surface,
-                                  borderRadius: BorderRadius.circular(19),
-                                  border: Border.all(
-                                    color: s.fontKey == e.key
-                                        ? cs.primary.withValues(alpha: 0.65)
-                                        : cs.outlineVariant,
-                                    width: s.fontKey == e.key ? 1.4 : 1,
+                  label('Phông chữ', serifFonts.containsKey(s.fontKey) ? 'font có chân (Serif)' : 'font không chân (Sans)'),
+                  Builder(
+                    builder: (context) {
+                      final isSerifActive = serifFonts.containsKey(s.fontKey);
+                      final displayFonts = isSerifActive ? serifFonts : sansFonts;
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          seg(
+                            context,
+                            ['Có chân (Serif)', 'Không chân (Sans)'],
+                            isSerifActive ? 0 : 1,
+                            (idx) {
+                              if (idx == 0 && !isSerifActive) {
+                                n.update(s.copyWith(fontKey: serifFonts.keys.first));
+                              } else if (idx == 1 && isSerifActive) {
+                                n.update(s.copyWith(fontKey: sansFonts.keys.first));
+                              }
+                            },
+                          ),
+                          const SizedBox(height: 10),
+                          SizedBox(
+                            height: 38,
+                            child: ListView(
+                              scrollDirection: Axis.horizontal,
+                              children: [
+                                for (final e in displayFonts.entries)
+                                  Padding(
+                                    padding: const EdgeInsets.only(right: 8),
+                                    child: GestureDetector(
+                                      onTap: () => n.update(s.copyWith(fontKey: e.key)),
+                                      child: AnimatedContainer(
+                                        duration: const Duration(milliseconds: 150),
+                                        alignment: Alignment.center,
+                                        padding: const EdgeInsets.symmetric(horizontal: 14),
+                                        decoration: BoxDecoration(
+                                          color: s.fontKey == e.key
+                                              ? cs.primary.withValues(alpha: 0.10)
+                                              : cs.surface,
+                                          borderRadius: BorderRadius.circular(19),
+                                          border: Border.all(
+                                            color: s.fontKey == e.key
+                                                ? cs.primary.withValues(alpha: 0.65)
+                                                : cs.outlineVariant,
+                                            width: s.fontKey == e.key ? 1.4 : 1,
+                                          ),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            if (offlineBundledFonts.contains(e.key)) ...[
+                                              Icon(Icons.bolt_rounded, size: 14, color: cs.primary),
+                                              const SizedBox(width: 4),
+                                            ],
+                                            Text(
+                                              e.value,
+                                              style: readerFontStyle(
+                                                e.key,
+                                                fontSize: 13.5,
+                                                height: 1,
+                                                color: s.fontKey == e.key
+                                                    ? cs.primary
+                                                    : cs.onSurface,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
                                   ),
-                                ),
-                                child: Text(
-                                  e.value,
-                                  style: readerFontStyle(
-                                    e.key,
-                                    fontSize: 13.5,
-                                    height: 1,
-                                    color: s.fontKey == e.key
-                                        ? cs.primary
-                                        : cs.onSurface,
-                                  ),
-                                ),
-                              ),
+                              ],
                             ),
                           ),
-                      ],
-                    ),
+                        ],
+                      );
+                    },
                   ),
                   const SizedBox(height: 10),
                   slider('Cỡ chữ', '${s.fontSize.round()}', s.fontSize, 15, 28, 13,

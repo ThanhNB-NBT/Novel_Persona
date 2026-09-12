@@ -122,37 +122,71 @@ String withoutLeadingPreviousEcho(String current, String? previous) {
 
 // ---------------- Phân trang chế độ lật trang (thuần TextPainter) ----------------
 
-/// Cắt văn bản thành các trang vừa 1 màn (tìm nhị phân số ký tự vừa chiều cao).
+/// Cắt văn bản thành các trang vừa 1 màn (Exponential search + nhị phân có chặn trên).
 List<String> paginateText(
     String text, TextStyle style, double maxWidth, double pageH, double firstH) {
   final pages = <String>[];
   final tp = TextPainter(textDirection: TextDirection.ltr, maxLines: null);
   final n = text.length;
+  final fontSize = style.fontSize ?? 16.0;
+  final lineHeight = fontSize * (style.height ?? 1.3);
   int start = 0;
-  while (start < n) {
-    final limit = pages.isEmpty ? firstH : pageH;
-    int lo = start + 1, hi = n, best = start + 1;
-    while (lo <= hi) {
-      final mid = (lo + hi) >> 1;
-      tp.text = TextSpan(text: text.substring(start, mid), style: style);
-      tp.layout(maxWidth: maxWidth);
-      if (tp.height <= limit) {
-        best = mid;
-        lo = mid + 1;
-      } else {
-        hi = mid - 1;
+
+  try {
+    while (start < n) {
+      final limit = pages.isEmpty ? firstH : pageH;
+
+      // Ước lượng bước nhảy ban đầu dựa trên kích thước font và khung hình
+      final linesEst = (limit / lineHeight).ceil().clamp(1, 200);
+      final charsPerLineEst = (maxWidth / (fontSize * 0.55)).ceil().clamp(10, 150);
+      int step = (linesEst * charsPerLineEst).clamp(60, 3000);
+
+      int lo = start + 1;
+      int hi = n;
+
+      // Exponential search: Tìm khoảng chặn trên [lo, hi] hẹp trước khi nhị phân,
+      // tránh gọi layout trên toàn bộ chuỗi khổng lồ (n hàng chục nghìn ký tự).
+      int probe = start + step;
+      while (probe < n) {
+        tp.text = TextSpan(text: text.substring(start, probe), style: style);
+        tp.layout(maxWidth: maxWidth);
+        if (tp.height <= limit) {
+          lo = probe;
+          step *= 2;
+          probe = (start + step).clamp(start + 1, n);
+        } else {
+          hi = probe;
+          break;
+        }
       }
+
+      int best = lo;
+      while (lo <= hi) {
+        final mid = (lo + hi) >> 1;
+        tp.text = TextSpan(text: text.substring(start, mid), style: style);
+        tp.layout(maxWidth: maxWidth);
+        if (tp.height <= limit) {
+          best = mid;
+          lo = mid + 1;
+        } else {
+          hi = mid - 1;
+        }
+      }
+
+      int end = best;
+      if (end < n) {
+        // lùi về khoảng trắng gần nhất để không cắt giữa từ
+        final ws = text.lastIndexOf(RegExp(r'\s'), end - 1);
+        if (ws > start) end = ws + 1;
+      }
+      if (end <= start) end = (start + 1).clamp(0, n); // an toàn, tránh lặp vô hạn
+      pages.add(text.substring(start, end).trim());
+      start = end;
     }
-    int end = best;
-    if (end < n) {
-      // lùi về khoảng trắng gần nhất để không cắt giữa từ
-      final ws = text.lastIndexOf(RegExp(r'\s'), end - 1);
-      if (ws > start) end = ws + 1;
-    }
-    if (end <= start) end = (start + 1).clamp(0, n); // an toàn, tránh lặp vô hạn
-    pages.add(text.substring(start, end).trim());
-    start = end;
+  } finally {
+    tp.dispose();
   }
+
   if (pages.isEmpty) pages.add('');
   return pages;
 }

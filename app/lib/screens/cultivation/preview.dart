@@ -201,85 +201,87 @@ class _AnimatedCultivatorState extends State<AnimatedCultivator>
     return SizedBox(
       width: 150,
       height: 145,
-      child: AnimatedBuilder(
-        animation: _ctrl,
-        builder: (_, _) => CustomPaint(
-          // nền: halo sau đầu + trận pháp dưới chân + sương + quầng thở
-          // nền nhận cả đồ bay quanh: nửa vòng SAU vẽ ở đây → bị người che thật
-          painter: SkyPainter(
-            _ctrl.value,
-            moon,
-            color,
-            widget.realm,
-            halo: widget.halo,
-            weaponImg: _weaponImg,
-            phapbaoImg: _phapbaoImg,
-            swordWheelImg: _swordWheelImg,
-            tienTier: widget.tienTier,
-            elements: widget.elements,
-            haloImg: _haloImg,
-            elementTime: _elementTurn + _ctrl.value,
-          ),
-          // trước: hiệu ứng công pháp + nửa vòng TRƯỚC của vũ khí/pháp bảo
-          foregroundPainter: AuraPainter(
-            _ctrl.value,
-            color,
-            style,
-            weaponImg: _weaponImg,
-            phapbaoImg: _phapbaoImg,
-          ),
-          child: Center(
-            // Ảnh chibi 1 tấm không có layer riêng → giả chuyển động bằng
-            // 4 tín hiệu chồng nhau (mọi tần số là bội NGUYÊN của loop 4s):
-            // trôi Lissajous, xoay quanh trục Y có phối cảnh (2.5D), nghiêng
-            // Z nhẹ, và THỞ neo ở chân (giãn dọc, bụng phập phồng) thay vì
-            // phóng đều cả ảnh. Bóng dưới chân bên SkyPainter co giãn ngược
-            // pha [bob] để bán cảm giác lơ lửng.
-            child: Builder(
-              builder: (_) {
-                final ph = _ctrl.value * 2 * math.pi;
-                final bob = math.sin(ph); // -1..1, cùng pha bóng dưới chân
-                final breath = math.sin(ph * 2); // thở 2 nhịp mỗi vòng
-                // có frame phụ → chạy ping-pong 1..n..1 (8 bước/vòng ≈ 2fps),
-                // gaplessPlayback giữ frame cũ khi decode nên không nháy trắng
-                final n = _frames.length;
-                final asset = n <= 1
-                    ? cultivatorAsset(widget.race, widget.gender)
-                    : () {
-                        final step = (_ctrl.value * 8).floor() % (2 * n - 2);
-                        return _frames[step < n ? step : 2 * n - 2 - step];
-                      }();
-                return Transform.translate(
-                  offset: Offset(
-                    bob * 1.5 + math.sin(ph * 2 + 0.9) * 0.7, // trôi lệch nhịp
-                    10 + bob * 4,
-                  ),
-                  child: Transform(
-                    alignment: Alignment.bottomCenter,
-                    transform: Matrix4.identity()
-                      ..setEntry(
-                        3,
-                        2,
-                        0.0015,
-                      ) // phối cảnh cho rotateY có chiều sâu
-                      ..rotateY(math.sin(ph + 1.1) * 0.07) // khẽ xoay người
-                      ..rotateZ(bob * 0.012)
-                      ..scaleByDouble(
-                        1.0 - breath * 0.006,
-                        1.0 + breath * 0.011,
-                        1.0,
-                        1.0,
-                      ),
-                    child: Image.asset(
-                      asset,
-                      width: 104,
-                      height: 128,
-                      fit: BoxFit.contain,
-                      gaplessPlayback: true,
+      child: RepaintBoundary(
+        child: AnimatedBuilder(
+          animation: _ctrl,
+          builder: (_, _) => CustomPaint(
+            // nền: halo sau đầu + trận pháp dưới chân + sương + quầng thở
+            // nền nhận cả đồ bay quanh: nửa vòng SAU vẽ ở đây → bị người che thật
+            painter: SkyPainter(
+              _ctrl.value,
+              moon,
+              color,
+              widget.realm,
+              halo: widget.halo,
+              weaponImg: _weaponImg,
+              phapbaoImg: _phapbaoImg,
+              swordWheelImg: _swordWheelImg,
+              tienTier: widget.tienTier,
+              elements: widget.elements,
+              haloImg: _haloImg,
+              elementTime: _elementTurn + _ctrl.value,
+            ),
+            // trước: hiệu ứng công pháp + nửa vòng TRƯỚC của vũ khí/pháp bảo
+            foregroundPainter: AuraPainter(
+              _ctrl.value,
+              color,
+              style,
+              weaponImg: _weaponImg,
+              phapbaoImg: _phapbaoImg,
+            ),
+            child: Center(
+              // Ảnh chibi 1 tấm không có layer riêng → giả chuyển động bằng
+              // 4 tín hiệu chồng nhau (mọi tần số là bội NGUYÊN của loop 4s):
+              // trôi Lissajous, xoay quanh trục Y có phối cảnh (2.5D), nghiêng
+              // Z nhẹ, và THỞ neo ở chân (giãn dọc, bụng phập phồng) thay vì
+              // phóng đều cả ảnh. Bóng dưới chân bên SkyPainter co giãn ngược
+              // pha [bob] để bán cảm giác lơ lửng.
+              child: Builder(
+                builder: (_) {
+                  final ph = _ctrl.value * 2 * math.pi;
+                  final bob = math.sin(ph); // -1..1, cùng pha bóng dưới chân
+                  final breath = math.sin(ph * 2); // thở 2 nhịp mỗi vòng
+                  // có frame phụ → chạy ping-pong 1..n..1 (8 bước/vòng ≈ 2fps),
+                  // gaplessPlayback giữ frame cũ khi decode nên không nháy trắng
+                  final n = _frames.length;
+                  final asset = n <= 1
+                      ? cultivatorAsset(widget.race, widget.gender)
+                      : () {
+                          final step = (_ctrl.value * 8).floor() % (2 * n - 2);
+                          return _frames[step < n ? step : 2 * n - 2 - step];
+                        }();
+                  return Transform.translate(
+                    offset: Offset(
+                      bob * 1.5 + math.sin(ph * 2 + 0.9) * 0.7, // trôi lệch nhịp
+                      10 + bob * 4,
                     ),
-                  ),
-                );
-              },
+                    child: Transform(
+                      alignment: Alignment.bottomCenter,
+                      transform: Matrix4.identity()
+                        ..setEntry(
+                          3,
+                          2,
+                          0.0015,
+                        ) // phối cảnh cho rotateY có chiều sâu
+                        ..rotateY(math.sin(ph + 1.1) * 0.07) // khẽ xoay người
+                        ..rotateZ(bob * 0.012)
+                        ..scaleByDouble(
+                          1.0 - breath * 0.006,
+                          1.0 + breath * 0.011,
+                          1.0,
+                          1.0,
+                        ),
+                      child: Image.asset(
+                        asset,
+                        width: 104,
+                        height: 128,
+                        fit: BoxFit.contain,
+                        gaplessPlayback: true,
+                      ),
+                    ),
+                  );
+                },
+              ),
             ),
           ),
         ),

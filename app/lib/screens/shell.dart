@@ -15,6 +15,8 @@ import 'explore/home.dart';
 import 'library/library.dart';
 import 'library/queue.dart';
 import 'account/settings.dart';
+import '../theme.dart';
+import '../tts.dart';
 
 /// Cờ tĩnh ghi nhận splash đã chiếu trong phiên chạy (không lặp lại khi đổi tab)
 bool _splashShown = false;
@@ -130,7 +132,13 @@ class _RootShellState extends ConsumerState<RootShell> {
           // dữ liệu khi mở tab để thấy thay đổi vừa gây ở màn khác.
           Align(
             alignment: Alignment.bottomCenter,
-            child: _Dock(index: _i, pageController: _pc, onTap: go),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const _GlobalTtsBar(),
+                _Dock(index: _i, pageController: _pc, onTap: go),
+              ],
+            ),
           ),
           // Hoạt ảnh khởi động: Chữ "Gác Truyện" bay vào giữa màn hình rồi chuyển hóa sang Logo
           if (_showSplash)
@@ -197,6 +205,115 @@ class _KeepAliveState extends State<_KeepAlive> with AutomaticKeepAliveClientMix
   Widget build(BuildContext context) {
     super.build(context);
     return widget.child;
+  }
+}
+
+/// Thanh điều khiển máy đọc TTS toàn cục: hiển thị khi có audio đang phát/tạm dừng.
+class _GlobalTtsBar extends StatelessWidget {
+  const _GlobalTtsBar();
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<TtsState>(
+      valueListenable: TtsPlayer.i.state,
+      builder: (context, st, _) {
+        if (!st.active) return const SizedBox.shrink();
+        final cs = Theme.of(context).colorScheme;
+        final t = Theme.of(context).textTheme;
+        final dark = Theme.of(context).brightness == Brightness.dark;
+
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(20),
+              onTap: () {
+                if (st.novelId != null) {
+                  context.push('/novel/${st.novelId}/read/${st.chapterIndex}');
+                }
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                decoration: BoxDecoration(
+                  color: dark
+                      ? Pal.dSurface.withValues(alpha: 0.92)
+                      : Pal.surface.withValues(alpha: 0.92),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: cs.primary.withValues(alpha: 0.35),
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: dark ? 0.35 : 0.12),
+                      blurRadius: 14,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      st.playing
+                          ? Icons.graphic_eq_rounded
+                          : Icons.headphones_rounded,
+                      size: 20,
+                      color: cs.primary,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Đang phát chương ${st.chapterIndex}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: t.labelMedium?.copyWith(
+                          color: cs.onSurface,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      icon: Icon(
+                        st.playing
+                            ? Icons.pause_rounded
+                            : Icons.play_arrow_rounded,
+                        size: 22,
+                        color: cs.primary,
+                      ),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(
+                        minWidth: 32,
+                        minHeight: 32,
+                      ),
+                      onPressed: () {
+                        if (st.playing) {
+                          TtsPlayer.i.pause();
+                        } else {
+                          TtsPlayer.i.resume();
+                        }
+                      },
+                    ),
+                    IconButton(
+                      icon: Icon(
+                        Icons.close_rounded,
+                        size: 18,
+                        color: cs.onSurfaceVariant,
+                      ),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(
+                        minWidth: 28,
+                        minHeight: 28,
+                      ),
+                      onPressed: () => TtsPlayer.i.stop(),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
   }
 }
 

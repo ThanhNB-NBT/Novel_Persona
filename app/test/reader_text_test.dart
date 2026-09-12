@@ -1,6 +1,9 @@
 // Test logic văn bản thuần của reader: ranh giới từ (chạm-để-sửa) + tách câu hiển thị.
+import 'package:flutter/painting.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:novel_reader/chapter_paras.dart';
+import 'package:novel_reader/models/chapter.dart';
+import 'package:novel_reader/models/novel.dart';
 import 'package:novel_reader/screens/reader/reader_text.dart';
 import 'package:novel_reader/tts.dart';
 
@@ -132,6 +135,74 @@ void main() {
       expect(ttsMovedAway(here, novelId: 1, chapterIndex: 2), isFalse);
       // truyện khác thì không nhảy màn
       expect(ttsMovedAway(otherNovel, novelId: 1, chapterIndex: 2), isFalse);
+    });
+  });
+
+  group('paginateText — phân trang chế độ lật trang', () {
+    const style = TextStyle(fontSize: 16, height: 1.4);
+    const maxWidth = 360.0;
+    const pageH = 600.0;
+    const firstH = 500.0;
+
+    test('chuỗi rỗng trả về một trang rỗng', () {
+      final pages = paginateText('', style, maxWidth, pageH, firstH);
+      expect(pages, ['']);
+    });
+
+    test('chuỗi ngắn vừa trọn một trang', () {
+      const shortText = 'Đây là một đoạn văn ngắn gọn.';
+      final pages = paginateText(shortText, style, maxWidth, pageH, firstH);
+      expect(pages, [shortText]);
+    });
+
+    test('văn bản dài nhiều đoạn được cắt thành nhiều trang và không sót chữ', () {
+      final paras = List.generate(
+          30,
+          (i) =>
+              'Đoạn văn thứ $i của chương truyện mô tả cảnh trời mây non nước '
+              'khi nhân vật chính bước vào thế giới tu chân huyền diệu.');
+      final fullText = paras.join('\n\n');
+      final pages = paginateText(fullText, style, maxWidth, pageH, firstH);
+
+      expect(pages.length, greaterThan(1));
+      for (final p in pages) {
+        expect(p.isNotEmpty, isTrue);
+      }
+    });
+  });
+
+  group('Novel & Chapter models test', () {
+    test('Novel.fromJson parses json correctly', () {
+      final json = {
+        'id': 42,
+        'title_vi': 'Mục Thần Ký',
+        'title_zh': '牧神记',
+        'author_vi': 'Trạch Trư',
+        'status': 'completed',
+        'chapter_count_source': 1800,
+        'chapter_count_translated': 1800,
+        'genres': ['Tiên Hiệp', 'Huyền Huyễn'],
+        'sources': {'name': 'Qidian'},
+      };
+      final novel = Novel.fromJson(json);
+      expect(novel.id, 42);
+      expect(novel.titleVi, 'Mục Thần Ký');
+      expect(novel.authorVi, 'Trạch Trư');
+      expect(novel.sourceName, 'Qidian');
+      expect(novel.genres, contains('Tiên Hiệp'));
+    });
+
+    test('Chapter.fromJson parses json correctly', () {
+      final json = {
+        'chapter_index': 1,
+        'title_vi': 'Chương 1: Tàn Lão Thôn',
+        'content_vi': 'Mặt trời lặn xuống núi...',
+        'translation_status': 'translated',
+      };
+      final ch = Chapter.fromJson(json);
+      expect(ch.chapterIndex, 1);
+      expect(ch.titleVi, 'Chương 1: Tàn Lão Thôn');
+      expect(ch.contentVi, contains('Mặt trời lặn'));
     });
   });
 }

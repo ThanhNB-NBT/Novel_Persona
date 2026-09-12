@@ -69,30 +69,31 @@ class OfflineStore {
         r['chapter_index'] as int
     };
     final missing = serverIdx.where((i) => !localIdx.contains(i)).toList();
-    final rows = <Rec>[];
     for (var i = 0; i < missing.length; i += 200) {
       final batchIdx = missing.sublist(i, min(i + 200, missing.length));
-      rows.addAll(List<Rec>.from(await sb
+      final chunkRows = List<Rec>.from(await sb
           .from('chapters')
           .select('chapter_index, title_vi, content_vi, updated_at')
           .eq('novel_id', id)
-          .inFilter('chapter_index', batchIdx)));
+          .inFilter('chapter_index', batchIdx));
+
+      final batch = db.batch();
+      for (final r in chunkRows) {
+        batch.insert(
+          'chapters',
+          {
+            'novel_id': id,
+            'chapter_index': r['chapter_index'],
+            'title_vi': r['title_vi'],
+            'content_vi': r['content_vi'],
+            'server_updated_at': r['updated_at'] as String?,
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+      await batch.commit(noResult: true);
     }
-    final batch = db.batch();
-    for (final r in rows) {
-      batch.insert(
-        'chapters',
-        {
-          'novel_id': id,
-          'chapter_index': r['chapter_index'],
-          'title_vi': r['title_vi'],
-          'content_vi': r['content_vi'],
-          'server_updated_at': r['updated_at'] as String?,
-        },
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
-    }
-    batch.insert(
+    await db.insert(
       'novels',
       {
         'novel_id': id,
@@ -104,7 +105,6 @@ class OfflineStore {
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
-    await batch.commit(noResult: true);
     // Tổng chương đang có offline, không phải số vừa tải: bấm lại lần 2 mà chỉ thiếu 0
     // chương vẫn phải báo "đã tải 3000 chương", không phải "chưa có chương nào".
     return serverIdx.length;
