@@ -376,6 +376,18 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
           ),
           const SizedBox(width: 2),
         ],
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(2),
+          child: ValueListenableBuilder<double>(
+            valueListenable: _percent,
+            builder: (_, p, _) => LinearProgressIndicator(
+              value: p,
+              minHeight: 1.5,
+              backgroundColor: Colors.transparent,
+              valueColor: AlwaysStoppedAnimation<Color>(col.fg.withValues(alpha: 0.2)),
+            ),
+          ),
+        ),
       ),
       // Thanh điều khiển nghe — chỉ hiện khi máy đọc đang chạy cho truyện này
       bottomNavigationBar: ValueListenableBuilder<TtsState>(
@@ -659,24 +671,48 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
             );
           }
           final c = i - lead;
-          return Padding(
-            padding: EdgeInsets.fromLTRB(s.sideMargin, 10, s.sideMargin, 10),
-            child: SingleChildScrollView(
-              physics: const NeverScrollableScrollPhysics(), // đã fit sẵn; chặn kéo trong trang
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                if (c == 0) ...[
-                  Text(title, style: titleStyle),
-                  const SizedBox(height: 18),
-                ],
-                _TapPara(
-                  para: pages[c],
-                  style: textStyle,
-                  align: s.justify ? TextAlign.justify : TextAlign.left,
-                  sel: _sel,
-                  onTapWord: _onTapWord,
+          return Stack(
+            fit: StackFit.expand,
+            children: [
+              // Đổ bóng gáy sách nhẹ nhàng ở mép trái tạo chiều sâu trang sách giấy
+              Positioned(
+                left: 0,
+                top: 0,
+                bottom: 0,
+                width: 14,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                      colors: [
+                        Colors.black.withValues(alpha: 0.04),
+                        Colors.transparent,
+                      ],
+                    ),
+                  ),
                 ),
-              ]),
-            ),
+              ),
+              Padding(
+                padding: EdgeInsets.fromLTRB(s.sideMargin, 10, s.sideMargin, 10),
+                child: SingleChildScrollView(
+                  physics: const NeverScrollableScrollPhysics(), // đã fit sẵn; chặn kéo trong trang
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    if (c == 0) ...[
+                      Text(title, style: titleStyle),
+                      const SizedBox(height: 18),
+                    ],
+                    _TapPara(
+                      para: pages[c],
+                      style: textStyle,
+                      align: s.justify ? TextAlign.justify : TextAlign.left,
+                      sel: _sel,
+                      onTapWord: _onTapWord,
+                    ),
+                  ]),
+                ),
+              ),
+            ],
           );
         },
       );

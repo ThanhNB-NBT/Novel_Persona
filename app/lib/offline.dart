@@ -178,6 +178,13 @@ class OfflineStore {
     await db.delete('novels', where: 'novel_id = ?', whereArgs: [novelId]);
   }
 
+  Future<void> deleteAllNovels() async {
+    final db = await _database;
+    await db.delete('chapters');
+    await db.delete('novels');
+    await db.execute('VACUUM');
+  }
+
   /// Dung lượng file DB offline (byte) — hiển thị tổng "đã dùng".
   Future<int> totalSizeBytes() async {
     final f = File(p.join(await getDatabasesPath(), 'offline.db'));

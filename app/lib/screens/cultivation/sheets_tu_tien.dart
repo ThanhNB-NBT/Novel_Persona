@@ -149,13 +149,18 @@ class DongPhuSheet extends ConsumerStatefulWidget {
 
 class _DongPhuSheetState extends ConsumerState<DongPhuSheet> {
   bool _busy = false;
+  bool _showParticles = false;
 
   Future<void> _harvestQi(double rate) async {
     if (_busy) return;
-    setState(() => _busy = true);
+    setState(() {
+      _busy = true;
+      _showParticles = true;
+    });
     final gain = (rate * 30).clamp(50, 10000).toDouble();
     try {
-      HapticFeedback.mediumImpact();
+      HapticFeedback.heavyImpact();
+      await Future.delayed(const Duration(milliseconds: 600));
       ref.invalidate(cultStateProvider);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -195,9 +200,11 @@ class _DongPhuSheetState extends ConsumerState<DongPhuSheet> {
         ? dongPhuNames.last
         : dongPhuNames[(realm - 1).clamp(0, dongPhuNames.length - 1)];
 
-    return SafeArea(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(18, 4, 18, 24),
+    return Stack(
+      children: [
+        SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(18, 4, 18, 24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
@@ -264,8 +271,16 @@ class _DongPhuSheetState extends ConsumerState<DongPhuSheet> {
           ],
         ),
       ),
-    );
-  }
+    ),
+    if (_showParticles)
+      Positioned.fill(
+        child: IgnorePointer(
+          child: _QiParticlesOverlay(color: cs.primary),
+        ),
+      ),
+    ],
+  );
+}
 
   Widget _row(BuildContext context, {required IconData icon, required String title, required String desc}) {
     final t = Theme.of(context).textTheme;
@@ -576,3 +591,79 @@ class _ThanhTuuSheetState extends State<ThanhTuuSheet> {
     );
   }
 }
+
+/// Hiệu ứng đốm sáng linh khí hội tụ về tâm khi tụ linh khí / thiền định
+class _QiParticlesOverlay extends StatefulWidget {
+  final Color color;
+  const _QiParticlesOverlay({required this.color});
+
+  @override
+  State<_QiParticlesOverlay> createState() => _QiParticlesOverlayState();
+}
+
+class _QiParticlesOverlayState extends State<_QiParticlesOverlay>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 600),
+  )..forward();
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _ctrl,
+      builder: (context, _) => CustomPaint(
+        painter: _QiParticlePainter(
+          progress: _ctrl.value,
+          color: widget.color,
+        ),
+      ),
+    );
+  }
+}
+
+class _QiParticlePainter extends CustomPainter {
+  final double progress;
+  final Color color;
+  _QiParticlePainter({required this.progress, required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final paint = Paint()..style = PaintingStyle.fill;
+    final maxRadius = math.min(size.width, size.height) * 0.45;
+
+    // 24 hạt linh khí xoắn ốc hội tụ về tâm
+    const count = 24;
+    for (var i = 0; i < count; i++) {
+      final angle = (i * 2 * math.pi / count) + (progress * math.pi);
+      final dist = maxRadius * (1.0 - progress);
+      final x = center.dx + math.cos(angle) * dist;
+      final y = center.dy + math.sin(angle) * dist;
+
+      final alpha = (math.sin(progress * math.pi) * 0.85).clamp(0.0, 1.0);
+      paint.color = color.withValues(alpha: alpha);
+      final pRadius = (1.5 + 2.5 * (1.0 - progress)).clamp(1.0, 4.0);
+      canvas.drawCircle(Offset(x, y), pRadius, paint);
+    }
+
+    // Quầng sáng tâm nở ra ở đoạn cuối
+    if (progress > 0.4) {
+      final glowProgress = (progress - 0.4) / 0.6;
+      final glowAlpha = (math.sin(glowProgress * math.pi) * 0.4).clamp(0.0, 1.0);
+      paint.color = color.withValues(alpha: glowAlpha);
+      canvas.drawCircle(center, 40 * glowProgress, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _QiParticlePainter oldDelegate) =>
+      oldDelegate.progress != progress || oldDelegate.color != color;
+}
+

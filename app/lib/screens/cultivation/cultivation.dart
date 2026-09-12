@@ -1640,11 +1640,20 @@ class _EquipRow extends ConsumerWidget {
 
 /// Lưới kho đồ: ô nhỏ chỉ icon + số lượng (màu viền = phẩm), đồ ĐANG TRANG BỊ
 /// được ẩn (đã hiện ở mục Trang bị); tap → popup nhỏ ngay cạnh ô.
-class _InventoryGrid extends ConsumerWidget {
+/// Lưới kho đồ: ô nhỏ chỉ icon + số lượng (màu viền = phẩm), đồ ĐANG TRANG BỊ
+/// được ẩn (đã hiện ở mục Trang bị); tap → popup nhỏ ngay cạnh ô.
+class _InventoryGrid extends ConsumerStatefulWidget {
   const _InventoryGrid();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_InventoryGrid> createState() => _InventoryGridState();
+}
+
+class _InventoryGridState extends ConsumerState<_InventoryGrid> {
+  String? _selectedType;
+
+  @override
+  Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final t = Theme.of(context).textTheme;
     final inv = ref.watch(cultInventoryProvider).value ?? const <Rec>[];
@@ -1671,67 +1680,117 @@ class _InventoryGrid extends ConsumerWidget {
         ),
       );
     }
-    return GridView.builder(
-      shrinkWrap: true,
-      primary: false,
-      padding: EdgeInsets.zero,
-      physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 6, // khớp 6 cột hàng Trang bị → ô cùng bề rộng
-        mainAxisExtent:
-            58, // ponytail: khớp chiều cao ô Trang bị (_slot height 58)
-        mainAxisSpacing: 6,
-        crossAxisSpacing: 6,
-      ),
-      itemCount: items.length,
-      itemBuilder: (context, i) {
-        final it = items[i]['cult_items'] as Rec;
-        final qty = items[i]['qty'] as int;
-        final grade = it['grade'] as int;
-        final gc = gradeColor(grade);
-        // Builder: cần context CỦA Ô để popup neo đúng cạnh ô được bấm
-        return Builder(
-          builder: (tileCtx) {
-            return InkWell(
-              borderRadius: BorderRadius.circular(12),
-              onTap: () => _showItemPopup(tileCtx, ref, it, qty),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: cs.surface,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: gc.withValues(alpha: 0.55),
+
+    final availableTypes = <String>{};
+    for (final r in items) {
+      final it = r['cult_items'] as Rec;
+      final type = it['type'] as String?;
+      if (type != null) availableTypes.add(type);
+    }
+
+    final displayedItems = _selectedType == null
+        ? items
+        : [
+            for (final r in items)
+              if ((r['cult_items'] as Rec)['type'] == _selectedType) r,
+          ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (availableTypes.length > 1)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  ChoiceChip(
+                    label: const Text('Tất cả'),
+                    selected: _selectedType == null,
+                    visualDensity: VisualDensity.compact,
+                    onSelected: (_) => setState(() => _selectedType = null),
                   ),
-                ),
-                child: Stack(
-                  children: [
-                    Center(
-                      child: PixelIcon(
-                        it['pixel'] as String,
-                        grade: grade,
-                        size: 32,
+                  for (final type in availableTypes) ...[
+                    const SizedBox(width: 6),
+                    ChoiceChip(
+                      label: Text(cultTypeNames[type] ?? type),
+                      selected: _selectedType == type,
+                      visualDensity: VisualDensity.compact,
+                      onSelected: (sel) {
+                        setState(() {
+                          _selectedType = sel ? type : null;
+                        });
+                      },
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        GridView.builder(
+          shrinkWrap: true,
+          primary: false,
+          padding: EdgeInsets.zero,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 6, // khớp 6 cột hàng Trang bị → ô cùng bề rộng
+            mainAxisExtent:
+                58, // ponytail: khớp chiều cao ô Trang bị (_slot height 58)
+            mainAxisSpacing: 6,
+            crossAxisSpacing: 6,
+          ),
+          itemCount: displayedItems.length,
+          itemBuilder: (context, i) {
+            final it = displayedItems[i]['cult_items'] as Rec;
+            final qty = displayedItems[i]['qty'] as int;
+            final grade = it['grade'] as int;
+            final gc = gradeColor(grade);
+            // Builder: cần context CỦA Ô để popup neo đúng cạnh ô được bấm
+            return Builder(
+              builder: (tileCtx) {
+                return InkWell(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: () => _showItemPopup(tileCtx, ref, it, qty),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: cs.surface,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: gc.withValues(alpha: 0.55),
                       ),
                     ),
-                    if (qty > 1)
-                      Positioned(
-                        right: 3,
-                        bottom: 2,
-                        child: Text(
-                          '×$qty',
-                          style: t.labelSmall?.copyWith(
-                            fontSize: 9,
-                            fontWeight: FontWeight.w700,
-                            color: gc,
+                    child: Stack(
+                      children: [
+                        Center(
+                          child: PixelIcon(
+                            it['pixel'] as String,
+                            grade: grade,
+                            size: 32,
                           ),
                         ),
-                      ),
-                  ],
-                ),
-              ),
+                        if (qty > 1)
+                          Positioned(
+                            right: 3,
+                            bottom: 2,
+                            child: Text(
+                              '×$qty',
+                              style: t.labelSmall?.copyWith(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w700,
+                                color: gc,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                );
+              },
             );
           },
-        );
-      },
+        ),
+      ],
     );
   }
 }
