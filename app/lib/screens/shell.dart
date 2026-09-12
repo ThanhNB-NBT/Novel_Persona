@@ -8,7 +8,6 @@ import 'package:go_router/go_router.dart';
 import '../cultivation.dart';
 import '../data.dart';
 import '../update.dart';
-import '../widgets.dart';
 import 'cultivation/cultivation.dart';
 import 'cultivation/pixel.dart';
 import 'explore/home.dart';
@@ -142,7 +141,7 @@ class _RootShellState extends ConsumerState<RootShell> {
           ),
           // Hoạt ảnh khởi động: Chữ "Gác Truyện" bay vào giữa màn hình rồi chuyển hóa sang Logo
           if (_showSplash)
-            _AppSplashIntro(
+            AppSplashIntro(
               onComplete: () {
                 if (mounted) {
                   setState(() {
@@ -510,16 +509,17 @@ class _Emblem extends ConsumerWidget {
   }
 }
 
-/// Hoạt ảnh mở màn: Chữ "Gác Truyện" bay vào giữa màn hình, chuyển hóa sang logo sắc nét
-class _AppSplashIntro extends StatefulWidget {
+/// Hoạt ảnh mở màn: Dải lụa ánh sáng bay lượn mềm mại uốn lượn vào giữa tâm,
+/// sau đó ngưng kết thành đốm sáng và bừng nở ra logo Gác Truyện.
+class AppSplashIntro extends StatefulWidget {
   final VoidCallback onComplete;
-  const _AppSplashIntro({required this.onComplete});
+  const AppSplashIntro({super.key, required this.onComplete});
 
   @override
-  State<_AppSplashIntro> createState() => _AppSplashIntroState();
+  State<AppSplashIntro> createState() => _AppSplashIntroState();
 }
 
-class _AppSplashIntroState extends State<_AppSplashIntro>
+class _AppSplashIntroState extends State<AppSplashIntro>
     with SingleTickerProviderStateMixin {
   late final AnimationController _ctrl;
 
@@ -528,7 +528,7 @@ class _AppSplashIntroState extends State<_AppSplashIntro>
     super.initState();
     _ctrl = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1250),
+      duration: const Duration(milliseconds: 2300),
     );
     _ctrl.forward().then((_) {
       if (mounted) widget.onComplete();
@@ -546,112 +546,185 @@ class _AppSplashIntroState extends State<_AppSplashIntro>
     final cs = Theme.of(context).colorScheme;
     final t = Theme.of(context).textTheme;
     final bg = Theme.of(context).scaffoldBackgroundColor;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return AnimatedBuilder(
       animation: _ctrl,
       builder: (context, child) {
         final val = _ctrl.value;
 
-        // Giai đoạn 1 (0.0 -> 0.38): Chữ bay từ dưới vào giữa màn hình
-        final textIn = (val / 0.38).clamp(0.0, 1.0);
-        final textSlide = Curves.easeOutCubic.transform(textIn);
+        // Giai đoạn 1 (0.0 -> 0.65): Nét cọ vẽ logo thư pháp GT từ trên trái xuống
+        final brushProgress = Curves.easeInOutCubic.transform((val / 0.65).clamp(0.0, 1.0));
 
-        // Giai đoạn 2 (0.38 -> 0.68): Chữ tan biến, Logo nở ra giữa tâm
-        final morph = ((val - 0.38) / 0.30).clamp(0.0, 1.0);
-        final textOut = (1.0 - morph).clamp(0.0, 1.0);
-        final logoIn = Curves.easeOutBack.transform(morph);
+        // Giai đoạn 2 (0.35 -> 0.75): Chữ GÁC TRUYỆN và slogan hiện lên trang nhã
+        final textProgress = ((val - 0.35) / 0.40).clamp(0.0, 1.0);
+        final textAlpha = Curves.easeOutCubic.transform(textProgress);
+        final textScale = 0.95 + 0.05 * Curves.easeOutBack.transform(textProgress);
 
-        // Giai đoạn 3 (0.70 -> 1.0): Mờ dần toàn bộ splash, vào giao diện chính
-        final fadeOut = ((val - 0.70) / 0.30).clamp(0.0, 1.0);
+        // Giai đoạn 3 (0.88 -> 1.0): Mờ dần chuyển vào màn hình chính
+        final fadeOut = ((val - 0.88) / 0.12).clamp(0.0, 1.0);
         final overallOpacity = (1.0 - fadeOut).clamp(0.0, 1.0);
 
-        return IgnorePointer(
-          ignoring: val > 0.75,
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () {
-              _ctrl.stop();
-              widget.onComplete();
-            },
-            child: Opacity(
-              opacity: overallOpacity,
-              child: Container(
-                color: bg,
-                alignment: Alignment.center,
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    // Chữ bay vào tâm
-                    if (textOut > 0.01)
-                      Opacity(
-                        opacity: (textIn * textOut).clamp(0.0, 1.0),
-                        child: Transform.translate(
-                          offset: Offset(0, 42 * (1.0 - textSlide) - 16 * morph),
-                          child: Transform.scale(
-                            scale: 0.90 + 0.14 * textSlide,
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  'Gác Truyện',
-                                  style: t.displaySmall?.copyWith(
-                                    fontWeight: FontWeight.w800,
-                                    color: cs.onSurface,
-                                    letterSpacing: -0.5,
-                                  ),
-                                ),
-                                const SizedBox(height: 6),
-                                Container(
-                                  width: 28,
-                                  height: 2,
-                                  decoration: BoxDecoration(
-                                    color: cs.primary,
-                                    borderRadius: BorderRadius.circular(1),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
+        final inkColor = isDark ? const Color(0xFFE2E8F0) : const Color(0xFF1E242B);
+        final logoAsset = isDark ? 'assets/icon/gt_white.png' : 'assets/icon/gt_ink.png';
 
-                    // Logo nở ra từ tâm
-                    if (morph > 0.01)
-                      Opacity(
-                        opacity: morph.clamp(0.0, 1.0),
-                        child: Transform.scale(
-                          scale: 0.55 + 0.45 * logoIn,
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: cs.primary.withValues(alpha: 0.08 * logoIn.clamp(0.0, 1.0)),
-                                ),
-                                child: const BrandLogo(height: 64),
+        return Opacity(
+          opacity: overallOpacity,
+          child: Container(
+            color: bg,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                // Tầng nền: Vệt mực loang mờ nhạt và các giọt mực bắn tự nhiên
+                CustomPaint(
+                  size: const Size(360, 360),
+                  painter: _InkSplatterPainter(
+                    progress: brushProgress,
+                    color: inkColor,
+                  ),
+                ),
+
+                // Tầng chính: Bức hoạ cọ vẽ GT reveal theo chuyển động ngọn bút
+                Center(
+                  child: SizedBox(
+                    width: 260,
+                    height: 188,
+                    child: ShaderMask(
+                      shaderCallback: (bounds) {
+                        // Quét dải gradient từ góc trên trái xuống dưới phải theo chiều viết cọ
+                        final sweep = brushProgress * 1.5;
+                        return LinearGradient(
+                          begin: const Alignment(-1.0, -1.0),
+                          end: const Alignment(1.0, 1.0),
+                          stops: [
+                            (sweep - 0.28).clamp(0.0, 1.0),
+                            sweep.clamp(0.0, 1.0),
+                          ],
+                          colors: const [
+                            Colors.black,
+                            Colors.transparent,
+                          ],
+                        ).createShader(bounds);
+                      },
+                      blendMode: BlendMode.dstIn,
+                      child: Image.asset(
+                        logoAsset,
+                        width: 260,
+                        height: 188,
+                        fit: BoxFit.contain,
+                        filterQuality: FilterQuality.high,
+                      ),
+                    ),
+                  ),
+                ),
+
+                // Tầng chữ: Thương hiệu GÁC TRUYỆN hiện lên phía dưới
+                if (textAlpha > 0.01)
+                  Positioned(
+                    bottom: MediaQuery.of(context).size.height * 0.26,
+                    child: Opacity(
+                      opacity: textAlpha,
+                      child: Transform.scale(
+                        scale: textScale,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              'GÁC TRUYỆN',
+                              style: t.titleMedium?.copyWith(
+                                letterSpacing: 6.0 - 2.0 * textAlpha,
+                                fontWeight: FontWeight.w700,
+                                color: inkColor,
+                                fontFamily: 'serif',
                               ),
-                              const SizedBox(height: 10),
-                              Text(
-                                'GÁC TRUYỆN',
-                                style: t.labelSmall?.copyWith(
-                                  color: cs.primary,
-                                  letterSpacing: 4,
-                                  fontWeight: FontWeight.w700,
-                                ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Vạn Cuốn Thư Sinh • Nhất Niệm Thông Thiên',
+                              style: t.labelSmall?.copyWith(
+                                letterSpacing: 1.8,
+                                color: cs.onSurfaceVariant.withValues(alpha: 0.80),
                               ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
                       ),
-                  ],
-                ),
-              ),
+                    ),
+                  ),
+              ],
             ),
           ),
         );
       },
     );
   }
+}
+
+/// Vẽ quầng mực loang và các hạt mực bắn tự nhiên khi hạ bút
+class _InkSplatterPainter extends CustomPainter {
+  final double progress;
+  final Color color;
+
+  _InkSplatterPainter({
+    required this.progress,
+    required this.color,
+  });
+
+  // Tọa độ tương đối của 18 hạt mực bắn (x, y, radius, triggerProgress, alpha)
+  static final List<List<double>> _splatters = [
+    [-95, -70, 2.2, 0.10, 0.70],
+    [-80, -90, 1.8, 0.15, 0.60],
+    [-110, -40, 3.0, 0.18, 0.75],
+    [-65, -55, 1.4, 0.22, 0.50],
+    [-20, -75, 2.5, 0.28, 0.65],
+    [30, -60, 3.2, 0.35, 0.80],
+    [70, -70, 1.6, 0.40, 0.55],
+    [95, -45, 2.8, 0.45, 0.70],
+    [105, -20, 2.0, 0.50, 0.60],
+    [85, 20, 3.5, 0.55, 0.75],
+    [60, 50, 2.4, 0.60, 0.65],
+    [25, 75, 1.9, 0.65, 0.55],
+    [-10, 85, 3.2, 0.70, 0.80],
+    [-45, 65, 2.1, 0.75, 0.60],
+    [-80, 45, 2.6, 0.80, 0.70],
+    [115, 35, 1.5, 0.82, 0.45],
+    [-30, -30, 2.0, 0.85, 0.50],
+    [40, 10, 1.8, 0.90, 0.55],
+  ];
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (progress <= 0.01) return;
+
+    final center = Offset(size.width / 2, size.height / 2);
+
+    // 1. Quầng mực khuếch tán ở tâm (radial ink wash)
+    final washRadius = 40.0 + 85.0 * Curves.easeOutCubic.transform(progress);
+    final washAlpha = (0.07 * (1.0 - progress * 0.3)).clamp(0.0, 0.10);
+    final washPaint = Paint()
+      ..color = color.withValues(alpha: washAlpha)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 30);
+    canvas.drawCircle(center, washRadius, washPaint);
+
+    // 2. Hạt mực bắn (Ink Droplets)
+    final dropPaint = Paint()..style = PaintingStyle.fill;
+    for (final s in _splatters) {
+      final trigger = s[3];
+      if (progress >= trigger) {
+        final dropP = ((progress - trigger) / 0.20).clamp(0.0, 1.0);
+        final dropScale = Curves.easeOutBack.transform(dropP);
+        final ox = center.dx + s[0];
+        final oy = center.dy + s[1];
+        final r = s[2] * dropScale;
+        final a = (s[4] * dropP).clamp(0.0, 1.0);
+
+        dropPaint.color = color.withValues(alpha: a);
+        canvas.drawCircle(Offset(ox, oy), r, dropPaint);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _InkSplatterPainter oldDelegate) =>
+      oldDelegate.progress != progress || oldDelegate.color != color;
 }

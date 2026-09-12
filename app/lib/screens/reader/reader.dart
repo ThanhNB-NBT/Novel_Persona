@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
@@ -54,6 +55,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   bool _restored = false;
   int _restoreTries = 0;
   Timer? _statusPoll; // chương chưa 'done' (đang dịch/hàng đợi) → refetch tới khi xong
+  bool _showBars = true; // bật/tắt thanh công cụ (AppBar/Bottom controls)
 
   // Bộ nhớ đệm phân trang (chế độ lật trang) — tính lại khi nội dung/cỡ chữ/kích thước đổi.
   List<String>? _pages;
@@ -314,89 +316,107 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
       backgroundColor: col.bg,
       resizeToAvoidBottomInset: false, // form sửa tự nâng theo viewInsets; giữ phân trang ổn định
       // header tối giản: thấp, chữ/icon mờ — nhường trọn sự chú ý cho trang chữ
-      appBar: AppBar(
-        toolbarHeight: 38,
-        backgroundColor: col.bg,
-        foregroundColor: col.fg.withValues(alpha: 0.55),
-        iconTheme: IconThemeData(color: col.fg.withValues(alpha: 0.55), size: 20),
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        titleSpacing: 0,
-        title: Text('Chương $chapterIndex',
-            style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
-                color: col.fg.withValues(alpha: 0.55))),
-        actions: [
-          ValueListenableBuilder<double>(
-            valueListenable: _percent,
-            builder: (_, p, _) => Center(
-              child: Padding(
-                padding: const EdgeInsets.only(right: 4),
-                child: Text('${(p * 100).round()}%',
-                    style: TextStyle(fontSize: 11, color: col.fg.withValues(alpha: 0.45))),
+      appBar: _showBars
+          ? AppBar(
+              toolbarHeight: 38,
+              backgroundColor: col.bg,
+              foregroundColor: col.fg.withValues(alpha: 0.55),
+              iconTheme: IconThemeData(color: col.fg.withValues(alpha: 0.55), size: 20),
+              elevation: 0,
+              scrolledUnderElevation: 0,
+              leading: IconButton(
+                tooltip: 'Quay lại',
+                icon: const Icon(Icons.arrow_back_rounded, size: 20),
+                onPressed: () {
+                  if (context.canPop()) {
+                    context.pop();
+                  } else {
+                    context.go('/novel/$novelId');
+                  }
+                },
               ),
-            ),
-          ),
-          // Nghe truyện: TTS hệ thống đọc từ chương đang mở; điều khiển ở thanh đáy
-          ValueListenableBuilder<TtsState>(
-            valueListenable: TtsPlayer.i.state,
-            builder: (_, ts, _) => IconButton(
-              tooltip: ts.active ? 'Dừng nghe' : 'Nghe chương này',
-              icon: Icon(
-                  ts.active ? Icons.headset_off_rounded : Icons.headset_rounded,
-                  size: 19),
-              onPressed: () async {
-                if (ts.active) {
-                  await TtsPlayer.i.stop();
-                  return;
-                }
-                final messenger = ScaffoldMessenger.of(context);
-                // bắt đầu từ ĐOẠN đang đọc (ước lượng theo % cuộn), không đọc lại từ đầu;
-                // truyền paras/title để máy đọc phân đoạn KHỚP với màn hình → highlight đúng
-                final n = _renderedParas.length;
-                final from =
-                    n == 0 ? 0 : (_percent.value * n).floor().clamp(0, n - 1);
-                // máy thiếu giọng tiếng Việt → nói thẳng lý do thay vì câm lặng
-                final warn = await TtsPlayer.i.start(novelId, chapterIndex,
-                    fromContentPara: from,
-                    paras: _renderedParas,
-                    title: _renderedTitle);
-                if (warn != null) {
-                  messenger.showSnackBar(SnackBar(
-                      content: Text(warn), duration: const Duration(seconds: 6)));
-                }
-              },
-            ),
-          ),
-          IconButton(
-            tooltip: 'Cài đặt đọc',
-            icon: const Icon(Icons.settings_rounded, size: 19),
-            onPressed: () => showReaderSettingsSheet(context, ref, onRetranslate: _retranslate),
-          ),
-          const SizedBox(width: 2),
-        ],
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(2),
-          child: ValueListenableBuilder<double>(
-            valueListenable: _percent,
-            builder: (_, p, _) => LinearProgressIndicator(
-              value: p,
-              minHeight: 1.5,
-              backgroundColor: Colors.transparent,
-              valueColor: AlwaysStoppedAnimation<Color>(col.fg.withValues(alpha: 0.2)),
-            ),
-          ),
-        ),
-      ),
-      // Thanh điều khiển nghe — chỉ hiện khi máy đọc đang chạy cho truyện này
-      bottomNavigationBar: ValueListenableBuilder<TtsState>(
-        valueListenable: TtsPlayer.i.state,
-        builder: (_, ts, _) => ts.novelId == novelId
-            ? TtsBar(state: ts, fg: col.fg, bg: col.bg)
-            : const SizedBox.shrink(),
-      ),
-      body: chapter.when(
+              titleSpacing: 0,
+              title: Text('Chương $chapterIndex',
+                  style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: col.fg.withValues(alpha: 0.55))),
+              actions: [
+                ValueListenableBuilder<double>(
+                  valueListenable: _percent,
+                  builder: (_, p, _) => Center(
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: 4),
+                      child: Text('${(p * 100).round()}%',
+                          style: TextStyle(fontSize: 11, color: col.fg.withValues(alpha: 0.45))),
+                    ),
+                  ),
+                ),
+                // Nghe truyện: TTS hệ thống đọc từ chương đang mở; điều khiển ở thanh đáy
+                ValueListenableBuilder<TtsState>(
+                  valueListenable: TtsPlayer.i.state,
+                  builder: (_, ts, _) => IconButton(
+                    tooltip: ts.active ? 'Dừng nghe' : 'Nghe chương này',
+                    icon: Icon(
+                        ts.active ? Icons.headset_off_rounded : Icons.headset_rounded,
+                        size: 19),
+                    onPressed: () async {
+                      if (ts.active) {
+                        await TtsPlayer.i.stop();
+                        return;
+                      }
+                      final messenger = ScaffoldMessenger.of(context);
+                      // bắt đầu từ ĐOẠN đang đọc (ước lượng theo % cuộn), không đọc lại từ đầu;
+                      // truyền paras/title để máy đọc phân đoạn KHỚP với màn hình → highlight đúng
+                      final n = _renderedParas.length;
+                      final from =
+                          n == 0 ? 0 : (_percent.value * n).floor().clamp(0, n - 1);
+                      // máy thiếu giọng tiếng Việt → nói thẳng lý do thay vì câm lặng
+                      final warn = await TtsPlayer.i.start(novelId, chapterIndex,
+                          fromContentPara: from,
+                          paras: _renderedParas,
+                          title: _renderedTitle);
+                      if (warn != null) {
+                        messenger.showSnackBar(SnackBar(
+                            content: Text(warn), duration: const Duration(seconds: 6)));
+                      }
+                    },
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Cài đặt đọc',
+                  icon: const Icon(Icons.settings_rounded, size: 19),
+                  onPressed: () => showReaderSettingsSheet(context, ref, onRetranslate: _retranslate),
+                ),
+                const SizedBox(width: 2),
+              ],
+              bottom: PreferredSize(
+                preferredSize: const Size.fromHeight(2),
+                child: ValueListenableBuilder<double>(
+                  valueListenable: _percent,
+                  builder: (_, p, _) => LinearProgressIndicator(
+                    value: p,
+                    minHeight: 1.5,
+                    backgroundColor: Colors.transparent,
+                    valueColor: AlwaysStoppedAnimation<Color>(col.fg.withValues(alpha: 0.2)),
+                  ),
+                ),
+              ),
+            )
+          : null,
+      // Thanh điều khiển nghe — chỉ hiện khi máy đọc đang chạy cho truyện này VÀ thanh công cụ đang bật
+      bottomNavigationBar: _showBars
+          ? ValueListenableBuilder<TtsState>(
+              valueListenable: TtsPlayer.i.state,
+              builder: (_, ts, _) => ts.novelId == novelId
+                  ? TtsBar(state: ts, fg: col.fg, bg: col.bg)
+                  : const SizedBox.shrink(),
+            )
+          : null,
+      body: SafeArea(
+        top: !_showBars,
+        bottom: !_showBars,
+        child: chapter.when(
         // Chương chưa dịch thì phải CHỜ worker dịch xong — đo trên máy thật là hơn
         // 20 giây. Spinner trơn giữa màn đen không nói được điều đó, người đọc tưởng
         // app treo. Không hiện % (tiến độ dịch không chia mốc được), chỉ một dòng chữ.
@@ -481,6 +501,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
             ],
           );
         },
+      ),
       ),
     );
   }
@@ -710,6 +731,63 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                       onTapWord: _onTapWord,
                     ),
                   ]),
+                ),
+              ),
+              // Vùng nhận diện cử chỉ chạm (Tap zones): 25% trái (lùi), 50% giữa (bật/tắt thanh công cụ), 25% phải (tiến)
+              Positioned.fill(
+                child: Row(
+                  children: [
+                    // Chạm 25% mép trái: Lùi trang
+                    Expanded(
+                      flex: 25,
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.translucent,
+                        onTap: () {
+                          if (_pageCtrl.hasClients &&
+                              (_pageCtrl.page?.round() ?? 0) > 0) {
+                            HapticFeedback.selectionClick();
+                            _pageCtrl.previousPage(
+                              duration: const Duration(milliseconds: 220),
+                              curve: Curves.easeOutCubic,
+                            );
+                          }
+                        },
+                      ),
+                    ),
+                    // Chạm 50% vùng giữa: Bật/tắt thanh công cụ (hoặc đóng form sửa)
+                    Expanded(
+                      flex: 50,
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.translucent,
+                        onTap: () {
+                          if (_editing.value) {
+                            _editing.value = false;
+                            _sel.value = null;
+                            FocusScope.of(context).unfocus();
+                          } else {
+                            setState(() => _showBars = !_showBars);
+                          }
+                        },
+                      ),
+                    ),
+                    // Chạm 25% mép phải: Sang trang kế
+                    Expanded(
+                      flex: 25,
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.translucent,
+                        onTap: () {
+                          if (_pageCtrl.hasClients &&
+                              (_pageCtrl.page?.round() ?? 0) < total - 1) {
+                            HapticFeedback.selectionClick();
+                            _pageCtrl.nextPage(
+                              duration: const Duration(milliseconds: 220),
+                              curve: Curves.easeOutCubic,
+                            );
+                          }
+                        },
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
