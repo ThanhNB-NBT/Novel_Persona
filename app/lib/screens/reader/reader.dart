@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../../chapter_paras.dart';
@@ -225,6 +226,42 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     return words.every((w) =>
         w[0].toUpperCase() == w[0] && w[0].toLowerCase() != w[0]);
   }
+
+  /// Thuật ngữ để gạch chân trong trang đọc — rỗng khi người dùng tắt công tắc.
+  /// Trần 200 term: đoạn văn nào cũng quét cả danh sách, truyện lâu năm có hàng nghìn
+  /// term thì mỗi lần cuộn là một vòng lặp thừa. Lấy term của CHÍNH truyện trước.
+  List<String> _markTerms(ReaderSettings s) {
+    if (!s.markGlossary) return const [];
+    final rows = ref.read(glossaryProvider(novelId)).value ?? const <Rec>[];
+    final out = <String>[];
+    for (final r in rows) {
+      final v = (r['correct_vi'] ?? '').toString().trim();
+      if (v.length >= 2) out.add(v);
+      if (out.length >= 200) break;
+    }
+    return out;
+  }
+
+  /// Chip đổi kiểu chữ cho ô "Bản sửa" — áp lên chữ đang gõ, giữ con trỏ ở cuối.
+  Widget _caseChip(BuildContext context, String nhan, String Function(String) f) =>
+      ActionChip(
+        visualDensity: VisualDensity.compact,
+        label: Text(nhan),
+        onPressed: () {
+          final v = f(_correct.text.trim());
+          if (v.isEmpty || v == _correct.text) return;
+          _correct.text = v;
+          _correct.selection = TextSelection.collapsed(offset: v.length);
+        },
+      );
+
+  static String _titleCase(String v) => v
+      .split(RegExp(r'(\s+)'))
+      .map((w) => w.isEmpty ? w : w[0].toUpperCase() + w.substring(1).toLowerCase())
+      .join(' ');
+
+  static String _sentenceCase(String v) =>
+      v.isEmpty ? v : v[0].toUpperCase() + v.substring(1).toLowerCase();
 
   void _closeEdit() {
     _correct.clear();
@@ -583,6 +620,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                 ttsPara: _localTtsPara,
                 paraIndex: p,
                 ttsHlColor: col.fg.withValues(alpha: 0.10),
+                terms: _markTerms(s),
               ),
             );
             // quà nằm NGAY DƯỚI đoạn của nó → gộp chung 1 item, khỏi lệch chỉ số
@@ -729,6 +767,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                       align: s.justify ? TextAlign.justify : TextAlign.left,
                       sel: _sel,
                       onTapWord: _onTapWord,
+                      terms: _markTerms(s),
                     ),
                   ]),
                 ),
@@ -1045,6 +1084,38 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                 isDense: true,
               ),
             ),
+            const SizedBox(height: 8),
+            // Kiểu chữ + tra cứu. Tên Hán-Việt nhiều âm tiết gõ tay hay sai hoa/thường
+            // ("lâm hiên" / "Lâm hiên"), mà đây là thứ glossary áp cho CẢ truyện nên
+            // sai một chữ hoa là lệch khắp nơi — bấm nút nhanh và chắc hơn gõ lại.
+            Wrap(spacing: 6, runSpacing: 6, children: [
+              _caseChip(context, 'Hoa Từng Chữ', _titleCase),
+              _caseChip(context, 'Hoa chữ đầu', _sentenceCase),
+              _caseChip(context, 'thường', (v) => v.toLowerCase()),
+              ActionChip(
+                visualDensity: VisualDensity.compact,
+                avatar: const Icon(Icons.copy_rounded, size: 16),
+                label: const Text('Chép'),
+                onPressed: () {
+                  Clipboard.setData(ClipboardData(text: wrong));
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                    content: Text('Đã chép'),
+                    duration: Duration(milliseconds: 1200),
+                  ));
+                },
+              ),
+              ActionChip(
+                visualDensity: VisualDensity.compact,
+                avatar: const Icon(Icons.search_rounded, size: 16),
+                label: const Text('Tra'),
+                // Tên lạ thì tra ngoài nhanh hơn đoán; mở trình duyệt ngoài, không rời app.
+                onPressed: () => launchUrl(
+                  Uri.parse('https://www.google.com/search?q='
+                      '${Uri.encodeQueryComponent(wrong)}'),
+                  mode: LaunchMode.externalApplication,
+                ),
+              ),
+            ]),
             const SizedBox(height: 12),
             SizedBox(
               width: double.infinity,
@@ -1124,6 +1195,8 @@ class _TapPara extends StatelessWidget {
   final ValueNotifier<int>? ttsPara;
   final int paraIndex;
   final Color? ttsHlColor;
+  // Thuật ngữ của truyện để gạch chân chỗ glossary đã áp; rỗng = tắt (mặc định).
+  final List<String> terms;
   const _TapPara({
     required this.para,
     required this.style,
@@ -1133,6 +1206,7 @@ class _TapPara extends StatelessWidget {
     this.ttsPara,
     this.paraIndex = -1,
     this.ttsHlColor,
+    this.terms = const [],
   });
 
   @override
@@ -1167,6 +1241,48 @@ class _TapPara extends StatelessWidget {
     );
   }
 
+  /// Ghép hai lớp tô: gạch chân thuật ngữ (nền) + vùng đang sửa (đè lên, màu đỏ).
+  /// Tách ra hàm riêng vì giờ phải cắt chuỗi theo NHIỀU mốc chứ không còn 3 mảnh.
+  TextSpan _spans(ColorScheme cs, Sel? hl) {
+    final marks = terms.isEmpty ? const <(int, int)>[] : glossaryRanges(para, terms);
+    if (marks.isEmpty && hl == null) return TextSpan(text: para, style: style);
+
+    // Mốc cắt: đầu/cuối mọi vùng. Đi tuần tự, mỗi khúc tra xem nằm trong lớp nào.
+    final cuts = <int>{0, para.length};
+    for (final m in marks) { cuts..add(m.$1)..add(m.$2); }
+    if (hl != null) { cuts..add(hl.start)..add(hl.end); }
+    final points = cuts.where((i) => i >= 0 && i <= para.length).toList()..sort();
+
+    final children = <TextSpan>[];
+    for (var k = 0; k + 1 < points.length; k++) {
+      final a = points[k], b = points[k + 1];
+      if (a >= b) continue;
+      final inSel = hl != null && a >= hl.start && b <= hl.end;
+      final inMark = marks.any((m) => a >= m.$1 && b <= m.$2);
+      children.add(TextSpan(
+        text: para.substring(a, b),
+        style: inSel
+            ? TextStyle(
+                backgroundColor: cs.error.withValues(alpha: 0.22),
+                color: cs.error,
+                fontWeight: FontWeight.w600,
+              )
+            // Gạch chân mảnh thay vì tô nền: tên xuất hiện dày đặc, tô nền thì cả
+            // trang loang lổ. Màu lấy theo chữ đang dùng (màn đọc có bảng màu riêng).
+            : inMark
+                ? TextStyle(
+                    decoration: TextDecoration.underline,
+                    decorationStyle: TextDecorationStyle.dotted,
+                    decorationColor: (style.color ?? cs.onSurface)
+                        .withValues(alpha: 0.45),
+                  )
+                : null,
+      ));
+    }
+    return TextSpan(style: style, children: children);
+  }
+
+
   Widget _base(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     return ValueListenableBuilder<Sel?>(
@@ -1190,20 +1306,7 @@ class _TapPara extends StatelessWidget {
               onTapWord(para, off, d.globalPosition);
             },
             child: Text.rich(
-              hl == null
-                  ? TextSpan(text: para, style: style)
-                  : TextSpan(style: style, children: [
-                      TextSpan(text: para.substring(0, hl.start)),
-                      TextSpan(
-                        text: para.substring(hl.start, hl.end),
-                        style: TextStyle(
-                          backgroundColor: cs.error.withValues(alpha: 0.22),
-                          color: cs.error,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      TextSpan(text: para.substring(hl.end)),
-                    ]),
+              _spans(cs, hl),
               textAlign: align,
             ),
           );

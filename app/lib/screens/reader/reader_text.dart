@@ -212,3 +212,51 @@ bool ttsMovedAway(TtsState st, {required int novelId, required int chapterIndex}
     st.playing &&
     st.novelId == novelId &&
     st.chapterIndex != chapterIndex;
+
+// ---------------- Dò vùng thuật ngữ để tô dấu (thuần Dart, unit-test được) ----------------
+
+/// Các đoạn trong [text] trùng một thuật ngữ của truyện → [(đầu, cuối)], không chồng nhau.
+///
+/// Dùng để tô dấu chỗ bản dịch đã được glossary áp vào ("Áp cả truyện" chạy thay chuỗi,
+/// xong rồi trang đọc không còn dấu vết gì — người đọc không biết chỗ nào do máy chỉnh,
+/// mà chính mình cũng không soi được glossary có vá bậy không).
+///
+/// Khớp theo RANH GIỚI TỪ y như chạm-sửa: `replace_word` phía worker cũng thay theo ranh
+/// giới từ, nên tô dấu phải cùng luật, kẻo hiện một đằng vá một nẻo. Phân biệt hoa/thường
+/// vì thuật ngữ là tên riêng — khớp lỏng sẽ dính "hiên" trong "hiên nhà".
+///
+/// Term dài khớp trước để "Lâm Hiên Nhi" thắng "Lâm Hiên". [maxMarks] chặn trần cho đoạn
+/// dày đặc tên; [terms] nên đã lọc sẵn ở chỗ gọi.
+List<(int, int)> glossaryRanges(
+  String text,
+  Iterable<String> terms, {
+  int maxMarks = 60,
+}) {
+  if (text.isEmpty) return const [];
+  final sorted = terms
+      .map((t) => t.trim())
+      .where((t) => t.length >= 2)
+      .toSet()
+      .toList()
+    ..sort((a, b) => b.length.compareTo(a.length));
+  final out = <(int, int)>[];
+  for (final term in sorted) {
+    if (out.length >= maxMarks) break;
+    var from = 0;
+    while (true) {
+      final i = text.indexOf(term, from);
+      if (i < 0) break;
+      final end = i + term.length;
+      from = i + 1;
+      // Ranh giới từ hai đầu: "Lâm" không được khớp bên trong "Lâmm"
+      if (i > 0 && isWordChar(text, i - 1)) continue;
+      if (end < text.length && isWordChar(text, end)) continue;
+      // Đã nằm trong một vùng dài hơn đã nhận → bỏ
+      if (out.any((r) => i < r.$2 && end > r.$1)) continue;
+      out.add((i, end));
+      if (out.length >= maxMarks) break;
+    }
+  }
+  out.sort((a, b) => a.$1.compareTo(b.$1));
+  return out;
+}

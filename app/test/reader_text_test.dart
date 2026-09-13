@@ -8,6 +8,7 @@ import 'package:novel_reader/screens/reader/reader_text.dart';
 import 'package:novel_reader/tts.dart';
 
 void main() {
+  _glossaryRangeTests();
   group('wordLeft / wordRight — mở rộng vùng chọn theo từ', () {
     const s = 'Lâm Tùng nhìn về phía xa';
 
@@ -203,6 +204,53 @@ void main() {
       expect(ch.chapterIndex, 1);
       expect(ch.titleVi, 'Chương 1: Tàn Lão Thôn');
       expect(ch.contentVi, contains('Mặt trời lặn'));
+    });
+  });
+}
+
+/// Dò vùng thuật ngữ để tô dấu: phải khớp theo RANH GIỚI TỪ giống replace_word của
+/// worker, kẻo tô một đằng vá một nẻo.
+void _glossaryRangeTests() {
+  group('glossaryRanges — tô dấu chỗ glossary đã áp', () {
+    test('khớp trọn từ, trả đúng vị trí', () {
+      const s = 'Lâm Hiên bước vào, Lâm Hiên mỉm cười.';
+      final r = glossaryRanges(s, ['Lâm Hiên']);
+      expect(r.length, 2);
+      expect(s.substring(r[0].$1, r[0].$2), 'Lâm Hiên');
+      expect(s.substring(r[1].$1, r[1].$2), 'Lâm Hiên');
+    });
+
+    test('KHÔNG khớp khi dính vào từ khác (bài học "xmuội")', () {
+      expect(glossaryRanges('Hiênnhà rất rộng', ['Hiên']), isEmpty);
+      expect(glossaryRanges('ngoài hiênnhà', ['hiên']), isEmpty);
+    });
+
+    test('phân biệt hoa thường — tên riêng mới tô', () {
+      expect(glossaryRanges('ngồi ngoài hiên nhà', ['Hiên']), isEmpty);
+    });
+
+    test('term DÀI thắng term ngắn, không chồng nhau', () {
+      const s = 'Lâm Hiên Nhi gật đầu.';
+      final r = glossaryRanges(s, ['Lâm Hiên', 'Lâm Hiên Nhi']);
+      expect(r.length, 1);
+      expect(s.substring(r[0].$1, r[0].$2), 'Lâm Hiên Nhi');
+    });
+
+    test('kết quả xếp theo vị trí tăng dần', () {
+      const s = 'Tiêu Viêm gặp Lâm Hiên rồi gặp Tiêu Viêm lần nữa.';
+      final r = glossaryRanges(s, ['Lâm Hiên', 'Tiêu Viêm']);
+      expect(r.map((e) => e.$1).toList(), [for (final e in r) e.$1]..sort());
+      expect(r.length, 3);
+    });
+
+    test('trần maxMarks chặn đoạn dày đặc tên', () {
+      final s = List.filled(100, 'Lâm Hiên').join(' ');
+      expect(glossaryRanges(s, ['Lâm Hiên'], maxMarks: 10).length, 10);
+    });
+
+    test('rỗng / term quá ngắn → không tô', () {
+      expect(glossaryRanges('', ['Lâm Hiên']), isEmpty);
+      expect(glossaryRanges('Lâm Hiên', ['L', ' ', '']), isEmpty);
     });
   });
 }

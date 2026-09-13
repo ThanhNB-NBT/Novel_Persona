@@ -122,6 +122,9 @@ class ReaderSettings {
   final double lineHeight; // 1.3..2.2
   final double sideMargin; // 8..48
   final bool pageMode; // true = lật trang, false = cuộn dọc
+  // Tô dấu chỗ bản dịch đã được glossary áp vào. MẶC ĐỊNH TẮT: truyện dày đặc tên,
+  // gạch chân hết thì rối mắt — ai muốn soi glossary mới bật.
+  final bool markGlossary;
 
   const ReaderSettings({
     this.fontSize = 18,
@@ -133,6 +136,7 @@ class ReaderSettings {
     this.lineHeight = 1.7,
     this.sideMargin = 20,
     this.pageMode = false,
+    this.markGlossary = false,
   });
 
   ReaderSettings copyWith({
@@ -145,6 +149,7 @@ class ReaderSettings {
     double? lineHeight,
     double? sideMargin,
     bool? pageMode,
+    bool? markGlossary,
   }) => ReaderSettings(
     fontSize: fontSize ?? this.fontSize,
     fontKey: fontKey ?? this.fontKey,
@@ -155,6 +160,7 @@ class ReaderSettings {
     lineHeight: lineHeight ?? this.lineHeight,
     sideMargin: sideMargin ?? this.sideMargin,
     pageMode: pageMode ?? this.pageMode,
+    markGlossary: markGlossary ?? this.markGlossary,
   );
 
   /// Màu nền/chữ đã giải quyết: chế độ quyết định lấy nền sáng hay tối,
@@ -185,6 +191,7 @@ class ReaderSettingsNotifier extends Notifier<ReaderSettings> {
     lineHeight: prefs.getDouble('rd_lh') ?? 1.7,
     sideMargin: prefs.getDouble('rd_margin') ?? 20,
     pageMode: prefs.getBool('rd_page') ?? false,
+    markGlossary: prefs.getBool('rd_mark_gloss') ?? false,
   );
 
   void _save() {
@@ -197,6 +204,7 @@ class ReaderSettingsNotifier extends Notifier<ReaderSettings> {
     prefs.setDouble('rd_lh', state.lineHeight);
     prefs.setDouble('rd_margin', state.sideMargin);
     prefs.setBool('rd_page', state.pageMode);
+    prefs.setBool('rd_mark_gloss', state.markGlossary);
   }
 
   void update(ReaderSettings s) {
@@ -451,6 +459,23 @@ void showReaderSettingsSheet(
                         ['Trái', 'Đều 2 bên'],
                         s.justify ? 1 : 0,
                         (i) => n.update(s.copyWith(justify: i == 1)),
+                      ),
+                    ),
+                  ]),
+                  // Gạch chân chỗ đã được thuật ngữ của truyện áp vào — để soi xem
+                  // "Áp cả truyện" có vá đúng chỗ không. Mặc định tắt cho đỡ rối mắt.
+                  Row(children: [
+                    SizedBox(
+                        width: 86,
+                        child: Text('Thuật ngữ',
+                            style:
+                                t.labelMedium?.copyWith(color: cs.onSurfaceVariant))),
+                    Expanded(
+                      child: seg(
+                        context,
+                        ['Ẩn', 'Gạch chân'],
+                        s.markGlossary ? 1 : 0,
+                        (i) => n.update(s.copyWith(markGlossary: i == 1)),
                       ),
                     ),
                   ]),
