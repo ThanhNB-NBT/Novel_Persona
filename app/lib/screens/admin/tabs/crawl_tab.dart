@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../data.dart';
 import '../../../theme.dart';
 import '../../../widgets.dart';
+import 'model_picker.dart';
 import 'shared.dart';
 
 // ---------------- Crawl: config + nguồn + truyện mới 24h ----------------
@@ -22,6 +23,33 @@ class _CrawlTabState extends ConsumerState<CrawlTab> {
 
   // Knob của translator (note bắt đầu 'DỊCH ·') tách nhóm riêng khỏi crawler.
   static bool _isTransKey(Rec s) => '${s['note'] ?? ''}'.startsWith('DỊCH');
+
+  // Knob dịch: tên ngắn + 1 dòng gợi ý, xếp theo đường đi một request (engine → Gemini →
+  // NVIDIA dự phòng → nhịp/trần). Note trong DB viết dài và cũ dần (còn nhắc glm-5.2, "số key
+  // NVIDIA") nên chỉ hiện trong hộp thoại sửa. Knob mới chưa có ở đây thì vẫn hiện note.
+  static const _transLabels = <String, (String, String?)>{
+    'default_engine': ('Engine cho truyện MỚI', null),
+    'gemini_models': ('Model Gemini · thứ tự ưu tiên', 'Hết lượt thì lấy con kế, hết sạch mới rơi về NVIDIA'),
+    'gemini_metadata_models': ('Model Gemini cho tên + mô tả truyện', 'Trần lấy theo chuỗi Gemini ở trên'),
+    'llm_model': ('Model NVIDIA dự phòng', 'Chỉ dùng khi mọi key/model Gemini hết lượt hoặc lỗi'),
+    'llm_timeout_sec': ('Timeout 1 lượt gọi LLM (giây)', 'Flash-lite ~10s/chương, Gemma ~90s'),
+    'translator_concurrency': ('Số luồng dịch', 'Chỉ áp khi khởi động lại worker'),
+    'nvidia_rpm_limit': ('Request/phút mỗi key NVIDIA', 'Tối đa 39 (trần NIM 40)'),
+    'nvidia_inflight_per_key': ('Request NVIDIA đang chạy mỗi key', 'Dính 429 thì hạ số này trước (1–8)'),
+    'max_chapters_per_day': ('Trần chương dịch mỗi ngày', 'Chạm trần thì nghỉ tới 00:00 UTC'),
+    'audit_interval_min': ('Chu kỳ quét chương dịch hỏng (phút)', null),
+  };
+  static int _transRank(Rec s) {
+    final i = _transLabels.keys.toList().indexOf('${s['key']}');
+    return i < 0 ? _transLabels.length : i;
+  }
+
+  // Chip model Gemini: 'gemini-3.1-flash-lite 15/250000/500' → tên + trần đọc được.
+  static String _chipText(String key, String part) {
+    if (key != 'gemini_models') return part;
+    final m = parseGeminiModels(part).first;
+    return m.rpd == 0 ? '${m.name} · tắt' : '${m.name} · ${m.rpm} RPM · ${fmtThousands(m.rpd)}/ngày';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -102,9 +130,45 @@ class _CrawlTabState extends ConsumerState<CrawlTab> {
 
     Widget settingRow(Rec s) {
       final value = '${s['value']}';
+      // Engine chỉ có 2 giá trị hợp lệ → bấm chọn thay vì gõ chữ (gõ nhầm worker bỏ qua
+      // mà app không báo). 'nvidia' là tên cũ của 'llm'.
+      if (s['key'] == 'default_engine') {
+        final llm = value == 'llm' || value == 'nvidia';
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 11),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(_transLabels['default_engine']!.$1, style: t.bodyMedium),
+            const SizedBox(height: 3),
+            Text(llm
+                    ? 'Gemini (hết lượt thì NVIDIA) — khá hơn ở câu rắc rối, tốn quota'
+                    : 'Hachimi — model local trên box, miễn phí. Truyện cũ giữ engine của nó.',
+                style: t.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
+            const SizedBox(height: 8),
+            SegmentedButton<bool>(
+              showSelectedIcon: false,
+              // mặc định M3 tô secondaryContainer (be) — lệch tông xanh của app
+              style: SegmentedButton.styleFrom(
+                selectedBackgroundColor: cs.primary,
+                selectedForegroundColor: cs.onPrimary,
+              ),
+              segments: const [
+                ButtonSegment(value: false, label: Text('Hachimi')),
+                ButtonSegment(value: true, label: Text('LLM')),
+              ],
+              selected: {llm},
+              onSelectionChanged: (v) async {
+                await updateCrawlSetting('default_engine', v.first ? 'llm' : 'hachimi');
+                ref.invalidate(crawlSettingsProvider);
+              },
+            ),
+          ]),
+        );
+      }
       final long = value.length > 16 || value.contains(',');
       return InkWell(
-          onTap: () => _editSetting(context, ref, s),
+          onTap: () => modelListKindOf('${s['key']}') == null
+              ? _editSetting(context, ref, s)
+              : _pickModels(context, ref, s),
           borderRadius: BorderRadius.circular(12),
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 11),
@@ -113,8 +177,13 @@ class _CrawlTabState extends ConsumerState<CrawlTab> {
               Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   // bỏ tiền tố nhóm 'DỊCH ·'/'CRAWL ·' — đã tách section rồi
-                  Text('${s['note'] ?? s['key']}'.replaceFirst(RegExp(r'^(DỊCH|CRAWL) · '), ''),
+                  Text(_transLabels[s['key']]?.$1 ??
+                          '${s['note'] ?? s['key']}'.replaceFirst(RegExp(r'^(DỊCH|CRAWL) · '), ''),
                       style: t.bodyMedium),
+                  if (_transLabels[s['key']]?.$2 case final hint?) ...[
+                    const SizedBox(height: 2),
+                    Text(hint, style: t.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
+                  ],
                   const SizedBox(height: 3),
                   Text('${s['key']}',
                       style: monoStyle(context, size: 10.5, color: cs.onSurfaceVariant)),
@@ -133,7 +202,7 @@ class _CrawlTabState extends ConsumerState<CrawlTab> {
               Wrap(spacing: 6, runSpacing: 6, children: [
                 for (final part in '${s['value']}'.split(',').map((e) => e.trim())
                     .where((e) => e.isNotEmpty))
-                  valuePill(part, mono: true),
+                  valuePill(_chipText('${s['key']}', part), mono: true),
               ]),
             ],
           ]),
@@ -207,12 +276,15 @@ class _CrawlTabState extends ConsumerState<CrawlTab> {
         children: [
           const _CrawlPulseCard(),
           sectionLabel(Icons.translate_rounded, 'CẤU HÌNH DỊCH',
-              hint: 'Sửa xong worker tự nhận trong ~1 phút — không cần restart.',
+              hint: 'Gemini xoay key × model theo trần free tier, hết sạch lượt mới rơi về '
+                  'NVIDIA. Sửa xong worker tự nhận trong ~1 phút — không cần restart.',
               open: _openTrans,
               onToggle: () => setState(() => _openTrans = !_openTrans)),
           if (_openTrans)
             card(Column(children: [
-              for (final (i, s) in settings.where(_isTransKey).indexed) ...[
+              for (final (i, s) in (settings.where(_isTransKey).toList()
+                    ..sort((a, b) => _transRank(a).compareTo(_transRank(b))))
+                  .indexed) ...[
                 if (i > 0) Divider(height: 1, color: cs.outlineVariant.withValues(alpha: 0.5)),
                 settingRow(s),
               ],
@@ -276,18 +348,36 @@ class _CrawlTabState extends ConsumerState<CrawlTab> {
     );
   }
 
+  // Chuỗi model: chọn trong danh mục thay vì gõ chuỗi 'tên RPM/TPM/RPD,…' (không ai nhớ nổi).
+  Future<void> _pickModels(BuildContext context, WidgetRef ref, Rec s) async {
+    final key = '${s['key']}';
+    final v = await showModelPicker(context,
+        kind: modelListKindOf(key)!,
+        title: _transLabels[key]?.$1 ?? key,
+        value: '${s['value']}');
+    if (v == null || v == s['value']) return;
+    await updateCrawlSetting(key, v);
+    ref.invalidate(crawlSettingsProvider);
+  }
+
   void _editSetting(BuildContext context, WidgetRef ref, Rec s) {
     final ctrl = TextEditingController(text: '${s['value']}');
+    final note = '${s['note'] ?? ''}'.replaceFirst(RegExp(r'^(DỊCH|CRAWL) · '), '');
     // Knob số thì bắt số như cũ; knob CHUỖI (llm_model = danh sách model dự phòng) trước
     // đây rơi vào int.tryParse → bấm Lưu không có gì xảy ra, không sửa được từ app.
     final isNumber = int.tryParse('${s['value']}') != null;
     showBlurDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(s['note'] ?? s['key']),
+        title: Text(_transLabels[s['key']]?.$1 ?? (note.isEmpty ? '${s['key']}' : note)),
         content: SizedBox(
           width: double.maxFinite,
-          child: TextField(
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          if (_transLabels.containsKey(s['key']) && note.isNotEmpty) ...[
+            Text(note, style: Theme.of(ctx).textTheme.bodySmall),
+            const SizedBox(height: 14),
+          ],
+          TextField(
             controller: ctrl,
             autofocus: true,
             keyboardType: isNumber ? TextInputType.number : TextInputType.text,
@@ -297,6 +387,7 @@ class _CrawlTabState extends ConsumerState<CrawlTab> {
               helperText: isNumber ? null : 'Nhiều giá trị thì ngăn bằng dấu phẩy.',
             ),
           ),
+          ]),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Huỷ')),

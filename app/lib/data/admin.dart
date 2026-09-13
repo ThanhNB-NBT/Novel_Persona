@@ -137,13 +137,15 @@ final adminJobsProvider = FutureProvider.autoDispose<List<Rec>>((ref) async {
         )
         .inFilter('status', ['running', 'failed', 'pending'])
         .neq('type', 'audit') // audit là job toàn cục (novel_id null) → không gộp theo truyện
-        // PHẢI khớp thứ tự claim của worker (`order by priority, created_at` trong
-        // claim_next_job) — trước đây created_at DESC nên tab này hiện 120 job chạy SAU
-        // CÙNG mà trình bày như đầu hàng đợi, lệch hẳn với màn Hàng đợi.
+        // PHẢI khớp thứ tự claim của worker — trước đây created_at DESC nên tab này hiện
+        // 120 job chạy SAU CÙNG mà trình bày như đầu hàng đợi. Lấy cửa sổ theo
+        // priority/created_at rồi sortLikeClaim xếp lại theo chương (migration 117).
         .order('priority', ascending: true) // ưu tiên cao (pri nhỏ, truyện đang đọc) lên đầu
         .order('created_at', ascending: true)
         .limit(kAdminJobsWindow),
   );
+  // running/failed xen giữa cũng xếp theo cùng khoá — tab gộp theo truyện nên không lệch nghĩa
+  sortLikeClaim(jobs);
   // Job pending mà chương CHƯA có content_zh = crawler đang tải nguồn → gắn cờ
   // 'downloading' để tab Worker hiện "đang crawl" thay vì "chờ" chung chung.
   final pendingIds = [
@@ -233,13 +235,63 @@ final tokenUsageProvider = FutureProvider.autoDispose<List<Rec>>((ref) async {
   return List<Rec>.from(await sb.rpc('admin_token_usage'));
 });
 
-/// Sức khỏe model dịch (latency + ok/fail) — cho tab Token. RLS chỉ admin đọc.
-final modelHealthProvider = FutureProvider.autoDispose<List<Rec>>((ref) async {
-  return List<Rec>.from(await sb
-      .from('model_health')
-      .select('model, ok_count, fail_count, total_latency_ms, last_ok_at, last_error, last_error_at')
-      .order('updated_at', ascending: false));
-});
+/// Sổ request LLM 30 ngày, gộp theo NGÀY QUOTA (giờ Pacific — mốc Google reset lượt/ngày):
+/// {usage: [ngày × provider × key × model], chapters: [ngày, số chương dịch xong]}.
+final llmUsageDailyProvider = FutureProvider.autoDispose<Rec>((ref) async =>
+    Rec.from(await sb.rpc('admin_llm_usage_daily', params: {'p_days': 30}) as Map));
+
+/// 1 model trong knob `gemini_models`: tên + trần free tier.
+typedef GeminiModel = ({String name, int rpm, int tpm, int rpd});
+
+/// 'gemini-3.1-flash-lite 15/250000/500, gemma-4-31b-it' → danh sách model kèm trần.
+/// MIRROR của parse_gemini_models (worker/novelworker/translator/providers.py) — đổi định
+/// dạng một đầu thì sửa cả đầu kia. Thiếu/hỏng trần → 5/250000/20 như worker.
+List<GeminiModel> parseGeminiModels(String raw) {
+  final out = <GeminiModel>[];
+  for (final part in raw.split(',')) {
+    final bits = part.trim().split(RegExp(r'\s+'));
+    if (bits.first.isEmpty) continue;
+    final nums = bits.length > 1 ? bits[1].split('/').map(int.tryParse).toList() : const <int?>[];
+    final ok = nums.length == 3 && nums.every((n) => n != null && n >= 0);
+    out.add((
+      name: bits.first,
+      rpm: ok ? nums[0]! : 5,
+      tpm: ok ? nums[1]! : 250000,
+      rpd: ok ? nums[2]! : 20,
+    ));
+  }
+  return out;
+}
+
+/// 1 model trong danh mục chọn ở tab Crawl.
+typedef LlmCatalogItem = ({String id, String note, int rpm, int tpm, int rpd});
+
+/// Model Gemini free tier dùng được để dịch. Trần = bảng AI Studio → Rate limit (file HTML lưu
+/// 14/09/2026 — tài liệu Google không còn công bố bảng số). Không có: 2 Flash/2 Flash Lite,
+/// 2.5 Pro, 3.1 Pro (trần 0); 3.6/3.7 Flash gọi được nhưng tự bày "Option 1…" thay vì trả bản dịch.
+const geminiCatalog = <LlmCatalogItem>[
+  (id: 'gemini-3.1-flash-lite', note: 'Nhanh ~10s/chương, dịch tốt — chủ lực', rpm: 15, tpm: 250000, rpd: 500),
+  (id: 'gemini-3.5-flash-lite', note: 'Nhanh, ngang 3.1 Flash Lite', rpm: 15, tpm: 250000, rpd: 500),
+  (id: 'gemma-4-26b-a4b-it', note: 'Nhiều lượt/ngày nhưng chậm ~90s/chương, TPM thấp',
+      rpm: 30, tpm: 16000, rpd: 14400),
+  (id: 'gemma-4-31b-it', note: 'Ngang 26B mà chậm hơn, hay lỗi 500/503', rpm: 30, tpm: 16000, rpd: 14400),
+  (id: 'gemini-3.5-flash', note: 'Chất lượng cao nhưng chỉ 20 lượt/ngày', rpm: 5, tpm: 250000, rpd: 20),
+  (id: 'gemini-3.8-flash', note: 'Mới, gọi được — chưa đo chất lượng', rpm: 5, tpm: 250000, rpd: 20),
+  (id: 'gemini-3-flash-preview', note: 'Bản preview, gọi được', rpm: 5, tpm: 250000, rpd: 20),
+  (id: 'gemini-2.5-flash', note: 'Đời cũ, gọi được', rpm: 5, tpm: 250000, rpd: 20),
+  (id: 'gemini-2.5-flash-lite', note: 'Đời cũ, nhanh, gọi được', rpm: 10, tpm: 250000, rpd: 20),
+];
+
+/// Model NVIDIA NIM (free: 40 RPM mỗi key, không trần ngày). NIM khai tử model không báo trước
+/// — ghi chú là lần đo gần nhất trong repo, id lấy từ /v1/models 14/09/2026.
+const nvidiaCatalog = <({String id, String note})>[
+  (id: 'google/gemma-4-31b-it', note: 'Dịch cả chương ổn (đo 29/08) — đang dùng'),
+  (id: 'moonshotai/kimi-k3', note: '504 khi đo 29/08'),
+  (id: 'deepseek-ai/deepseek-v4-flash-0731', note: '504 khi đo 29/08'),
+  (id: 'mistralai/mistral-nemotron', note: 'Timeout >180s khi đo 26/08'),
+  (id: 'z-ai/glm-5.3-flash', note: 'Chưa đo'),
+  (id: 'openai/gpt-oss-20b', note: 'Chưa đo'),
+];
 
 /// Báo cáo term dịch sai chưa xử lý (góp ý auto-duyệt, chỉ soi khi bị báo cáo).
 final reportsProvider = FutureProvider.autoDispose<List<Rec>>((ref) async {

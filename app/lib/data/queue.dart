@@ -28,7 +28,7 @@ final translateQueueProvider = FutureProvider.autoDispose<QueueState>((
   // Đọc từ `translation_jobs` (nguồn sự thật của hàng đợi, CÓ priority) chứ không từ
   // chapters.status → (1) ưu tiên cao (truyện đang đọc, pri nhỏ) nổi lên đầu, (2) không
   // dính "chương mồ côi" (status kẹt nhưng job đã xoá).
-  const jobCols = 'priority, status, novel_id, chapter_id, '
+  const jobCols = 'priority, status, novel_id, chapter_id, created_at, '
       'chapters(chapter_index, title_vi, title_zh), '
       'novels(title_vi, title_zh, cover_url, chapter_count_translated, '
       'chapter_count_source, sources(name, enabled))';
@@ -47,11 +47,12 @@ final translateQueueProvider = FutureProvider.autoDispose<QueueState>((
         .select(jobCols)
         .eq('type', 'chapter')
         .eq('status', 'pending')
-        // Khớp thứ tự claim của worker (`order by priority, created_at`).
+        // Lấy cửa sổ đầu theo priority/created_at rồi xếp lại y như worker claim.
         .order('priority', ascending: true) // nhỏ = ưu tiên cao → lên đầu
         .order('created_at', ascending: true)
         .limit(kQueueWindow),
   );
+  sortLikeClaim(pending);
   final pendingTotal = (await sb
           .from('translation_jobs')
           .select('id')
@@ -116,3 +117,28 @@ final translateQueueProvider = FutureProvider.autoDispose<QueueState>((
 /// Xoá "lịch sử vừa dịch xong" trên máy (chỉ ẩn hiển thị, không đụng dữ liệu dịch).
 Future<void> clearQueueDone() =>
     prefs.setString('queue_done_cleared_at', DateTime.now().toUtc().toIso8601String());
+
+/// Xếp job y như `claim_next_job` (migration 117): priority → truyện có job chờ lâu nhất ở mức
+/// ưu tiên đó → chapter_index tăng dần → created_at. MIRROR của câu ORDER BY trong SQL — đổi
+/// một đầu phải sửa đầu kia. Job cần `priority`, `novel_id`, `created_at`, `chapters(chapter_index)`.
+/// ponytail: chỉ xếp trong cửa sổ đã tải (vài trăm job đầu theo priority/created_at); job ngoài
+/// cửa sổ mà chương nhỏ hơn thì không thấy — đủ cho màn xem, worker vẫn claim đúng.
+void sortLikeClaim(List<Rec> jobs) {
+  final since = <(Object?, Object?), String>{};
+  for (final j in jobs) {
+    final k = (j['novel_id'], j['priority']);
+    final c = '${j['created_at'] ?? ''}';
+    if (since[k] == null || c.compareTo(since[k]!) < 0) since[k] = c;
+  }
+  int idx(Rec j) => ((j['chapters'] as Map?)?['chapter_index'] as int?) ?? -1; // metadata trước
+  jobs.sort((a, b) {
+    final byPrio = ((a['priority'] ?? 0) as int).compareTo((b['priority'] ?? 0) as int);
+    if (byPrio != 0) return byPrio;
+    final bySince = since[(a['novel_id'], a['priority'])]!
+        .compareTo(since[(b['novel_id'], b['priority'])]!);
+    if (bySince != 0) return bySince;
+    final byIdx = idx(a).compareTo(idx(b));
+    if (byIdx != 0) return byIdx;
+    return '${a['created_at']}'.compareTo('${b['created_at']}');
+  });
+}

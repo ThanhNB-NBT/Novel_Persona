@@ -9,11 +9,10 @@ import 'tabs/jobs_tab.dart';
 import 'tabs/novels_tab.dart';
 import 'tabs/reading_now_tab.dart';
 import 'tabs/reports_tab.dart';
-import 'tabs/tokens_tab.dart';
 
 /// Màn Quản trị (chỉ admin vào được — RLS + isAdminProvider chặn ở cả 2 đầu).
-/// 7 tab: Worker (hàng đợi/lỗi), Crawl (nguồn + cấu hình), Đang đọc,
-/// Truyện (ẩn/sửa), Token (chi phí LLM), Báo cáo, Tu Tiên.
+/// 6 tab: Worker (hàng đợi/lỗi), Crawl (nguồn + cấu hình), Đang đọc,
+/// Truyện (ẩn/sửa), Báo cáo, Tu Tiên. Token/request LLM ra màn riêng /admin/llm.
 /// Nội dung từng tab nằm trong thư mục tabs/ cùng cấp.
 class AdminScreen extends ConsumerWidget {
   const AdminScreen({super.key});
@@ -33,7 +32,7 @@ class AdminScreen extends ConsumerWidget {
           );
         }
         return DefaultTabController(
-          length: 7,
+          length: 6,
           child: Scaffold(
             appBar: AppBar(
               title: const Text('Quản trị'),
@@ -80,7 +79,6 @@ class AdminScreen extends ConsumerWidget {
                   Tab(text: 'Crawl'),
                   Tab(text: 'Đang đọc'),
                   Tab(text: 'Truyện'),
-                  Tab(text: 'Token'),
                   Tab(text: 'Báo cáo'),
                   Tab(text: 'Tu Tiên'),
                 ],
@@ -91,7 +89,6 @@ class AdminScreen extends ConsumerWidget {
               CrawlTab(),
               ReadingNowTab(),
               NovelsTab(),
-              TokensTab(),
               ReportsTab(),
               CultTab(),
             ]),

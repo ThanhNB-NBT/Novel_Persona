@@ -20,7 +20,7 @@ void main() {
   GoogleFonts.config.allowRuntimeFetching = false;
 
   testWidgets('render tab Crawl ra PNG', (tester) async {
-    await tester.binding.setSurfaceSize(const Size(400, 900));
+    await tester.binding.setSurfaceSize(const Size(400, 1100));
     final key = GlobalKey();
     final now = DateTime.now().toUtc().toIso8601String();
     await tester.pumpWidget(ProviderScope(
@@ -36,10 +36,16 @@ void main() {
         crawlSettingsProvider.overrideWith((ref) async => [
               {
                 'key': 'llm_model',
-                'value': 'meta/llama-3.1-70b-instruct,minimaxai/minimax-m3,'
-                    'nvidia/llama-3.3-nemotron-super-49b-v1',
-                'note': 'DỊCH · Model NVIDIA cho 3 việc phụ',
+                'value': 'google/gemma-4-31b-it,minimaxai/minimax-m3',
+                'note': 'DỊCH · Chuỗi model NVIDIA DỰ PHÒNG',
               },
+              {
+                'key': 'gemini_models',
+                'value': 'gemini-3.1-flash-lite 15/250000/500,gemini-3.5-flash-lite 15/250000/500,'
+                    'gemma-4-26b-a4b-it 30/16000/14400,gemini-3.5-flash 5/250000/0',
+                'note': 'DỊCH · Model Gemini theo thứ tự ưu tiên',
+              },
+              {'key': 'default_engine', 'value': 'llm', 'note': 'DỊCH · Engine cho truyện MỚI'},
               {'key': 'llm_timeout_sec', 'value': '90', 'note': 'DỊCH · Timeout 1 call LLM'},
               {'key': 'crawl_interval_min', 'value': '75', 'note': 'Chu kỳ discovery (phút)'},
             ]),
