@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/commit-guard.sh\"",
+            "if": "Bash(git commit*)",
+            "timeout": 20,
+            "statusMessage": "kiem luat truoc khi commit"
+          }
+        ]
+      }
+    ]
+  },
+  "permissions": {
+    "allow": [
+      "Bash(flutter analyze:*)",
+      "Bash(flutter test:*)",
+      "Bash(flutter pub get)",
+      "Bash(dart analyze:*)",
+      "Bash(dart format:*)",
+      "Bash(codegraph explore:*)",
+      "Bash(codegraph node:*)",
+      "mcp__dart__analyze_files",
+      "mcp__dart__run_tests",
+      "mcp__dart__pub_dev_search",
+      "mcp__dart__read_package_uris",
+      "mcp__dart__rip_grep_packages",
+      "mcp__dart__get_runtime_errors",
+      "mcp__dart__list_devices"
+    ],
+    "ask": [
+      "Bash(git tag:*)",
+      "Bash(git push:*)"
+    ]
+  }
+}
