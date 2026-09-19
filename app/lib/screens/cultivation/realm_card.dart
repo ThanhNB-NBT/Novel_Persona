@@ -299,7 +299,7 @@ class RealmCard extends StatelessWidget {
   final VoidCallback onAscendTier;
   final bool busy;
   final bool ascended;
-  const RealmCard({super.key, 
+  const RealmCard({super.key,
     required this.st,
     required this.exp,
     required this.onAdvance,
