@@ -41,20 +41,33 @@ class CollectionSheet extends ConsumerWidget {
           }
           final types = cultTypeNames.keys.where(byType.containsKey).toList();
 
-          return ListView(
+          // .builder chứ KHÔNG phải ListView(children:): bản cũ dựng sẵn lưới ô của
+          // MỌI loại vật phẩm (catalog vài trăm ô, mỗi ô một PixelIcon tự vẽ) ngay
+          // cả khi chỉ nhìn thấy loại đầu tiên — và dựng lại mỗi lần sheet rebuild.
+          // item 0 = khối tiêu đề, sau đó mỗi loại chiếm 2 item: nhãn mục rồi lưới ô.
+          return ListView.builder(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-            children: [
-              Text(
-                'Sưu tập  ${owned.length}/${items.length}',
-                style: t.titleMedium?.copyWith(fontWeight: FontWeight.w800),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Vật phẩm đã gặp được lưu vĩnh viễn — dùng hoặc luyện hóa không mất dấu.',
-                style: t.labelSmall?.copyWith(color: cs.onSurfaceVariant),
-              ),
-              for (final ty in types) ...[
-                Padding(
+            itemCount: 1 + types.length * 2,
+            itemBuilder: (context, i) {
+              if (i == 0) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Sưu tập  ${owned.length}/${items.length}',
+                      style: t.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Vật phẩm đã gặp được lưu vĩnh viễn — dùng hoặc luyện hóa không mất dấu.',
+                      style: t.labelSmall?.copyWith(color: cs.onSurfaceVariant),
+                    ),
+                  ],
+                );
+              }
+              final ty = types[(i - 1) ~/ 2];
+              if (i.isOdd) {
+                return Padding(
                   padding: const EdgeInsets.only(top: 14, bottom: 8),
                   child: CultSectionLabel(
                     '${cultTypeNames[ty]}  '
@@ -62,17 +75,17 @@ class CollectionSheet extends ConsumerWidget {
                     '/${byType[ty]!.length}',
                     Icons.category_rounded,
                   ),
-                ),
-                Wrap(
-                  spacing: 10,
-                  runSpacing: 10,
-                  children: [
-                    for (final it in byType[ty]!)
-                      _CollectionTile(it: it, owned: owned.contains(it['id'])),
-                  ],
-                ),
-              ],
-            ],
+                );
+              }
+              return Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  for (final it in byType[ty]!)
+                    _CollectionTile(it: it, owned: owned.contains(it['id'])),
+                ],
+              );
+            },
           );
         },
       ),
@@ -616,12 +629,17 @@ class _QiParticlesOverlayState extends State<_QiParticlesOverlay>
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _ctrl,
-      builder: (context, _) => CustomPaint(
-        painter: _QiParticlePainter(
-          progress: _ctrl.value,
-          color: widget.color,
+    // RepaintBoundary: painter đổi mỗi frame suốt 600ms. Không có ranh giới thì
+    // lớp chứa nó (cả sheet: chữ, nút, danh sách) bị vẽ lại theo từng frame —
+    // đúng vào lúc người dùng vừa bấm nút và đang nhìn.
+    return RepaintBoundary(
+      child: AnimatedBuilder(
+        animation: _ctrl,
+        builder: (context, _) => CustomPaint(
+          painter: _QiParticlePainter(
+            progress: _ctrl.value,
+            color: widget.color,
+          ),
         ),
       ),
     );

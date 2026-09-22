@@ -318,6 +318,9 @@ class _GlobalTtsBar extends StatelessWidget {
 
 /// Dock nổi 120fps Ultra-Smooth: vũng LINH DỊCH metaball bám sát ngón tay theo
 /// thời gian thực qua PageController.
+/// Cỡ chữ nhãn dock. Chiều cao dock tính theo nó nên đổi một chỗ là đủ.
+const _dockLabelSize = 9.5;
+
 class _Dock extends StatefulWidget {
   final int index;
   final PageController pageController;
@@ -405,7 +408,13 @@ class _DockState extends State<_Dock> with TickerProviderStateMixin {
             Padding(
               padding: const EdgeInsets.all(_pad),
               child: SizedBox(
-                height: _h,
+                // Cao thêm ĐÚNG phần chữ nở ra khi cỡ chữ hệ thống > 100%; ở 100%
+                // bằng đúng _h nên giao diện không đổi một pixel. Ghim cứng 56 thì
+                // ở 200% nhãn xuống 2 dòng và tràn đáy 12px (đo trên máy ảo 22/09).
+                height: _h +
+                    (MediaQuery.textScalerOf(context).scale(_dockLabelSize) -
+                            _dockLabelSize) *
+                        1.4,
                 child: Row(children: [
                   for (var i = 0; i < _n; i++)
                     Expanded(
@@ -459,9 +468,11 @@ class _DockState extends State<_Dock> with TickerProviderStateMixin {
       const SizedBox(height: 2),
       Text(
         tab.label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
         style: t.labelSmall?.copyWith(
           letterSpacing: 0,
-          fontSize: 9.5,
+          fontSize: _dockLabelSize,
           fontWeight: near > 0.5 ? FontWeight.w700 : FontWeight.w500,
           color: color,
         ),
@@ -495,8 +506,9 @@ class _Emblem extends ConsumerWidget {
             Text(
               'Tu Tiên',
               maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: t.labelSmall?.copyWith(
-                fontSize: 9.5,
+                fontSize: _dockLabelSize,
                 letterSpacing: 0,
                 fontWeight: near > 0.5 ? FontWeight.w700 : FontWeight.w500,
                 color: color,

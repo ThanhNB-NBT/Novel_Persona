@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
@@ -125,6 +127,11 @@ class NovelListRow extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     const coverW = 76.0; // bìa nhỉnh hơn khối chữ bên phải một chút cho cân mắt
     const coverH = coverW * 1.36; // ảnh to hơn + text căn theo chiều cao ảnh
+    // Khối chữ phải BÁM cỡ chữ hệ thống, không ghim cứng theo chiều cao bìa:
+    // Column dưới dùng spaceBetween nên cần chiều cao bị chặn, mà chặn ở coverH
+    // thì người để cỡ chữ 150% bị tràn đáy 24px (test/text_scale_test.dart).
+    // Ở 100% giá trị trả về đúng bằng coverH → giao diện không đổi một pixel.
+    final textH = math.max(coverH, MediaQuery.textScalerOf(context).scale(coverH));
     return InkWell(
       onTap: onTap,
       child: Padding(
@@ -138,7 +145,7 @@ class NovelListRow extends StatelessWidget {
           const SizedBox(width: 14),
           Expanded(
             child: SizedBox(
-              height: coverH,
+              height: textH,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,

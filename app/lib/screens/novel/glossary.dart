@@ -100,54 +100,35 @@ class _GlossaryScreenState extends ConsumerState<GlossaryScreen> {
                 child: Text('Chưa có thuật ngữ nào.\nBấm + để thêm.',
                     textAlign: TextAlign.center));
           }
-          return ListView(
-            padding: const EdgeInsets.only(bottom: 88),
-            children: [
-              if (pending.isNotEmpty) ...[
-                _toggleHeader('Gợi ý chờ duyệt (${pending.length})', _openPending,
-                    () => setState(() => _openPending = !_openPending)),
-                if (_openPending)
-                  for (final t in pending)
-                    if (_selecting)
-                      _checkTile(t)
-                    else
-                      _PendingTile(
-                        term: t,
-                        onChanged: refresh,
-                        onEdit: () =>
-                            _showTermDialog(context, term: t, onDone: refresh),
-                      ),
-              ],
-              _toggleHeader('Đã áp dụng (${approved.length})', _openApproved,
-                  () => setState(() => _openApproved = !_openApproved)),
-              if (_openApproved)
-              for (final t in approved)
-                if (_selecting)
-                  _checkTile(t)
-                else
-                ListTile(
-                  title: Text('${t['term_zh'] ?? '(?)'} → ${t['correct_vi']}'),
-                  subtitle: Text([
-                    _typeLabels[t['term_type']] ?? t['term_type'],
-                    if (t['wrong_vi'] != null) 'không dịch: "${t['wrong_vi']}"',
-                    if (t['narrator_term'] != null) 'kể: ${t['narrator_term']}',
-                    if (t['scope'] == 'global') 'toàn cục',
-                  ].join(' · ')),
-                  trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                    IconButton(
-                      tooltip: 'Báo cáo dịch sai',
-                      icon: const Icon(Icons.flag_outlined, size: 20),
-                      onPressed: () => _reportTerm(context, t['id']),
-                    ),
-                    IconButton(
-                      tooltip: 'Sửa',
-                      icon: const Icon(Icons.edit_outlined, size: 20),
-                      onPressed: () =>
-                          _showTermDialog(context, term: t, onDone: refresh),
-                    ),
-                  ]),
-                ),
+          // .builder chứ KHÔNG phải ListView(children:): truyện dài có vài trăm
+          // thuật ngữ, bản cũ dựng lại mô tả widget cho TOÀN BỘ danh sách mỗi lần
+          // setState — mà setState chạy ở MỖI ô tick trong chế độ chọn nhiều.
+          // Danh sách phẳng dưới chỉ giữ hàm dựng; widget thật sinh khi cuộn tới.
+          final rows = <Widget Function()>[
+            if (pending.isNotEmpty) ...[
+              () => _toggleHeader('Gợi ý chờ duyệt (${pending.length})', _openPending,
+                  () => setState(() => _openPending = !_openPending)),
+              if (_openPending)
+                for (final t in pending)
+                  () => _selecting
+                      ? _checkTile(t)
+                      : _PendingTile(
+                          term: t,
+                          onChanged: refresh,
+                          onEdit: () =>
+                              _showTermDialog(context, term: t, onDone: refresh),
+                        ),
             ],
+            () => _toggleHeader('Đã áp dụng (${approved.length})', _openApproved,
+                () => setState(() => _openApproved = !_openApproved)),
+            if (_openApproved)
+              for (final t in approved)
+                () => _selecting ? _checkTile(t) : _approvedTile(t, refresh),
+          ];
+          return ListView.builder(
+            padding: const EdgeInsets.only(bottom: 88),
+            itemCount: rows.length,
+            itemBuilder: (context, i) => rows[i](),
           );
         },
       )),
@@ -297,6 +278,29 @@ class _GlossaryScreenState extends ConsumerState<GlossaryScreen> {
             onPressed: _sel.isEmpty ? null : _deleteSelected,
           ),
         ],
+      );
+
+  /// Một dòng thuật ngữ đã duyệt (tách khỏi build để danh sách dựng được lười).
+  Widget _approvedTile(Rec t, VoidCallback onDone) => ListTile(
+        title: Text('${t['term_zh'] ?? '(?)'} → ${t['correct_vi']}'),
+        subtitle: Text([
+          _typeLabels[t['term_type']] ?? t['term_type'],
+          if (t['wrong_vi'] != null) 'không dịch: "${t['wrong_vi']}"',
+          if (t['narrator_term'] != null) 'kể: ${t['narrator_term']}',
+          if (t['scope'] == 'global') 'toàn cục',
+        ].join(' · ')),
+        trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+          IconButton(
+            tooltip: 'Báo cáo dịch sai',
+            icon: const Icon(Icons.flag_outlined, size: 20),
+            onPressed: () => _reportTerm(context, t['id']),
+          ),
+          IconButton(
+            tooltip: 'Sửa',
+            icon: const Icon(Icons.edit_outlined, size: 20),
+            onPressed: () => _showTermDialog(context, term: t, onDone: onDone),
+          ),
+        ]),
       );
 
   Widget _checkTile(Rec t) {

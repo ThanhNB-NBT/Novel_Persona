@@ -162,16 +162,21 @@ class _ReadingRow extends ConsumerWidget {
                   ),
                   const SizedBox(height: 2),
                   // Số chương nhỏ, một màu nhạt hơn tên truyện + chip chương mới
-                  Row(children: [
-                    Text(
-                      'Đã đọc $cur${total > 0 ? '/$total' : ''}',
-                      style: t.labelMedium?.copyWith(color: cs.onSurfaceVariant),
-                    ),
-                    if (hasNew) ...[
-                      const SizedBox(width: 8),
-                      const TagChip('Chương mới'),
+                  // Wrap chứ không Row: ở cỡ chữ hệ thống 200% chữ + chip rộng hơn
+                  // cột 95px (đo trên máy ảo 22/09). Wrap cho chip rớt xuống dòng
+                  // thay vì cắt chữ; ở 100% vẫn một dòng, cách nhau đúng 8px như cũ.
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      Text(
+                        'Đã đọc $cur${total > 0 ? '/$total' : ''}',
+                        style: t.labelMedium?.copyWith(color: cs.onSurfaceVariant),
+                      ),
+                      if (hasNew) const TagChip('Chương mới'),
                     ],
-                  ]),
+                  ),
                   const SizedBox(height: 8),
                   ProgressRibbon(progress),
                 ],
