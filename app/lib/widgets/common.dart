@@ -2,6 +2,7 @@ import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// Logo GT trong app: chữ trần không nền — mực đen khi sáng, mực sáng khi tối
 /// (đen tuyền trên nền đêm sẽ tàng hình). Icon launcher lo phần nền trắng.
@@ -76,6 +77,64 @@ class AppLoading extends StatelessWidget {
 /// user) + nút Thử lại. Phân biệt mất mạng với lỗi khác. Thay cho `Text('Lỗi: $e')`
 /// rải khắp — màn lỗi trước đây là ngõ cụt (list có RefreshIndicator nhưng nhánh
 /// error trả Center không cuộn được nên không kéo làm mới được).
+/// Đổi ngoại lệ thành MỘT câu người dùng hiểu được và biết phải làm gì.
+///
+/// Trước đây các màn Quản trị in thẳng `'Lỗi: $e'`, ra màn hình thành nguyên khối:
+///   PostgrestException(message: duplicate key value violates unique constraint
+///   "uq_job_meta_active", code: 23505, details: Key (novel_id, type)=(35833,
+///   metadata) already exists., hint: null)
+/// Đọc xong vẫn không biết chuyện gì. Gom về một chỗ để mọi nơi hiện lỗi nói
+/// cùng một giọng, và luôn ưu tiên "chuyện gì xảy ra" thay vì "máy báo mã gì".
+///
+/// Lỗi chưa có mẫu thì KHÔNG nuốt mất: cắt lấy dòng đầu, gọn lại — vẫn tra được
+/// mà không phủ kín màn hình.
+String loiDeHieu(Object e) {
+  final s = e.toString().toLowerCase();
+
+  // Mạng xét trước mọi thứ: mất kết nối thì mã lỗi bên dưới đều vô nghĩa.
+  if (s.contains('socketexception') ||
+      s.contains('clientexception') ||
+      s.contains('failed host lookup') ||
+      s.contains('timeoutexception') ||
+      s.contains('connection')) {
+    return 'Mất kết nối — kiểm tra mạng rồi thử lại.';
+  }
+
+  if (e is AuthException) {
+    if (s.contains('invalid login')) return 'Sai email hoặc mật khẩu.';
+    if (s.contains('email not confirmed')) return 'Email chưa được xác nhận.';
+    // App bỏ đăng ký và máy chủ khoá DISABLE_SIGNUP → nói rõ đường đi tiếp.
+    if (s.contains('signup') && s.contains('disabled')) {
+      return 'Đăng ký đã khoá — nhờ quản trị tạo tài khoản giúp.';
+    }
+    return 'Đăng nhập thất bại. Thử lại.';
+  }
+
+  if (e is PostgrestException) {
+    final d = '${e.message} ${e.details ?? ''}'.toLowerCase();
+    switch (e.code) {
+      case '23505': // trùng khoá
+        if (d.contains('uq_job_meta_active')) {
+          return 'Truyện này đã có việc đang chờ trong hàng đợi — xong việc đó rồi hẵng thử lại.';
+        }
+        return 'Dữ liệu này đã có rồi.';
+      case '23503': // khoá ngoại
+        return 'Dữ liệu liên quan không còn — tải lại rồi thử lại.';
+      case '42501': // RLS chặn
+        return 'Không có quyền làm việc này.';
+      case 'PGRST301':
+        return 'Phiên đăng nhập hết hạn — đăng nhập lại.';
+    }
+    if (d.contains('admin only')) return 'Việc này cần quyền quản trị.';
+    // Không khớp mẫu: chỉ lấy message, bỏ code/details/hint.
+    return e.message;
+  }
+
+  final dongDau = e.toString().split('\n').first.trim();
+  if (dongDau.isEmpty) return 'Có lỗi xảy ra. Thử lại sau ít phút.';
+  return dongDau.length <= 120 ? dongDau : '${dongDau.substring(0, 117)}…';
+}
+
 class AppError extends StatelessWidget {
   final Object error;
   final VoidCallback? onRetry;
@@ -107,9 +166,9 @@ class AppError extends StatelessWidget {
               style: t.titleMedium, textAlign: TextAlign.center),
           const SizedBox(height: 4),
           Text(
-              offline
-                  ? 'Kiểm tra mạng rồi thử lại.'
-                  : 'Vui lòng thử lại sau ít phút.',
+              // Mất mạng thì câu trên đã đủ; còn lại nói RÕ lỗi gì thay vì
+              // "thử lại sau ít phút" — câu đó không giúp ai quyết định gì.
+              offline ? 'Kiểm tra mạng rồi thử lại.' : loiDeHieu(error),
               style: t.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
               textAlign: TextAlign.center),
           if (onRetry != null) ...[

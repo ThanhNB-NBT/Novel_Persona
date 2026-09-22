@@ -51,7 +51,7 @@ class AdminScreen extends ConsumerWidget {
                               ? 'Đã đẩy lại $n job lỗi vào hàng đợi'
                               : 'Không có job lỗi nào')));
                     } catch (e) {
-                      messenger.showSnackBar(SnackBar(content: Text('Lỗi: $e')));
+                      messenger.showSnackBar(SnackBar(content: Text(loiDeHieu(e))));
                     }
                   },
                 ),
@@ -66,7 +66,7 @@ class AdminScreen extends ConsumerWidget {
                           content: Text('Đã bắt đầu quét — chương lỗi sẽ tự '
                               'xếp lại dịch, xem tab Worker.')));
                     } catch (e) {
-                      messenger.showSnackBar(SnackBar(content: Text('Lỗi: $e')));
+                      messenger.showSnackBar(SnackBar(content: Text(loiDeHieu(e))));
                     }
                   },
                 ),

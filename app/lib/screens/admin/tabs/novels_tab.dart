@@ -505,7 +505,7 @@ class _AdminNovelBodyState extends ConsumerState<_AdminNovelBody> {
                     content: Text('Đã xếp dịch lại tên — cập nhật sau vài '
                         'giây, kéo làm mới để xem.')));
               } catch (e) {
-                messenger.showSnackBar(SnackBar(content: Text('Lỗi: $e')));
+                messenger.showSnackBar(SnackBar(content: Text(loiDeHieu(e))));
               }
             },
           ),

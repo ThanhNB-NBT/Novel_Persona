@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../data.dart';
+import '../../widgets.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -51,17 +52,10 @@ class _LoginScreenState extends State<LoginScreen> {
         }
       }
     } catch (e) {
-      setState(() => _error = _friendly('$e'));
+      setState(() => _error = loiDeHieu(e));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
-  }
-
-  String _friendly(String raw) {
-    final s = raw.toLowerCase();
-    if (s.contains('invalid login')) return 'Sai email hoặc mật khẩu.';
-    if (s.contains('network') || s.contains('socket')) return 'Lỗi mạng — kiểm tra kết nối.';
-    return 'Đăng nhập thất bại. Thử lại.';
   }
 
   @override

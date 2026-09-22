@@ -309,7 +309,7 @@ class _HostCard extends ConsumerWidget {
       messenger.showSnackBar(SnackBar(
           content: Text('Đã gửi lệnh — worker nhận trong ~10 giây')));
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('Lỗi gửi lệnh: $e')));
+      messenger.showSnackBar(SnackBar(content: Text('Gửi lệnh hỏng — ${loiDeHieu(e)}')));
     }
   }
 
