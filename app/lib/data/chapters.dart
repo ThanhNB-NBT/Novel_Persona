@@ -133,6 +133,13 @@ final chapterProvider = FutureProvider.autoDispose.family<Rec?, ChapterKey>((
 
 // ---------- Sửa / góp ý bản dịch ----------
 
+/// Gợi ý AI cho đoạn đang sửa (Edge Function `goi-y-dich`, backend repo
+/// supabase/functions/): trả {'zh': chữ gốc, 'goi_y': [{'vi', 'y'}]}. Cần đăng nhập.
+Future<Rec> goiYDich(String zh, String vi, String chon) async {
+  final r = await sb.functions.invoke('goi-y-dich', body: {'zh': zh, 'vi': vi, 'chon': chon});
+  return Map<String, dynamic>.from(r.data as Map);
+}
+
 /// Nguyên văn chữ Trung của chương — chỉ form sửa dùng để gợi ý tên theo nguồn, nên
 /// tải lười lúc mở form (không nhét vào chapterProvider/bản offline). Lỗi/offline → ''.
 final chapterZhProvider = FutureProvider.family<String, ChapterKey>((ref, key) async {

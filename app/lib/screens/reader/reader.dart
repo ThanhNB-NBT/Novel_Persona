@@ -46,6 +46,10 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   final _editing = ValueNotifier<bool>(false);
   // chữ Trung người dùng bôi trong câu gốc (form sửa) — rỗng = dùng đoạn tự dò
   final _zhPick = ValueNotifier<String>('');
+  // Gợi ý AI cho đoạn đang sửa: null = chưa hỏi. _aiReq chặn kết quả về muộn của lần
+  // chạm trước đè lên form của từ mới.
+  final _ai = ValueNotifier<({bool loading, List<Rec> items, String? err, String thay, bool dung})?>(null);
+  var _aiReq = 0;
 
   // TTS: đoạn nội dung máy đọc đang đọc TRÊN CHƯƠNG NÀY (-1 = không phải chương đang
   // nghe / đang đọc tiêu đề). Reader nghe cái này để highlight + cuộn theo.
@@ -118,6 +122,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     _sel.dispose();
     _editing.dispose();
     _zhPick.dispose();
+    _ai.dispose();
     _localTtsPara.dispose();
     WakelockPlus.disable();
     super.dispose();
@@ -191,6 +196,8 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     final (na, nb) = nameRunBounds(block, a, b);
     _sel.value = (block: block, start: na, end: nb);
     _zhPick.value = '';
+    _ai.value = null;
+    _aiReq++;
     if (!_editing.value) {
       _editing.value = true;
     }
@@ -267,8 +274,43 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   static String _sentenceCase(String v) =>
       v.isEmpty ? v : v[0].toUpperCase() + v.substring(1).toLowerCase();
 
+  /// Hỏi Gemini (Edge Function goi-y-dich) 3-4 cách dịch cho [chon] trong câu [vi] có
+  /// nguồn [zh] — cho từ thường mà glossary/Hán-Việt không có gì để gợi.
+  Future<void> _askAi(String zh, String vi, String chon) async {
+    final req = ++_aiReq;
+    _ai.value = (loading: true, items: const <Rec>[], err: null, thay: chon, dung: false);
+    try {
+      final r = await goiYDich(zh, vi, chon);
+      if (req != _aiReq) return;
+      final items = [
+        for (final g in (r['goi_y'] as List? ?? const []))
+          if (g is Map) Map<String, dynamic>.from(g)
+      ];
+      final dung = r['dung'] == true;
+      _ai.value = (
+        loading: false,
+        items: items,
+        err: items.isEmpty && !dung ? 'AI không đưa ra được cách dịch khác' : null,
+        thay: '${r['thay'] ?? chon}',
+        dung: dung,
+      );
+    } catch (e) {
+      if (req != _aiReq) return;
+      _ai.value = (
+        loading: false,
+        items: const <Rec>[],
+        err: 'Gợi ý AI lỗi — thử lại sau',
+        thay: chon,
+        dung: false,
+      );
+      debugPrint('goi-y-dich: $e');
+    }
+  }
+
   void _closeEdit() {
     _zhPick.value = '';
+    _ai.value = null;
+    _aiReq++;
     _correct.clear();
     _editing.value = false;
     _sel.value = null;
@@ -861,7 +903,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
 
   // -------- Overlay form sửa (mở thẳng khi chạm từ), chỉ nó rebuild theo selection --------
   Widget _overlay(BuildContext context) => AnimatedBuilder(
-        animation: Listenable.merge([_sel, _editing, _zhPick]),
+        animation: Listenable.merge([_sel, _editing, _zhPick, _ai]),
         builder: (context, _) {
           final sel = _sel.value;
           if (sel == null || !_editing.value) return const SizedBox.shrink();
@@ -1133,6 +1175,88 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                       if (c != '${m['correct_vi']}') fillChip(c, alt: true),
                 ],
               ]),
+            ],
+            // Gợi ý AI: chỉ khi có câu gốc (AI cần chữ Trung mới dịch lại được cho đúng).
+            if (src != null) ...[
+              const SizedBox(height: 8),
+              switch (_ai.value) {
+                null => Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                      onPressed: () => _askAi(src, block, sel0),
+                      icon: const Icon(Icons.auto_awesome_rounded, size: 18),
+                      label: const Text('Gợi ý AI cách dịch khác'),
+                    ),
+                  ),
+                (loading: true, items: _, err: _, thay: _, dung: _) => Row(children: [
+                    const SizedBox(
+                        width: 16, height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2)),
+                    const SizedBox(width: 10),
+                    Text('AI đang đọc câu gốc…', style: t.labelMedium),
+                  ]),
+                (
+                  loading: false,
+                  items: final items,
+                  err: final err,
+                  thay: final thay,
+                  dung: final dung,
+                ) =>
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (err != null)
+                        Text(err, style: t.labelMedium?.copyWith(color: cs.error))
+                      else
+                        Text(
+                            dung
+                                ? 'AI: “$thay” đã dịch đúng'
+                                    '${items.isEmpty ? '' : ' — cách nói tương đương:'}'
+                                : 'AI gợi ý thay “$thay”:',
+                            style: t.labelMedium?.copyWith(
+                                color: dung ? cs.primary : cs.onSurfaceVariant)),
+                      for (final g in items)
+                        InkWell(
+                          borderRadius: BorderRadius.circular(8),
+                          onTap: () {
+                            // chạm một chữ ("nghiệm") mà AI xét cả cụm ("điểm kinh nghiệm")
+                            // → nới vùng chọn ra trọn cụm, kẻo điền vào ra "điểm kinh thức ăn"
+                            if (thay != wrong) {
+                              final i = block.lastIndexOf(thay, a);
+                              if (i >= 0 && i + thay.length >= b) {
+                                _sel.value = (block: block, start: i, end: i + thay.length);
+                              }
+                            }
+                            _correct.text = '${g['vi']}';
+                            _correct.selection =
+                                TextSelection.collapsed(offset: _correct.text.length);
+                            _correctFocus.requestFocus();
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+                            child: Row(children: [
+                              Icon(Icons.auto_awesome_rounded, size: 16, color: cs.primary),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text.rich(TextSpan(children: [
+                                  TextSpan(
+                                      text: '${g['vi']}',
+                                      style: t.bodyMedium
+                                          ?.copyWith(fontWeight: FontWeight.w600)),
+                                  if ('${g['y'] ?? ''}'.isNotEmpty)
+                                    TextSpan(
+                                        text: ' · ${g['y']}',
+                                        style: t.labelMedium
+                                            ?.copyWith(color: cs.onSurfaceVariant)),
+                                ])),
+                              ),
+                            ]),
+                          ),
+                        ),
+                    ],
+                  ),
+              },
             ],
             const SizedBox(height: 10),
             TextField(
