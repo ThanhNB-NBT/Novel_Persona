@@ -79,6 +79,12 @@ class _RootShellState extends ConsumerState<RootShell> {
 
   @override
   Widget build(BuildContext context) {
+    // Chưa đăng nhập chỉ được ở Khám phá (tab 1). Nội dung đã khoá ở tầng RLS
+    // (migration 122) nên 4 tab kia chỉ còn là màn trống — khoá ở đây để người
+    // dùng gặp màn đăng nhập thay vì tưởng app hỏng.
+    ref.watch(authStateProvider); // đăng nhập/xuất → mở/khoá tab ngay frame sau
+    final signedIn = sb.auth.currentUser != null;
+
     // Cả vuốt lẫn bấm dock đều đi qua onPageChanged → side effect một chỗ
     void changed(int i) {
       if (i == _i) return;
@@ -91,6 +97,10 @@ class _RootShellState extends ConsumerState<RootShell> {
 
     void go(int i) {
       if (i < 0 || i > 4 || i == _i) return;
+      if (!signedIn && i != 1) {
+        context.push('/login');
+        return;
+      }
       _pc.animateToPage(i,
           duration: const Duration(milliseconds: 320), curve: Curves.easeOutCubic);
     }
@@ -123,7 +133,10 @@ class _RootShellState extends ConsumerState<RootShell> {
             controller: _pc,
             // Đàn hồi kiểu Fluid Fusion (ColorOS 17): vuốt tới tab đầu/cuối thì
             // trang căng ra rồi bật lại theo ngón tay, thay vì khựng cứng.
-            physics: const PageScrollPhysics(parent: BouncingScrollPhysics()),
+            physics: signedIn
+                ? const PageScrollPhysics(parent: BouncingScrollPhysics())
+                // Khách vuốt ngang sẽ lọt sang tab khoá mà không qua go() → chặn hẳn.
+                : const NeverScrollableScrollPhysics(),
             onPageChanged: changed,
             children: [for (final p in _pages) _KeepAlive(child: p)],
           ),

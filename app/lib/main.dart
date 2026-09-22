@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -179,7 +180,37 @@ Future<void> main() async {
 int _intParam(GoRouterState s, String key) =>
     int.tryParse(s.pathParameters[key] ?? '') ?? 0;
 
-final _router = GoRouter(routes: [
+/// Hàng rào đăng nhập. Chưa đăng nhập chỉ vào được Khám phá ('/') và '/login';
+/// mọi đường khác — kể cả deep link /novel/5/read/2 bấm từ thông báo — đẩy về
+/// màn đăng nhập. Đây là hàng rào TRẢI NGHIỆM, không phải bảo mật: hàng rào thật
+/// là RLS (migration 122), vì app thì sửa được còn policy trong DB thì không.
+/// Phần thuần logic tách riêng: test được mà không phải dựng phiên Supabase giả
+/// (test/auth_gate_test.dart). Trả null = cho đi, trả chuỗi = đẩy về đó.
+@visibleForTesting
+String? authGateFor(String path, {required bool signedIn}) {
+  if (signedIn) return null;
+  return path == '/' || path == '/login' ? null : '/login';
+}
+
+String? _authGate(BuildContext _, GoRouterState s) =>
+    authGateFor(s.matchedLocation, signedIn: sb.auth.currentUser != null);
+
+/// GoRouter chỉ chạy lại redirect khi được báo có thay đổi. Nối vào luồng auth để
+/// vừa đăng nhập/đăng xuất là hàng rào áp dụng lại ngay, không phải mở lại app.
+class _AuthGateNotifier extends ChangeNotifier {
+  _AuthGateNotifier() {
+    _sub = sb.auth.onAuthStateChange.listen((_) => notifyListeners());
+  }
+  late final StreamSubscription<AuthState> _sub;
+
+  @override
+  void dispose() {
+    _sub.cancel();
+    super.dispose();
+  }
+}
+
+final _router = GoRouter(redirect: _authGate, refreshListenable: _AuthGateNotifier(), routes: [
   GoRoute(path: '/', builder: (_, _) => const RootShell()),
   // Mọi màn push đi qua chuyển cảnh MỰC LOANG (ink_transition.dart) — chữ ký
   // chuyển động của app. Riêng màn đọc giữ transition riêng theo chế độ lật/cuộn.

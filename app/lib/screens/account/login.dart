@@ -40,7 +40,16 @@ class _LoginScreenState extends State<LoginScreen> {
     });
     try {
       await sb.auth.signInWithPassword(email: email, password: _password.text);
-      if (mounted) context.pop(); // provider phụ thuộc auth tự nạp lại (authStateProvider)
+      // Tới màn này bằng 2 đường: push từ Cài đặt (pop về chỗ cũ), hoặc bị
+      // _authGate đẩy tới — lúc đó ngăn xếp có thể rỗng, pop là kẹt màn trắng.
+      // Provider phụ thuộc auth tự nạp lại (authStateProvider).
+      if (mounted) {
+        if (context.canPop()) {
+          context.pop();
+        } else {
+          context.go('/');
+        }
+      }
     } catch (e) {
       setState(() => _error = _friendly('$e'));
     } finally {
