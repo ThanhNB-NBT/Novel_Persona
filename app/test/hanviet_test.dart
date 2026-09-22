@@ -9,4 +9,13 @@ void main() {
     expect(hanVietOnly.hasMatch('𱌮'), isTrue);
     expect(hanVietOf('𱌮'), 'Xuất');
   });
+
+  testWidgets('zhSpanFor: tìm lại chữ Hán gốc từ phiên âm Hán-Việt', (tester) async {
+    await tester.runAsync(loadHanViet);
+    expect(zhSpanFor('Liệp Nhân', '一个猎人走了过来。'), '猎人');
+    // bỏ dấu + chữ đa âm: 宁 có âm "ninh" ưu tiên, vẫn khớp
+    expect(zhSpanFor('Ninh Thành', '他回到了宁城。'), '宁城');
+    // từ thuần Việt không có trong câu theo âm Hán-Việt → null
+    expect(zhSpanFor('thợ săn', '一个猎人走了过来。'), isNull);
+  });
 }

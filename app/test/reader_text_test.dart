@@ -9,6 +9,9 @@ import 'package:novel_reader/tts.dart';
 
 void main() {
   _glossaryRangeTests();
+  _termsFromSourceTests();
+  _sourceLineTests();
+  _nameRunTests();
   group('wordLeft / wordRight — mở rộng vùng chọn theo từ', () {
     const s = 'Lâm Tùng nhìn về phía xa';
 
@@ -251,6 +254,89 @@ void _glossaryRangeTests() {
     test('rỗng / term quá ngắn → không tô', () {
       expect(glossaryRanges('', ['Lâm Hiên']), isEmpty);
       expect(glossaryRanges('Lâm Hiên', ['L', ' ', '']), isEmpty);
+    });
+  });
+}
+
+void _termsFromSourceTests() {
+  group('termsFromSource — gợi ý tên theo bản gốc chữ Trung', () {
+    final terms = [
+      {'term_zh': '巴拉巴拉', 'correct_vi': 'Ba Lạp Ba Lạp'},
+      {'term_zh': '林轩', 'correct_vi': 'Lâm Hiên'},
+      {'term_zh': '天王', 'correct_vi': 'Thiên Vương'},
+      {'term_zh': '猎人', 'correct_vi': 'Liệp Nhân'},
+    ];
+    const zh = '巴拉巴拉说了一大堆。林轩看着天王。';
+
+    test('tên lệch dấu/cụt âm vẫn ra đúng term (so cũ có dấu thì trơ)', () {
+      final r = termsFromSource('Ba La', 'Ba La nói.', zh, terms);
+      expect(r.first['correct_vi'], 'Ba Lạp Ba Lạp');
+    });
+
+    test('term không có chữ Hán trong chương → không gợi', () {
+      final r = termsFromSource('Liệp', 'Liệp đến', zh, terms);
+      expect(r, isEmpty);
+    });
+
+    test('bản đúng đã có trong đoạn → xếp sau tên còn thiếu', () {
+      final t2 = [...terms, {'term_zh': '林贤', 'correct_vi': 'Lâm Hiền'}];
+      const zh2 = '林轩和林贤。';
+      // "Lâm Hiên" đã đúng trong đoạn → tên còn thiếu "Lâm Hiền" lên trước
+      final r = termsFromSource('Lâm Hiên', 'Lâm Hiên và Lâm Hiên', zh2, t2);
+      expect(r.map((t) => t['correct_vi']), ['Lâm Hiền', 'Lâm Hiên']);
+    });
+
+    test('chung một âm không đủ gợi (ca thật: "Thôn Thiên Nga" ra "Thương Thiên Tử")', () {
+      final t2 = [
+        {'term_zh': '吞天蛾', 'correct_vi': 'Thôn Thiên Nga'},
+        {'term_zh': '商天子', 'correct_vi': 'Thương Thiên Tử'},
+        {'term_zh': '地下黑市', 'correct_vi': 'Địa Hạ Hắc Thị'},
+      ];
+      const zh2 = '吞天蛾在这里，商天子去地下黑市。';
+      final r = termsFromSource('Thôn Thiên Nga', 'Thôn Thiên Nga ở đây', zh2, t2);
+      expect(r.map((t) => t['correct_vi']), ['Thôn Thiên Nga']);
+    });
+
+    test('âm 1 chữ cái không khớp tiền tố lỏng', () {
+      expect(termsFromSource('B', 'B', zh, terms), isEmpty);
+    });
+  });
+}
+
+void _sourceLineTests() {
+  group('sourceLineFor — câu gốc chữ Trung của khối đang chạm', () {
+    const zh = '第一章\n林风笑了。\n\n他去了城主府。';
+    const vi = 'Lâm Phong cười.\n\nHắn đi tới Thành Chủ Phủ. Trời đã tối.';
+
+    test('khớp dòng theo chỉ số, nguồn thừa dòng tiêu đề vẫn khớp', () {
+      expect(sourceLineFor('Lâm Phong cười.', vi, zh), '林风笑了。');
+      // khối là một câu đã tách khỏi dòng dài
+      expect(sourceLineFor('Hắn đi tới Thành Chủ Phủ.', vi, zh), '他去了城主府。');
+    });
+
+    test('lệch số dòng hoặc không thấy khối → null', () {
+      expect(sourceLineFor('Lâm Phong cười.', vi, '林风笑了。'), isNull);
+      expect(sourceLineFor('Không có câu này', vi, zh), isNull);
+    });
+  });
+}
+
+void _nameRunTests() {
+  group('nameRunBounds — chạm tên gom trọn cụm viết hoa', () {
+    (String, String) pick(String s, String word) {
+      final i = s.indexOf(word);
+      final (a, b) = nameRunBounds(s, i, i + word.length);
+      return (s.substring(a, b), '');
+    }
+
+    test('không nuốt từ nối viết hoa đầu câu (ca thật chương 229)', () {
+      expect(pick('Nếu Thôn Thiên Nga ở đây, thì', 'Thôn').$1, 'Thôn Thiên Nga');
+      expect(pick('Nhưng Lâm Phong không tin.', 'Phong').$1, 'Lâm Phong');
+    });
+
+    test('họ ở đầu câu vẫn là một phần tên', () {
+      expect(pick('Lâm Phong cười.', 'Phong').$1, 'Lâm Phong');
+      expect(pick('Hắn gặp Trần Đại Chinh rồi.', 'Đại').$1, 'Trần Đại Chinh');
     });
   });
 }

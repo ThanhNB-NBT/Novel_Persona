@@ -133,6 +133,22 @@ final chapterProvider = FutureProvider.autoDispose.family<Rec?, ChapterKey>((
 
 // ---------- Sửa / góp ý bản dịch ----------
 
+/// Nguyên văn chữ Trung của chương — chỉ form sửa dùng để gợi ý tên theo nguồn, nên
+/// tải lười lúc mở form (không nhét vào chapterProvider/bản offline). Lỗi/offline → ''.
+final chapterZhProvider = FutureProvider.family<String, ChapterKey>((ref, key) async {
+  try {
+    final r = await sb
+        .from('chapters')
+        .select('content_zh')
+        .eq('novel_id', key.novelId)
+        .eq('chapter_index', key.index)
+        .maybeSingle();
+    return (r?['content_zh'] ?? '').toString();
+  } catch (_) {
+    return ''; // không có nguồn thì form vẫn gợi theo glossary như cũ
+  }
+});
+
 /// Sửa TRỰC TIẾP bản dịch 1 chương (string-replace, không LLM, không hàng đợi) → hiện ngay
 /// sau khi invalidate chapterProvider. RPC SECURITY DEFINER (migration 021).
 Future<void> editChapterText(int novelId, int index, String wrong, String correct,

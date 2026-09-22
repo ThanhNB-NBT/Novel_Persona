@@ -44,6 +44,8 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   // Selection dùng ValueNotifier → chỉ overlay sửa rebuild, KHÔNG rebuild cả trang (đỡ giật khi chọn).
   final _sel = ValueNotifier<Sel?>(null);
   final _editing = ValueNotifier<bool>(false);
+  // chữ Trung người dùng bôi trong câu gốc (form sửa) — rỗng = dùng đoạn tự dò
+  final _zhPick = ValueNotifier<String>('');
 
   // TTS: đoạn nội dung máy đọc đang đọc TRÊN CHƯƠNG NÀY (-1 = không phải chương đang
   // nghe / đang đọc tiêu đề). Reader nghe cái này để highlight + cuộn theo.
@@ -115,6 +117,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     _correctFocus.dispose();
     _sel.dispose();
     _editing.dispose();
+    _zhPick.dispose();
     _localTtsPara.dispose();
     WakelockPlus.disable();
     super.dispose();
@@ -187,6 +190,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     // chạm trúng tên riêng → lấy trọn cụm viết hoa (cả tên), khỏi phải nới ⟨ ⟩ tay
     final (na, nb) = nameRunBounds(block, a, b);
     _sel.value = (block: block, start: na, end: nb);
+    _zhPick.value = '';
     if (!_editing.value) {
       _editing.value = true;
     }
@@ -264,6 +268,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
       v.isEmpty ? v : v[0].toUpperCase() + v.substring(1).toLowerCase();
 
   void _closeEdit() {
+    _zhPick.value = '';
     _correct.clear();
     _editing.value = false;
     _sel.value = null;
@@ -856,16 +861,20 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
 
   // -------- Overlay form sửa (mở thẳng khi chạm từ), chỉ nó rebuild theo selection --------
   Widget _overlay(BuildContext context) => AnimatedBuilder(
-        animation: Listenable.merge([_sel, _editing]),
+        animation: Listenable.merge([_sel, _editing, _zhPick]),
         builder: (context, _) {
           final sel = _sel.value;
           if (sel == null || !_editing.value) return const SizedBox.shrink();
-          return _editForm(context, sel);
+          // Consumer: chỉ form rebuild khi bản gốc tải xong, không kéo cả màn đọc
+          return Consumer(builder: (context, ref, _) {
+            final zh = ref.watch(chapterZhProvider(ChapterKey(novelId, chapterIndex))).value;
+            return _editForm(context, sel, zh ?? '');
+          });
         },
       );
 
   /// Form nhỏ ở đáy: từ đang sửa + 2 nút mở rộng vùng chọn (trái/phải) + đóng.
-  Widget _editForm(BuildContext context, Sel sel) {
+  Widget _editForm(BuildContext context, Sel sel, String zh) {
     final cs = Theme.of(context).colorScheme;
     final t = Theme.of(context).textTheme;
     final block = sel.block;
@@ -904,18 +913,21 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     final nameWords = sel0.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
     final looksLikeName = nameWords.isNotEmpty && nameWords.every(isCap);
 
-    final terms = looksLikeName
-        ? (ref.read(glossaryProvider(novelId)).value ?? const [])
-        : const <Map<String, dynamic>>[];
-    final sug = <Map<String, dynamic>>[];
+    final allTerms = ref.read(glossaryProvider(novelId)).value ?? const <Map<String, dynamic>>[];
+    // Trước hết: tên có chữ Hán trong BẢN GỐC chương, giống vùng chọn khi bỏ dấu — bắt
+    // được tên dịch lệch ("Ba La" → "Ba Lạp Ba Lạp") mà so chuỗi có dấu bên dưới trượt.
+    // Không cần vùng chọn viết hoa: nguồn đã lọc sẵn nên ít nhiễu.
+    final sug = termsFromSource(sel0, block, zh, allTerms);
+    final terms = looksLikeName ? allTerms : const <Map<String, dynamic>>[];
     for (final tm in terms) {
+      if (sug.length >= 6) break;
+      if (sug.any((s) => s['correct_vi'] == tm['correct_vi'])) continue;
       final zh = (tm['term_zh'] ?? '').toString();
       if (zh.isEmpty || sel0.isEmpty) continue;
       final hit = sel0.contains(zh) || // chọn trúng chữ Hán còn sót → term của chính nó
           wordHit((tm['correct_vi'] ?? '').toString()) ||
           wordHit((tm['wrong_vi'] ?? '').toString());
       if (hit) sug.add(tm);
-      if (sug.length >= 6) break;
     }
 
     // Chọn trúng chữ Hán sót trong bản dịch → tra bảng ra thẳng âm Hán-Việt để điền,
@@ -933,6 +945,22 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
         if (filled != sel0) hanFill = filled;
       }
     }
+
+    // Câu GỐC chữ Trung của khối đang chạm (dòng zh↔vi khớp 1-1) + đoạn chữ Hán ứng với
+    // vùng chọn: người dùng bôi trong câu gốc, không thì tự dò theo âm Hán-Việt. Có chữ
+    // Trung thì tra nghĩa mới ra hồn — tra chữ Việt đã dịch sai chỉ ra đúng cái sai đó.
+    final viText = (ref.read(chapterProvider(ChapterKey(novelId, chapterIndex))).value
+            ?['content_vi'] ?? '')
+        .toString();
+    final src = sourceLineFor(block, viText, zh);
+    final zhWord = _zhPick.value.isNotEmpty
+        ? _zhPick.value
+        : (src == null ? null : zhSpanFor(sel0, src));
+    final zhReadings = zhWord == null || hanName != null
+        ? const <String>[]
+        : hanVietCandidates(zhWord)
+            .where((c) => c.toLowerCase() != selLow)
+            .toList();
 
     Widget extend(IconData icon, String tip, VoidCallback onTap) => IconButton.filledTonal(
           tooltip: tip,
@@ -1048,20 +1076,54 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
             // gợi ý bản đúng từ glossary (chữ Trung → Hán-Việt) — bấm để điền.
             // Kèm chip "tra bảng ⇒" khi phiên âm Hán-Việt theo bảng KHÁC bản trong
             // glossary — người không biết tiếng Trung vẫn đối chiếu được chuẩn.
-            if (sug.isEmpty && hanFill == null && hanName == null) ...[
+            if (src != null) ...[
+              const SizedBox(height: 8),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: cs.surfaceContainerHighest.withValues(alpha: 0.6),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(
+                      zhWord == null
+                          ? 'Câu gốc — bôi chữ để tra/phiên âm'
+                          : 'Câu gốc — đang xét: $zhWord',
+                      style: t.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
+                  const SizedBox(height: 2),
+                  SelectableText(
+                    src,
+                    minLines: 1, // thiếu minLines thì maxLines giữ chỗ đủ 4 dòng dù câu ngắn
+                    maxLines: 4,
+                    style: t.bodyMedium,
+                    onSelectionChanged: (s, _) {
+                      final v = s.textInside(src).trim();
+                      if (v != _zhPick.value) _zhPick.value = v;
+                    },
+                  ),
+                ]),
+              ),
+            ],
+            if (sug.isEmpty && hanFill == null && hanName == null && zhReadings.isEmpty) ...[
               // không có gì để gợi (từ thường, chưa có trong thuật ngữ) — nói rõ
               // thay vì form trơ khiến user tưởng lỗi
               const SizedBox(height: 8),
-              Text('Từ này chưa có trong thuật ngữ truyện — gõ thẳng bản đúng bên dưới.',
+              Text(
+                  src == null
+                      ? 'Từ này chưa có trong thuật ngữ truyện — gõ thẳng bản đúng bên dưới.'
+                      : 'Chưa có trong thuật ngữ — bôi chữ tương ứng ở câu gốc rồi bấm Tra.',
                   style: t.labelMedium?.copyWith(color: cs.onSurfaceVariant)),
             ],
-            if (sug.isNotEmpty || hanFill != null || hanName != null) ...[
+            if (sug.isNotEmpty || hanFill != null || hanName != null || zhReadings.isNotEmpty) ...[
               const SizedBox(height: 10),
               Wrap(spacing: 8, runSpacing: 6, children: [
                 // vùng chọn là tên chữ Hán → hiện các CÁCH ĐỌC để bấm chọn (đa âm ra nhiều)
                 if (hanName case final hn?)
                   for (final c in hanVietCandidates(hn)) fillChip(c, alt: true),
                 if (hanFill case final hf?) fillChip(hf, alt: true),
+                // phiên âm Hán-Việt của chữ gốc đang xét (bôi tay hoặc tự dò)
+                for (final c in zhReadings) fillChip(c, alt: true),
                 for (final m in sug) ...[
                   fillChip('${m['correct_vi']}'),
                   // Cách đọc khác CHỈ hiện khi chọn ĐÚNG tên này (đa âm → nhiều ứng viên);
@@ -1107,11 +1169,16 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
               ActionChip(
                 visualDensity: VisualDensity.compact,
                 avatar: const Icon(Icons.search_rounded, size: 16),
-                label: const Text('Tra'),
-                // Tên lạ thì tra ngoài nhanh hơn đoán; mở trình duyệt ngoài, không rời app.
+                label: Text(zhWord != null ? 'Tra $zhWord' : 'Tra'),
+                // Tra CHỮ GỐC qua Google Dịch (zh→vi): chữ đang xét, không có thì cả câu gốc.
+                // Không có nguồn (offline/lệch dòng) mới rơi về tìm chữ Việt như cũ.
                 onPressed: () => launchUrl(
-                  Uri.parse('https://www.google.com/search?q='
-                      '${Uri.encodeQueryComponent(wrong)}'),
+                  (zhWord ?? src) != null
+                      ? Uri.https('translate.google.com', '/', {
+                          'sl': 'zh-CN', 'tl': 'vi', 'op': 'translate',
+                          'text': zhWord ?? src!,
+                        })
+                      : Uri.https('www.google.com', '/search', {'q': wrong}),
                   mode: LaunchMode.externalApplication,
                 ),
               ),

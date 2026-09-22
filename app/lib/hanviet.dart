@@ -1,5 +1,7 @@
 import 'package:flutter/services.dart' show rootBundle;
 
+import 'data/core.dart' show boDau;
+
 /// Tra âm Hán-Việt bằng bảng (assets/hanviet.tsv — cùng bản với worker,
 /// worker/novelworker/data/hanviet.tsv; sửa bảng thì chép lại sang đây).
 /// Dùng trong form sửa bản dịch: cho người không biết tiếng Trung đối chiếu
@@ -102,4 +104,25 @@ List<String> hanVietCandidates(String zh, {int cap = 4}) {
     if (out.length >= cap) break;
   }
   return out;
+}
+
+/// Đoạn chữ Hán trong [zhLine] mà âm Hán-Việt (bỏ dấu, xét MỌI âm của chữ đa âm) khớp
+/// từng âm của [sel] — "Liệp Nhân" → 猎人. Tên/thuật ngữ dịch kiểu Hán-Việt tìm lại được
+/// chữ gốc để tra nghĩa; từ thuần Việt ("thợ săn") thì null, người dùng tự bôi trong câu gốc.
+String? zhSpanFor(String sel, String zhLine) {
+  final t = _hv;
+  if (t == null) return null;
+  final want =
+      boDau(sel).split(RegExp(r'[^a-z0-9]+')).where((w) => w.isNotEmpty).toList();
+  if (want.isEmpty || want.length > 8) return null;
+  final chars = zhLine.runes.map(String.fromCharCode).toList();
+  for (var i = 0; i + want.length <= chars.length; i++) {
+    var ok = true;
+    for (var k = 0; k < want.length && ok; k++) {
+      final rs = t[chars[i + k]];
+      ok = rs != null && rs.any((r) => boDau(r) == want[k]);
+    }
+    if (ok) return chars.sublist(i, i + want.length).join();
+  }
+  return null;
 }

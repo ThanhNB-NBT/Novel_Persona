@@ -1,5 +1,6 @@
 import 'package:flutter/painting.dart';
 
+import '../../data/core.dart' show boDau;
 import '../../tts.dart';
 
 /// Vùng chữ đang chọn để sửa: khối chứa + vị trí đầu/cuối trong khối.
@@ -79,6 +80,17 @@ int nextWordEnd(String s, int from) {
   return i == s.length ? clamped : wordRight(s, i);
 }
 
+// Từ nối/đại từ hay đứng ĐẦU CÂU nên viết hoa — không phải âm tiết của tên. Thiếu luật
+// này thì chạm "Thôn Thiên Nga" ở câu "Nếu Thôn Thiên Nga ở đây" gom luôn "Nếu", lưu bản
+// sửa là mất chữ "Nếu" khỏi câu (thấy trên máy thật 23/09, chương 229 truyện 34700).
+const _dauCau = {
+  'nếu', 'nhưng', 'khi', 'thì', 'và', 'còn', 'lúc', 'sau', 'trước', 'tại', 'ở', 'chỉ',
+  'đến', 'từ', 'vì', 'bởi', 'tuy', 'dù', 'mà', 'rồi', 'để', 'với', 'cho', 'có', 'không',
+  'đây', 'đó', 'này', 'hắn', 'nàng', 'ta', 'ngươi', 'họ', 'chúng', 'các', 'những',
+  'một', 'cả', 'ngay', 'đã', 'đang', 'sẽ', 'cũng', 'đúng', 'vậy', 'giờ',
+  'nhìn', 'thấy', 'nói', 'là', 'bị', 'được', 'trong', 'ngoài', 'trên', 'dưới',
+};
+
 /// Chạm trúng 1 âm tiết VIẾT HOA (tên riêng Hán-Việt nhiều âm tiết: "Trần Đại Chinh")
 /// → nuốt TRỌN cụm âm tiết viết hoa liền nhau, dừng ở từ thường/dấu câu. Từ thường
 /// ("hệ thống") → giữ nguyên 1 từ (khỏi quơ trúng từ bên cạnh làm hỏng gợi ý theo tên).
@@ -102,6 +114,15 @@ int nextWordEnd(String s, int from) {
     while (w < nb && !isWordChar(s, w)) { w++; }
     if (!capAt(w)) break; // âm tiết kế viết thường → không nuốt
     end = nb;
+  }
+  // bỏ từ nối đầu câu khỏi tên (còn ít nhất một từ viết hoa phía sau)
+  while (true) {
+    final w0 = wordRight(s, start);
+    final next = extendRightWord(s, w0);
+    if (w0 >= end || next > end || !_dauCau.contains(s.substring(start, w0).toLowerCase())) break;
+    var w = w0;
+    while (w < end && !isWordChar(s, w)) { w++; }
+    start = w;
   }
   return (start, end);
 }
@@ -259,4 +280,60 @@ List<(int, int)> glossaryRanges(
   }
   out.sort((a, b) => a.$1.compareTo(b.$1));
   return out;
+}
+
+/// Gợi ý sửa TÊN theo bản gốc: term glossary có chữ Hán nằm trong [zh] (nguyên văn
+/// chương) và giống [sel] theo âm tiết đã bỏ dấu. Tên dịch lệch thường chỉ khác dấu
+/// hoặc cụt âm ("Ba La" ↔ "Ba Lạp Ba Lạp") nên so nguyên chuỗi có dấu không bao giờ
+/// trúng — đây là lý do form sửa từng trơ đúng lúc cần gợi ý nhất.
+/// Term mà bản đúng ĐÃ có trong [block] xếp sau: đoạn này đọc đúng tên đó rồi.
+List<Map<String, dynamic>> termsFromSource(
+  String sel,
+  String block,
+  String zh,
+  List<Map<String, dynamic>> terms, {
+  int max = 6,
+}) {
+  List<String> syl(String s) =>
+      boDau(s).split(RegExp(r'[^a-z0-9]+')).where((w) => w.isNotEmpty).toList();
+  final want = syl(sel);
+  if (want.isEmpty || zh.isEmpty) return [];
+  // "la" ~ "lap": âm cụt/ thừa phụ âm cuối vẫn tính trúng, nhưng chữ 1 ký tự thì phải khớp đủ
+  // lệch ĐÚNG một ký tự cuối ("la" ~ "lap"); lỏng hơn thì "thi" khớp cả "thien"
+  bool same(String a, String b) =>
+      a == b ||
+      (a.length >= 2 && b.length >= 2 && (a.length - b.length).abs() == 1 &&
+          (a.startsWith(b) || b.startsWith(a)));
+  final scored = <(Map<String, dynamic>, int, bool)>[];
+  final seen = <String>{};
+  for (final t in terms) {
+    final tz = (t['term_zh'] ?? '').toString();
+    final vi = (t['correct_vi'] ?? '').toString().trim();
+    if (tz.length < 2 || vi.isEmpty || !zh.contains(tz) || !seen.add(vi)) continue;
+    final have = syl('$vi ${t['wrong_vi'] ?? ''}');
+    final score = want.where((w) => have.any((h) => same(w, h))).length;
+    // phải phủ ≥ nửa tên dài hơn: chung một âm "Thiên" không đủ gợi "Thương Thiên Tử"
+    final len = [want.length, syl(vi).length].reduce((x, y) => x > y ? x : y);
+    if (score * 2 < len) continue;
+    scored.add((t, score, block.contains(vi)));
+  }
+  scored.sort((a, b) => a.$3 != b.$3 ? (a.$3 ? 1 : -1) : b.$2.compareTo(a.$2));
+  return [for (final e in scored.take(max)) e.$1];
+}
+
+/// Dòng NGUỒN chữ Trung của khối đang chạm: bản dịch giữ dòng 1-1 với nguồn (đo trên
+/// truyện 34700: 237/244 chương), nên tìm dòng vi chứa khối rồi lấy dòng zh cùng chỉ số.
+/// Khối hiển thị là câu đã tách/gộp (splitBySentence) nên dò theo đầu khối. Lệch số dòng
+/// → null: thà không hiện còn hơn hiện nhầm câu.
+String? sourceLineFor(String block, String vi, String zh) {
+  List<String> lines(String s) =>
+      s.split('\n').map((l) => l.trim()).where((l) => l.isNotEmpty).toList();
+  final vl = lines(vi);
+  var zl = lines(zh);
+  if (zl.length == vl.length + 1) zl = zl.sublist(1); // nguồn còn dòng tiêu đề
+  final key = block.trim();
+  if (zl.length != vl.length || key.isEmpty) return null;
+  final probe = key.length > 40 ? key.substring(0, 40) : key;
+  final i = vl.indexWhere((l) => l.contains(probe));
+  return i < 0 ? null : zl[i];
 }
