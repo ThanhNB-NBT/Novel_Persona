@@ -19,15 +19,15 @@ void main() {
         'assets/bg/cultivation_bg_night.webp');
   });
 
-  // Mirror SQL↔Dart: cult_tien_max()=9 → 10 tên bậc + 10 đạo hiệu, tránh index-out-of-range.
-  test('bảng bậc tiên khớp cult_tien_max (103)', () {
-    expect(tienTierNames.length, 10);
-    expect(tienDaoTitles.length, 10);
-    expect(tienTierMax, 9);
+  // Mirror SQL↔Dart: cult_tien_max()=14 → 15 tên bậc + 15 đạo hiệu, tránh index-out-of-range.
+  test('bảng bậc tiên khớp cult_tien_max (124)', () {
+    expect(tienTierNames.length, 15);
+    expect(tienDaoTitles.length, 15);
+    expect(tienTierMax, 14);
   });
 
   testWidgets('render cảnh tu luyện ra PNG', (tester) async {
-    await tester.binding.setSurfaceSize(const Size(640, 700));
+    await tester.binding.setSurfaceSize(const Size(640, 1040));
     final key = GlobalKey();
     await tester.pumpWidget(MaterialApp(
       debugShowCheckedModeBanner: false,
@@ -56,6 +56,13 @@ void main() {
               CultivatorPreview(
                   realm: 9, race: 'nhan', gender: 'nam', tienTier: 5,
                   elements: ['kim'], haloWorn: 'hoang_kim'),
+              // cung Siêu Thoát (124): bậc 10 hào quang bắt đầu ngả trắng tím, bậc 14 lạnh hẳn
+              CultivatorPreview(
+                  realm: 9, race: 'linh', gender: 'nu', tienTier: 10,
+                  elements: ['thuy']),
+              CultivatorPreview(
+                  realm: 9, race: 'nhan', gender: 'nam', tienTier: 14,
+                  elements: ['hoa'], haloWorn: 'bach_ngan'),
             ],
           ),
         ),

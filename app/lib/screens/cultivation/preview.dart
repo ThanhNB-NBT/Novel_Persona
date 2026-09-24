@@ -36,7 +36,7 @@ class AnimatedCultivator extends StatefulWidget {
   final String? halo; // kiểu vòng sáng sau đầu (từ pháp bảo vòng)
   final String? weaponSprite; // vũ khí đang đeo bay quanh (null = không)
   final String? phapbaoSprite; // pháp bảo đang đeo bay quanh, lệch pha nửa vòng
-  final int tienTier; // bậc tiên hậu phi thăng (0..6); -1 = chưa phi thăng, không hào quang
+  final int tienTier; // bậc tiên hậu phi thăng (0..14); -1 = chưa phi thăng, không hào quang
   final List<String> elements; // bộ hệ linh căn cố định → sương linh khí ngũ sắc quanh người
   final String? haloWorn; // mã trận pháp đang đội (hậu phi thăng) → vòng lớn xoay sau lưng
   const AnimatedCultivator({
@@ -301,7 +301,7 @@ class CultivatorPreview extends StatelessWidget {
   final String? halo; // kiểu vòng sáng (pháp bảo vòng đang đeo)
   final String? weaponSprite; // key icon vũ khí đang đeo (assets/cult_items)
   final String? phapbaoSprite; // key icon pháp bảo đang đeo — bay đối xứng
-  final int tienTier; // bậc tiên hậu phi thăng (0..6); -1 = chưa phi thăng
+  final int tienTier; // bậc tiên hậu phi thăng (0..14); -1 = chưa phi thăng
   final List<String> elements; // bộ hệ linh căn → sương ngũ sắc
   final String? haloWorn; // mã trận pháp đang đội
   const CultivatorPreview({

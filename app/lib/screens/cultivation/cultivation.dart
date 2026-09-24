@@ -39,11 +39,15 @@ class _CultivationScreenState extends ConsumerState<CultivationScreen> {
   double _base = 0, _rate = 0, _req = 1;
   DateTime _since = DateTime.now();
   bool _advancing = false; // khóa nút đột phá/lên tầng khi RPC đang chạy
+  // Đã cuộn qua hero → hiện dải nền sau status bar. Status bar trong suốt để hero trải
+  // lên tận đỉnh, nhưng cuộn xuống túi đồ thì icon ô vật phẩm chạy chồng lên giờ/pin.
+  final _scrolled = ValueNotifier<bool>(false);
 
   @override
   void dispose() {
     _timer?.cancel();
     _exp.dispose();
+    _scrolled.dispose();
     super.dispose();
   }
 
@@ -149,9 +153,11 @@ class _CultivationScreenState extends ConsumerState<CultivationScreen> {
       final chance = (r['chance'] as num?)?.toInt() ?? 0;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(win
-              ? 'Vượt Tâm Ma ($chance%), độ thiên kiếp thành công — đăng bậc ${tienTierNames[tier]}!'
-              : 'Tâm ma quấy nhiễu ($chance%), độ kiếp thất bại — hao 20% tiên nguyên. Thử lại.'),
+          content: Text(
+            win
+                ? 'Vượt Tâm Ma ($chance%), độ thiên kiếp thành công — đăng bậc ${tienTierNames[tier]}!'
+                : 'Tâm ma quấy nhiễu ($chance%), độ kiếp thất bại — hao 20% tiên nguyên. Thử lại.',
+          ),
         ),
       );
     } catch (e) {
@@ -203,8 +209,10 @@ class _CultivationScreenState extends ConsumerState<CultivationScreen> {
               bottom: false,
               child: state.when(
                 loading: () => const Center(child: CircularProgressIndicator()),
-                error: (e, _) =>
-                    AppError(e, onRetry: () => ref.invalidate(cultStateProvider)),
+                error: (e, _) => AppError(
+                  e,
+                  onRetry: () => ref.invalidate(cultStateProvider),
+                ),
                 data: (st) {
                   if (st == null) {
                     // Nút mặc định là `primary` (xanh băng) — đặt giữa tranh thuỷ mặc
@@ -224,80 +232,112 @@ class _CultivationScreenState extends ConsumerState<CultivationScreen> {
                   }
                   _sync(st);
                   final topPad = MediaQuery.paddingOf(context).top;
-                  return RefreshIndicator(
-                    onRefresh: () async => ref.invalidate(cultStateProvider),
-                    child: ListView(
-                      // hero tràn viền → bỏ padding ngang ở ListView, pad từng phần dưới
-                      padding: const EdgeInsets.only(bottom: 120), // né dock
-                      children: [
-                        // chưa chọn chủng tộc → mời chọn (một lần duy nhất, server chặn đổi)
-                        if (st['race'] == null)
-                          Padding(
-                            padding: EdgeInsets.fromLTRB(16, topPad + 8, 16, 4),
-                            child: _RacePickerCard(),
+                  return NotificationListener<ScrollNotification>(
+                    onNotification: (n) {
+                      if (n.depth == 0 && n.metrics.axis == Axis.vertical) {
+                        _scrolled.value = n.metrics.pixels > 160;
+                      }
+                      return false;
+                    },
+                    child: RefreshIndicator(
+                      onRefresh: () async => ref.invalidate(cultStateProvider),
+                      child: ListView(
+                        // hero tràn viền → bỏ padding ngang ở ListView, pad từng phần dưới
+                        padding: const EdgeInsets.only(bottom: 120), // né dock
+                        children: [
+                          // chưa chọn chủng tộc → mời chọn (một lần duy nhất, server chặn đổi)
+                          if (st['race'] == null)
+                            Padding(
+                              padding: EdgeInsets.fromLTRB(
+                                16,
+                                topPad + 8,
+                                16,
+                                4,
+                              ),
+                              child: _RacePickerCard(),
+                            ),
+                          // có card chọn tộc phía trên thì hero khỏi ôm status bar
+                          HeroStage(
+                            st: st,
+                            topPad: st['race'] == null ? 0 : topPad,
                           ),
-                        // có card chọn tộc phía trên thì hero khỏi ôm status bar
-                        HeroStage(
-                          st: st,
-                          topPad: st['race'] == null ? 0 : topPad,
-                        ),
-                        const SizedBox(height: 14),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              RealmCard(
-                                st: st,
-                                exp: _exp,
-                                busy: _advancing,
-                                ascended: st['ascended_at'] != null,
-                                onAdvance: () => _advance(st),
-                                onAscend: () => _ascend(st),
-                                onAscendTier: () => _ascendTier(),
-                              ),
-                              const SizedBox(height: 12),
-                              _TuTienActionBar(st: st),
-                              const SizedBox(height: 14),
-                              const CultSectionLabel(
-                                'Trang bị',
-                                Icons.shield_moon_outlined,
-                              ),
-                              const SizedBox(height: 8),
-                              EquipRow(st: st),
-                              const SizedBox(height: 12),
-                              CultSectionLabel(
-                                'Túi càn khôn',
-                                Icons.backpack_rounded,
-                                trailing: TextButton.icon(
-                                  onPressed: () => showModalBottomSheet(
-                                    context: context,
-                                    isScrollControlled: true,
-                                    showDragHandle: true,
-                                    builder: (_) => const CollectionSheet(),
-                                  ),
-                                  icon: const Icon(
-                                    Icons.grid_view_rounded,
-                                    size: 16,
-                                  ),
-                                  label: const Text('Sưu tập'),
-                                  style: TextButton.styleFrom(
-                                    visualDensity: VisualDensity.compact,
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
+                          const SizedBox(height: 14),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                RealmCard(
+                                  st: st,
+                                  exp: _exp,
+                                  busy: _advancing,
+                                  ascended: st['ascended_at'] != null,
+                                  onAdvance: () => _advance(st),
+                                  onAscend: () => _ascend(st),
+                                  onAscendTier: () => _ascendTier(),
+                                ),
+                                const SizedBox(height: 12),
+                                _TuTienActionBar(st: st),
+                                const SizedBox(height: 14),
+                                const CultSectionLabel(
+                                  'Trang bị',
+                                  Icons.shield_moon_outlined,
+                                ),
+                                const SizedBox(height: 8),
+                                EquipRow(st: st),
+                                const SizedBox(height: 12),
+                                CultSectionLabel(
+                                  'Túi càn khôn',
+                                  Icons.backpack_rounded,
+                                  trailing: TextButton.icon(
+                                    onPressed: () => showModalBottomSheet(
+                                      context: context,
+                                      isScrollControlled: true,
+                                      showDragHandle: true,
+                                      builder: (_) => const CollectionSheet(),
+                                    ),
+                                    icon: const Icon(
+                                      Icons.grid_view_rounded,
+                                      size: 16,
+                                    ),
+                                    label: const Text('Sưu tập'),
+                                    style: TextButton.styleFrom(
+                                      visualDensity: VisualDensity.compact,
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                      ),
                                     ),
                                   ),
                                 ),
-                              ),
-                              const SizedBox(height: 6),
-                              const InventoryGrid(),
-                            ],
+                                const SizedBox(height: 6),
+                                const InventoryGrid(),
+                              ],
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   );
                 },
+              ),
+            ),
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              height: MediaQuery.paddingOf(context).top,
+              child: IgnorePointer(
+                child: ValueListenableBuilder<bool>(
+                  valueListenable: _scrolled,
+                  builder: (_, on, _) => AnimatedOpacity(
+                    opacity: on ? 1 : 0,
+                    duration: const Duration(milliseconds: 180),
+                    // tối hẳn để icon status bar (đang để sáng) luôn đọc được
+                    child: ColoredBox(
+                      color: Color.lerp(bgTint, Colors.black, 0.7)!,
+                    ),
+                  ),
+                ),
               ),
             ),
           ],

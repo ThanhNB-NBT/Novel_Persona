@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../cultivation.dart';
 import '../../data.dart';
+import '../../widgets.dart' show loiDeHieu;
 import 'pixel.dart';
 
 // ponytail: cờ toàn cục chống double-tap dùng/trang bị đồ — app 1 user, 1 màn Tu Tiên
@@ -148,12 +149,16 @@ class _InventoryGridState extends ConsumerState<InventoryGrid> {
       if (type != null) availableTypes.add(type);
     }
 
-    final displayedItems = _selectedType == null
-        ? items
-        : [
-            for (final r in items)
-              if ((r['cult_items'] as Rec)['type'] == _selectedType) r,
-          ];
+    // quý nhất lên đầu (phẩm cao → nhiều bản), cùng loại đứng cạnh nhau
+    int grade(Rec r) => (r['cult_items'] as Rec)['grade'] as int;
+    final displayedItems = [
+      for (final r in items)
+        if (_selectedType == null || (r['cult_items'] as Rec)['type'] == _selectedType) r,
+    ]..sort((a, b) {
+        final g = grade(b).compareTo(grade(a));
+        return g != 0 ? g : (b['qty'] as int).compareTo(a['qty'] as int);
+      });
+    final hasSpare = items.any((r) => (r['qty'] as int) > 1);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -250,8 +255,61 @@ class _InventoryGridState extends ConsumerState<InventoryGrid> {
             );
           },
         ),
+        if (hasSpare)
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              onPressed: () => _recycleAll(context, items),
+              icon: const Icon(Icons.local_fire_department_rounded, size: 16),
+              label: const Text('Luyện hóa hàng loạt'),
+            ),
+          ),
       ],
     );
+  }
+
+  /// Chọn phẩm cao nhất được đốt (mặc định an toàn: chỉ đồ thường), thấy trước tu vi nhận được.
+  /// Luôn giữ 1 bản mỗi món — server cult_recycle_all (124) cũng chỉ đốt qty-1.
+  Future<void> _recycleAll(BuildContext context, List<Rec> items) async {
+    final messenger = ScaffoldMessenger.of(context);
+    int spare(int gMax) => items.fold(0, (s, r) {
+          final g = (r['cult_items'] as Rec)['grade'] as int;
+          return g <= gMax ? s + (r['qty'] as int) - 1 : s;
+        });
+    int gain(int gMax) => items.fold(0, (s, r) {
+          final g = (r['cult_items'] as Rec)['grade'] as int;
+          return g <= gMax ? s + ((r['qty'] as int) - 1) * cultRecycleGain(g) : s;
+        });
+    final gMax = await showDialog<int>(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        title: const Text('Luyện hóa bản dư'),
+        children: [
+          const Padding(
+            padding: EdgeInsets.fromLTRB(24, 0, 24, 8),
+            child: Text('Mỗi món giữ lại 1 bản. Chọn phẩm cao nhất được luyện:'),
+          ),
+          for (var g = 1; g <= gradeNames.length; g++)
+            if (spare(g) > 0)
+              SimpleDialogOption(
+                onPressed: () => Navigator.pop(ctx, g),
+                child: Text(g == 1
+                    ? 'Chỉ phẩm ${gradeNames[0]} · ${spare(g)} bản → +${gonSo(gain(g))} tu vi'
+                    : '${gradeNames[0]} → ${gradeNames[g - 1]} · ${spare(g)} bản → +${gonSo(gain(g))} tu vi'),
+              ),
+        ],
+      ),
+    );
+    if (gMax == null) return;
+    try {
+      final r = await cultRecycleAll(gMax);
+      ref.invalidate(cultStateProvider);
+      ref.invalidate(cultInventoryProvider);
+      messenger.showSnackBar(SnackBar(
+          content: Text('Luyện hóa ${r['recycled']} bản → +${gonSo(r['linh_khi'] as num)} tu vi')));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(loiDeHieu(e))));
+    }
   }
 }
 
@@ -405,7 +463,7 @@ Future<void> _showItemPopup(
         ScaffoldMessenger.of(tileCtx).showSnackBar(
           SnackBar(
             content: Text(
-              'Luyện hóa ${r['recycled']} bản → +${r['linh_khi']} tu vi',
+              'Luyện hóa ${r['recycled']} bản → +${gonSo(r['linh_khi'] as num)} tu vi',
             ),
           ),
         );
@@ -419,7 +477,7 @@ Future<void> _showItemPopup(
     ref.invalidate(cultInventoryProvider);
   } catch (e) {
     if (tileCtx.mounted) {
-      ScaffoldMessenger.of(tileCtx).showSnackBar(SnackBar(content: Text('$e')));
+      ScaffoldMessenger.of(tileCtx).showSnackBar(SnackBar(content: Text(loiDeHieu(e))));
     }
   } finally {
     _cultItemBusy = false;

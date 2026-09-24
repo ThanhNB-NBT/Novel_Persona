@@ -62,7 +62,7 @@ class SkyPainter extends CustomPainter {
   final ui.Image? weaponImg; // vũ khí đang đeo — nửa vòng SAU vẽ ở lớp nền này
   final ui.Image? phapbaoImg; // pháp bảo đang đeo — như trên, lệch pha nửa vòng
   final ui.Image? swordWheelImg; // kiếm luân minh họa sau đầu
-  final int tienTier; // bậc tiên (0..6) → hào quang vàng sau đầu; -1 = không vẽ
+  final int tienTier; // bậc tiên (0..14) → hào quang sau đầu; -1 = không vẽ
   final List<String> elements; // bộ hệ linh căn → sương linh khí ngũ sắc bay quanh
   final ui.Image? haloImg; // trận pháp đang đội — vòng lớn xoay sau lưng (nền)
   SkyPainter(
@@ -293,8 +293,12 @@ class SkyPainter extends CustomPainter {
 
   /// Hào quang cõi tiên: đĩa vàng ấm + tia sáng xoay quanh đầu, càng lên bậc (tier)
   /// càng nhiều tia + rực hơn. Vẽ ở lớp nền → nằm SAU nhân vật.
-  void _drawTienCorona(Canvas canvas, Offset hc, int tier) {
-    const gold = Color(0xFFFFD25A);
+  void _drawTienCorona(Canvas canvas, Offset hc, int level) {
+    // Cỡ + độ rực chỉ tăng tới bậc 9 (quá nữa tia dài ra ngoài khung 150px).
+    // Cung Siêu Thoát (10..14, migration 124) đổi màu: vàng → trắng tím, càng cao càng lạnh.
+    final tier = math.min(level, 9);
+    final gold = Color.lerp(const Color(0xFFFFD25A), const Color(0xFFE6D6FF),
+        ((level - 9) / 5).clamp(0.0, 1.0))!;
     final pulse = 0.5 + 0.5 * math.sin(t * 2 * math.pi);
     final r = 22.0 + tier * 1.5;
     canvas.drawCircle(

@@ -12,7 +12,7 @@ Nguồn phát hiện: rà app thật trên AVD `gac_truyen` (bản 1.0.31) + đ�
 - [x] GĐ0 Dọn nền
 - [x] GĐ1 Trình đọc
 - [x] GĐ2 Gộp Tủ truyện
-- [ ] GĐ3 Tu Tiên thật + mở rộng cấp bậc (backend + app)
+- [x] GĐ3 Tu Tiên thật + mở rộng cấp bậc (backend + app)
 - [ ] GĐ4 Điều hướng + lần đầu dùng
 - [ ] GĐ5 Dọn chữ & dữ liệu hiển thị
 - [ ] GĐ6 Phát hành 2.0.0+33 (user tự tag)

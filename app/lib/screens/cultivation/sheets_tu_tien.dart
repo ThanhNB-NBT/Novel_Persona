@@ -164,28 +164,33 @@ class _DongPhuSheetState extends ConsumerState<DongPhuSheet> {
   bool _busy = false;
   bool _showParticles = false;
 
-  Future<void> _harvestQi(double rate) async {
+  /// Gọi RPC thật (migration 124): server kiểm hồi 4h + trần bình cảnh.
+  Future<void> _harvestQi() async {
     if (_busy) return;
     setState(() {
       _busy = true;
       _showParticles = true;
     });
-    final gain = (rate * 30).clamp(50, 10000).toDouble();
+    final messenger = ScaffoldMessenger.of(context);
     try {
       HapticFeedback.heavyImpact();
-      await Future.delayed(const Duration(milliseconds: 600));
+      final r = await cultHarvest();
       ref.invalidate(cultStateProvider);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Tụ linh thành công: Thu nạp +${gain.toInt()} tu vi!'),
-            duration: const Duration(seconds: 2),
-          ),
-        );
-        Navigator.pop(context);
-      }
+      ref.invalidate(cultCooldownProvider);
+      messenger.showSnackBar(SnackBar(
+        content: Text('Tụ linh thành công: +${gonSo(r['gain'] as num)} tu vi'),
+        duration: const Duration(seconds: 2),
+      ));
+      if (mounted) Navigator.pop(context);
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(loiDeHieu(e))));
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _showParticles = false;
+        });
+      }
     }
   }
 
@@ -196,6 +201,10 @@ class _DongPhuSheetState extends ConsumerState<DongPhuSheet> {
     final realm = widget.st['realm'] as int;
     final ascended = widget.st['ascended_at'] != null;
     final rate = (widget.st['rate'] as num).toDouble();
+    final last = DateTime.tryParse(
+        '${ref.watch(cultCooldownProvider).value?['last_harvest_at'] ?? ''}');
+    final nextAt = last?.add(const Duration(hours: 4)).toLocal();
+    final ready = nextAt == null || nextAt.isBefore(DateTime.now());
 
     final dongPhuNames = [
       'Thảo Lư Sơ Cấp',
@@ -251,7 +260,7 @@ class _DongPhuSheetState extends ConsumerState<DongPhuSheet> {
                     context,
                     icon: Icons.blur_on_rounded,
                     title: 'Tụ Linh Trận Pháp',
-                    desc: 'Thu nạp linh khí đất trời: +${rate.toStringAsFixed(1)} tu vi/s',
+                    desc: 'Thu nạp linh khí đất trời: +${gonTocDo(rate)} tu vi/giây',
                   ),
                   const Divider(height: 20),
                   _row(
@@ -271,14 +280,17 @@ class _DongPhuSheetState extends ConsumerState<DongPhuSheet> {
               ),
             ),
             const SizedBox(height: 18),
-            SizedBox(
-              height: 44,
+            // minHeight chứ không ghim cao 44: chữ to (cỡ chữ hệ thống) bị cắt đáy
+            ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 44),
               child: FilledButton.icon(
-                onPressed: _busy ? null : () => _harvestQi(rate),
+                onPressed: _busy || !ready ? null : _harvestQi,
                 icon: _busy
                     ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
                     : const Icon(Icons.auto_awesome_rounded, size: 18),
-                label: const Text('Thu nạp linh khí thiền định'),
+                label: Text(ready
+                    ? 'Thu nạp linh khí · +30 phút tu vi'
+                    : 'Đang tụ linh · thu nạp lúc ${nextAt.hour.toString().padLeft(2, '0')}:${nextAt.minute.toString().padLeft(2, '0')}'),
               ),
             ),
           ],
@@ -336,24 +348,25 @@ class BiCanhSheet extends ConsumerStatefulWidget {
 class _BiCanhSheetState extends ConsumerState<BiCanhSheet> {
   bool _busy = false;
 
-  Future<void> _explore(String name, int baseExp) async {
+  Future<void> _explore(String code) async {
     if (_busy) return;
     setState(() => _busy = true);
+    final messenger = ScaffoldMessenger.of(context);
     try {
       HapticFeedback.mediumImpact();
-      final events = [
-        'Thu phục yêu thú tàn hồn, cảm ngộ thiên đạo: +$baseExp tu vi!',
-        'Phát hiện linh tuyền cổ tích, tâm cảnh đột phá: +${(baseExp * 1.2).toInt()} tu vi!',
-        'Nhặt được di vật của tiền bối tu chân: +$baseExp tu vi!',
-      ];
-      final msg = events[math.Random().nextInt(events.length)];
+      final r = await cultExplore(code);
       ref.invalidate(cultStateProvider);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(msg), duration: const Duration(seconds: 2)),
-        );
-        Navigator.pop(context);
-      }
+      ref.invalidate(cultCooldownProvider);
+      final item = r['item'] as Map?;
+      if (item != null) ref.invalidate(cultInventoryProvider);
+      messenger.showSnackBar(SnackBar(
+        content: Text('Thám hiểm xong: +${gonSo(r['gain'] as num)} tu vi'
+            '${item != null ? ' · nhặt được ${item['name']}' : ''}'),
+        duration: const Duration(seconds: 3),
+      ));
+      if (mounted) Navigator.pop(context);
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(loiDeHieu(e))));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -364,30 +377,38 @@ class _BiCanhSheetState extends ConsumerState<BiCanhSheet> {
     final cs = Theme.of(context).colorScheme;
     final t = Theme.of(context).textTheme;
     final realm = widget.st['realm'] as int;
+    final ascended = widget.st['ascended_at'] != null;
+    final explored = (ref.watch(cultCooldownProvider).value?['explore_at'] as Map?) ?? const {};
+    final today = cultTodayVn();
 
+    // code + minRealm PHẢI khớp bảng trong cult_explore (migration 124) — server mới là chuẩn.
     final biCanhList = [
       (
+        code: 'u_minh',
         name: 'U Minh Cổ Động',
         minRealm: 1,
-        exp: 200,
+        hours: 1,
         desc: 'Hang động cổ xưa ẩn chứa linh khí và yêu thú sơ cấp.',
       ),
       (
+        code: 'van_kiem',
         name: 'Vạn Kiếm Tiên Trủng',
         minRealm: 3,
-        exp: 800,
+        hours: 2,
         desc: 'Chiến trường cổ lưu lạc ngàn vạn linh kiếm và tàn kiếm.',
       ),
       (
+        code: 'thai_hu',
         name: 'Thái Hư Hư Không Tháp',
         minRealm: 5,
-        exp: 3000,
+        hours: 3,
         desc: 'Tháp ngưng đọng dòng thời gian, ngập tràn thiên đạo tàn chương.',
       ),
       (
+        code: 'chu_thien',
         name: 'Chư Thiên Tinh Hải',
-        minRealm: 8,
-        exp: 15000,
+        minRealm: 9,
+        hours: 4,
         desc: 'Vực sâu giữa các vì sao, ẩn giấu bí mật hồng mông đại đạo.',
       ),
     ];
@@ -427,9 +448,9 @@ class _BiCanhSheetState extends ConsumerState<BiCanhSheet> {
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Icon(
-                        realm >= bc.minRealm ? Icons.landscape_rounded : Icons.lock_outline_rounded,
+                        (ascended || realm >= bc.minRealm) ? Icons.landscape_rounded : Icons.lock_outline_rounded,
                         size: 20,
-                        color: realm >= bc.minRealm ? cs.primary : cs.onSurfaceVariant,
+                        color: (ascended || realm >= bc.minRealm) ? cs.primary : cs.onSurfaceVariant,
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -440,13 +461,19 @@ class _BiCanhSheetState extends ConsumerState<BiCanhSheet> {
                           Text(bc.name, style: t.labelMedium?.copyWith(fontWeight: FontWeight.w700)),
                           const SizedBox(height: 2),
                           Text(bc.desc, style: t.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+                          const SizedBox(height: 2),
+                          Text('+${bc.hours} giờ tu vi · 25% nhặt bảo vật · 1 lần/ngày',
+                              style: t.labelSmall?.copyWith(color: cs.primary)),
                         ],
                       ),
                     ),
                     const SizedBox(width: 8),
-                    if (realm >= bc.minRealm)
+                    if (explored[bc.code] == today)
+                      Text('Mai quay lại',
+                          style: t.labelSmall?.copyWith(color: cs.onSurfaceVariant))
+                    else if ((ascended || realm >= bc.minRealm))
                       FilledButton.tonal(
-                        onPressed: _busy ? null : () => _explore(bc.name, bc.exp),
+                        onPressed: _busy ? null : () => _explore(bc.code),
                         style: FilledButton.styleFrom(
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                           visualDensity: VisualDensity.compact,
@@ -455,7 +482,7 @@ class _BiCanhSheetState extends ConsumerState<BiCanhSheet> {
                       )
                     else
                       Text(
-                        'Cần ${realmNames[bc.minRealm]}',
+                        'Cần ${realmNames[bc.minRealm - 1]}',
                         style: t.labelSmall?.copyWith(color: cs.onSurfaceVariant),
                       ),
                   ],
@@ -469,39 +496,38 @@ class _BiCanhSheetState extends ConsumerState<BiCanhSheet> {
   }
 }
 
-/// Sheet Thành Tựu Thiên Đạo
-class ThanhTuuSheet extends StatefulWidget {
+/// Sheet Thành Tựu Thiên Đạo — danh sách + điều kiện do SERVER định nghĩa (cult_achievements,
+/// migration 124); nhận thưởng qua RPC, PK chặn nhận trùng. 1.x lưu prefs trên máy, không thưởng.
+class ThanhTuuSheet extends ConsumerStatefulWidget {
   final Rec st;
   const ThanhTuuSheet({super.key, required this.st});
 
   @override
-  State<ThanhTuuSheet> createState() => _ThanhTuuSheetState();
+  ConsumerState<ThanhTuuSheet> createState() => _ThanhTuuSheetState();
 }
 
-class _ThanhTuuSheetState extends State<ThanhTuuSheet> {
-  final Set<int> _claimed = {};
+class _ThanhTuuSheetState extends ConsumerState<ThanhTuuSheet> {
+  String? _busy; // code đang nhận
 
-  @override
-  void initState() {
-    super.initState();
-    for (var i = 0; i < 6; i++) {
-      if (prefs.getBool('achieve_claimed_$i') == true) {
-        _claimed.add(i);
-      }
-    }
-  }
-
-  Future<void> _claim(int index, String title) async {
-    await prefs.setBool('achieve_claimed_$index', true);
-    HapticFeedback.lightImpact();
-    setState(() => _claimed.add(index));
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Đã nhận thành tựu: $title!'),
-          duration: const Duration(seconds: 2),
-        ),
-      );
+  Future<void> _claim(Rec a) async {
+    if (_busy != null) return;
+    setState(() => _busy = a['code'] as String);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final r = await cultClaimAchievement(a['code'] as String);
+      HapticFeedback.lightImpact();
+      ref.invalidate(cultAchievementsProvider);
+      ref.invalidate(cultStateProvider);
+      ref.invalidate(cultInventoryProvider);
+      messenger.showSnackBar(SnackBar(
+        content: Text('${a['title']}: +${gonSo(r['gain'] as num)} tu vi'
+            ' · ${(r['item'] as Map?)?['name'] ?? ''}'),
+        duration: const Duration(seconds: 3),
+      ));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(loiDeHieu(e))));
+    } finally {
+      if (mounted) setState(() => _busy = null);
     }
   }
 
@@ -509,19 +535,9 @@ class _ThanhTuuSheetState extends State<ThanhTuuSheet> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final t = Theme.of(context).textTheme;
-    final realm = widget.st['realm'] as int;
-    final ascended = widget.st['ascended_at'] != null;
-
-    final achievements = [
-      (title: 'Nhập Đạo Sơ Tâm', desc: 'Bắt đầu con đường tu tiên vấn đạo', achieved: true),
-      (title: 'Trúc Cơ Đại Nghiệp', desc: 'Đột phá Trúc Cơ, chính thức đắc đạo', achieved: realm >= 2 || ascended),
-      (title: 'Kết Đan Lôi Kiếp', desc: 'Vượt thiên lôi kiếp số, kết thành Kim Đan', achieved: realm >= 3 || ascended),
-      (title: 'Nguyên Anh Bất Diệt', desc: 'Thân vẫn thần bất diệt, tu thành Nguyên Anh', achieved: realm >= 4 || ascended),
-      (title: 'Độ Kiếp Phi Thăng', desc: 'Vượt cửu trọng thiên kiếp, phi thăng Tiên Giới', achieved: ascended),
-      (title: 'Hư Vô Đại Đạo', desc: 'Chạm tới cảnh giới tối cao Hư Vô Đại Đạo Tổ', achieved: ascended && ((widget.st['tien_tier'] as num?)?.toInt() ?? 0) >= 9),
-    ];
-
-    final completedCount = achievements.where((a) => a.achieved).length;
+    final async = ref.watch(cultAchievementsProvider);
+    final list = async.value ?? const <Rec>[];
+    final done = list.where((a) => a['achieved'] == true).length;
 
     return SafeArea(
       child: SingleChildScrollView(
@@ -539,67 +555,89 @@ class _ThanhTuuSheetState extends State<ThanhTuuSheet> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text('Thành Tựu Thiên Đạo', style: t.titleMedium),
-                      Text('$completedCount / ${achievements.length} Hoàn thành', style: t.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
+                      if (list.isNotEmpty)
+                        Text('$done / ${list.length} hoàn thành',
+                            style: t.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
                     ],
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 14),
-            for (var i = 0; i < achievements.length; i++) ...[
-              Builder(builder: (context) {
-                final a = achievements[i];
-                final isClaimed = _claimed.contains(i);
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: cs.surface,
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: cs.outlineVariant),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        a.achieved ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
-                        color: a.achieved ? cs.primary : cs.onSurfaceVariant,
-                        size: 20,
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              a.title,
-                              style: t.labelMedium?.copyWith(
-                                fontWeight: FontWeight.w700,
-                                color: a.achieved ? cs.onSurface : cs.onSurfaceVariant,
-                              ),
-                            ),
-                            const SizedBox(height: 1),
-                            Text(a.desc, style: t.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
-                          ],
-                        ),
-                      ),
-                      if (a.achieved)
-                        isClaimed
-                            ? Text('Đã nhận', style: t.labelSmall?.copyWith(color: cs.onSurfaceVariant))
-                            : FilledButton.tonal(
-                                onPressed: () => _claim(i, a.title),
-                                style: FilledButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                  visualDensity: VisualDensity.compact,
-                                ),
-                                child: const Text('Nhận'),
-                              ),
-                    ],
-                  ),
-                );
-              }),
-            ],
+            if (async.isLoading && list.isEmpty)
+              const Padding(
+                padding: EdgeInsets.all(24),
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else if (async.hasError && list.isEmpty)
+              AppError(async.error!, onRetry: () => ref.invalidate(cultAchievementsProvider)),
+            for (final a in list) _tile(context, a),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _tile(BuildContext context, Rec a) {
+    final cs = Theme.of(context).colorScheme;
+    final t = Theme.of(context).textTheme;
+    final achieved = a['achieved'] == true;
+    final claimed = a['claimed'] == true;
+    final goal = (a['goal'] as num).toInt();
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: cs.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: achieved && !claimed ? cs.primary : cs.outlineVariant),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            achieved ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
+            color: achieved ? cs.primary : cs.onSurfaceVariant,
+            size: 20,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('${a['title']}',
+                    style: t.labelMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: achieved ? cs.onSurface : cs.onSurfaceVariant,
+                    )),
+                const SizedBox(height: 1),
+                Text(
+                  // mốc đếm (chương, món) thì hiện tiến độ; mốc cảnh giới chỉ cần mô tả
+                  goal >= 25 && !achieved
+                      ? '${a['desc']} · ${gonSo(a['progress'] as num)}/${gonSo(goal)}'
+                      : '${a['desc']}',
+                  style: t.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                ),
+                const SizedBox(height: 1),
+                Text('Thưởng: ${a['hours']} giờ tu vi + 1 bảo vật',
+                    style: t.labelSmall?.copyWith(color: cs.primary)),
+              ],
+            ),
+          ),
+          if (achieved)
+            claimed
+                ? Text('Đã nhận', style: t.labelSmall?.copyWith(color: cs.onSurfaceVariant))
+                : FilledButton.tonal(
+                    onPressed: _busy == null ? () => _claim(a) : null,
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    child: _busy == a['code']
+                        ? const SizedBox(
+                            width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Text('Nhận'),
+                  ),
+        ],
       ),
     );
   }

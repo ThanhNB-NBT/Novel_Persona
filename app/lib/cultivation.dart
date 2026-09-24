@@ -24,19 +24,23 @@ const daoTitles = [
 
 /// Cấp bậc Tiên & Thánh Đạo hậu Phi Thăng (migration 064 + 103). tien_tier 0 = vừa phi thăng,
 /// tăng dần khi tiếp tục tích tu vi cõi tiên tới Đạo Tổ và các tầng Thánh Đạo Thái Sơ.
-/// Độ dài PHẢI = cult_tien_max()+1 ở SQL (10 bậc, 0..9).
+/// Độ dài PHẢI = cult_tien_max()+1 ở SQL (15 bậc, 0..14 — cung Siêu Thoát 10..14 từ migration 124).
 const tienTierNames = [
   'Tiên Nhân', 'Địa Tiên', 'Thiên Tiên', 'Kim Tiên',
   'Thái Ất Kim Tiên', 'Đại La Kim Tiên', 'Đạo Tổ',
   'Hỗn Nguyên Thánh Nhân', 'Hồng Mông Chí Tôn', 'Hư Vô Đại Đạo Tổ',
-]; // tien_tier 0..9
+  'Siêu Thoát Giả', 'Vĩnh Hằng Chúa Tể', 'Nguyên Sơ Thủy Tổ',
+  'Vô Lượng Đạo Chủ', 'Vô Thượng Chí Tôn',
+]; // tien_tier 0..14
 
 /// Đạo hiệu cõi tiên & thánh đạo theo bậc — thay daoTitles khi đã phi thăng.
 const tienDaoTitles = [
   'sơ đăng tiên tịch', 'Địa Tiên tản nhân', 'Thiên Tiên chân quân',
   'Kim Tiên đạo tôn', 'Thái Ất thượng tiên', 'Đại La thiên tôn', 'Hồng Mông Đạo Tổ',
   'Vạn Kiếp Bất Hủ Thánh Tôn', 'Chư Thiên Khởi Nguyên Chủ', 'Đại Đạo Quy Nhất Tôn',
-]; // tien_tier 0..9
+  'siêu thoát luân hồi', 'vĩnh hằng bất diệt chủ', 'nguyên sơ khai thiên tổ',
+  'vô lượng đạo quả chủ', 'vô thượng độc tôn',
+]; // tien_tier 0..14
 
 int get tienTierMax => tienTierNames.length - 1;
 
@@ -293,6 +297,50 @@ Future<Rec> cultUseItem(int itemId) async =>
 Future<Rec> cultRecycle(int itemId) async =>
     Map<String, dynamic>.from(
         await sb.rpc('cult_recycle', params: {'p_item_id': itemId}) as Map);
+
+/// Luyện hóa MỌI bản dư của các món phẩm ≤ [gradeMax] (migration 124). Trả {items, recycled, linh_khi}.
+Future<Rec> cultRecycleAll(int gradeMax) async => Map<String, dynamic>.from(
+    await sb.rpc('cult_recycle_all', params: {'p_grade_max': gradeMax}) as Map);
+
+// ---------- Động Phủ · Bí Cảnh · Thành Tựu (migration 124) ----------
+// 1.x chỉ hiện SnackBar "+X tu vi" mà không ghi gì. Giờ server tính + kiểm hồi chiêu.
+
+/// Thu nạp linh khí Động Phủ: 30 phút tu vi, hồi 4 giờ. Trả {gain, next_at}.
+Future<Rec> cultHarvest() async =>
+    Map<String, dynamic>.from(await sb.rpc('cult_harvest') as Map);
+
+/// Thám hiểm bí cảnh [code] (1 lần/ngày). Trả {gain, item?}.
+Future<Rec> cultExplore(String code) async => Map<String, dynamic>.from(
+    await sb.rpc('cult_explore', params: {'p_code': code}) as Map);
+
+/// Hồi chiêu đọc thẳng dòng của mình: {last_harvest_at, explore_at: {code: 'YYYY-MM-DD'}}.
+final cultCooldownProvider = FutureProvider.autoDispose<Rec>((ref) async {
+  ref.watch(authStateProvider);
+  final uid = sb.auth.currentUser?.id;
+  if (uid == null) return const {};
+  return Map<String, dynamic>.from(await sb
+          .from('user_cultivation')
+          .select('last_harvest_at, explore_at')
+          .eq('user_id', uid)
+          .maybeSingle() ??
+      const {});
+});
+
+/// Ngày theo giờ VN dạng 'YYYY-MM-DD' — khớp cách cult_explore ghi explore_at.
+String cultTodayVn([DateTime? now]) =>
+    (now ?? DateTime.now()).toUtc().add(const Duration(hours: 7)).toIso8601String().substring(0, 10);
+
+/// Danh sách thành tựu do SERVER định nghĩa + đạt/chưa/đã nhận.
+final cultAchievementsProvider = FutureProvider.autoDispose<List<Rec>>((ref) async {
+  ref.watch(authStateProvider);
+  if (sb.auth.currentUser == null) return const [];
+  return List<Rec>.from((await sb.rpc('cult_achievements') as List)
+      .map((e) => Map<String, dynamic>.from(e as Map)));
+});
+
+/// Nhận thưởng 1 thành tựu đã đạt. Trả {gain, item}.
+Future<Rec> cultClaimAchievement(String code) async => Map<String, dynamic>.from(
+    await sb.rpc('cult_claim_achievement', params: {'p_code': code}) as Map);
 
 Future<Rec> cultEquip(int itemId) async =>
     Map<String, dynamic>.from(
