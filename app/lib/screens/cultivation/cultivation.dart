@@ -278,14 +278,21 @@ class _CultivationScreenState extends ConsumerState<CultivationScreen> {
                                   onAscendTier: () => _ascendTier(),
                                 ),
                                 const SizedBox(height: 12),
-                                _TuTienActionBar(st: st),
+                                // ô khổ cố định (3 thẻ, dãy trang bị): 200% cắt chữ → chặn 1.3
+                                MediaQuery.withClampedTextScaling(
+                                  maxScaleFactor: 1.3,
+                                  child: _TuTienActionBar(st: st),
+                                ),
                                 const SizedBox(height: 14),
                                 const CultSectionLabel(
                                   'Trang bị',
                                   Icons.shield_moon_outlined,
                                 ),
                                 const SizedBox(height: 8),
-                                EquipRow(st: st),
+                                MediaQuery.withClampedTextScaling(
+                                  maxScaleFactor: 1.3,
+                                  child: EquipRow(st: st),
+                                ),
                                 const SizedBox(height: 12),
                                 CultSectionLabel(
                                   'Túi càn khôn',

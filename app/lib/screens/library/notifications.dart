@@ -197,9 +197,13 @@ class _NovelDone extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 8),
-            Text(
-              timeAgo(chapters.first['translated_at']),
-              style: t.labelSmall?.copyWith(color: cs.onSurfaceVariant),
+            // mốc giờ không co: ở 200% nó nuốt hết chỗ của tên truyện → chặn 1.3
+            MediaQuery.withClampedTextScaling(
+              maxScaleFactor: 1.3,
+              child: Text(
+                timeAgo(chapters.first['translated_at']),
+                style: t.labelSmall?.copyWith(color: cs.onSurfaceVariant),
+              ),
             ),
             IconButton(
               tooltip: 'Xoá thông báo này',

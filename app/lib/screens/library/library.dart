@@ -118,7 +118,7 @@ class ContinueCard extends StatelessWidget {
         child: Material(
           color: const Color(0xFF1B2230),
           child: InkWell(
-            onTap: () => context.push('/novel/${n['id']}'),
+            onTap: () => openNovel(context, n, 'libc'),
             child: Stack(children: [
               if (bg != null)
                 Positioned.fill(
@@ -146,7 +146,10 @@ class ContinueCard extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.all(16),
                 child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Cover(url: n['cover_url'], width: 84, aspect: 1.36, label: title),
+                  Hero(
+                    tag: coverTag('libc', n['id']),
+                    child: Cover(url: n['cover_url'], width: 84, aspect: 1.36, label: title),
+                  ),
                   const SizedBox(width: 16),
                   Expanded(
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -219,18 +222,18 @@ class _ReadingRow extends ConsumerWidget {
     final readAt = DateTime.tryParse(n['read_at'] as String? ?? '');
     final hasNew = lastCh != null && readAt != null && lastCh.isAfter(readAt);
     return InkWell(
-      onTap: () => context.push(
-        '/novel/${n['id']}',
-      ), // → trang thông tin (đồng bộ với mọi nơi)
+      onTap: () => openNovel(context, n, 'lib'), // → trang thông tin
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         // center: bìa đứng giữa dòng, khoảng trên dưới bằng nhau (start cũ lệch lên)
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            // KHÔNG Hero ở đây: các tab sống chung 1 route (PageView keep-alive),
-            // truyện nằm cả ở carousel Khám phá sẽ trùng tag 'cover-id' → crash.
-            Cover(url: n['cover_url'], width: 72, aspect: 1.36, label: title),
+            // tag riêng 'lib' (coverTag): tab sống chung route với Khám phá
+            Hero(
+              tag: coverTag('lib', n['id']),
+              child: Cover(url: n['cover_url'], width: 72, aspect: 1.36, label: title),
+            ),
             const SizedBox(width: 14),
             Expanded(
               child: Column(

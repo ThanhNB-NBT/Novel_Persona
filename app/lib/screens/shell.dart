@@ -171,7 +171,11 @@ class _RootShellState extends ConsumerState<RootShell> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 const _GlobalTtsBar(),
-                _Dock(index: _i, pageController: _pc, onTap: go, badge: unread),
+                // dock cao cố định: cỡ chữ 200% cắt nhãn thành "Tủ tru…" → chặn 1.3
+                MediaQuery.withClampedTextScaling(
+                  maxScaleFactor: 1.3,
+                  child: _Dock(index: _i, pageController: _pc, onTap: go, badge: unread),
+                ),
               ],
             ),
           ),

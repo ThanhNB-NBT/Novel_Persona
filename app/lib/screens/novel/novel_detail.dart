@@ -16,14 +16,22 @@ import '../../widgets.dart';
 
 class NovelDetailScreen extends ConsumerWidget {
   final int novelId;
-  const NovelDetailScreen({super.key, required this.novelId});
+  /// (tag Hero, bản ghi) của danh sách vừa bấm (openNovel); null → 'cover-id'
+  final (String, Rec)? hero;
+  const NovelDetailScreen({super.key, required this.novelId, this.hero});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final novel = ref.watch(novelProvider(novelId));
     return Scaffold(
       body: novel.when(
-        loading: () => const AppLoading(),
+        // có bản ghi từ danh sách → dựng header ngay để bìa Hero có chỗ đáp
+        loading: () => hero == null
+            ? const AppLoading()
+            : Column(children: [
+                _Header(hero!.$2, novelId, Ambient.fallback, hero!.$1),
+                const Expanded(child: AppLoading()),
+              ]),
         error: (e, _) => AppError(e, onRetry: () => ref.invalidate(novelProvider(novelId))),
         data: (n) {
           // nền khí quyển kiểu NEO: màu trích từ bìa loãng dần vào nền chung
@@ -37,7 +45,7 @@ class NovelDetailScreen extends ConsumerWidget {
               DefaultTabController(
                 length: 2,
                 child: Column(children: [
-                  _Header(n, novelId, amb),
+                  _Header(n, novelId, amb, hero?.$1),
                   TabBar(
                     tabs: const [Tab(text: 'Giới thiệu'), Tab(text: 'Danh sách chương')],
                     labelStyle: Theme.of(context).textTheme.titleMedium,
@@ -70,7 +78,8 @@ class _Header extends StatelessWidget {
   final Rec n;
   final int novelId;
   final Ambient amb;
-  const _Header(this.n, this.novelId, this.amb);
+  final String? heroTag;
+  const _Header(this.n, this.novelId, this.amb, this.heroTag);
 
   @override
   Widget build(BuildContext context) {
@@ -131,7 +140,7 @@ class _Header extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
             child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
               Hero(
-                tag: 'cover-${n['id']}',
+                tag: heroTag ?? 'cover-${n['id']}',
                 child: Cover(url: cover, width: 124, label: n['title_vi'] ?? n['title_zh']),
               ),
               const SizedBox(width: 16),

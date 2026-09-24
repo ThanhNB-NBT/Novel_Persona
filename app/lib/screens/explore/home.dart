@@ -609,25 +609,30 @@ class _Spotlight extends StatelessWidget {
           ).push(MaterialPageRoute(builder: (_) => SectionScreen(kind: kind))),
         ),
         SizedBox(
-          // bìa 76×106 + 2 dòng tên; bám cỡ chữ hệ thống để 200% không tràn đáy
-          height: 106 + 8 + MediaQuery.textScalerOf(context).scale(36),
+          // bìa 76×106 + 2 dòng tên (cao dòng 1.2). Phóng CỠ CHỮ THẬT rồi nhân dòng:
+          // Android 14+ phóng phi tuyến (số lớn phóng ít), scale(36) hụt 17px ở 200%.
+          height: 106 + 12 +
+              2 * 1.2 * MediaQuery.textScalerOf(context).scale(t.labelMedium?.fontSize ?? 13),
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 20),
             itemCount: items.length,
             separatorBuilder: (_, _) => const SizedBox(width: 10),
             itemBuilder: (_, i) => TapScale(
-              onTap: () => context.push('/novel/${items[i]['id']}'),
+              onTap: () => openNovel(context, items[i], 'sp$kind'),
               child: SizedBox(
                 width: w,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Cover(
-                      url: items[i]['cover_url'],
-                      width: w,
-                      flat: true,
-                      label: _title(items[i]),
+                    Hero(
+                      tag: coverTag('sp$kind', items[i]['id']),
+                      child: Cover(
+                        url: items[i]['cover_url'],
+                        width: w,
+                        flat: true,
+                        label: _title(items[i]),
+                      ),
                     ),
                     const SizedBox(height: 6),
                     Text(
@@ -671,7 +676,7 @@ class _Ranking extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
             child: TapScale(
-              onTap: () => context.push('/novel/${items[i]['id']}'),
+              onTap: () => openNovel(context, items[i], 'rk$kind'),
               child: Row(
                 children: [
                   SizedBox(
@@ -687,10 +692,13 @@ class _Ranking extends StatelessWidget {
                       ),
                     ),
                   ),
-                  Cover(
-                    url: items[i]['cover_url'],
-                    width: 46,
-                    label: _title(items[i]),
+                  Hero(
+                    tag: coverTag('rk$kind', items[i]['id']),
+                    child: Cover(
+                      url: items[i]['cover_url'],
+                      width: 46,
+                      label: _title(items[i]),
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -762,10 +770,16 @@ class _PosterRail extends StatelessWidget {
             itemBuilder: (_, i) {
               final n = items[i];
               return TapScale(
-                onTap: () => context.push('/novel/${n['id']}'),
-                child: Stack(
+                onTap: () => openNovel(context, n, 'po$kind'),
+                // chữ phủ trên bìa khổ cố định: 200% đè nhau → chặn 1.3
+                child: MediaQuery.withClampedTextScaling(
+                  maxScaleFactor: 1.3,
+                  child: Stack(
                   children: [
-                    Cover(url: n['cover_url'], width: 130, label: _title(n)),
+                    Hero(
+                      tag: coverTag('po$kind', n['id']),
+                      child: Cover(url: n['cover_url'], width: 130, label: _title(n)),
+                    ),
                     if (sourceName(n).isNotEmpty)
                       Positioned(
                         top: 8,
@@ -819,6 +833,7 @@ class _PosterRail extends StatelessWidget {
                       ),
                     ),
                   ],
+                  ),
                 ),
               );
             },
@@ -853,7 +868,7 @@ class _Rail extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 20),
             itemCount: items.length,
             separatorBuilder: (_, _) => const SizedBox(width: 14),
-            itemBuilder: (_, i) => _RailCard(items[i]),
+            itemBuilder: (_, i) => _RailCard(items[i], 'rl$kind'),
           ),
         ),
       ],
@@ -894,23 +909,25 @@ class _ChapterBadge extends StatelessWidget {
 
 class _RailCard extends StatelessWidget {
   final Rec n;
-  const _RailCard(this.n);
+  final String list; // tag Hero riêng mỗi dải (coverTag)
+  const _RailCard(this.n, this.list);
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).textTheme;
     return SizedBox(
       width: 132,
       child: TapScale(
-        onTap: () => context.push('/novel/${n['id']}'),
+        onTap: () => openNovel(context, n, list),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Không bọc Hero: cùng 1 truyện xuất hiện ở nhiều rail = cùng Map ref =
-            // cùng tag → Flutter assert "multiple heroes same tag". Hero chỉ ở _HeroCard.
             // Badge số chương nằm ở CHÂN ảnh (luôn cùng vị trí, không lệ thuộc độ dài tên).
             Stack(
               children: [
-                Cover(url: n['cover_url'], width: 132, label: _title(n)),
+                Hero(
+                  tag: coverTag(list, n['id']),
+                  child: Cover(url: n['cover_url'], width: 132, label: _title(n)),
+                ),
                 Positioned(
                   left: 6,
                   bottom: 6,

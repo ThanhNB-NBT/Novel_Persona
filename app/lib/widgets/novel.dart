@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../data.dart';
 import '../endpoint.dart';
@@ -34,6 +35,15 @@ Widget _cached(String url,
     errorWidget: (_, _, _) => onError ?? placeholder,
   );
 }
+
+/// Tag Hero cho bìa bay sang trang truyện. Các tab sống chung một route (PageView
+/// keep-alive) và một truyện có thể nằm ở nhiều dải cùng lúc → mỗi danh sách
+/// dùng [list] riêng để tag không trùng. Trang đích nhận `(tag, n)` qua `extra`
+/// và dựng header từ `n` ngay khung đầu → Hero có đích để bay khi dữ liệu chưa về.
+String coverTag(String list, Object? id) => 'cover-$list-$id';
+
+void openNovel(BuildContext context, Rec n, String list) =>
+    context.push('/novel/${n['id']}', extra: (coverTag(list, n['id']), n));
 
 /// Ảnh bìa truyện: bo góc 14, đổ bóng mềm (chiều sâu), placeholder gradient.
 class Cover extends StatelessWidget {

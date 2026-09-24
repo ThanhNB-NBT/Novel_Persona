@@ -265,7 +265,10 @@ final _router = GoRouter(redirect: _authGate, refreshListenable: _AuthGateNotifi
     path: '/novel/:id',
     pageBuilder: (_, s) => inkPage(
         key: s.pageKey,
-        child: NovelDetailScreen(novelId: _intParam(s, 'id'))),
+        child: NovelDetailScreen(
+            novelId: _intParam(s, 'id'),
+            // openNovel gửi (tag Hero, bản ghi ở danh sách); deep link thì không có
+            hero: s.extra is (String, Rec) ? s.extra as (String, Rec) : null)),
   ),
   GoRoute(
     path: '/novel/:id/glossary',

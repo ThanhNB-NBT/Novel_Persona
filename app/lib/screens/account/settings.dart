@@ -252,14 +252,14 @@ class _ReadingPanel extends StatelessWidget {
             Icon(Icons.local_fire_department_rounded,
                 size: 42, color: hot ? gold : cs.onSurfaceVariant),
             const SizedBox(width: 14),
-            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text('$streak', style: monoStyle(context, size: 34, w: FontWeight.w700,
                   color: hot ? gold : cs.onSurface)),
               const SizedBox(height: 1),
               Text(hot ? 'ngày đọc liên tiếp' : 'chưa có chuỗi — đọc hôm nay để bắt đầu',
                   style: t.labelMedium?.copyWith(
                       letterSpacing: 0.4, color: cs.onSurfaceVariant)),
-            ]),
+            ])),
           ]),
         ),
         const SizedBox(height: 4),

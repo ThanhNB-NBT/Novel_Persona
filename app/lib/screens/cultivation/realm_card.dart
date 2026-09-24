@@ -330,7 +330,10 @@ class RealmCard extends StatelessWidget {
         (buffUntil != null && buffUntil.isAfter(now)) ||
         (stoneUntil != null && stoneUntil.isAfter(now));
 
-    return _TiltCard(
+    // thẻ HUD lưới chỉ số cố định: 200% làm số vỡ dòng, chữ tu vi đè thanh → chặn 1.3
+    return MediaQuery.withClampedTextScaling(
+      maxScaleFactor: 1.3,
+      child: _TiltCard(
       rc: rc,
       child: Container(
         // nền đục (alphaBlend) để viền foil phía sau không lộ xuyên qua
@@ -535,6 +538,7 @@ class RealmCard extends StatelessWidget {
             ),
           ],
         ),
+      ),
       ),
     );
   }
