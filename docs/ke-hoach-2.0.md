@@ -122,4 +122,15 @@ Cách làm: dựng bản mẫu (render PNG / trang xem trước) 2–3 màn cho 
 4. Khám phá: thống nhất nhịp (bo góc, khoảng cách, cỡ tiêu đề mục).
 5. Tu Tiên: thẻ Động Phủ/Bí Cảnh/Thành Tựu theo chất liệu giấy-lụa-triện hợp nền thủy mặc.
 6. Toàn app: soi dark mode, minh hoạ trạng thái trống, hiệu ứng chuyển màn đồng bộ.
-Chờ user chọn màn ưu tiên + phong cách.
+**Chốt 24/09: làm CẢ 6, kết hợp phong cách** theo luật chia vai:
+- KHUNG (dock, header, danh sách, nút, chip) = hiện đại tối giản: khoảng thở rộng, bo góc thống nhất
+  (token chung trong theme.dart), một màu nhấn, sans. Không rải hoạ tiết cổ lên khung.
+- NỘI DUNG/CẢM XÚC = cổ phong có chủ đích:
+  - Tu Tiên cổ phong đậm: thẻ giấy lụa, triện đỏ, viền vân mây (hợp nền thủy mặc có sẵn).
+  - Trình đọc: theme "Giấy cũ" (chữ có chân) + "Mực đêm".
+  - Chữ ký thương hiệu: dấu triện nhỏ cạnh tiêu đề mục (SectionHeader/PageHeader) — dùng NHẤT QUÁN.
+  - Trang truyện: màu chủ đạo trích từ bìa (hiện đại, mỗi truyện một sắc).
+Thứ tự: (a) token thiết kế + triện dùng chung → (b) dựng mẫu PNG 3 màn (Tủ truyện, Trang truyện,
+thẻ Tu Tiên) cho user duyệt → (c) áp 6 màn → (d) soi dark mode + text scale 200% → commit từng màn.
+Ràng buộc: không thêm dependency (trích màu bìa tự viết, không dùng palette_generator nếu chưa có
+trong pubspec — kiểm trước); ảnh/hoạ tiết mới phải .webp; render test mỗi màn đổi.
