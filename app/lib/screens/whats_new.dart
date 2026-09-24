@@ -33,6 +33,8 @@ class WhatsNewSheet extends StatelessWidget {
         'Truyện đang đọc và truyện bấm Theo dõi nằm chung, kèm số chương đã dịch.'),
     (Icons.self_improvement_rounded, 'Tu Tiên thật',
         'Động Phủ, Bí Cảnh, Thành Tựu cho tu vi thật. Thêm 5 bậc Siêu Thoát tới Vô Thượng Chí Tôn.'),
+    (Icons.palette_rounded, 'Giao diện giấy dó · 5 bộ màu',
+        'Nền giấy, chữ mực, chế độ Mực đêm. Đổi màu chủ đạo ở Tôi → Giao diện.'),
     (Icons.notifications_rounded, 'Tab Thông báo',
         'Chương mới của truyện theo dõi báo ở tab riêng. Cài đặt đổi thành tab Tôi.'),
   ];
