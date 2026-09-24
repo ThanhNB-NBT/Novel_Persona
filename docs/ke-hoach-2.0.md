@@ -110,3 +110,16 @@ Kèm: túi đồ đè thanh trạng thái (thêm nền vùng status bar); sắp 
 
 `flutter analyze` file sửa (0 info) → test liên quan → màn đổi: render test hoặc chạy AVD + screencap
 nhìn bằng mắt. Không commit khi chưa qua. Commit tiếng Việt không dấu.
+
+## GĐ7 — Nâng giao diện (user yêu cầu 24/09, CHƯA chốt hướng)
+
+User nhận xét GĐ0–6 chỉ tăng trải nghiệm, không nâng diện mạo. Chưa tag 2.0 → gộp vào 2.0.
+Cách làm: dựng bản mẫu (render PNG / trang xem trước) 2–3 màn cho user chọn hướng TRƯỚC khi code.
+Ứng viên (từ ảnh rà app):
+1. Tủ truyện: thẻ lớn "Đọc tiếp" (bìa mờ làm nền) cho truyện gần nhất; còn lại chọn lưới/danh sách.
+2. Trang truyện: header cao tràn viền, màu chủ đạo lấy từ bìa; chỉ số gom thành hàng chip.
+3. Trình đọc: thanh trên/dưới đẹp hơn, thanh tiến độ chương kéo được, theme đọc mới (giấy cũ, mực đêm), chuyển chương có hiệu ứng.
+4. Khám phá: thống nhất nhịp (bo góc, khoảng cách, cỡ tiêu đề mục).
+5. Tu Tiên: thẻ Động Phủ/Bí Cảnh/Thành Tựu theo chất liệu giấy-lụa-triện hợp nền thủy mặc.
+6. Toàn app: soi dark mode, minh hoạ trạng thái trống, hiệu ứng chuyển màn đồng bộ.
+Chờ user chọn màn ưu tiên + phong cách.
