@@ -401,14 +401,7 @@ class CultSectionLabel extends StatelessWidget {
     final t = Theme.of(context).textTheme;
     return Row(
       children: [
-        Container(
-          width: 3,
-          height: 15,
-          decoration: BoxDecoration(
-            color: cs.primary,
-            borderRadius: BorderRadius.circular(2),
-          ),
-        ),
+        const Seal(size: 11),
         const SizedBox(width: 8),
         Icon(icon, size: 16, color: cs.onSurfaceVariant),
         const SizedBox(width: 6),

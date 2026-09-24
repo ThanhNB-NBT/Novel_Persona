@@ -8,6 +8,7 @@ import '../../data.dart';
 import '../../widgets.dart';
 import '../../theme.dart' show monoStyle;
 import 'pixel.dart';
+import 'silk.dart';
 
 // ---- đọc chỉ số từ state (mirror công thức server, chỉ để hiển thị) ----
 num? _cpMult(Rec st) {
@@ -200,7 +201,7 @@ class _TiltCardState extends State<_TiltCard> {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
+    final silk = Silk.of(context);
     final rc = widget.rc;
     return Listener(
       onPointerDown: (e) => _set(e.localPosition),
@@ -224,13 +225,13 @@ class _TiltCardState extends State<_TiltCard> {
               padding: const EdgeInsets.all(1.4), // độ dày viền foil
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(20),
-                // viền foil: sweep cảnh giới → vàng → xanh nhấn, xoay theo hướng nghiêng
+                // viền lụa thếp: sweep mực nâu → màu cảnh giới → son, xoay theo hướng nghiêng
                 gradient: SweepGradient(
                   transform: GradientRotation(math.atan2(o.dy, o.dx + 0.01)),
                   colors: [
                     rc.withValues(alpha: 0.55),
-                    cs.secondary.withValues(alpha: 0.40 + 0.35 * mag),
-                    cs.primary.withValues(alpha: 0.40),
+                    silk.line.withValues(alpha: 0.55 + 0.35 * mag),
+                    silk.seal.withValues(alpha: 0.35),
                     rc.withValues(alpha: 0.55),
                   ],
                 ),
@@ -303,6 +304,7 @@ class RealmCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final silk = Silk.of(context);
     final realm = st['realm'] as int;
     final stage = st['stage'] as int;
     final req = (st['req'] as num).toDouble();
@@ -337,8 +339,8 @@ class RealmCard extends StatelessWidget {
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              Color.alphaBlend(rc.withValues(alpha: 0.16), cs.surface),
-              cs.surface,
+              Color.alphaBlend(rc.withValues(alpha: 0.08), silk.paper),
+              silk.paperEdge,
             ],
             stops: const [0, 0.55],
           ),
@@ -449,7 +451,7 @@ class RealmCard extends StatelessWidget {
                       height: 22,
                       clipBehavior: Clip.antiAlias,
                       decoration: BoxDecoration(
-                        color: rc.withValues(alpha: 0.14),
+                        color: silk.line.withValues(alpha: 0.16),
                         borderRadius: BorderRadius.circular(11),
                       ),
                       child: Stack(
@@ -458,7 +460,7 @@ class RealmCard extends StatelessWidget {
                             widthFactor: (e / req).clamp(0.0, 1.0).toDouble(),
                             child: Container(
                               decoration: BoxDecoration(
-                                color: full ? cs.primary : rc,
+                                color: full ? rc : silk.seal,
                                 borderRadius: BorderRadius.circular(11),
                               ),
                             ),
