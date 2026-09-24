@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../widgets.dart';
 import 'package:go_router/go_router.dart';
 
@@ -227,5 +228,78 @@ Future<void> showTtsVoiceSheet(
         ),
       ),
     ),
+  );
+}
+
+/// Mục lục ngay trong màn đọc — 1.x phải thoát ra trang truyện mới đổi chương được.
+/// Dòng cao cố định ([_tocRow]) → mở sheet là cuộn thẳng tới chương đang đọc, không cần đo.
+const _tocRow = 48.0;
+Future<void> showChapterTocSheet(BuildContext context,
+    {required int novelId, required int current, required ValueChanged<int> onPick}) {
+  return showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    showDragHandle: true,
+    builder: (context) {
+      final h = MediaQuery.sizeOf(context).height * 0.72;
+      final cs = Theme.of(context).colorScheme;
+      return SizedBox(
+        height: h,
+        child: Consumer(builder: (context, ref, _) {
+          final chapters = ref.watch(chapterListProvider(novelId));
+          return chapters.when(
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (e, _) => AppError(e,
+                onRetry: () => ref.invalidate(chapterListProvider(novelId))),
+            data: (list) {
+              final pos = list.indexWhere((c) => c['chapter_index'] == current);
+              return Column(children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+                  child: Row(children: [
+                    Text('Mục lục', style: Theme.of(context).textTheme.titleMedium),
+                    const Spacer(),
+                    Text('${list.length} chương',
+                        style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12)),
+                  ]),
+                ),
+                Expanded(
+                  child: ListView.builder(
+                    controller: ScrollController(
+                        initialScrollOffset: pos <= 3 ? 0 : (pos - 3) * _tocRow),
+                    itemExtent: _tocRow,
+                    itemCount: list.length,
+                    itemBuilder: (context, i) {
+                      final c = list[i];
+                      final idx = c['chapter_index'] as int;
+                      final here = idx == current;
+                      final done = c['translation_status'] == 'done';
+                      return ListTile(
+                        dense: true,
+                        selected: here,
+                        selectedTileColor: cs.primaryContainer.withValues(alpha: 0.35),
+                        leading: SizedBox(
+                            width: 40,
+                            child: Text('$idx',
+                                textAlign: TextAlign.right,
+                                style: TextStyle(color: cs.onSurfaceVariant))),
+                        title: Text(c['title_vi'] ?? c['title_zh'] ?? 'Chương $idx',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(color: done || here ? null : cs.onSurfaceVariant)),
+                        onTap: () {
+                          Navigator.pop(context);
+                          if (!here) onPick(idx);
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ]);
+            },
+          );
+        }),
+      );
+    },
   );
 }

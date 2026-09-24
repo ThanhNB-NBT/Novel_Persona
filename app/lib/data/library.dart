@@ -3,43 +3,39 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core.dart';
 import 'novels.dart';
 
-/// Tủ truyện: truyện user đang đọc (có tiến độ), kèm chương đang đọc + tổng chương.
+/// Tủ truyện (2.0) = truyện THEO DÕI (bảng library) ∪ truyện ĐANG ĐỌC (reading_progress).
+/// 1.x hiện mỗi reading_progress, còn nút "+" ghi vào library mà không màn nào đọc →
+/// bấm theo dõi xong không thấy truyện đâu. Truyện theo dõi chưa đọc: cur_chapter = null.
 final readingProvider = FutureProvider.autoDispose<List<Rec>>((ref) async {
   ref.watch(authStateProvider); // đăng nhập/xuất → nạp lại tủ truyện
   final uid = sb.auth.currentUser?.id;
   if (uid == null) return [];
-  final rows = List<Rec>.from(
-    await sb
+  // Lọc CHÍNH user: admin có policy đọc reading_progress của mọi người (cho tab
+  // Quản trị) → không lọc thì Tủ truyện admin hiện cả tiến độ người khác (và không
+  // xoá được vì không phải row của mình).
+  final (rp, lib) = await (
+    sb
         .from('reading_progress')
         .select('chapter_index, updated_at, novels($novelCols)')
-        // Lọc CHÍNH user: admin có policy đọc reading_progress của mọi người (cho tab
-        // Quản trị) → không lọc thì Tủ truyện admin hiện cả tiến độ người khác (và không
-        // xoá được vì không phải row của mình).
-        .eq('user_id', uid)
-        .order('updated_at', ascending: false),
-  );
-  // gộp phẳng: {novel..., cur_chapter}
-  return rows.map((r) {
+        .eq('user_id', uid),
+    sb.from('library').select('added_at, novels($novelCols)').eq('user_id', uid),
+  ).wait;
+  // gộp phẳng theo novel id: {novel..., cur_chapter, read_at}
+  final byId = <int, Rec>{};
+  for (final r in lib) {
+    final n = Map<String, dynamic>.from(r['novels'] as Map);
+    n['read_at'] = r['added_at'];
+    byId[n['id'] as int] = n;
+  }
+  for (final r in rp) {
     final n = Map<String, dynamic>.from(r['novels'] as Map);
     n['cur_chapter'] = r['chapter_index'];
     n['read_at'] = r['updated_at'];
-    return n;
-  }).toList();
-});
-
-/// Tủ sách của user (RLS tự lọc theo auth.uid).
-final libraryProvider = FutureProvider.autoDispose<List<Rec>>((ref) async {
-  ref.watch(authStateProvider);
-  if (sb.auth.currentUser == null) return [];
-  return List<Rec>.from(
-    await sb
-        .from('library')
-        .select(
-          'added_at, novels(id, title_vi, title_zh, author_vi, author_zh, '
-          'cover_url, chapter_count_translated, chapter_count_source)',
-        )
-        .order('added_at', ascending: false),
-  );
+    byId[n['id'] as int] = n;
+  }
+  // mới động tới nhất lên đầu (ISO-8601 UTC so chuỗi được)
+  return byId.values.toList()
+    ..sort((a, b) => '${b['read_at']}'.compareTo('${a['read_at']}'));
 });
 
 final inLibraryProvider = FutureProvider.autoDispose.family<bool, int>((
@@ -69,7 +65,7 @@ Future<void> setInLibrary(int novelId, bool add) async {
   }
 }
 
-/// Xóa truyện khỏi Tủ truyện = xóa lịch sử đọc (reading_progress) của truyện đó.
+/// Xóa truyện khỏi Tủ truyện = bỏ theo dõi (library) + xóa lịch sử đọc (reading_progress).
 Future<void> removeReading(int novelId) async {
   // Xoá luôn vị trí cuộn trong từng chương lưu local (rp_<novelId>_<idx>),
   // nếu không thì mở lại chương vẫn nhảy về chỗ đọc dở dù đã xoá khỏi tủ.
@@ -78,11 +74,10 @@ Future<void> removeReading(int novelId) async {
   }
   final uid = sb.auth.currentUser?.id;
   if (uid == null) return;
-  await sb
-      .from('reading_progress')
-      .delete()
-      .eq('user_id', uid)
-      .eq('novel_id', novelId);
+  await Future.wait([
+    sb.from('reading_progress').delete().eq('user_id', uid).eq('novel_id', novelId),
+    sb.from('library').delete().eq('user_id', uid).eq('novel_id', novelId),
+  ]);
 }
 
 /// Chương đang đọc dở (null = chưa đọc / chưa đăng nhập).
@@ -196,7 +191,9 @@ final notificationsProvider = FutureProvider.autoDispose<List<Rec>>((ref) async 
   }).toList();
 });
 
-/// Số thông báo chưa đọc (mới hơn mốc "đã xem") — hiện lên badge chuông.
+/// Số TRUYỆN có chương mới chưa xem (mới hơn mốc "đã xem") — hiện lên badge chuông.
+/// Đếm theo truyện vì màn Thông báo gộp theo truyện: 1.x đếm chương → chuông "99+"
+/// mà mở ra chỉ có 1 dòng.
 final unreadNotifCountProvider = FutureProvider.autoDispose<int>((ref) async {
   ref.watch(authStateProvider);
   if (sb.auth.currentUser == null) return 0;
@@ -207,9 +204,10 @@ final unreadNotifCountProvider = FutureProvider.autoDispose<int>((ref) async {
     return 0;
   }
   final list = await ref.watch(notificationsProvider.future);
-  return list
-      .where((c) => (c['translated_at'] as String).compareTo(seen) > 0)
-      .length;
+  return {
+    for (final c in list)
+      if ((c['translated_at'] as String).compareTo(seen) > 0) c['novel_id'],
+  }.length;
 });
 
 /// Gọi khi mở màn Thông báo — đánh dấu đã đọc (badge về 0).

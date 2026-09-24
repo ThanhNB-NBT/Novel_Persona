@@ -2,7 +2,7 @@ part of 'reader.dart';
 
 // Form sửa bản dịch của màn đọc — tách khỏi reader.dart (GĐ0 kế hoạch 2.0).
 extension _ReaderEditForm on _ReaderScreenState {
-  // -------- Overlay form sửa (mở thẳng khi chạm từ), chỉ nó rebuild theo selection --------
+  // -------- Overlay form sửa (mở khi nhấn giữ từ), chỉ nó rebuild theo selection --------
   Widget _overlay(BuildContext context) => AnimatedBuilder(
         animation: Listenable.merge([_sel, _editing, _zhPick, _ai]),
         builder: (context, _) {

@@ -185,7 +185,8 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
         extra: index > chapterIndex ? 1 : -1);
   }
 
-  /// Chạm vào 1 từ trong đoạn → chọn từ đó + mở form sửa ngay (không cần giữ/chọn tay).
+  /// NHẤN GIỮ 1 từ trong đoạn → chọn từ đó + mở form sửa. Chạm thường chỉ bật/tắt thanh
+  /// công cụ ([_onTapContent]) — 1.x mở form + bàn phím mỗi lần chạm, người đọc bực.
   void _onTapWord(String block, int offset, Offset globalPos) {
     if (sb.auth.currentUser == null) {
       context.push('/login');
@@ -471,6 +472,12 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                   ),
                 ),
                 IconButton(
+                  tooltip: 'Mục lục',
+                  icon: const Icon(Icons.format_list_bulleted_rounded, size: 19),
+                  onPressed: () => showChapterTocSheet(context,
+                      novelId: novelId, current: chapterIndex, onPick: _goChapter),
+                ),
+                IconButton(
                   tooltip: 'Cài đặt đọc',
                   icon: const Icon(Icons.settings_rounded, size: 19),
                   onPressed: () => showReaderSettingsSheet(context, ref, onRetranslate: _retranslate),
@@ -596,6 +603,18 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   /// Chương này còn quà tu tiên chưa nhận không (công thức md5 + bảng claims).
   void _toggleBars() => setState(() => _showBars = !_showBars);
 
+  /// Chạm vào nội dung (cả chế độ cuộn lẫn vùng giữa chế độ lật trang):
+  /// đang sửa thì đóng form, không thì bật/tắt thanh công cụ.
+  void _onTapContent() {
+    if (_editing.value) {
+      _editing.value = false;
+      _sel.value = null;
+      FocusScope.of(context).unfocus();
+    } else {
+      _toggleBars();
+    }
+  }
+
   bool _hasGift() {
     final uid = sb.auth.currentUser?.id;
     if (uid == null || !giftAt(uid, novelId, chapterIndex)) return false;
@@ -669,6 +688,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                 align: s.justify ? TextAlign.justify : TextAlign.left,
                 sel: _sel,
                 onTapWord: _onTapWord,
+                onTap: _onTapContent,
                 ttsPara: _localTtsPara,
                 paraIndex: p,
                 ttsHlColor: col.fg.withValues(alpha: 0.10),
@@ -729,7 +749,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   }
 }
 
-/// Đoạn văn chạm-để-sửa: chạm vào từ nào là chọn từ đó; từ đang sửa tô nền đỏ
+/// Đoạn văn chạm-để-sửa: nhấn giữ từ nào là chọn từ đó; từ đang sửa tô nền đỏ
 /// NGAY TRONG TRANG nên gõ trong form vẫn thấy rõ đang sửa chỗ nào.
 /// Chỉ đoạn chứa vùng chọn rebuild khi selection đổi (ValueListenableBuilder).
 class _TapPara extends StatelessWidget {
@@ -737,7 +757,8 @@ class _TapPara extends StatelessWidget {
   final TextStyle style;
   final TextAlign align;
   final ValueNotifier<Sel?> sel;
-  final void Function(String block, int offset, Offset globalPos) onTapWord;
+  final void Function(String block, int offset, Offset globalPos) onTapWord; // nhấn giữ
+  final VoidCallback onTap;
   // TTS: nghe chỉ số đoạn đang đọc; khi trùng paraIndex → tô nền + tự cuộn vào tầm mắt.
   final ValueNotifier<int>? ttsPara;
   final int paraIndex;
@@ -750,6 +771,7 @@ class _TapPara extends StatelessWidget {
     required this.align,
     required this.sel,
     required this.onTapWord,
+    required this.onTap,
     this.ttsPara,
     this.paraIndex = -1,
     this.ttsHlColor,
@@ -840,7 +862,9 @@ class _TapPara extends StatelessWidget {
           final scaler = MediaQuery.textScalerOf(context);
           return GestureDetector(
             behavior: HitTestBehavior.opaque,
-            onTapUp: (d) {
+            onTap: onTap,
+            onLongPressStart: (d) {
+              HapticFeedback.selectionClick();
               // đo lại layout chữ y hệt lúc render → vị trí chạm → chỉ số ký tự
               final tp = TextPainter(
                 text: TextSpan(text: para, style: style),

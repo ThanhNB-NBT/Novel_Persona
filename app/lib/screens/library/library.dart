@@ -15,7 +15,7 @@ class LibraryScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final reading = ref.watch(readingProvider);
     // Header editorial đồng bộ với Khám phá (thay AppBar phẳng cũ).
-    final header = PageHeader('TỦ SÁCH', 'Đang đọc', actions: [
+    final header = PageHeader('THEO DÕI · ĐANG ĐỌC', 'Tủ truyện', actions: [
       IconButton(
         tooltip: 'Yêu cầu truyện mới',
         iconSize: 22,
@@ -83,7 +83,7 @@ class LibraryScreen extends ConsumerWidget {
                 if (sb.auth.currentUser == null) {
                   return _Empty(
                     icon: Icons.login_rounded,
-                    text: 'Đăng nhập để lưu truyện đang đọc',
+                    text: 'Đăng nhập để theo dõi truyện và lưu chỗ đang đọc',
                     action: FilledButton(
                       onPressed: () => context.push('/login'),
                       child: const Text('Đăng nhập'),
@@ -94,7 +94,7 @@ class LibraryScreen extends ConsumerWidget {
                   return const _Empty(
                     icon: Icons.auto_stories_rounded,
                     text:
-                        'Chưa có truyện đang đọc.\nMở một truyện ở Khám phá để bắt đầu.',
+                        'Tủ truyện còn trống.\nMở một truyện ở Khám phá rồi đọc hoặc bấm Theo dõi.',
                   );
                 }
                 // Truyện đọc GẦN NHẤT (list đã sort updated_at desc) lên thẻ hero
@@ -125,9 +125,12 @@ class _ReadingRow extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final t = Theme.of(context).textTheme;
     final cs = Theme.of(context).colorScheme;
-    final cur = (n['cur_chapter'] ?? 1) as int;
+    // null = truyện theo dõi mà chưa mở chương nào
+    final read = n['cur_chapter'] as int?;
+    final cur = read ?? 1;
     final total = (n['chapter_count_source'] ?? 0) as int;
-    final progress = total > 0 ? cur / total : 0.0;
+    final translated = (n['chapter_count_translated'] ?? 0) as int;
+    final progress = total > 0 && read != null ? cur / total : 0.0;
     final title = n['title_vi'] ?? n['title_zh'] ?? '';
     // Đọc đuổi: nguồn ra chương mới SAU lần đọc gần nhất → chip báo. Worker tự dịch
     // sẵn (queue_followed_new_chapters) nên bấm vào là đọc được luôn.
@@ -171,9 +174,18 @@ class _ReadingRow extends ConsumerWidget {
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
                       Text(
-                        'Đã đọc $cur${total > 0 ? '/$total' : ''}',
+                        read == null
+                            ? 'Chưa đọc'
+                            : 'Đã đọc $cur${total > 0 ? '/$total' : ''}',
                         style: t.labelMedium?.copyWith(color: cs.onSurfaceVariant),
                       ),
+                      // truyện chưa dịch hết: cho biết đọc được tới đâu
+                      if (total > 0 && translated < total)
+                        Text(
+                          'Đã dịch $translated/$total',
+                          style: t.labelMedium?.copyWith(
+                              color: cs.onSurfaceVariant.withValues(alpha: 0.7)),
+                        ),
                       if (hasNew) const TagChip('Chương mới'),
                     ],
                   ),
@@ -187,7 +199,7 @@ class _ReadingRow extends ConsumerWidget {
             Column(children: [
               _menu(context, ref),
               IconButton(
-                tooltip: 'Đọc tiếp chương $cur',
+                tooltip: read == null ? 'Đọc từ chương 1' : 'Đọc tiếp chương $cur',
                 visualDensity: VisualDensity.compact,
                 // trần icon tam giác, không nền — nhẹ mắt, thẳng trục với 3 chấm
                 icon: Icon(Icons.play_arrow_rounded, size: 26, color: cs.primary),

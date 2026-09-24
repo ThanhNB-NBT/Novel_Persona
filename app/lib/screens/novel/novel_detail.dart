@@ -345,6 +345,37 @@ class _ChapterListTabState extends ConsumerState<_ChapterListTab> {
   // checkbox cạnh từng chương, mặc định tick chương đang đọc dở.
   bool _selecting = false;
   final _sel = <int>{};
+  final _scroll = ScrollController();
+  bool _jumped = false; // chỉ tự cuộn tới chương đang đọc 1 lần, sau đó để người dùng
+
+  Widget _row(Rec c) {
+    final idx = c['chapter_index'] as int;
+    return Column(mainAxisSize: MainAxisSize.min, children: [
+      _ChapterTile(
+        c,
+        widget.novelId,
+        selecting: _selecting,
+        checked: _sel.contains(idx),
+        onToggle: (v) => setState(() => v ? _sel.add(idx) : _sel.remove(idx)),
+      ),
+      const RowDivider(),
+    ]);
+  }
+
+  /// Mở tab là thấy ngay chương đang đọc (1.x luôn mở ở chương 1).
+  void _jumpToCurrent(List<Rec> ordered, int? cur) {
+    if (_jumped || cur == null || ordered.isEmpty) return;
+    final pos = ordered.indexWhere((c) => c['chapter_index'] == cur);
+    if (pos < 0) return;
+    _jumped = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scroll.hasClients) return;
+      final p = _scroll.position;
+      // prototypeItem → dòng cao đều tuyệt đối; 100 = padding 4+96
+      final row = (p.maxScrollExtent + p.viewportDimension - 100) / ordered.length;
+      _scroll.jumpTo((pos * row - p.viewportDimension * 0.3).clamp(0.0, p.maxScrollExtent));
+    });
+  }
 
   void _loadToc() {
     if (_tocRequested || sb.auth.currentUser == null) return;
@@ -362,6 +393,7 @@ class _ChapterListTabState extends ConsumerState<_ChapterListTab> {
   @override
   void dispose() {
     _tocPoll?.cancel();
+    _scroll.dispose();
     super.dispose();
   }
 
@@ -437,6 +469,7 @@ class _ChapterListTabState extends ConsumerState<_ChapterListTab> {
       error: (e, _) => AppError(e, onRetry: () => ref.invalidate(chapterListProvider(widget.novelId))),
       data: (list) {
         final ordered = _asc ? list : list.reversed.toList();
+        _jumpToCurrent(ordered, ref.watch(progressProvider(widget.novelId)).value);
         // Mục lục lười: mở tab chương là tín hiệu cần xem thật → xin crawler tải đầy đủ
         // và poll danh sách; chỉ xem tab Giới thiệu vẫn không tốn lượt tải mục lục.
         final total = (novel?['chapter_count_source'] ?? 0) as int;
@@ -508,22 +541,14 @@ class _ChapterListTabState extends ConsumerState<_ChapterListTab> {
                   ]),
           ),
           Expanded(
-            child: ListView.separated(
+            // builder + prototypeItem (không separated): mọi dòng cao đúng bằng dòng mẫu
+            // → chiều dài cuộn CHÍNH XÁC, _jumpToCurrent rơi đúng chương (ước lượng lệch ~6 dòng).
+            child: ListView.builder(
+              controller: _scroll,
               padding: const EdgeInsets.only(top: 4, bottom: 96), // chừa chỗ cho bong bóng nổi
               itemCount: ordered.length,
-              separatorBuilder: (_, _) => const RowDivider(),
-              itemBuilder: (_, i) {
-                final c = ordered[i];
-                final idx = c['chapter_index'] as int;
-                return _ChapterTile(
-                  c,
-                  widget.novelId,
-                  selecting: _selecting,
-                  checked: _sel.contains(idx),
-                  onToggle: (v) =>
-                      setState(() => v ? _sel.add(idx) : _sel.remove(idx)),
-                );
-              },
+              prototypeItem: ordered.isEmpty ? null : _row(ordered.first),
+              itemBuilder: (_, i) => _row(ordered[i]),
             ),
           ),
         ]);
@@ -651,7 +676,7 @@ class _BottomBar extends ConsumerWidget {
         // lề quanh để bong bóng "nổi" tách khỏi mép màn hình
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
         child: Row(children: [
-          // Đọc bên TRÁI, Lưu (tròn, dấu cộng) bên PHẢI — cả hai thu gọn nhưng vẫn nổi
+          // Đọc bên TRÁI, Theo dõi bên PHẢI — cả hai thu gọn nhưng vẫn nổi
           Expanded(child: _readBubble(context, reading ? progress : 1, reading)),
           const SizedBox(width: 12),
           _saveBubble(context, ref, inLib),
@@ -686,16 +711,20 @@ class _BottomBar extends ConsumerWidget {
     );
   }
 
-  /// Nút tròn Lưu tủ — dấu cộng; đã lưu thì thành dấu tick nền nhấn nhạt.
+  /// Nút Theo dõi — có CHỮ (1.x chỉ là dấu "+" tròn, không ai đoán ra là lưu tủ).
+  /// Theo dõi = vào Tủ truyện + được báo chương mới.
   Widget _saveBubble(BuildContext context, WidgetRef ref, bool inLib) {
     final cs = Theme.of(context).colorScheme;
+    final shape = RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(23),
+        side: BorderSide(color: inLib ? cs.primary : cs.outlineVariant));
     return Material(
       color: inLib ? cs.primaryContainer : cs.surface,
-      shape: const CircleBorder(),
+      shape: shape,
       elevation: 6,
       shadowColor: Colors.black.withValues(alpha: 0.25),
       child: InkWell(
-        customBorder: const CircleBorder(),
+        customBorder: shape,
         onTap: () async {
           if (sb.auth.currentUser == null) {
             context.push('/login');
@@ -703,16 +732,22 @@ class _BottomBar extends ConsumerWidget {
           }
           await setInLibrary(novelId, !inLib);
           ref.invalidate(inLibraryProvider(novelId));
-          ref.invalidate(libraryProvider);
+          ref.invalidate(readingProvider);
         },
         child: Container(
-          height: 46, width: 46,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            border: Border.all(color: inLib ? cs.primary : cs.outlineVariant),
-          ),
-          child: Icon(inLib ? Icons.check_rounded : Icons.add_rounded,
-              size: 22, color: inLib ? cs.primary : cs.onSurfaceVariant),
+          height: 46,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          alignment: Alignment.center,
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(inLib ? Icons.check_rounded : Icons.add_rounded,
+                size: 20, color: inLib ? cs.primary : cs.onSurfaceVariant),
+            const SizedBox(width: 6),
+            Text(inLib ? 'Đang theo dõi' : 'Theo dõi',
+                style: TextStyle(
+                    color: inLib ? cs.primary : cs.onSurface,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14)),
+          ]),
         ),
       ),
     );

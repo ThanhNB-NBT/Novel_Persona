@@ -123,6 +123,7 @@ extension _ReaderPager on _ReaderScreenState {
                       align: s.justify ? TextAlign.justify : TextAlign.left,
                       sel: _sel,
                       onTapWord: _onTapWord,
+                      onTap: _onTapContent,
                       terms: _markTerms(s),
                     ),
                   ]),
@@ -154,15 +155,7 @@ extension _ReaderPager on _ReaderScreenState {
                       flex: 50,
                       child: GestureDetector(
                         behavior: HitTestBehavior.translucent,
-                        onTap: () {
-                          if (_editing.value) {
-                            _editing.value = false;
-                            _sel.value = null;
-                            FocusScope.of(context).unfocus();
-                          } else {
-                            _toggleBars();
-                          }
-                        },
+                        onTap: _onTapContent,
                       ),
                     ),
                     // Chạm 25% mép phải: Sang trang kế
