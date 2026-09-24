@@ -319,3 +319,16 @@ Future<Rec> cultDebugSet(int realm, int stage, {bool fill = true}) async =>
 Future<Rec> cultSetAvatar(String race, String gender) async =>
     Map<String, dynamic>.from(await sb.rpc('cult_set_avatar',
         params: {'p_race': race, 'p_gender': gender}) as Map);
+
+/// 431580831 → "431,6M" · 25300 → "25,3K" · 940 → "940".
+/// Thanh tu vi chỉ cao 22px: in số thô thì "431580831 / 721022776" chi chít không đọc nổi.
+String gonSo(num v) {
+  String so(num x) => x.toStringAsFixed(1).replaceAll('.', ',');
+  if (v >= 1000000) return '${so(v / 1000000)}M';
+  if (v >= 10000) return '${so(v / 1000)}K';
+  return '${v.floor()}';
+}
+
+/// Tốc độ tu vi: số nhỏ giữ 1 số lẻ (đầu game 1,5/giây mới có nghĩa), từ 10K gọn như [gonSo].
+/// Cùng dấu phẩy thập phân với thanh tu vi — trước đây "3800.2/giây" cạnh "669,8M".
+String gonTocDo(num v) => v >= 10000 ? gonSo(v) : v.toStringAsFixed(1).replaceAll('.', ',');

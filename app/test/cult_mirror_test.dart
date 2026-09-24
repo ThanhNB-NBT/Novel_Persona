@@ -23,4 +23,13 @@ void main() {
       expect(File('assets/cult_halo/$code.webp').existsSync(), isTrue, reason: code);
     }
   });
+
+  test('định dạng số tu vi dùng chung một kiểu dấu phẩy', () {
+    expect(gonSo(431580831), '431,6M');
+    expect(gonSo(25300), '25,3K');
+    expect(gonSo(940.7), '940');
+    expect(gonTocDo(3800.2), '3800,2');
+    expect(gonTocDo(1.5), '1,5');
+    expect(gonTocDo(25300), '25,3K');
+  });
 }

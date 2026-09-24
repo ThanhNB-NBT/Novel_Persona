@@ -65,15 +65,6 @@ Widget infoChip(
   );
 }
 
-/// 431580831 → "431,6M" · 25300 → "25,3K" · 940 → "940".
-/// Thanh tu vi chỉ cao 22px: in số thô thì "431580831 / 721022776" chi chít không đọc nổi.
-String _gonSo(num v) {
-  String so(num x) => x.toStringAsFixed(1).replaceAll('.', ',');
-  if (v >= 1000000) return '${so(v / 1000000)}M';
-  if (v >= 10000) return '${so(v / 1000)}K';
-  return '${v.floor()}';
-}
-
 /// Popup phân tích các yếu tố ảnh hưởng TỐC ĐỘ TU LUYỆN (mirror cult_base_rate 067).
 /// Số tổng là 'rate' server trả; các dòng chỉ để người chơi hiểu vì sao nhanh/chậm.
 void _showSpeedBreakdown(BuildContext context, Rec st) {
@@ -164,7 +155,7 @@ void _showSpeedBreakdown(BuildContext context, Rec st) {
                   child: Text('Tốc độ tu luyện',
                       style: Theme.of(ctx).textTheme.titleSmall),
                 ),
-                Text('${rate.toStringAsFixed(1)}/giây',
+                Text('${gonTocDo(rate)}/giây',
                     style: Theme.of(ctx).textTheme.titleSmall?.copyWith(
                           fontWeight: FontWeight.w800,
                           color: cs.primary,
@@ -385,7 +376,7 @@ class RealmCard extends StatelessWidget {
                   infoChip(
                     context,
                     Icons.speed_rounded,
-                    '${rate.toStringAsFixed(1)}/giây',
+                    '${gonTocDo(rate)}/giây',
                     on: true,
                     onTap: () => _showSpeedBreakdown(context, st),
                   ),
@@ -482,7 +473,7 @@ class RealmCard extends StatelessWidget {
                                                     : 'Hư Vô Đại Đạo Tổ · cực hạn chư thiên')
                                               : 'Viên mãn — có thể phi thăng')
                                         : 'Bình cảnh · ${major ? 'sẵn sàng đột phá' : 'sẵn sàng lên tầng'}')
-                                  : '${_gonSo(e)} / ${_gonSo(req)}',
+                                  : '${gonSo(e)} / ${gonSo(req)}',
                               style: monoStyle(
                                 context,
                                 size: 11,
