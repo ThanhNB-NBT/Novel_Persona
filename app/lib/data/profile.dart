@@ -16,6 +16,18 @@ final appThemeModeProvider = NotifierProvider<AppThemeMode, int>(
   AppThemeMode.new,
 );
 
+/// Bộ màu nhấn: chỉ số trong `accents` (theme.dart), 0 = Son mặc định.
+class AppAccent extends Notifier<int> {
+  @override
+  int build() => prefs.getInt('app_accent') ?? 0;
+  void set(int i) {
+    state = i;
+    prefs.setInt('app_accent', i);
+  }
+}
+
+final appAccentProvider = NotifierProvider<AppAccent, int>(AppAccent.new);
+
 /// Emblem xoay giữa dock (tab Tu Tiên) — key sprite trong pixel.dart. Chọn tại
 /// màn Sửa hồ sơ, lưu cục bộ (thuần trang trí, không cần server). Chỉ nhận các
 /// emblem đối xứng radial cho xoay đẹp.

@@ -24,7 +24,7 @@ class SettingsScreen extends ConsumerWidget {
       body: SafeArea(
         child: Column(children: [
           // header editorial đồng bộ các tab (thay AppBar phẳng)
-          const PageHeader('CÁ NHÂN', 'Tôi', seal: '我'),
+          const PageHeader('', 'Tôi', seal: '我'),
           Expanded(
               child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 110), // chừa chỗ dock nổi
@@ -71,6 +71,11 @@ class SettingsScreen extends ConsumerWidget {
             value: mode,
             labels: const ['Hệ thống', 'Sáng', 'Tối'],
             onChanged: (i) => ref.read(appThemeModeProvider.notifier).set(i),
+          ),
+          const SizedBox(height: 12),
+          _AccentPicker(
+            value: ref.watch(appAccentProvider),
+            onChanged: (i) => ref.read(appAccentProvider.notifier).set(i),
           ),
           if (user != null) ...[
             const _SectionLabel('Thư viện'),
@@ -195,7 +200,7 @@ class _ProfileCard extends StatelessWidget {
           // đăng xuất ngay trên thẻ tài khoản — khỏi phải cuộn xuống tìm
           IconButton(
             tooltip: 'Đăng xuất',
-            icon: Icon(Icons.logout_rounded, size: 22, color: cs.error),
+            icon: Icon(Icons.logout_rounded, size: 22, color: cs.primary),
             onPressed: onLogout,
           ),
           ]),
@@ -272,6 +277,91 @@ class _ReadingPanel extends StatelessWidget {
             stat('$chapters', 'chương đã đọc'),
           ]),
         ),
+      ]),
+    );
+  }
+}
+
+/// Chọn bộ màu nhấn kiểu ColorOS: mỗi thẻ là chùm chấm màu chồng nhau + tên.
+/// Đổi là áp ngay (theme nội suy màu), không cần nút Lưu.
+class _AccentPicker extends StatelessWidget {
+  final int value;
+  final ValueChanged<int> onChanged;
+  const _AccentPicker({required this.value, required this.onChanged});
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final t = Theme.of(context).textTheme;
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    // 5 ô chia đều đúng bề ngang khối trên (không cuộn ngang: cuộn thì ô chạm mép màn)
+    return Row(children: [
+        for (var i = 0; i < accents.length; i++) ...[
+          if (i > 0) const SizedBox(width: 8),
+          Expanded(child: Semantics(
+            button: true,
+            selected: i == value,
+            label: 'Bộ màu ${accents[i].name}',
+            child: GestureDetector(
+              onTap: () => onChanged(i),
+              child: AnimatedContainer(
+                duration: Motion.fast,
+                padding: const EdgeInsets.fromLTRB(4, 14, 4, 12),
+                decoration: BoxDecoration(
+                  color: cs.surface,
+                  borderRadius: BorderRadius.circular(Rad.md),
+                  border: Border.all(
+                    color: i == value ? cs.primary : cs.outlineVariant,
+                    width: i == value ? 2 : 1,
+                  ),
+                ),
+                child: Column(children: [
+                  _Dots([
+                    dark ? accents[i].dAccent : accents[i].accent,
+                    dark ? accents[i].dSeal : accents[i].seal,
+                    // nền nhạt (soft) ở bản tối gần như trùng nền thẻ → pha nhấn với nền cho còn thấy
+                    dark ? Color.lerp(accents[i].dAccent, cs.surface, 0.55)! : accents[i].soft,
+                  ]),
+                  const SizedBox(height: 8),
+                  Text(accents[i].name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: t.labelMedium?.copyWith(
+                          color: i == value ? cs.onSurface : cs.onSurfaceVariant,
+                          fontWeight: i == value ? FontWeight.w700 : null)),
+                ]),
+              ),
+            ),
+          )),
+        ],
+      ]);
+  }
+}
+
+/// Chùm chấm tròn chồng mép nhau (như thẻ màu ColorOS).
+class _Dots extends StatelessWidget {
+  final List<Color> colors;
+  const _Dots(this.colors);
+  @override
+  Widget build(BuildContext context) {
+    const d = 16.0, step = 10.0;
+    final ring = Theme.of(context).colorScheme.surface;
+    return SizedBox(
+      width: d + step * (colors.length - 1),
+      height: d,
+      child: Stack(children: [
+        for (var i = colors.length - 1; i >= 0; i--)
+          Positioned(
+            left: step * i,
+            child: Container(
+              width: d,
+              height: d,
+              decoration: BoxDecoration(
+                color: colors[i],
+                shape: BoxShape.circle,
+                border: Border.all(color: ring, width: 1.5),
+              ),
+            ),
+          ),
       ]),
     );
   }

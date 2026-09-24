@@ -10,13 +10,12 @@ class Silk {
   final Color paper, paperEdge, ink, inkSoft, line, seal;
   const Silk._(this.paper, this.paperEdge, this.ink, this.inkSoft, this.line, this.seal);
 
-  static const _light = Silk._(Color(0xFFF6EFE0), Color(0xFFEADCC0), Color(0xFF3B2A1E),
-      Color(0xFF7A6250), Color(0xFF9C6B3F), Pal.seal);
-  static const _dark = Silk._(Color(0xFF2B241D), Color(0xFF211B15), Color(0xFFEFE2C8),
-      Color(0xFFB9A58A), Color(0xFFC89A62), Pal.dSeal);
-
-  static Silk of(BuildContext context) =>
-      Theme.of(context).brightness == Brightness.dark ? _dark : _light;
+  // màu triện theo bộ màu người dùng chọn (sealColor), phần giấy lụa cố định
+  static Silk of(BuildContext context) => Theme.of(context).brightness == Brightness.dark
+      ? Silk._(const Color(0xFF2B241D), const Color(0xFF211B15), const Color(0xFFEFE2C8),
+          const Color(0xFFB9A58A), const Color(0xFFC89A62), sealColor(context))
+      : Silk._(const Color(0xFFF6EFE0), const Color(0xFFEADCC0), const Color(0xFF3B2A1E),
+          const Color(0xFF7A6250), const Color(0xFF9C6B3F), sealColor(context));
 }
 
 class SilkCard extends StatelessWidget {

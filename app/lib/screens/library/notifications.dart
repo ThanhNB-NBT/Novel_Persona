@@ -33,7 +33,7 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
     // 2.0: là một TAB dưới dock (shell.dart) → header editorial như các tab khác,
     // nền trong suốt lộ tầng khí quyển, chừa đáy cho dock nổi.
     final header = PageHeader(
-      'THEO DÕI',
+      'CHƯƠNG MỚI DỊCH XONG',
       'Thông báo',
       seal: '訊',
       actions: [

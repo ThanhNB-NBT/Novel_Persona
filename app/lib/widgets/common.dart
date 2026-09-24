@@ -38,9 +38,12 @@ class PageHeader extends StatelessWidget {
       child: Row(children: [
         Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(eyebrow.toUpperCase(),
-                style: t.labelSmall?.copyWith(color: cs.primary, letterSpacing: 3)),
-            const SizedBox(height: 2),
+            // nhãn phụ chỉ khi NÓI THÊM được điều gì ('CÁ NHÂN' trên 'Tôi' là lặp) → '' thì bỏ
+            if (eyebrow.isNotEmpty) ...[
+              Text(eyebrow.toUpperCase(),
+                  style: t.labelSmall?.copyWith(color: cs.primary, letterSpacing: 3)),
+              const SizedBox(height: 2),
+            ],
             // triện đóng sau tiêu đề như lạc khoản trên tranh — chữ ký thương hiệu (GĐ7)
             Row(children: [
               Flexible(
@@ -70,7 +73,7 @@ class Seal extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
-    final ink = dark ? Pal.dSeal : Pal.seal;
+    final ink = sealColor(context);
     final paper = dark ? Pal.dBg : Colors.white;
     return ExcludeSemantics(
       child: Transform.rotate(

@@ -99,12 +99,60 @@ Color _rim(bool dark, Color line) => dark
     ? Colors.white.withValues(alpha: 0.16)
     : line.withValues(alpha: 0.75);
 
-ThemeData _build({required bool dark}) {
+/// Bộ màu nhấn người dùng chọn (Tôi → Giao diện, kiểu ColorOS). Chỉ đổi màu NHẤN
+/// và triện; giấy/mực/vàng/xanh-ok giữ nguyên để chất giấy dó không đổi.
+/// Màu nhấn sáng: chữ giấy (Pal.surface) đè lên phải ≥ 4.5:1. Bản tối pha sáng NHƯNG
+/// ngả xám (tông khoáng/mực) — bản rực kiểu 93AEE3 ra xanh 'công nghệ', lạc nền mực ấm.
+class Accent {
+  final String name;
+  final Color accent, deep, soft, seal, dAccent, dSoft, dSeal;
+  const Accent(this.name, this.accent, this.deep, this.soft, this.seal,
+      this.dAccent, this.dSoft, this.dSeal);
+}
+
+const accents = [
+  Accent('Son', Pal.accent, Pal.accentDeep, Pal.accentSoft, Pal.seal,
+      Pal.dAccent, Pal.dAccentSoft, Pal.dSeal),
+  Accent('Ngọc', Color(0xFF2E6B55), Color(0xFF1F4D3D), Color(0xFFD7E6DC), Color(0xFF2F7A5E),
+      Color(0xFF8DBBA3), Color(0xFF1A2A23), Color(0xFF4F9A7A)),
+  Accent('Chàm', Color(0xFF34508A), Color(0xFF243A68), Color(0xFFDCE2EF), Color(0xFF3A5AA0),
+      Color(0xFFA2B1D0), Color(0xFF1E2230), Color(0xFF6A7FB0)),
+  Accent('Hoàng', Color(0xFF8A5A12), Color(0xFF6B440A), Color(0xFFF1E1C4), Color(0xFFB0761C),
+      Color(0xFFE3B46A), Color(0xFF33281A), Color(0xFFD29A45)),
+  Accent('Tử', Color(0xFF6E3A6E), Color(0xFF522A52), Color(0xFFEADAE8), Color(0xFF8A3F86),
+      Color(0xFFC6A4C3), Color(0xFF2B1F2A), Color(0xFFA0689C)),
+];
+
+/// Màu triện theo bộ màu đang chọn — Seal/Silk đọc qua đây thay vì Pal.seal cứng.
+class SealTone extends ThemeExtension<SealTone> {
+  final Color seal;
+  const SealTone(this.seal);
+  @override
+  SealTone copyWith({Color? seal}) => SealTone(seal ?? this.seal);
+  @override
+  SealTone lerp(SealTone? other, double t) =>
+      other == null ? this : SealTone(Color.lerp(seal, other.seal, t)!);
+}
+
+Color sealColor(BuildContext context) {
+  final t = Theme.of(context);
+  return t.extension<SealTone>()?.seal ??
+      (t.brightness == Brightness.dark ? Pal.dSeal : Pal.seal);
+}
+
+final _themes = <(bool, int), ThemeData>{};
+
+/// Theme theo sáng/tối + bộ màu (chỉ số trong [accents]); dựng một lần rồi nhớ.
+ThemeData appTheme({required bool dark, int accent = 0}) => _themes.putIfAbsent(
+    (dark, accent),
+    () => _build(dark: dark, a: accents[accent.clamp(0, accents.length - 1)]));
+
+ThemeData _build({required bool dark, required Accent a}) {
   final bg = dark ? Pal.dBg : Pal.bg;
   final surface = dark ? Pal.dSurface : Pal.surface;
   final ink = dark ? Pal.dInk : Pal.ink;
   final soft = dark ? Pal.dInkSoft : Pal.inkSoft;
-  final accent = dark ? Pal.dAccent : Pal.accent;
+  final accent = dark ? a.dAccent : a.accent;
   final ok = dark ? Pal.dOk : Pal.ok;
   final line = dark ? Pal.dLine : Pal.line;
   final onAccent = dark ? const Color(0xFF2A140B) : Pal.surface;
@@ -119,12 +167,13 @@ ThemeData _build({required bool dark}) {
     }),
     scaffoldBackgroundColor: bg,
     canvasColor: bg,
+    extensions: [SealTone(dark ? a.dSeal : a.seal)],
     colorScheme: ColorScheme(
       brightness: dark ? Brightness.dark : Brightness.light,
       primary: accent,
       onPrimary: onAccent,
-      primaryContainer: dark ? Pal.dAccentSoft : Pal.accentSoft,
-      onPrimaryContainer: dark ? Pal.dAccent : Pal.accentDeep,
+      primaryContainer: dark ? a.dSoft : a.soft,
+      onPrimaryContainer: dark ? a.dAccent : a.deep,
       secondary: dark ? Pal.dGold : Pal.gold,
       // gold/cam sáng → chữ TỐI mới đủ tương phản (white trên gold tụt dưới AA)
       onSecondary: Pal.ink,
@@ -315,14 +364,14 @@ ThemeData _build({required bool dark}) {
       contentTextStyle: TextStyle(color: dark ? Pal.dInk : Colors.white),
       // nền snackbar TỐI ở cả 2 theme → action phải là màu nhấn SÁNG; mặc định
       // (inversePrimary) ra chữ tối trên nền tối, nút "Áp cả truyện" tàng hình
-      actionTextColor: dark ? Pal.dAccent : Pal.accentSoft,
+      actionTextColor: dark ? a.dAccent : a.soft,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(Rad.md)),
     ),
   );
 }
 
-final lightTheme = _build(dark: false);
-final darkTheme = _build(dark: true);
+final lightTheme = appTheme(dark: false);
+final darkTheme = appTheme(dark: true);
 
 
 /// Màu viền contour cho tấm nổi TỰ DỰNG bằng Material/Container — form sửa bản
