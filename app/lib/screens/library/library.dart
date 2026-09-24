@@ -15,103 +15,77 @@ class LibraryScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final reading = ref.watch(readingProvider);
     // Header editorial đồng bộ với Khám phá (thay AppBar phẳng cũ).
-    final header = PageHeader('THEO DÕI · ĐANG ĐỌC', 'Tủ truyện', actions: [
-      IconButton(
-        tooltip: 'Yêu cầu truyện mới',
-        iconSize: 22,
-        visualDensity: VisualDensity.compact,
-        icon: const Icon(Icons.travel_explore_rounded),
-        onPressed: () => showRequestSheet(context),
-      ),
-      IconButton(
-        tooltip: 'Bản offline',
-        iconSize: 22,
-        visualDensity: VisualDensity.compact,
-        icon: const Icon(Icons.download_done_rounded),
-        onPressed: () => context.push('/offline'),
-      ),
-      IconButton(
-        tooltip: 'Thông báo',
-        iconSize: 22,
-        visualDensity: VisualDensity.compact,
-        // badge SỐ thông báo chưa đọc (chương dịch xong sau lần mở màn trước)
-        icon: Builder(builder: (context) {
-          final n = ref.watch(unreadNotifCountProvider).value ?? 0;
-          final cs = Theme.of(context).colorScheme;
-          return Stack(clipBehavior: Clip.none, children: [
-            const Icon(Icons.notifications_none_rounded),
-            if (n > 0)
-              Positioned(
-                right: -6, top: -6,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
-                  decoration: BoxDecoration(
-                    color: cs.error,
-                    borderRadius: BorderRadius.circular(9),
-                  ),
-                  child: Center(
-                    child: Text(n > 99 ? '99+' : '$n',
-                        style: TextStyle(
-                            color: cs.onError,
-                            fontSize: 10,
-                            height: 1.1,
-                            fontWeight: FontWeight.w700)),
-                  ),
-                ),
-              ),
-          ]);
-        }),
-        onPressed: () async {
-          await context.push('/notifications');
-          ref.invalidate(unreadNotifCountProvider); // vừa xem xong → về 0
-        },
-      ),
-      const SizedBox(width: 4),
-    ]);
+    final header = PageHeader(
+      'THEO DÕI · ĐANG ĐỌC',
+      'Tủ truyện',
+      actions: [
+        IconButton(
+          tooltip: 'Yêu cầu truyện mới',
+          iconSize: 22,
+          visualDensity: VisualDensity.compact,
+          icon: const Icon(Icons.travel_explore_rounded),
+          onPressed: () => showRequestSheet(context),
+        ),
+        IconButton(
+          tooltip: 'Bản offline',
+          iconSize: 22,
+          visualDensity: VisualDensity.compact,
+          icon: const Icon(Icons.download_done_rounded),
+          onPressed: () => context.push('/offline'),
+        ),
+        const SizedBox(width: 4),
+      ],
+    );
     return Scaffold(
       backgroundColor: Colors.transparent, // lộ tầng khí quyển của shell
       body: SafeArea(
-        child: Column(children: [
-          header,
-          Expanded(
-            child: reading.when(
-              loading: () => const SkeletonList(),
-              error: (e, _) =>
-                  AppError(e, onRetry: () => ref.invalidate(readingProvider)),
-              data: (list) {
-                if (sb.auth.currentUser == null) {
-                  return _Empty(
-                    icon: Icons.login_rounded,
-                    text: 'Đăng nhập để theo dõi truyện và lưu chỗ đang đọc',
-                    action: FilledButton(
-                      onPressed: () => context.push('/login'),
-                      child: const Text('Đăng nhập'),
+        child: Column(
+          children: [
+            header,
+            Expanded(
+              child: reading.when(
+                loading: () => const SkeletonList(),
+                error: (e, _) =>
+                    AppError(e, onRetry: () => ref.invalidate(readingProvider)),
+                data: (list) {
+                  if (sb.auth.currentUser == null) {
+                    return _Empty(
+                      icon: Icons.login_rounded,
+                      text: 'Đăng nhập để theo dõi truyện và lưu chỗ đang đọc',
+                      action: FilledButton(
+                        onPressed: () => context.push('/login'),
+                        child: const Text('Đăng nhập'),
+                      ),
+                    );
+                  }
+                  if (list.isEmpty) {
+                    return const _Empty(
+                      icon: Icons.auto_stories_rounded,
+                      text:
+                          'Tủ truyện còn trống.\nMở một truyện ở Khám phá rồi đọc hoặc bấm Theo dõi.',
+                    );
+                  }
+                  // Truyện đọc GẦN NHẤT (list đã sort updated_at desc) lên thẻ hero
+                  // "Đọc tiếp" — một chạm vào lại mạch truyện; còn lại là danh sách.
+                  return RefreshIndicator(
+                    onRefresh: () async => ref.invalidate(readingProvider),
+                    child: ListView.separated(
+                      padding: const EdgeInsets.fromLTRB(
+                        0,
+                        2,
+                        0,
+                        110,
+                      ), // chừa dock nổi
+                      itemCount: list.length,
+                      separatorBuilder: (_, _) => const RowDivider(),
+                      itemBuilder: (_, i) => _ReadingRow(list[i]),
                     ),
                   );
-                }
-                if (list.isEmpty) {
-                  return const _Empty(
-                    icon: Icons.auto_stories_rounded,
-                    text:
-                        'Tủ truyện còn trống.\nMở một truyện ở Khám phá rồi đọc hoặc bấm Theo dõi.',
-                  );
-                }
-                // Truyện đọc GẦN NHẤT (list đã sort updated_at desc) lên thẻ hero
-                // "Đọc tiếp" — một chạm vào lại mạch truyện; còn lại là danh sách.
-                return RefreshIndicator(
-                  onRefresh: () async => ref.invalidate(readingProvider),
-                  child: ListView.separated(
-                    padding: const EdgeInsets.fromLTRB(0, 2, 0, 110), // chừa dock nổi
-                    itemCount: list.length,
-                    separatorBuilder: (_, _) => const RowDivider(),
-                    itemBuilder: (_, i) => _ReadingRow(list[i]),
-                  ),
-                );
-              },
+                },
+              ),
             ),
-          ),
-        ]),
+          ],
+        ),
       ),
     );
   }
@@ -177,14 +151,17 @@ class _ReadingRow extends ConsumerWidget {
                         read == null
                             ? 'Chưa đọc'
                             : 'Đã đọc $cur${total > 0 ? '/$total' : ''}',
-                        style: t.labelMedium?.copyWith(color: cs.onSurfaceVariant),
+                        style: t.labelMedium?.copyWith(
+                          color: cs.onSurfaceVariant,
+                        ),
                       ),
                       // truyện chưa dịch hết: cho biết đọc được tới đâu
                       if (total > 0 && translated < total)
                         Text(
                           'Đã dịch $translated/$total',
                           style: t.labelMedium?.copyWith(
-                              color: cs.onSurfaceVariant.withValues(alpha: 0.7)),
+                            color: cs.onSurfaceVariant.withValues(alpha: 0.7),
+                          ),
                         ),
                       if (hasNew) const TagChip('Chương mới'),
                     ],
@@ -196,18 +173,26 @@ class _ReadingRow extends ConsumerWidget {
             ),
             // Cột phải: menu 3 chấm trên, nút Đọc tiếp dưới — thẳng một trục dọc,
             // không chen vào hàng tên truyện nữa (tên được cả bề ngang).
-            Column(children: [
-              _menu(context, ref),
-              IconButton(
-                tooltip: read == null ? 'Đọc từ chương 1' : 'Đọc tiếp chương $cur',
-                visualDensity: VisualDensity.compact,
-                // trần icon tam giác, không nền — nhẹ mắt, thẳng trục với 3 chấm
-                icon: Icon(Icons.play_arrow_rounded, size: 26, color: cs.primary),
-                // Đọc tiếp 1 chạm — vào thẳng chương đang dở, khỏi ghé trang thông tin
-                // (tap cả dòng vẫn mở trang thông tin như mọi nơi).
-                onPressed: () => context.push('/novel/${n['id']}/read/$cur'),
-              ),
-            ]),
+            Column(
+              children: [
+                _menu(context, ref),
+                IconButton(
+                  tooltip: read == null
+                      ? 'Đọc từ chương 1'
+                      : 'Đọc tiếp chương $cur',
+                  visualDensity: VisualDensity.compact,
+                  // trần icon tam giác, không nền — nhẹ mắt, thẳng trục với 3 chấm
+                  icon: Icon(
+                    Icons.play_arrow_rounded,
+                    size: 26,
+                    color: cs.primary,
+                  ),
+                  // Đọc tiếp 1 chạm — vào thẳng chương đang dở, khỏi ghé trang thông tin
+                  // (tap cả dòng vẫn mở trang thông tin như mọi nơi).
+                  onPressed: () => context.push('/novel/${n['id']}/read/$cur'),
+                ),
+              ],
+            ),
           ],
         ),
       ),
@@ -215,7 +200,8 @@ class _ReadingRow extends ConsumerWidget {
   }
 
   Widget _menu(BuildContext context, WidgetRef ref) {
-    final downloaded = ref.watch(isDownloadedProvider(n['id'] as int)).value ?? false;
+    final downloaded =
+        ref.watch(isDownloadedProvider(n['id'] as int)).value ?? false;
     return PopupMenuButton<String>(
       padding: EdgeInsets.zero,
       constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
@@ -243,9 +229,11 @@ class _ReadingRow extends ConsumerWidget {
           child: ListTile(
             dense: true,
             contentPadding: EdgeInsets.zero,
-            leading: Icon(downloaded
-                ? Icons.download_done_rounded
-                : Icons.download_for_offline_outlined),
+            leading: Icon(
+              downloaded
+                  ? Icons.download_done_rounded
+                  : Icons.download_for_offline_outlined,
+            ),
             title: Text(downloaded ? 'Xoá bản offline' : 'Tải truyện về máy'),
           ),
         ),
@@ -335,50 +323,67 @@ class _RequestSheetState extends ConsumerState<_RequestSheet> {
       child: SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('Yêu cầu truyện mới', style: t.titleLarge),
-            const SizedBox(height: 6),
-            Text(
-              'Nhập tên truyện tiếng Việt (Hán-Việt) hoặc tên gốc tiếng Trung. '
-              'Hệ thống tự tìm tên gốc, crawl về và thêm vào tủ sách của bạn — '
-              'thường xong trong dưới 1 phút.',
-              style: t.bodySmall?.copyWith(color: cs.onSurfaceVariant),
-            ),
-            const SizedBox(height: 14),
-            Row(children: [
-              Expanded(
-                child: TextField(
-                  controller: _input,
-                  autofocus: true,
-                  maxLength: 100,
-                  decoration: const InputDecoration(
-                      counterText: '', hintText: 'vd: Kiếm Lai / 剑来', isDense: true),
-                  onSubmitted: (_) => _submit(),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Yêu cầu truyện mới', style: t.titleLarge),
+              const SizedBox(height: 6),
+              Text(
+                'Nhập tên truyện tiếng Việt (Hán-Việt) hoặc tên gốc tiếng Trung. '
+                'Hệ thống tự tìm tên gốc, crawl về và thêm vào tủ sách của bạn — '
+                'thường xong trong dưới 1 phút.',
+                style: t.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _input,
+                      autofocus: true,
+                      maxLength: 100,
+                      decoration: const InputDecoration(
+                        counterText: '',
+                        hintText: 'vd: Kiếm Lai / 剑来',
+                        isDense: true,
+                      ),
+                      onSubmitted: (_) => _submit(),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  FilledButton(
+                    onPressed: _sending ? null : _submit,
+                    child: _sending
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text('Tìm'),
+                  ),
+                ],
+              ),
+              if (reqs.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                Text(
+                  'YÊU CẦU CỦA BẠN',
+                  style: t.labelSmall?.copyWith(
+                    color: cs.onSurfaceVariant,
+                    letterSpacing: 1.5,
+                  ),
                 ),
-              ),
-              const SizedBox(width: 10),
-              FilledButton(
-                onPressed: _sending ? null : _submit,
-                child: _sending
-                    ? const SizedBox(
-                        width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Text('Tìm'),
-              ),
-            ]),
-            if (reqs.isNotEmpty) ...[
-              const SizedBox(height: 16),
-              Text('YÊU CẦU CỦA BẠN',
-                  style: t.labelSmall
-                      ?.copyWith(color: cs.onSurfaceVariant, letterSpacing: 1.5)),
-              const SizedBox(height: 4),
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxHeight: 320),
-                child: ListView(shrinkWrap: true, children: [
-                  for (final r in reqs) _requestRow(context, r),
-                ]),
-              ),
+                const SizedBox(height: 4),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 320),
+                  child: ListView(
+                    shrinkWrap: true,
+                    children: [for (final r in reqs) _requestRow(context, r)],
+                  ),
+                ),
+              ],
             ],
-          ]),
+          ),
         ),
       ),
     );
@@ -401,39 +406,53 @@ class _RequestSheetState extends ConsumerState<_RequestSheet> {
           : null,
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 8),
-        child: Row(children: [
-          if (r['status'] == 'pending') ...[
-            const SizedBox(
-                width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
-            const SizedBox(width: 10),
-          ],
-          Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(
-                (novel?['title_vi'] ?? r['query']) as String,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: t.bodyMedium,
+        child: Row(
+          children: [
+            if (r['status'] == 'pending') ...[
+              const SizedBox(
+                width: 14,
+                height: 14,
+                child: CircularProgressIndicator(strokeWidth: 2),
               ),
-              Text('${r['query']} · ${timeAgo(r['created_at'])}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: t.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
-            ]),
-          ),
-          const SizedBox(width: 8),
-          TagChip(chip, color: color),
-          if (r['status'] != 'pending')
-            IconButton(
-              tooltip: 'Xoá yêu cầu',
-              visualDensity: VisualDensity.compact,
-              icon: Icon(Icons.close_rounded, size: 16, color: cs.onSurfaceVariant),
-              onPressed: () async {
-                await deleteNovelRequest(r['id'] as int);
-                ref.invalidate(myNovelRequestsProvider);
-              },
+              const SizedBox(width: 10),
+            ],
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    (novel?['title_vi'] ?? r['query']) as String,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: t.bodyMedium,
+                  ),
+                  Text(
+                    '${r['query']} · ${timeAgo(r['created_at'])}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: t.labelSmall?.copyWith(color: cs.onSurfaceVariant),
+                  ),
+                ],
+              ),
             ),
-        ]),
+            const SizedBox(width: 8),
+            TagChip(chip, color: color),
+            if (r['status'] != 'pending')
+              IconButton(
+                tooltip: 'Xoá yêu cầu',
+                visualDensity: VisualDensity.compact,
+                icon: Icon(
+                  Icons.close_rounded,
+                  size: 16,
+                  color: cs.onSurfaceVariant,
+                ),
+                onPressed: () async {
+                  await deleteNovelRequest(r['id'] as int);
+                  ref.invalidate(myNovelRequestsProvider);
+                },
+              ),
+          ],
+        ),
       ),
     );
   }

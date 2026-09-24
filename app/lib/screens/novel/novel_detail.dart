@@ -9,6 +9,7 @@ import 'package:go_router/go_router.dart';
 import '../../ambient.dart';
 import '../../data.dart';
 import '../../endpoint.dart';
+import '../../notify.dart' show requestNotificationPermission;
 import '../../offline.dart';
 import '../../theme.dart' show monoStyle;
 import '../../widgets.dart';
@@ -711,6 +712,27 @@ class _BottomBar extends ConsumerWidget {
     );
   }
 
+  /// Lần theo dõi truyện ĐẦU TIÊN: giải thích rồi mới xin quyền thông báo của hệ thống.
+  static Future<void> _askNotifyOnce(BuildContext context) async {
+    if (prefs.getBool('notif_asked') == true) return;
+    await prefs.setBool('notif_asked', true);
+    if (!context.mounted) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        icon: const Icon(Icons.notifications_active_outlined),
+        title: const Text('Báo khi có chương mới?'),
+        content: const Text(
+            'Truyện bạn theo dõi dịch xong chương mới, app sẽ báo lên thanh thông báo.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Để sau')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Bật thông báo')),
+        ],
+      ),
+    );
+    if (ok == true) await requestNotificationPermission();
+  }
+
   /// Nút Theo dõi — có CHỮ (1.x chỉ là dấu "+" tròn, không ai đoán ra là lưu tủ).
   /// Theo dõi = vào Tủ truyện + được báo chương mới.
   Widget _saveBubble(BuildContext context, WidgetRef ref, bool inLib) {
@@ -733,6 +755,7 @@ class _BottomBar extends ConsumerWidget {
           await setInLibrary(novelId, !inLib);
           ref.invalidate(inLibraryProvider(novelId));
           ref.invalidate(readingProvider);
+          if (!inLib && context.mounted) await _askNotifyOnce(context);
         },
         child: Container(
           height: 46,

@@ -27,6 +27,7 @@ import 'screens/novel/glossary.dart';
 import 'screens/account/login.dart';
 import 'screens/library/notifications.dart';
 import 'screens/library/offline_library.dart';
+import 'screens/library/queue.dart';
 import 'screens/novel/novel_detail.dart';
 import 'screens/reader/reader.dart';
 import 'screens/reader/reader_settings.dart';
@@ -231,6 +232,9 @@ final _router = GoRouter(redirect: _authGate, refreshListenable: _AuthGateNotifi
   GoRoute(
       path: '/guide',
       pageBuilder: (_, s) => inkPage(key: s.pageKey, child: const GuideScreen())),
+  GoRoute(
+      path: '/queue',
+      pageBuilder: (_, s) => inkPage(key: s.pageKey, child: const QueueScreen())),
   GoRoute(
       path: '/notifications',
       pageBuilder: (_, s) =>

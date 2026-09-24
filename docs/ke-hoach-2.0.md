@@ -13,7 +13,7 @@ Nguồn phát hiện: rà app thật trên AVD `gac_truyen` (bản 1.0.31) + đ�
 - [x] GĐ1 Trình đọc
 - [x] GĐ2 Gộp Tủ truyện
 - [x] GĐ3 Tu Tiên thật + mở rộng cấp bậc (backend + app)
-- [ ] GĐ4 Điều hướng + lần đầu dùng
+- [x] GĐ4 Điều hướng + lần đầu dùng
 - [ ] GĐ5 Dọn chữ & dữ liệu hiển thị
 - [ ] GĐ6 Phát hành 2.0.0+33 (user tự tag)
 
@@ -82,6 +82,9 @@ Kèm: túi đồ đè thanh trạng thái (thêm nền vùng status bar); sắp 
 ## GĐ4 — Điều hướng & lần đầu dùng
 
 - Tab: Tủ truyện · Khám phá · Tu Tiên (giữa) · **Tôi**. Bỏ Hàng đợi (màn giữ route, vào từ Quản trị).
+  → **Đã làm khác (24/09):** 4 tab thì không có ô giữa, mà dock vẽ cho 5 ô với Tu Tiên ở ô 2.
+  Chốt 5 ô: Tủ truyện · Khám phá · Tu Tiên · **Thông báo** (chuông từ header Tủ truyện xuống, có
+  huy hiệu) · **Tôi**. Hàng đợi còn route `/queue`, vào từ Tôi → Thư viện (cho mọi user, không chỉ admin).
   "Tôi" = Cài đặt hiện tại (hồ sơ, chuỗi ngày, giao diện, offline, quản trị) + yêu cầu truyện.
 - Quyền thông báo: bỏ xin lúc khởi động; xin khi theo dõi truyện đầu tiên, kèm câu giải thích.
 - Chưa đăng nhập: tab khoá hiện trạng thái trống có giải thích + nút Đăng nhập (không nhảy thẳng).

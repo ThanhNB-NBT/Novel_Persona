@@ -12,7 +12,7 @@ import 'cultivation/cultivation.dart';
 import 'cultivation/pixel.dart';
 import 'explore/home.dart';
 import 'library/library.dart';
-import 'library/queue.dart';
+import 'library/notifications.dart';
 import 'account/settings.dart';
 import '../theme.dart';
 import '../tts.dart';
@@ -20,7 +20,9 @@ import '../tts.dart';
 /// Cờ tĩnh ghi nhận splash đã chiếu trong phiên chạy (không lặp lại khi đổi tab)
 bool _splashShown = false;
 
-/// Khung 5 tab: Tủ truyện · Khám phá · TU TIÊN (giữa, nổi) · Hàng đợi · Cài đặt.
+/// Khung 5 tab (2.0): Tủ truyện · Khám phá · TU TIÊN (giữa, nổi) · Thông báo · Tôi.
+/// 1.x có tab Hàng đợi gần như luôn trống — tiến độ dịch nay nằm ngay trên dòng Tủ truyện,
+/// màn Hàng đợi còn route /queue (vào từ Quản trị). Chuông từ header Tủ truyện xuống dock.
 /// Mặc định mở Tủ truyện (chưa đăng nhập → Khám phá). Vuốt ngang đổi tab bằng PageView.
 /// Dock NỔI đè lên nội dung như NEO (Stack, không dùng slot bottomNavigationBar —
 /// slot đó chừa nguyên một dải nền phía sau).
@@ -35,7 +37,7 @@ class _RootShellState extends ConsumerState<RootShell> {
   late final _pc = PageController(initialPage: _i);
   late bool _showSplash = !_splashShown;
   static const _pages = [
-    LibraryScreen(), HomeScreen(), CultivationScreen(), QueueScreen(), SettingsScreen(),
+    LibraryScreen(), HomeScreen(), CultivationScreen(), NotificationsScreen(), SettingsScreen(),
   ];
 
   static const _tabs = [
@@ -43,8 +45,8 @@ class _RootShellState extends ConsumerState<RootShell> {
     (icon: Icons.explore_outlined, active: Icons.explore_rounded, label: 'Khám phá'),
     // ô giữa (Tu Tiên) không dùng icon/label ở đây — vẽ bằng _SpiritDrop
     (icon: Icons.self_improvement_rounded, active: Icons.self_improvement_rounded, label: ''),
-    (icon: Icons.hourglass_empty_rounded, active: Icons.hourglass_bottom_rounded, label: 'Hàng đợi'),
-    (icon: Icons.settings_outlined, active: Icons.settings_rounded, label: 'Cài đặt'),
+    (icon: Icons.notifications_none_rounded, active: Icons.notifications_rounded, label: 'Thông báo'),
+    (icon: Icons.person_outline_rounded, active: Icons.person_rounded, label: 'Tôi'),
   ];
 
   @override
@@ -79,28 +81,34 @@ class _RootShellState extends ConsumerState<RootShell> {
 
   @override
   Widget build(BuildContext context) {
-    // Chưa đăng nhập chỉ được ở Khám phá (tab 1). Nội dung đã khoá ở tầng RLS
-    // (migration 122) nên 4 tab kia chỉ còn là màn trống — khoá ở đây để người
-    // dùng gặp màn đăng nhập thay vì tưởng app hỏng.
-    ref.watch(authStateProvider); // đăng nhập/xuất → mở/khoá tab ngay frame sau
-    final signedIn = sb.auth.currentUser != null;
+    // Khách vẫn vào được mọi tab: tab cần tài khoản TỰ hiện trạng thái trống có giải thích
+    // + nút Đăng nhập. 1.x bấm tab là bị đẩy thẳng sang màn đăng nhập, không biết tab có gì.
+    // Đăng nhập xong → về Tủ truyện (1.x kẹt ở tab đang đứng, thường là Khám phá).
+    ref.listen(authStateProvider, (prev, next) {
+      final was = prev?.value?.session != null;
+      final now = next.value?.session != null;
+      if (!was && now && _i != 0 && _pc.hasClients) _pc.jumpToPage(0);
+    });
+    final unread = ref.watch(unreadNotifCountProvider).value ?? 0;
 
     // Cả vuốt lẫn bấm dock đều đi qua onPageChanged → side effect một chỗ
     void changed(int i) {
       if (i == _i) return;
       if (i == 0) ref.invalidate(readingProvider);
       if (i == 2) ref.invalidate(cultStateProvider); // tick exp mỗi lần mở Tu Tiên
-      if (i == 3) ref.invalidate(translateQueueProvider);
+      if (i == 3) {
+        // tab sống mãi (keep-alive) → initState màn Thông báo chỉ chạy 1 lần; mỗi lần
+        // mở tab mới là "đã xem" → dập huy hiệu
+        markNotificationsSeen();
+        ref.invalidate(notificationsProvider);
+        ref.invalidate(unreadNotifCountProvider);
+      }
       HapticFeedback.lightImpact();
       setState(() => _i = i);
     }
 
     void go(int i) {
       if (i < 0 || i > 4 || i == _i) return;
-      if (!signedIn && i != 1) {
-        context.push('/login');
-        return;
-      }
       _pc.animateToPage(i,
           duration: const Duration(milliseconds: 320), curve: Curves.easeOutCubic);
     }
@@ -133,10 +141,7 @@ class _RootShellState extends ConsumerState<RootShell> {
             controller: _pc,
             // Đàn hồi kiểu Fluid Fusion (ColorOS 17): vuốt tới tab đầu/cuối thì
             // trang căng ra rồi bật lại theo ngón tay, thay vì khựng cứng.
-            physics: signedIn
-                ? const PageScrollPhysics(parent: BouncingScrollPhysics())
-                // Khách vuốt ngang sẽ lọt sang tab khoá mà không qua go() → chặn hẳn.
-                : const NeverScrollableScrollPhysics(),
+            physics: const PageScrollPhysics(parent: BouncingScrollPhysics()),
             onPageChanged: changed,
             children: [for (final p in _pages) _KeepAlive(child: p)],
           ),
@@ -148,7 +153,7 @@ class _RootShellState extends ConsumerState<RootShell> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 const _GlobalTtsBar(),
-                _Dock(index: _i, pageController: _pc, onTap: go),
+                _Dock(index: _i, pageController: _pc, onTap: go, badge: unread),
               ],
             ),
           ),
@@ -338,10 +343,12 @@ class _Dock extends StatefulWidget {
   final int index;
   final PageController pageController;
   final ValueChanged<int> onTap;
+  final int badge; // số truyện có chương mới chưa xem → chấm trên tab Thông báo
   const _Dock({
     required this.index,
     required this.pageController,
     required this.onTap,
+    this.badge = 0,
   });
   @override
   State<_Dock> createState() => _DockState();
@@ -462,6 +469,7 @@ class _DockState extends State<_Dock> with TickerProviderStateMixin {
         child: Transform.scale(
           scale: 1.0 + 0.12 * near,
           child: Stack(
+            clipBehavior: Clip.none,
             alignment: Alignment.center,
             children: [
               // Icon viền nét mờ
@@ -474,6 +482,27 @@ class _DockState extends State<_Dock> with TickerProviderStateMixin {
                 opacity: near,
                 child: Icon(tab.active, size: 20, color: cs.onSurface),
               ),
+              if (i == 3 && widget.badge > 0)
+                Positioned(
+                  right: -8,
+                  top: -5,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    constraints: const BoxConstraints(minWidth: 15, minHeight: 15),
+                    decoration: BoxDecoration(
+                      color: cs.error,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Center(
+                      child: Text(widget.badge > 99 ? '99+' : '${widget.badge}',
+                          style: TextStyle(
+                              color: cs.onError,
+                              fontSize: 9.5,
+                              height: 1.1,
+                              fontWeight: FontWeight.w700)),
+                    ),
+                  ),
+                ),
             ],
           ),
         ),

@@ -33,7 +33,16 @@ Future<void> initNotifications() async {
         macOS: DarwinInitializationSettings(),
       ),
     );
-    // xin quyền hiện thông báo (Android 13+, iOS)
+  } catch (_) {
+    // nền tảng chưa hỗ trợ (vd Windows lúc dev) → bỏ qua, không chặn app
+  }
+}
+
+/// Xin quyền hiện thông báo (Android 13+, iOS). 1.x xin ngay lúc mở app lần đầu, khi
+/// người dùng chưa biết app báo gì → hay bị từ chối. 2.0 xin lúc họ theo dõi truyện
+/// đầu tiên (novel_detail), sau một câu giải thích.
+Future<void> requestNotificationPermission() async {
+  try {
     await _plugin
         .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
         ?.requestNotificationsPermission();

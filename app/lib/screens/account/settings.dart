@@ -24,7 +24,7 @@ class SettingsScreen extends ConsumerWidget {
       body: SafeArea(
         child: Column(children: [
           // header editorial đồng bộ các tab (thay AppBar phẳng)
-          const PageHeader('CÁ NHÂN', 'Cài đặt'),
+          const PageHeader('CÁ NHÂN', 'Tôi'),
           Expanded(
               child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 110), // chừa chỗ dock nổi
@@ -78,6 +78,10 @@ class SettingsScreen extends ConsumerWidget {
               _Tile(Icons.download_done_rounded, 'Bản offline',
                   subtitle: 'Truyện đã tải để đọc không cần mạng',
                   onTap: () => context.push('/offline')),
+              // 1.x là cả một tab dưới dock, gần như luôn trống → nay vào từ đây
+              _Tile(Icons.hourglass_bottom_rounded, 'Hàng đợi dịch',
+                  subtitle: 'Chương đang chờ và đang dịch',
+                  onTap: () => context.push('/queue')),
             ]),
           ],
           if (ref.watch(isAdminProvider).value == true) ...[
