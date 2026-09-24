@@ -89,27 +89,14 @@ class _SilkPainter extends CustomPainter {
   bool shouldRepaint(_SilkPainter old) => old.s != s;
 }
 
-/// Triện son vuông chứa icon — đầu thẻ Tu Tiên.
+/// Icon màu son đầu thẻ Tu Tiên — nét trơn, không đóng khung ô đỏ (3 ô đỏ
+/// cạnh nhau nặng mắt; ô triện chỉ dành cho PageHeader và Động Phủ).
 class SealIcon extends StatelessWidget {
   final IconData icon;
   final double size;
   const SealIcon(this.icon, {super.key, this.size = 34});
 
   @override
-  Widget build(BuildContext context) {
-    final s = Silk.of(context);
-    return Transform.rotate(
-      angle: -0.05,
-      child: Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          color: s.seal,
-          borderRadius: BorderRadius.circular(size * 0.18),
-          boxShadow: [BoxShadow(color: s.seal.withValues(alpha: 0.3), blurRadius: 6, offset: const Offset(0, 2))],
-        ),
-        child: Icon(icon, size: size * 0.56, color: s.paper),
-      ),
-    );
-  }
+  Widget build(BuildContext context) =>
+      Icon(icon, size: size * 0.8, color: Silk.of(context).seal);
 }

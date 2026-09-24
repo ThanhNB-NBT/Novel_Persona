@@ -275,9 +275,8 @@ class SectionHeader extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // triện trơn làm chấm đầu mục — cùng ngôn ngữ với triện ở PageHeader
-          const Seal(size: 11),
-          const SizedBox(width: 10),
+          // không chấm triện đầu mục: trang chủ 4–5 mục = 4–5 ô đỏ, rối mắt.
+          // Triện chỉ còn ở PageHeader (một con dấu mỗi trang).
           Expanded(
             child: Text(title,
                 style: Theme.of(context).textTheme.headlineSmall),
