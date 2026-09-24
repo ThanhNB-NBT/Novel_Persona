@@ -13,6 +13,7 @@ import 'cultivation/pixel.dart';
 import 'explore/home.dart';
 import 'library/library.dart';
 import 'library/notifications.dart';
+import 'whats_new.dart';
 import 'account/settings.dart';
 import '../theme.dart';
 import '../tts.dart';
@@ -54,10 +55,12 @@ class _RootShellState extends ConsumerState<RootShell> {
     super.initState();
     _i = sb.auth.currentUser != null ? 0 : 1; // Tủ truyện nếu đã đăng nhập, ngược lại Khám phá
     // có bản mới trên GitHub Releases → hỏi 1 lần mỗi version (sau frame đầu, cần context)
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       maybePromptUpdate(context, ref);
-      _maybeOfferGuide();
+      // TRƯỚC lời mời Hướng dẫn: whats_new dựa vào cờ 'guide_offered' để biết máy từng chạy 1.x
+      await maybeShowWhatsNew(context);
+      if (mounted) _maybeOfferGuide();
     });
   }
 
