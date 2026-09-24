@@ -26,6 +26,9 @@ const readerColors = [
   ReaderColor('Bạc hà', Color(0xFFE4EFEA), Color(0xFF213330)),
   ReaderColor('Dạ Lam', Color(0xFF0F151E), Color(0xFFBEC6D1)),
   ReaderColor('Nâu trầm', Color(0xFF1B1611), Color(0xFFCDBDA7)),
+  // 2.0 — cặp chủ đạo, khớp giấy dó/mực đêm của khung app; mặc định cho người mới
+  ReaderColor('Giấy cũ', Color(0xFFEDE3CF), Color(0xFF33271C)),
+  ReaderColor('Mực đêm', Color(0xFF14110E), Color(0xFFD9CCB4)),
 ];
 
 /// Font có chân (Serif) — kinh điển, dẫn mắt êm, đọc tiểu thuyết dài không mỏi mắt.
@@ -183,9 +186,9 @@ class ReaderSettingsNotifier extends Notifier<ReaderSettings> {
     // key đã lưu có thể là serif cũ đã xoá → về mặc định cho chip chọn font khớp
     fontKey: readerFonts.containsKey(prefs.getString('rd_font'))
         ? prefs.getString('rd_font')!
-        : 'bevietnam',
-    lightColor: prefs.getInt('rd_light') ?? 0,
-    darkColor: prefs.getInt('rd_dark') ?? 5,
+        : 'literata', // 2.0: chữ có chân mặc định (người cũ giữ lựa chọn đã lưu)
+    lightColor: prefs.getInt('rd_light') ?? 13, // Giấy cũ
+    darkColor: prefs.getInt('rd_dark') ?? 14, // Mực đêm
     colorMode: prefs.getInt('rd_mode') ?? 0,
     justify: prefs.getBool('rd_justify') ?? true,
     lineHeight: prefs.getDouble('rd_lh') ?? 1.7,

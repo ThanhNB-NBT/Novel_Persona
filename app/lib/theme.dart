@@ -7,36 +7,35 @@ import 'package:google_fonts/google_fonts.dart';
 /// Một họ chữ Plus Jakarta Sans (dấu tiếng Việt chuẩn) + mono cho SỐ LIỆU;
 /// phân cấp bằng đậm/cỡ. Tránh trắng/đen tuyền hoàn toàn.
 class Pal {
-  // sáng — Thanh Tân
-  static const bg = Color(0xFFF5F7FA); // nền trắng lạnh (ngả xanh nhẹ)
-  static const surface = Color(0xFFFFFFFF); // thẻ
-  static const surfaceAlt = Color(0xFFE9EDF2);
-  static const ink = Color(0xFF1D2129); // chữ chính (không đen tuyền)
-  static const inkSoft = Color(0xFF6B727E); // chữ phụ (WCAG AA: 4.5:1 trên cả bg lẫn surface)
-  static const accent = Color(0xFF296EF4); // xanh dương thanh tân (đậm vừa đủ: chữ trắng trên nút đạt 4.5:1)
-  static const accentDeep = Color(0xFF2A5BC7);
-  static const accentSoft = Color(0xFFE1EBFE);
+  // sáng — Giấy Dó (2.0): nền giấy ngà, chữ mực nâu, nhấn son trầm
+  static const bg = Color(0xFFF3EBDD); // giấy dó
+  static const surface = Color(0xFFFAF5EB); // thẻ — giấy mới hơn nền một bậc
+  static const surfaceAlt = Color(0xFFE9DFCB);
+  static const ink = Color(0xFF2B2118); // mực nâu đen (không đen tuyền)
+  static const inkSoft = Color(0xFF6E5A48); // chữ phụ (5,5:1 trên nền giấy)
+  static const accent = Color(0xFF9A3B26); // son trầm — chữ giấy trên nút đạt 7:1
+  static const accentDeep = Color(0xFF7A2C1A);
+  static const accentSoft = Color(0xFFF0DCCD);
   static const gold = Color(0xFFE8913C); // streak / thành tựu (cam ấm) — CHỈ dùng làm NỀN (chữ ink đè lên: 6.6:1)
   static const goldDeep = Color(0xFFB16215); // gold khi làm CHỮ/ICON trên nền sáng (gold gốc chỉ 2.5:1)
   static const ok = Color(0xFF27864D); // thành công / positive (đã thêm, đã lưu…) — chữ trắng đè lên đạt 4.5:1
-  static const line = Color(0xFFE6EAF0);
+  static const line = Color(0xFFE2D5BD);
   // son (chu sa) của dấu triện — điểm nhấn cổ phong DUY NHẤT trên khung (GĐ7)
   static const seal = Color(0xFFB8322A);
   static const dSeal = Color(0xFFD0503F);
 
-  // tối — Dạ Lam, bản OLED "tech-minimal": nền gần đen (tiết kiệm pin, chất công nghệ),
-  // phân lớp bằng VIỀN 1px mờ thay vì nâng độ sáng nền.
-  static const dBg = Color(0xFF0A0E14);
-  static const dSurface = Color(0xFF10151D);
-  static const dSurfaceAlt = Color(0xFF161D27);
-  static const dInk = Color(0xFFE6EAF0); // không trắng tinh
-  static const dInkSoft = Color(0xFF7E8898);
-  static const dAccent = Color(0xFF5CC8E8); // xanh băng
-  static const dAccentDeep = Color(0xFF3A93B5);
-  static const dAccentSoft = Color(0xFF14262F);
+  // tối — Mực Đêm (2.0): nền mực ấm thay cho xanh đen lạnh, chữ màu giấy
+  static const dBg = Color(0xFF14110E);
+  static const dSurface = Color(0xFF1C1814);
+  static const dSurfaceAlt = Color(0xFF26201A);
+  static const dInk = Color(0xFFEDE3CF); // màu giấy
+  static const dInkSoft = Color(0xFFA39381);
+  static const dAccent = Color(0xFFE39A74); // son pha sáng cho nền tối
+  static const dAccentDeep = Color(0xFFC07552);
+  static const dAccentSoft = Color(0xFF33221A);
   static const dGold = Color(0xFFF2A65A);
   static const dOk = Color(0xFF3DBE76); // thành công — sáng hơn cho nền tối
-  static const dLine = Color(0xFF1D2530); // hairline kiểu Vercel/Linear
+  static const dLine = Color(0xFF2E2720);
 }
 
 /// Nhịp chuyển động chuẩn — dùng thay cho Duration/Curve rải rác, cho nhất quán.
@@ -63,13 +62,16 @@ TextTheme _text(Color ink, Color soft) {
   TextStyle f(double size, FontWeight w, {double sp = 0, double h = 1.2, Color? c}) =>
       GoogleFonts.plusJakartaSans(
           fontSize: size, fontWeight: w, letterSpacing: sp, height: h, color: c ?? ink);
+  // 2.0: tiêu đề lớn dùng chữ có chân (Noto Serif — đủ dấu tiếng Việt), thân chữ giữ sans
+  TextStyle serif(double size, {double sp = 0, double h = 1.2}) => GoogleFonts.notoSerif(
+      fontSize: size, fontWeight: FontWeight.w700, letterSpacing: sp, height: h, color: ink);
   return TextTheme(
     // bậc hero — khoảnh khắc lớn (brand, tên truyện): cú nhảy rõ so với body
-    displayMedium: f(38, FontWeight.w800, sp: -1.2, h: 1.0),
-    displaySmall: f(30, FontWeight.w800, sp: -0.9, h: 1.05),
-    headlineMedium: f(24, FontWeight.w800, sp: -0.6),
-    headlineSmall: f(20, FontWeight.w700, sp: -0.4),
-    titleLarge: f(18, FontWeight.w700, sp: -0.3),
+    displayMedium: serif(36, sp: -0.8, h: 1.05),
+    displaySmall: serif(29, sp: -0.6, h: 1.1),
+    headlineMedium: serif(25, sp: -0.4),
+    headlineSmall: serif(20.5, sp: -0.2),
+    titleLarge: serif(18, sp: -0.1, h: 1.25),
     titleMedium: f(15.5, FontWeight.w600, sp: -0.1),
     bodyLarge: f(15.5, FontWeight.w400, h: 1.5),
     bodyMedium: f(14, FontWeight.w400, h: 1.55, c: soft),
@@ -105,7 +107,7 @@ ThemeData _build({required bool dark}) {
   final accent = dark ? Pal.dAccent : Pal.accent;
   final ok = dark ? Pal.dOk : Pal.ok;
   final line = dark ? Pal.dLine : Pal.line;
-  final onAccent = dark ? const Color(0xFF0F2630) : Colors.white;
+  final onAccent = dark ? const Color(0xFF2A140B) : Pal.surface;
 
   return ThemeData(
     useMaterial3: true,

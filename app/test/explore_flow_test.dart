@@ -13,6 +13,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:novel_reader/cultivation.dart';
 import 'package:novel_reader/data.dart';
 import 'package:novel_reader/screens/explore/home.dart';
 import 'package:novel_reader/theme.dart';
@@ -55,7 +56,10 @@ Widget _app(Future<HomeSections> Function(Ref) load, {List<String>? visited}) {
     ),
   ]);
   return ProviderScope(
-    overrides: [homeSectionsProvider.overrideWith(load)],
+    overrides: [
+      homeSectionsProvider.overrideWith(load),
+      cultStateProvider.overrideWith((_) async => null),
+    ],
     child: MaterialApp.router(theme: lightTheme, routerConfig: router),
   );
 }

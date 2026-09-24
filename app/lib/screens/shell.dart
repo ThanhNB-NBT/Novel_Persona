@@ -28,6 +28,10 @@ bool _splashShown = false;
 /// Dock NỔI đè lên nội dung như NEO (Stack, không dùng slot bottomNavigationBar —
 /// slot đó chừa nguyên một dải nền phía sau).
 class RootShell extends ConsumerStatefulWidget {
+  /// Màn con xin chuyển tab (vd dải Động Phủ ở trang chủ → Tu Tiên) mà không cần
+  /// giữ tham chiếu tới shell.
+  static final goTab = ValueNotifier<int?>(null);
+
   const RootShell({super.key});
   @override
   ConsumerState<RootShell> createState() => _RootShellState();
@@ -50,9 +54,19 @@ class _RootShellState extends ConsumerState<RootShell> {
     (icon: Icons.person_outline_rounded, active: Icons.person_rounded, label: 'Tôi'),
   ];
 
+  void _onGoTab() {
+    final i = RootShell.goTab.value;
+    if (i == null) return;
+    RootShell.goTab.value = null;
+    if (i != _i && _pc.hasClients) {
+      _pc.animateToPage(i, duration: const Duration(milliseconds: 320), curve: Curves.easeOutCubic);
+    }
+  }
+
   @override
   void initState() {
     super.initState();
+    RootShell.goTab.addListener(_onGoTab);
     _i = sb.auth.currentUser != null ? 0 : 1; // Tủ truyện nếu đã đăng nhập, ngược lại Khám phá
     // có bản mới trên GitHub Releases → hỏi 1 lần mỗi version (sau frame đầu, cần context)
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -78,6 +92,7 @@ class _RootShellState extends ConsumerState<RootShell> {
 
   @override
   void dispose() {
+    RootShell.goTab.removeListener(_onGoTab);
     _pc.dispose();
     super.dispose();
   }
