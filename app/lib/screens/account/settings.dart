@@ -24,7 +24,7 @@ class SettingsScreen extends ConsumerWidget {
       body: SafeArea(
         child: Column(children: [
           // header editorial đồng bộ các tab (thay AppBar phẳng)
-          const PageHeader('CÁ NHÂN', 'Tôi'),
+          const PageHeader('CÁ NHÂN', 'Tôi', seal: '我'),
           Expanded(
               child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 110), // chừa chỗ dock nổi

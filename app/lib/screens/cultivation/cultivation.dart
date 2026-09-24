@@ -14,6 +14,7 @@ import 'inventory.dart';
 import 'pixel.dart';
 import 'realm_card.dart';
 import 'sheets_tu_tien.dart';
+import 'silk.dart';
 
 // Painters + cảnh nhân vật động đã tách sang painters_aura/painters_fx/preview;
 // export lại cho render test import thẳng cultivation.dart như cũ.
@@ -506,9 +507,9 @@ class _TuTienActionBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
     final t = Theme.of(context).textTheme;
 
+    final silk = Silk.of(context);
     Widget actionCard({
       required IconData icon,
       required String title,
@@ -516,48 +517,27 @@ class _TuTienActionBar extends StatelessWidget {
       required VoidCallback onTap,
     }) {
       return Expanded(
-        child: InkWell(
+        child: SilkCard(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(14),
-          child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
-            decoration: BoxDecoration(
-              color: cs.surface,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: cs.outlineVariant),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: cs.primary.withValues(alpha: 0.10),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(icon, size: 20, color: cs.primary),
-                ),
-                const SizedBox(height: 5),
-                Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: t.labelMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    color: cs.onSurface,
-                  ),
-                ),
-                Text(
-                  subtitle,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: t.labelSmall?.copyWith(
-                    fontSize: 9.5,
-                    color: cs.onSurfaceVariant,
-                  ),
-                ),
-              ],
-            ),
+          padding: const EdgeInsets.fromLTRB(8, 14, 8, 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SealIcon(icon),
+              const SizedBox(height: 8),
+              Text(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: t.labelLarge?.copyWith(fontWeight: FontWeight.w800, color: silk.ink),
+              ),
+              Text(
+                subtitle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: t.labelSmall?.copyWith(fontSize: 10, color: silk.inkSoft),
+              ),
+            ],
           ),
         ),
       );

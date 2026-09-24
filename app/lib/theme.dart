@@ -20,6 +20,9 @@ class Pal {
   static const goldDeep = Color(0xFFB16215); // gold khi làm CHỮ/ICON trên nền sáng (gold gốc chỉ 2.5:1)
   static const ok = Color(0xFF27864D); // thành công / positive (đã thêm, đã lưu…) — chữ trắng đè lên đạt 4.5:1
   static const line = Color(0xFFE6EAF0);
+  // son (chu sa) của dấu triện — điểm nhấn cổ phong DUY NHẤT trên khung (GĐ7)
+  static const seal = Color(0xFFB8322A);
+  static const dSeal = Color(0xFFD0503F);
 
   // tối — Dạ Lam, bản OLED "tech-minimal": nền gần đen (tiết kiệm pin, chất công nghệ),
   // phân lớp bằng VIỀN 1px mờ thay vì nâng độ sáng nền.
@@ -38,6 +41,14 @@ class Pal {
 
 /// Nhịp chuyển động chuẩn — dùng thay cho Duration/Curve rải rác, cho nhất quán.
 /// Chỉ animate transform/opacity; motion là gia vị, cắt trước khi thêm.
+/// Bo góc thống nhất (GĐ7): khung chỉ dùng 4 bậc này, không tự chế số lẻ.
+class Rad {
+  static const sm = 10.0; // chip, nút chữ
+  static const md = 14.0; // ô nhập, snackbar, thẻ nhỏ
+  static const lg = 18.0; // thẻ, menu, FAB
+  static const xl = 22.0; // sheet, hộp thoại, thẻ hero
+}
+
 class Motion {
   static const fast = Duration(milliseconds: 150); // phản hồi chạm, đổi trạng thái nhỏ
   static const base = Duration(milliseconds: 240); // chuyển cảnh trong khung
@@ -149,7 +160,7 @@ ThemeData _build({required bool dark}) {
       color: surface,
       elevation: 0,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(Rad.lg),
         side: BorderSide(color: line),
       ),
       margin: EdgeInsets.zero,
@@ -220,15 +231,15 @@ ThemeData _build({required bool dark}) {
       helperStyle: TextStyle(color: soft, fontSize: 12),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(Rad.md),
         borderSide: BorderSide(color: line),
       ),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(Rad.md),
         borderSide: BorderSide(color: line),
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(Rad.md),
         borderSide: BorderSide(color: accent, width: 1.6),
       ),
     ),
@@ -244,7 +255,7 @@ ThemeData _build({required bool dark}) {
       elevation: 12,
       shadowColor: Colors.black.withValues(alpha: dark ? 0.6 : 0.22),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(Rad.xl),
         side: BorderSide(color: _rim(dark, line), width: 1),
       ),
       titleTextStyle: GoogleFonts.plusJakartaSans(
@@ -260,7 +271,7 @@ ThemeData _build({required bool dark}) {
       elevation: 10,
       shadowColor: Colors.black.withValues(alpha: dark ? 0.6 : 0.22),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(Rad.lg),
         side: BorderSide(color: _rim(dark, line), width: 1),
       ),
       textStyle: GoogleFonts.plusJakartaSans(
@@ -272,7 +283,7 @@ ThemeData _build({required bool dark}) {
       elevation: 12,
       shadowColor: Colors.black.withValues(alpha: dark ? 0.6 : 0.22),
       shape: RoundedRectangleBorder(
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(Rad.xl)),
         side: BorderSide(color: _rim(dark, line), width: 1),
       ),
     ),
@@ -280,13 +291,13 @@ ThemeData _build({required bool dark}) {
       backgroundColor: accent,
       foregroundColor: onAccent,
       elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(Rad.lg)),
     ),
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(
         foregroundColor: accent,
         textStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600, letterSpacing: -0.1),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(Rad.sm)),
       ),
     ),
     // TabBar (quản trị, trang truyện): chỉ thanh indicator chạy, tắt màu lan ra khi bấm
@@ -303,7 +314,7 @@ ThemeData _build({required bool dark}) {
       // nền snackbar TỐI ở cả 2 theme → action phải là màu nhấn SÁNG; mặc định
       // (inversePrimary) ra chữ tối trên nền tối, nút "Áp cả truyện" tàng hình
       actionTextColor: dark ? Pal.dAccent : Pal.accentSoft,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(Rad.md)),
     ),
   );
 }

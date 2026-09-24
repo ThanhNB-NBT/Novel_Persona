@@ -35,6 +35,7 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
     final header = PageHeader(
       'THEO DÕI',
       'Thông báo',
+      seal: '訊',
       actions: [
         if (list.isNotEmpty)
           IconButton(

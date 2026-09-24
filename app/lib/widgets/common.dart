@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../theme.dart';
+
 /// Logo GT trong app: chữ trần không nền — mực đen khi sáng, mực sáng khi tối
 /// (đen tuyền trên nền đêm sẽ tàng hình). Icon launcher lo phần nền trắng.
 class BrandLogo extends StatelessWidget {
@@ -23,7 +25,10 @@ class BrandLogo extends StatelessWidget {
 class PageHeader extends StatelessWidget {
   final String eyebrow, title;
   final List<Widget> actions;
-  const PageHeader(this.eyebrow, this.title, {super.key, this.actions = const []});
+  /// Chữ trên dấu triện cạnh tiêu đề — mỗi trang một chữ (藏 Tủ truyện, 覽 Khám phá…).
+  final String seal;
+  const PageHeader(this.eyebrow, this.title,
+      {super.key, this.actions = const [], this.seal = '閣'});
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -33,24 +38,64 @@ class PageHeader extends StatelessWidget {
       child: Row(children: [
         Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Row(children: [
-              // vạch nhấn nhỏ trước eyebrow — nét bút điểm nhãn
-              Container(
-                  width: 16,
-                  height: 2,
-                  margin: const EdgeInsets.only(right: 6),
-                  decoration: BoxDecoration(
-                      color: cs.primary, borderRadius: BorderRadius.circular(1))),
-              Text(eyebrow.toUpperCase(),
-                  style: t.labelSmall?.copyWith(color: cs.primary, letterSpacing: 3)),
-            ]),
+            Text(eyebrow.toUpperCase(),
+                style: t.labelSmall?.copyWith(color: cs.primary, letterSpacing: 3)),
             const SizedBox(height: 2),
-            Text(title,
-                style: t.headlineMedium?.copyWith(color: cs.onSurface)),
+            // triện đóng sau tiêu đề như lạc khoản trên tranh — chữ ký thương hiệu (GĐ7)
+            Row(children: [
+              Flexible(
+                child: Text(title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: t.headlineMedium?.copyWith(color: cs.onSurface)),
+              ),
+              const SizedBox(width: 10),
+              Seal(char: seal, size: 22),
+            ]),
           ]),
         ),
         ...actions,
       ]),
+    );
+  }
+}
+
+/// Dấu triện son — điểm nhấn cổ phong DUY NHẤT được phép trên khung (GĐ7). Chỉ đặt
+/// cạnh tiêu đề trang/mục; [char] null = triện trơn (chấm đầu mục nhỏ, chữ đọc không ra).
+class Seal extends StatelessWidget {
+  final String? char;
+  final double size;
+  const Seal({super.key, this.char, this.size = 20});
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final ink = dark ? Pal.dSeal : Pal.seal;
+    final paper = dark ? Pal.dBg : Colors.white;
+    return ExcludeSemantics(
+      child: Transform.rotate(
+        angle: -0.07, // đóng tay nên hơi lệch — thẳng tắp nhìn như icon
+        child: Container(
+          width: size,
+          height: size,
+          padding: EdgeInsets.all(size * 0.09),
+          decoration: BoxDecoration(
+              color: ink, borderRadius: BorderRadius.circular(size * 0.16)),
+          child: Container(
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              border: Border.all(color: paper.withValues(alpha: 0.8), width: size * 0.045),
+              borderRadius: BorderRadius.circular(size * 0.1),
+            ),
+            child: char == null
+                ? null
+                : Text(char!,
+                    textScaler: TextScaler.noScaling, // triện là hình, không phải chữ đọc
+                    style: TextStyle(
+                        color: paper, fontSize: size * 0.54, height: 1, fontWeight: FontWeight.w700)),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -225,12 +270,14 @@ class SectionHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    // vạch nhấn CHỈ ở header trang (PageHeader/_Brand) — rải xuống từng mục là loãng
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 18, 12, 10),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
+          // triện trơn làm chấm đầu mục — cùng ngôn ngữ với triện ở PageHeader
+          const Seal(size: 11),
+          const SizedBox(width: 10),
           Expanded(
             child: Text(title,
                 style: Theme.of(context).textTheme.headlineSmall),

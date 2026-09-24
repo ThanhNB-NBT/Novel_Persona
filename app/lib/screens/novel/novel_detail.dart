@@ -11,7 +11,7 @@ import '../../data.dart';
 import '../../endpoint.dart';
 import '../../notify.dart' show requestNotificationPermission;
 import '../../offline.dart';
-import '../../theme.dart' show monoStyle;
+import '../../theme.dart' show Rad, monoStyle;
 import '../../widgets.dart';
 
 class NovelDetailScreen extends ConsumerWidget {
@@ -37,10 +37,13 @@ class NovelDetailScreen extends ConsumerWidget {
               DefaultTabController(
                 length: 2,
                 child: Column(children: [
-                  _Header(n, novelId),
+                  _Header(n, novelId, amb),
                   TabBar(
                     tabs: const [Tab(text: 'Giới thiệu'), Tab(text: 'Danh sách chương')],
                     labelStyle: Theme.of(context).textTheme.titleMedium,
+                    // sắc riêng của truyện chạy theo tab đang chọn (GĐ7)
+                    indicatorColor: amb.accent(Theme.of(context).brightness == Brightness.dark),
+                    labelColor: amb.accent(Theme.of(context).brightness == Brightness.dark),
                     dividerColor: Theme.of(context).colorScheme.outlineVariant,
                   ),
                   Expanded(
@@ -61,11 +64,13 @@ class NovelDetailScreen extends ConsumerWidget {
   }
 }
 
-/// Header: ảnh bìa mờ làm nền + bìa nét + tiêu đề (không còn nút — nút xuống thanh dưới).
+/// Header: ảnh bìa mờ làm nền + bìa nét + tiêu đề + hàng chip số liệu, nhuộm sắc trích
+/// từ bìa (GĐ7 — mỗi truyện một sắc). Nút Đọc/Lưu ở thanh dưới.
 class _Header extends StatelessWidget {
   final Rec n;
   final int novelId;
-  const _Header(this.n, this.novelId);
+  final Ambient amb;
+  const _Header(this.n, this.novelId, this.amb);
 
   @override
   Widget build(BuildContext context) {
@@ -95,8 +100,10 @@ class _Header extends StatelessWidget {
               end: Alignment.bottomCenter,
               // kết thúc bằng MÀU NỀN scaffold (không phải surface) → header liền mạch
               // với vùng tab bên dưới, ảnh không "tràn" thành dải lệch màu
+              stops: const [0, 0.55, 1],
               colors: [
-                Colors.black.withValues(alpha: 0.4),
+                Colors.black.withValues(alpha: 0.45),
+                Color.lerp(Colors.black, amb.accent(true), 0.35)!.withValues(alpha: 0.55),
                 Theme.of(context).scaffoldBackgroundColor,
               ],
             ),
@@ -121,37 +128,72 @@ class _Header extends StatelessWidget {
             const SizedBox(width: 4),
           ]),
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 4, 20, 14),
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
             child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
               Hero(
                 tag: 'cover-${n['id']}',
-                child: Cover(url: cover, width: 112, label: n['title_vi'] ?? n['title_zh']),
+                child: Cover(url: cover, width: 124, label: n['title_vi'] ?? n['title_zh']),
               ),
               const SizedBox(width: 16),
               Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text(n['title_vi'] ?? n['title_zh'] ?? '',
                       maxLines: 3, overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          color: onDark, height: 1.2)),
+                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                          color: onDark, height: 1.2, fontWeight: FontWeight.w800)),
                   const SizedBox(height: 6),
                   Text(n['author_vi'] ?? n['author_zh'] ?? '',
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                           color: onDark.withValues(alpha: 0.85))),
-                  const SizedBox(height: 8),
-                  Wrap(spacing: 8, runSpacing: 6, children: [
-                    TagChip(n['status'] == 'completed' ? 'Hoàn thành' : 'Đang ra',
-                        color: onDark),
-                    if (sourceName(n).isNotEmpty)
-                      TagChip(sourceName(n), color: onDark),
-                  ]),
                 ]),
               ),
             ]),
           ),
+          // chỉ số gom thành hàng chip kính mờ (thay dải 3 cột ở tab Giới thiệu)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Wrap(spacing: 8, runSpacing: 8, children: [
+                _HeroChip(Icons.menu_book_rounded, '${n['chapter_count_source'] ?? 0} chương'),
+                _HeroChip(Icons.translate_rounded, '${n['chapter_count_translated'] ?? 0} đã dịch'),
+                _HeroChip(
+                    n['status'] == 'completed'
+                        ? Icons.check_circle_rounded
+                        : Icons.edit_note_rounded,
+                    n['status'] == 'completed' ? 'Hoàn thành' : 'Đang ra'),
+                if (sourceName(n).isNotEmpty) _HeroChip(Icons.public_rounded, sourceName(n)),
+              ]),
+            ),
+          ),
         ]),
       ),
     ]));
+  }
+}
+
+class _HeroChip extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  const _HeroChip(this.icon, this.label);
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(Rad.sm),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
+      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(icon, size: 14, color: Colors.white.withValues(alpha: 0.85)),
+        const SizedBox(width: 6),
+        Text(label,
+            style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                color: Colors.white, fontWeight: FontWeight.w600)),
+      ]),
+    );
   }
 }
 
@@ -193,7 +235,6 @@ class _IntroTab extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 96), // chừa chỗ cho bong bóng nổi
       children: [
         _IdRow(n['id'] as int),
-        _stats(context),
         SourceFacts(n),
         if (genres.isNotEmpty) ...[
           const SizedBox(height: 22),
@@ -207,26 +248,6 @@ class _IntroTab extends StatelessWidget {
             style: t.bodyLarge?.copyWith(height: 1.65)),
       ],
     );
-  }
-
-  Widget _stats(BuildContext context) {
-    final done = n['chapter_count_translated'] ?? 0;
-    Widget cell(String v, String l) => Expanded(
-          child: Column(children: [
-            Text(v, style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: 2),
-            Text(l, style: Theme.of(context).textTheme.bodySmall),
-          ]),
-        );
-    final div = Container(
-        width: 1, height: 34, color: Theme.of(context).colorScheme.outlineVariant);
-    return Row(children: [
-      cell('${n['chapter_count_source'] ?? 0}', 'Chương nguồn'),
-      div,
-      cell('$done', 'Đã dịch'),
-      div,
-      cell(n['status'] == 'completed' ? 'Hoàn thành' : 'Đang ra', 'Trạng thái'),
-    ]);
   }
 }
 

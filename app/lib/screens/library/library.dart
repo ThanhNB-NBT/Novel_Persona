@@ -1,11 +1,14 @@
 import 'dart:async';
+import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../data.dart';
+import '../../endpoint.dart';
 import '../../offline.dart';
+import '../../theme.dart';
 import '../../widgets.dart';
 
 class LibraryScreen extends ConsumerWidget {
@@ -18,6 +21,7 @@ class LibraryScreen extends ConsumerWidget {
     final header = PageHeader(
       'THEO DÕI · ĐANG ĐỌC',
       'Tủ truyện',
+      seal: '藏',
       actions: [
         IconButton(
           tooltip: 'Yêu cầu truyện mới',
@@ -78,13 +82,116 @@ class LibraryScreen extends ConsumerWidget {
                       ), // chừa dock nổi
                       itemCount: list.length,
                       separatorBuilder: (_, _) => const RowDivider(),
-                      itemBuilder: (_, i) => _ReadingRow(list[i]),
+                      itemBuilder: (_, i) => i == 0 && list[0]['cur_chapter'] != null
+                          ? ContinueCard(list[0])
+                          : _ReadingRow(list[i]),
                     ),
                   );
                 },
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Thẻ hero "Đọc tiếp" (GĐ7): truyện đọc gần nhất, bìa mờ làm nền, một chạm vào lại
+/// đúng chương. Chỉ dựng khi đã có chương đang đọc (truyện chỉ theo dõi thì là dòng thường).
+class ContinueCard extends StatelessWidget {
+  final Rec n;
+  const ContinueCard(this.n, {super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).textTheme;
+    final cur = n['cur_chapter'] as int;
+    final total = (n['chapter_count_source'] ?? 0) as int;
+    final title = n['title_vi'] ?? n['title_zh'] ?? '';
+    final bg = endpointThumbUrl(n['cover_url'] as String?, 200);
+    const fg = Colors.white;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(Rad.xl),
+        child: Material(
+          color: const Color(0xFF1B2230),
+          child: InkWell(
+            onTap: () => context.push('/novel/${n['id']}'),
+            child: Stack(children: [
+              if (bg != null)
+                Positioned.fill(
+                  child: ImageFiltered(
+                    imageFilter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                    child: Image.network(bg, fit: BoxFit.cover, cacheWidth: 200,
+                        errorBuilder: (_, _, _) => const SizedBox()),
+                  ),
+                ),
+              // phủ tối để chữ trắng luôn đạt tương phản dù bìa sáng
+              Positioned.fill(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                      colors: [
+                        Colors.black.withValues(alpha: 0.62),
+                        Colors.black.withValues(alpha: 0.38),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Cover(url: n['cover_url'], width: 84, aspect: 1.36, label: title),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text('ĐỌC TIẾP',
+                          style: t.labelSmall?.copyWith(
+                              color: fg.withValues(alpha: 0.7), letterSpacing: 2.5)),
+                      const SizedBox(height: 4),
+                      Text(title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: t.titleLarge?.copyWith(color: fg, height: 1.2)),
+                      const SizedBox(height: 4),
+                      Text(total > 0 ? 'Chương $cur / $total' : 'Chương $cur',
+                          style: t.bodySmall?.copyWith(color: fg.withValues(alpha: 0.75))),
+                      const SizedBox(height: 14),
+                      Row(children: [
+                        Expanded(
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(2),
+                            child: LinearProgressIndicator(
+                              value: total > 0 ? (cur / total).clamp(0.0, 1.0) : 0,
+                              minHeight: 3,
+                              color: fg,
+                              backgroundColor: fg.withValues(alpha: 0.22),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        FilledButton.icon(
+                          style: FilledButton.styleFrom(
+                            backgroundColor: fg,
+                            foregroundColor: Colors.black87,
+                            visualDensity: VisualDensity.compact,
+                          ),
+                          onPressed: () => context.push('/novel/${n['id']}/read/$cur'),
+                          icon: const Icon(Icons.play_arrow_rounded, size: 20),
+                          label: const Text('Đọc'),
+                        ),
+                      ]),
+                    ]),
+                  ),
+                ]),
+              ),
+            ]),
+          ),
         ),
       ),
     );
