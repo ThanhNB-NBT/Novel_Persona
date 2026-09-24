@@ -193,7 +193,6 @@ class _IntroTab extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 96), // chừa chỗ cho bong bóng nổi
       children: [
         _IdRow(n['id'] as int),
-        const SizedBox(height: 14),
         _stats(context),
         SourceFacts(n),
         if (genres.isNotEmpty) ...[
@@ -297,15 +296,17 @@ class SourceFacts extends StatelessWidget {
 
 
 /// Mã truyện — chạm để copy, tiện báo lỗi/tra cứu nhanh (số id nội bộ).
-class _IdRow extends StatelessWidget {
+/// 2.0: CHỈ admin thấy — với người đọc đây là số vô nghĩa đứng đầu trang.
+class _IdRow extends ConsumerWidget {
   final int id;
   const _IdRow(this.id);
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (ref.watch(isAdminProvider).value != true) return const SizedBox.shrink();
     final cs = Theme.of(context).colorScheme;
     final t = Theme.of(context).textTheme;
-    return Align(
+    return Padding(padding: const EdgeInsets.only(bottom: 14), child: Align(
       alignment: Alignment.centerLeft,
       child: InkWell(
         borderRadius: BorderRadius.circular(8),
@@ -324,7 +325,7 @@ class _IdRow extends StatelessWidget {
           ]),
         ),
       ),
-    );
+    ));
   }
 }
 

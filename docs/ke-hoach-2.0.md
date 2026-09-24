@@ -14,7 +14,7 @@ Nguồn phát hiện: rà app thật trên AVD `gac_truyen` (bản 1.0.31) + đ�
 - [x] GĐ2 Gộp Tủ truyện
 - [x] GĐ3 Tu Tiên thật + mở rộng cấp bậc (backend + app)
 - [x] GĐ4 Điều hướng + lần đầu dùng
-- [ ] GĐ5 Dọn chữ & dữ liệu hiển thị
+- [x] GĐ5 Dọn chữ & dữ liệu hiển thị
 - [ ] GĐ6 Phát hành 2.0.0+33 (user tự tag)
 
 ## GĐ0 — Dọn nền (không đổi hành vi)
@@ -95,6 +95,10 @@ Kèm: túi đồ đè thanh trạng thái (thêm nền vùng status bar); sắp 
 - Ẩn "Mã truyện #…" và mã nguồn thô (`xslou`, `ptwxz`…) với user thường; nguồn → tên hiển thị
   (cột mới ở `sources` hoặc map phía app — chọn cái ít đụng nhất).
 - Thể loại: chuẩn hoá hoa/thường, gộp trùng, dịch mục còn tiếng Trung (`科幻小说`) — migration backend.
+  → **Đã làm (24/09):** không cần migration — chạy `worker/backfill_genres.py` có sẵn trên DB thật
+  (8.707 truyện, 211 → 138 nhãn, 0 nhãn chữ Trung; sao lưu bảng `_bak_genres_20260924`). Gốc rễ còn
+  lại: crawler ghi `genres_zh` thô, chỉ map khi dịch metadata → tách task riêng.
+  Nguồn: map phía app `sourceLabel()` (data/novels.dart), mã truyện chỉ admin thấy.
 - Khám phá: giữ băng chuyền, bỏ thẻ lớn trùng trong "Mới cập nhật", một kiểu nút "Đọc ngay".
 
 ## GĐ6 — Phát hành

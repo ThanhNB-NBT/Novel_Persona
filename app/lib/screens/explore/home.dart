@@ -8,7 +8,6 @@ import 'package:go_router/go_router.dart';
 import '../../ambient.dart';
 import '../../data.dart';
 import '../../endpoint.dart';
-import '../../theme.dart' show Motion;
 import '../../widgets.dart';
 import 'filter.dart';
 import 'section.dart';
@@ -355,113 +354,42 @@ class _HeroCard extends ConsumerWidget {
   }
 }
 
-/// Spotlight "Mới cập nhật": dải bìa nhỏ ở trên, bấm bìa nào thì thẻ chi tiết
-/// bên dưới đổi sang truyện đó (tên + thể loại + nút Đọc + bìa lớn).
-class _Spotlight extends StatefulWidget {
+/// "Mới cập nhật": dải bìa nhỏ + tên, chạm là mở truyện. 1.x kèm thêm thẻ chi tiết lớn
+/// có nút "Đọc ngay" riêng — thành hero thứ hai ngay dưới carousel, hai kiểu nút khác nhau.
+class _Spotlight extends StatelessWidget {
   final String title;
   final List<Rec> items;
   final SectionKind kind;
   const _Spotlight(this.title, this.items, this.kind);
-  @override
-  State<_Spotlight> createState() => _SpotlightState();
-}
-
-class _SpotlightState extends State<_Spotlight> {
-  int _sel = 0;
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
     final t = Theme.of(context).textTheme;
-    final sel = _sel.clamp(0, widget.items.length - 1);
-    final n = widget.items[sel];
-    final genres =
-        ((n['genres'] as List?) ?? const []).take(4).join(' + ');
+    const w = 76.0;
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      SectionHeader(widget.title,
+      SectionHeader(title,
           onMore: () => Navigator.of(context).push(MaterialPageRoute(
-              builder: (_) => SectionScreen(kind: widget.kind)))),
-      // dải bìa nhỏ — to, phẳng (không bóng), sát nhau; bìa đang chọn viền màu nhấn.
-      // padding trong 1 + separator 4: viền chọn vẫn có chỗ thở mà dải không hở rãnh to.
+              builder: (_) => SectionScreen(kind: kind)))),
       SizedBox(
-        height: 102,
+        // bìa 76×106 + 2 dòng tên; bám cỡ chữ hệ thống để 200% không tràn đáy
+        height: 106 + 8 + MediaQuery.textScalerOf(context).scale(36),
         child: ListView.separated(
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.symmetric(horizontal: 20),
-          itemCount: widget.items.length,
-          separatorBuilder: (_, _) => const SizedBox(width: 4),
-          itemBuilder: (_, i) => GestureDetector(
-            onTap: () => setState(() => _sel = i),
-            child: AnimatedContainer(
-              duration: Motion.base,
-              curve: Motion.easeOut, // thay linear mặc định — bớt "máy móc"
-              padding: const EdgeInsets.all(1),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                    color: i == sel ? cs.primary : Colors.transparent,
-                    width: 2),
-              ),
-              child: Cover(
-                  url: widget.items[i]['cover_url'],
-                  width: 68,
-                  flat: true,
-                  label: _title(widget.items[i])),
-            ),
-          ),
-        ),
-      ),
-      const SizedBox(height: 12),
-      Padding(
-        // phải 12 (không phải 20): bìa lớn nằm thẳng mép với dải bìa phía trên —
-        // dải trên có viền chọn 2px + bìa cuối thường sát mép nên 20 nhìn bị thụt vào
-        padding: const EdgeInsets.fromLTRB(20, 0, 12, 0),
-        child: TapScale(
-          onTap: () => context.push('/novel/${n['id']}'),
-          child: AnimatedSwitcher(
-            duration: Motion.base,
-            switchInCurve: Motion.easeOut,
-            switchOutCurve: Motion.easeOut,
-            child: Row(
-              key: ValueKey(n['id']),
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(_title(n),
-                            maxLines: 3,
-                            overflow: TextOverflow.ellipsis,
-                            style: t.titleLarge?.copyWith(height: 1.25)),
-                        if (genres.isNotEmpty) ...[
-                          const SizedBox(height: 6),
-                          Text('【$genres】',
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: t.labelMedium?.copyWith(color: cs.primary)),
-                        ],
-                        const SizedBox(height: 6),
-                        Text(
-                            '${n['chapter_count_source'] ?? 0} chương • '
-                            '${n['status'] == 'completed' ? 'Hoàn thành' : 'Đang ra'}',
-                            style: t.labelMedium),
-                        const SizedBox(height: 12),
-                        FilledButton(
-                          onPressed: () =>
-                              context.push('/novel/${n['id']}/read/1'),
-                          style: FilledButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 18, vertical: 8),
-                            textStyle: t.labelLarge?.copyWith(fontSize: 13),
-                          ),
-                          child: const Text('Đọc ngay'),
-                        ),
-                      ]),
-                ),
-                const SizedBox(width: 14),
-                Cover(url: n['cover_url'], width: 128, label: _title(n)),
-              ],
+          itemCount: items.length,
+          separatorBuilder: (_, _) => const SizedBox(width: 10),
+          itemBuilder: (_, i) => TapScale(
+            onTap: () => context.push('/novel/${items[i]['id']}'),
+            child: SizedBox(
+              width: w,
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Cover(url: items[i]['cover_url'], width: w, flat: true, label: _title(items[i])),
+                const SizedBox(height: 6),
+                Text(_title(items[i]),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: t.labelMedium?.copyWith(height: 1.2)),
+              ]),
             ),
           ),
         ),

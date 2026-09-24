@@ -54,7 +54,26 @@ String statusLabel(String s) => _statusLabels[s] ?? s;
 
 /// Tên nguồn crawl (slug) để hiện badge; rỗng nếu chưa join sources.
 String sourceName(Rec n) =>
-    ((n['sources'] as Map?)?['name'] as String?)?.trim() ?? '';
+    sourceLabel(((n['sources'] as Map?)?['name'] as String?)?.trim() ?? '');
+
+/// Mã nguồn crawl (`sources.name`: xslou, ptwxz…) → tên trang người đọc nhận ra
+/// (Hán-Việt tên site). 1.x in thẳng mã thô lên bìa. Nguồn mới chưa có ở đây thì
+/// hiện mã viết hoa chữ đầu — thêm một dòng khi bật nguồn mới.
+String sourceLabel(String code) => switch (code) {
+      'qidian' => 'Khởi Điểm',
+      'jjwxc' => 'Tấn Giang',
+      'shuhaige' => 'Thư Hải Các',
+      'ddxs' => 'Đỉnh Điểm',
+      'quanben5' => 'Toàn Bản',
+      'faloo' => 'Phi Lư',
+      'ptwxz' => 'Phiêu Thiên',
+      '69shuba' => '69 Thư Ba',
+      'xslou' => 'Tiểu Thuyết Lâu',
+      'qiushubang' => 'Cầu Thư Bang',
+      '123bqg' => 'Bút Thú Các',
+      '' => '',
+      _ => code[0].toUpperCase() + code.substring(1), // nguồn mới: ít ra không viết thường
+    };
 
 /// Các mốc "số chương tối thiểu" ≤ số chương lớn nhất trong kho (sinh động theo dữ liệu).
 List<int> minChapterThresholds(int maxChapters) => [
@@ -162,7 +181,7 @@ final filterSourcesProvider = FutureProvider.autoDispose<List<(int, String)>>((r
       .select('id, name')
       .eq('enabled', true)
       .order('name'));
-  return [for (final r in rows) (r['id'] as int, '${r['name']}')];
+  return [for (final r in rows) (r['id'] as int, sourceLabel('${r['name']}'))];
 });
 
 // ---------- Trang chủ ----------

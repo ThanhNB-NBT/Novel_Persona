@@ -234,6 +234,8 @@ class SourceBadge extends StatelessWidget {
         borderRadius: BorderRadius.circular(7),
       ),
       child: Text(name,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
           style: const TextStyle(
               color: Colors.white, fontSize: 10.5, fontWeight: FontWeight.w600)),
     );
@@ -289,7 +291,12 @@ class PosterTile extends StatelessWidget {
           ]),
         ),
         if (sourceName(n).isNotEmpty)
-          Positioned(top: 8, left: 8, child: SourceBadge(sourceName(n))),
+          // tên nguồn (2.0) dài hơn mã cũ → chặn trong bề ngang thẻ, dư thì "…"
+          Positioned(
+              top: 8,
+              left: 8,
+              right: 8,
+              child: Align(alignment: Alignment.centerLeft, child: SourceBadge(sourceName(n)))),
       ]),
     );
   }

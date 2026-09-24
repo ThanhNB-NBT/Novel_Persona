@@ -25,8 +25,9 @@ void main() {
   // vẫn tắt runtime fetch như lưới an toàn phòng khi có widget con gọi mono.
   GoogleFonts.config.allowRuntimeFetching = false;
 
-  test('sourceName lấy đúng slug, rỗng khi thiếu', () {
-    expect(sourceName(_novel('A', 'shuhaige')), 'shuhaige');
+  test('sourceName đổi mã nguồn thành tên trang, rỗng khi thiếu', () {
+    expect(sourceName(_novel('A', 'shuhaige')), 'Thư Hải Các');
+    expect(sourceName(_novel('A', 'book15')), 'Book15'); // chưa map → mã viết hoa chữ đầu
     expect(sourceName({'title_vi': 'B'}), '');
   });
 
@@ -50,7 +51,7 @@ void main() {
                 Row(children: [
                   PosterTile(n: _novel('Phàm Nhân Tu Tiên', 'ddxs'), width: 118, onTap: () {}),
                   const SizedBox(width: 12),
-                  PosterTile(n: _novel('Tru Tiên', 'xsbique'), width: 118, onTap: () {}),
+                  PosterTile(n: _novel('Tru Tiên', 'xslou'), width: 118, onTap: () {}),
                   const SizedBox(width: 12),
                   PosterTile(n: _novel('Không nguồn', ''), width: 118, onTap: () {}),
                 ]),
