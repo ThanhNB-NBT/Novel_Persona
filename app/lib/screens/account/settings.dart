@@ -73,9 +73,27 @@ class SettingsScreen extends ConsumerWidget {
             onChanged: (i) => ref.read(appThemeModeProvider.notifier).set(i),
           ),
           const SizedBox(height: 12),
-          _AccentPicker(
+          _SetPicker(
+            kind: 'Bộ màu',
+            names: [for (final a in accents) a.name],
+            dots: (i, dark, surface) => [
+              dark ? accents[i].dAccent : accents[i].accent,
+              dark ? accents[i].dSeal : accents[i].seal,
+              // nền nhạt (soft) ở bản tối gần như trùng nền thẻ → pha nhấn với nền cho còn thấy
+              dark ? Color.lerp(accents[i].dAccent, surface, 0.55)! : accents[i].soft,
+            ],
             value: ref.watch(appAccentProvider),
             onChanged: (i) => ref.read(appAccentProvider.notifier).set(i),
+          ),
+          const SizedBox(height: 12),
+          _SetPicker(
+            kind: 'Nền',
+            names: [for (final p in papers) p.name],
+            dots: (i, dark, _) => dark
+                ? [papers[i].dBg, papers[i].dSurfaceAlt, papers[i].dInk]
+                : [papers[i].bg, papers[i].surfaceAlt, papers[i].ink],
+            value: ref.watch(appPaperProvider),
+            onChanged: (i) => ref.read(appPaperProvider.notifier).set(i),
           ),
           if (user != null) ...[
             const _SectionLabel('Thư viện'),
@@ -282,25 +300,34 @@ class _ReadingPanel extends StatelessWidget {
   }
 }
 
-/// Chọn bộ màu nhấn kiểu ColorOS: mỗi thẻ là chùm chấm màu chồng nhau + tên.
+/// Chọn bộ màu nhấn / bộ nền kiểu ColorOS: mỗi thẻ là chùm chấm màu chồng nhau + tên.
 /// Đổi là áp ngay (theme nội suy màu), không cần nút Lưu.
-class _AccentPicker extends StatelessWidget {
+class _SetPicker extends StatelessWidget {
+  final String kind;
+  final List<String> names;
+  final List<Color> Function(int i, bool dark, Color surface) dots;
   final int value;
   final ValueChanged<int> onChanged;
-  const _AccentPicker({required this.value, required this.onChanged});
+  const _SetPicker({
+    required this.kind,
+    required this.names,
+    required this.dots,
+    required this.value,
+    required this.onChanged,
+  });
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final t = Theme.of(context).textTheme;
     final dark = Theme.of(context).brightness == Brightness.dark;
-    // 5 ô chia đều đúng bề ngang khối trên (không cuộn ngang: cuộn thì ô chạm mép màn)
+    // ô chia đều đúng bề ngang khối trên (không cuộn ngang: cuộn thì ô chạm mép màn)
     return Row(children: [
-        for (var i = 0; i < accents.length; i++) ...[
+        for (var i = 0; i < names.length; i++) ...[
           if (i > 0) const SizedBox(width: 8),
           Expanded(child: Semantics(
             button: true,
             selected: i == value,
-            label: 'Bộ màu ${accents[i].name}',
+            label: '$kind ${names[i]}',
             child: GestureDetector(
               onTap: () => onChanged(i),
               child: AnimatedContainer(
@@ -315,14 +342,9 @@ class _AccentPicker extends StatelessWidget {
                   ),
                 ),
                 child: Column(children: [
-                  _Dots([
-                    dark ? accents[i].dAccent : accents[i].accent,
-                    dark ? accents[i].dSeal : accents[i].seal,
-                    // nền nhạt (soft) ở bản tối gần như trùng nền thẻ → pha nhấn với nền cho còn thấy
-                    dark ? Color.lerp(accents[i].dAccent, cs.surface, 0.55)! : accents[i].soft,
-                  ]),
+                  _Dots(dots(i, dark, cs.surface)),
                   const SizedBox(height: 8),
-                  Text(accents[i].name,
+                  Text(names[i],
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: t.labelMedium?.copyWith(

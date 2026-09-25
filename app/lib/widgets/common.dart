@@ -74,7 +74,7 @@ class Seal extends StatelessWidget {
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
     final ink = sealColor(context);
-    final paper = dark ? Pal.dBg : Colors.white;
+    final paper = dark ? Theme.of(context).scaffoldBackgroundColor : Colors.white;
     return ExcludeSemantics(
       child: Transform.rotate(
         angle: -0.07, // đóng tay nên hơi lệch — thẳng tắp nhìn như icon

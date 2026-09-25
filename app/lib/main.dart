@@ -337,12 +337,13 @@ class NovelApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final mode = ref.watch(appThemeModeProvider);
     final accent = ref.watch(appAccentProvider);
+    final paper = ref.watch(appPaperProvider);
     return MaterialApp.router(
       title: 'Gác Truyện',
       debugShowCheckedModeBanner: false,
       scrollBehavior: _FluidScrollBehavior(),
-      theme: appTheme(dark: false, accent: accent),
-      darkTheme: appTheme(dark: true, accent: accent),
+      theme: appTheme(dark: false, accent: accent, paper: paper),
+      darkTheme: appTheme(dark: true, accent: accent, paper: paper),
       themeMode: switch (mode) { 1 => ThemeMode.light, 2 => ThemeMode.dark, _ => ThemeMode.system },
       // Đổi theme TỨC THỜI (1 frame) — lerp theme theo từng frame là nguồn khựng
       // (cả cây rebuild mỗi frame). Cái "êm" giao cho lớp scrim bên dưới lo.

@@ -15,7 +15,6 @@ import 'library/library.dart';
 import 'library/notifications.dart';
 import 'whats_new.dart';
 import 'account/settings.dart';
-import '../theme.dart';
 import '../tts.dart';
 
 /// Cờ tĩnh ghi nhận splash đã chiếu trong phiên chạy (không lặp lại khi đổi tab)
@@ -275,9 +274,7 @@ class _GlobalTtsBar extends StatelessWidget {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                 decoration: BoxDecoration(
-                  color: dark
-                      ? Pal.dSurface.withValues(alpha: 0.92)
-                      : Pal.surface.withValues(alpha: 0.92),
+                  color: cs.surface.withValues(alpha: 0.92),
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(
                     color: cs.primary.withValues(alpha: 0.35),

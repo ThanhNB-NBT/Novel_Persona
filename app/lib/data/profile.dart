@@ -28,6 +28,18 @@ class AppAccent extends Notifier<int> {
 
 final appAccentProvider = NotifierProvider<AppAccent, int>(AppAccent.new);
 
+/// Bộ nền: chỉ số trong `papers` (theme.dart), 0 = Giấy dó mặc định.
+class AppPaper extends Notifier<int> {
+  @override
+  int build() => prefs.getInt('app_paper') ?? 0;
+  void set(int i) {
+    state = i;
+    prefs.setInt('app_paper', i);
+  }
+}
+
+final appPaperProvider = NotifierProvider<AppPaper, int>(AppPaper.new);
+
 /// Emblem xoay giữa dock (tab Tu Tiên) — key sprite trong pixel.dart. Chọn tại
 /// màn Sửa hồ sơ, lưu cục bộ (thuần trang trí, không cần server). Chỉ nhận các
 /// emblem đối xứng radial cho xoay đẹp.

@@ -479,7 +479,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                 ),
                 IconButton(
                   tooltip: 'Cài đặt đọc',
-                  icon: const Icon(Icons.settings_rounded, size: 19),
+                  icon: const Icon(Icons.text_fields_rounded, size: 19),
                   onPressed: () => showReaderSettingsSheet(context, ref, onRetranslate: _retranslate),
                 ),
                 const SizedBox(width: 2),

@@ -123,6 +123,37 @@ const accents = [
       Color(0xFFC6A4C3), Color(0xFF2B1F2A), Color(0xFFA0689C)),
 ];
 
+/// Bộ nền người dùng chọn (Tôi → Giao diện): giấy/thẻ/viền/chữ cho cả sáng lẫn tối.
+/// Chữ phụ (inkSoft) phải ≥ 4.5:1 trên nền. Mới thêm ở CUỐI để index đã lưu không đổi nghĩa.
+class Paper {
+  final String name;
+  final Color bg, surface, surfaceAlt, line, ink, inkSoft;
+  final Color dBg, dSurface, dSurfaceAlt, dLine, dInk, dInkSoft;
+  const Paper(this.name, this.bg, this.surface, this.surfaceAlt, this.line, this.ink,
+      this.inkSoft, this.dBg, this.dSurface, this.dSurfaceAlt, this.dLine, this.dInk,
+      this.dInkSoft);
+}
+
+const papers = [
+  Paper('Giấy dó', Pal.bg, Pal.surface, Pal.surfaceAlt, Pal.line, Pal.ink, Pal.inkSoft,
+      Pal.dBg, Pal.dSurface, Pal.dSurfaceAlt, Pal.dLine, Pal.dInk, Pal.dInkSoft),
+  // trắng ngà trung tính — sáng sạch nhưng không chói; tối là than chì
+  Paper('Trắng ngà', Color(0xFFF7F5F0), Color(0xFFFFFFFF), Color(0xFFECE9E2),
+      Color(0xFFE3DFD6), Color(0xFF26221D), Color(0xFF5F5850),
+      Color(0xFF121212), Color(0xFF1C1C1E), Color(0xFF26262A), Color(0xFF2C2C2F),
+      Color(0xFFE8E6E3), Color(0xFF9E9A94)),
+  // trắng lạnh hơi xám; tối là xanh đêm
+  Paper('Tuyết', Color(0xFFF2F3F5), Color(0xFFFFFFFF), Color(0xFFE6E8EC),
+      Color(0xFFDDE0E5), Color(0xFF1F2328), Color(0xFF5A616B),
+      Color(0xFF0F151E), Color(0xFF17202B), Color(0xFF202B38), Color(0xFF26313F),
+      Color(0xFFE1E6ED), Color(0xFF98A3B2)),
+  // xanh lá dịu, đỡ mỏi mắt; tối là rêu đêm
+  Paper('Trúc', Color(0xFFEEF2EC), Color(0xFFF8FAF6), Color(0xFFE0E7DD),
+      Color(0xFFD6DED2), Color(0xFF1F2A22), Color(0xFF55635A),
+      Color(0xFF111612), Color(0xFF19201B), Color(0xFF222B24), Color(0xFF2A332C),
+      Color(0xFFE0E8E1), Color(0xFF98A69B)),
+];
+
 /// Màu triện theo bộ màu đang chọn — Seal/Silk đọc qua đây thay vì Pal.seal cứng.
 class SealTone extends ThemeExtension<SealTone> {
   final Color seal;
@@ -140,21 +171,26 @@ Color sealColor(BuildContext context) {
       (t.brightness == Brightness.dark ? Pal.dSeal : Pal.seal);
 }
 
-final _themes = <(bool, int), ThemeData>{};
+final _themes = <(bool, int, int), ThemeData>{};
 
-/// Theme theo sáng/tối + bộ màu (chỉ số trong [accents]); dựng một lần rồi nhớ.
-ThemeData appTheme({required bool dark, int accent = 0}) => _themes.putIfAbsent(
-    (dark, accent),
-    () => _build(dark: dark, a: accents[accent.clamp(0, accents.length - 1)]));
+/// Theme theo sáng/tối + bộ màu ([accents]) + bộ nền ([papers]); dựng một lần rồi nhớ.
+ThemeData appTheme({required bool dark, int accent = 0, int paper = 0}) =>
+    _themes.putIfAbsent(
+        (dark, accent, paper),
+        () => _build(
+            dark: dark,
+            a: accents[accent.clamp(0, accents.length - 1)],
+            p: papers[paper.clamp(0, papers.length - 1)]));
 
-ThemeData _build({required bool dark, required Accent a}) {
-  final bg = dark ? Pal.dBg : Pal.bg;
-  final surface = dark ? Pal.dSurface : Pal.surface;
-  final ink = dark ? Pal.dInk : Pal.ink;
-  final soft = dark ? Pal.dInkSoft : Pal.inkSoft;
+ThemeData _build({required bool dark, required Accent a, required Paper p}) {
+  final bg = dark ? p.dBg : p.bg;
+  final surface = dark ? p.dSurface : p.surface;
+  final surfaceAlt = dark ? p.dSurfaceAlt : p.surfaceAlt;
+  final ink = dark ? p.dInk : p.ink;
+  final soft = dark ? p.dInkSoft : p.inkSoft;
   final accent = dark ? a.dAccent : a.accent;
   final ok = dark ? Pal.dOk : Pal.ok;
-  final line = dark ? Pal.dLine : Pal.line;
+  final line = dark ? p.dLine : p.line;
   final onAccent = dark ? const Color(0xFF2A140B) : Pal.surface;
 
   return ThemeData(
@@ -273,7 +309,7 @@ ThemeData _build({required bool dark, required Accent a}) {
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: dark ? Pal.dSurfaceAlt : Pal.surface,
+      fillColor: dark ? surfaceAlt : surface,
       labelStyle: TextStyle(color: soft),
       // label nổi lên khi focus → nhuộm màu nhấn, form "phản hồi" theo thao tác
       floatingLabelStyle: TextStyle(color: accent, fontWeight: FontWeight.w600),
@@ -360,8 +396,8 @@ ThemeData _build({required bool dark, required Accent a}) {
       behavior: SnackBarBehavior.floating,
       // nổi lên trên dock (dock cao ~76 + lề 14) để không che menu bar
       insetPadding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
-      backgroundColor: dark ? Pal.dSurfaceAlt : Pal.ink,
-      contentTextStyle: TextStyle(color: dark ? Pal.dInk : Colors.white),
+      backgroundColor: dark ? surfaceAlt : ink,
+      contentTextStyle: TextStyle(color: dark ? ink : Colors.white),
       // nền snackbar TỐI ở cả 2 theme → action phải là màu nhấn SÁNG; mặc định
       // (inversePrimary) ra chữ tối trên nền tối, nút "Áp cả truyện" tàng hình
       actionTextColor: dark ? a.dAccent : a.soft,
