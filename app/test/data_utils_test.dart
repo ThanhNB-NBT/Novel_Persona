@@ -1,9 +1,42 @@
 // Test các hàm tiện ích thuần (không cần Supabase/network).
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:novel_reader/data.dart';
 import 'package:novel_reader/widgets.dart';
 
 void main() {
+  group('chapterPercent — vị trí đọc trong chương (khôi phục khi mở lại)', () {
+    // prefs là `late final` — gán một lần, mỗi test chỉ xoá sạch.
+    setUpAll(() async {
+      SharedPreferences.setMockInitialValues({});
+      prefs = await SharedPreferences.getInstance();
+    });
+    setUp(() => prefs.clear());
+
+    test('chưa đọc → 0 (reader bỏ qua khôi phục)', () {
+      expect(chapterPercent(1, 1), 0);
+    });
+
+    test('lưu rồi đọc lại đúng chương, không lẫn chương/truyện khác', () async {
+      await saveChapterPercent(7, 3, 0.42);
+      expect(chapterPercent(7, 3), 0.42);
+      expect(chapterPercent(7, 4), 0);
+      expect(chapterPercent(8, 3), 0);
+      // rp_1_23 và rp_12_3 không được đè nhau
+      await saveChapterPercent(1, 23, 0.1);
+      await saveChapterPercent(12, 3, 0.9);
+      expect(chapterPercent(1, 23), 0.1);
+      expect(chapterPercent(12, 3), 0.9);
+    });
+
+    test('overscroll ra ngoài 0..1 bị kẹp lại', () async {
+      await saveChapterPercent(1, 1, 1.3);
+      expect(chapterPercent(1, 1), 1.0);
+      await saveChapterPercent(1, 1, -0.2);
+      expect(chapterPercent(1, 1), 0.0);
+    });
+  });
+
   group('statusLabel — nhãn trạng thái truyện', () {
     test('trạng thái quen → tiếng Việt', () {
       expect(statusLabel('ongoing'), 'Đang ra');
