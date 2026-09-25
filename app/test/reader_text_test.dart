@@ -60,6 +60,11 @@ void main() {
   });
 
   group('splitBySentence — tách đoạn dài thành câu dễ đọc', () {
+    test('contentParagraphs đổi 【】 thành [ ] (hết thụt nửa ô đầu đoạn)', () {
+      expect(contentParagraphs('【Haiz, phải nói sao đây?】\n\nHắn cười.'),
+          ['[Haiz, phải nói sao đây?]', 'Hắn cười.']);
+    });
+
     test('đoạn 1 câu giữ nguyên (trim)', () {
       expect(splitBySentence(['  Một câu duy nhất.  ']), ['Một câu duy nhất.']);
     });

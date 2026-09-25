@@ -88,7 +88,7 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
         child: Column(
           children: [
             header,
-            Expanded(
+            FadedExpanded(
               child: items.when(
                 loading: () => const AppLoading(),
                 error: (e, _) => AppError(

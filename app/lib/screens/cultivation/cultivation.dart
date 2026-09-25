@@ -216,7 +216,7 @@ class _CultivationScreenState extends ConsumerState<CultivationScreen> {
                 ),
                 data: (st) {
                   if (st == null) {
-                    // Nút mặc định là `primary` (xanh băng) — đặt giữa tranh thuỷ mặc
+                    // Nút mặc định là `primary` (màu nhấn) — đặt giữa tranh thuỷ mặc
                     // xanh đêm + vàng kim thì chỏi hẳn tông. Dùng `secondary` (vàng
                     // thành tựu) cho hợp cảnh, vẫn là token chứ không hardcode.
                     final cs = Theme.of(context).colorScheme;

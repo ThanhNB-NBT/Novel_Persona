@@ -30,6 +30,7 @@ import 'screens/library/offline_library.dart';
 import 'screens/library/queue.dart';
 import 'screens/novel/novel_detail.dart';
 import 'screens/reader/reader.dart';
+import 'screens/account/lunar_calendar.dart';
 import 'screens/reader/reader_settings.dart';
 import 'screens/explore/search.dart';
 import 'screens/shell.dart';
@@ -48,7 +49,26 @@ const _endpointConfigUrl = String.fromEnvironment('ENDPOINT_CONFIG_URL');
 
 /// Chỉ chuyển sang đích mới khi Data API, Auth và Storage đều sẵn sàng. Nếu mọi đích đều
 /// đang offline, vẫn khởi tạo bằng cache/default để người dùng vào thư viện offline.
+/// Mở app nhanh: endpoint đã lưu lần trước mà còn sống (thử nhanh ≤1,5s) thì dùng
+/// luôn, còn việc tải cấu hình + dò mọi ứng viên chạy NỀN để cập nhật cho lần mở
+/// sau. Trước đây mỗi lần mở đều chờ 2 lượt gọi mạng (tới ~8s khi mạng chậm) mới
+/// vẽ khung đầu. Endpoint đã lưu chết / máy mới cài → dò đầy đủ như cũ.
 Future<Endpoint> _resolveEndpoint() async {
+  final cached = endpointFromValues(
+    prefs.getString('endpoint_url'),
+    prefs.getString('endpoint_anon'),
+    allowedHosts: endpointAllowedHosts(supabaseUrl, _endpointAllowedHosts),
+  );
+  if (cached != null &&
+      await _endpointReady(cached)
+          .timeout(const Duration(milliseconds: 1500), onTimeout: () => false)) {
+    unawaited(_resolveEndpointFull().then((_) {}, onError: (_) {}));
+    return cached;
+  }
+  return _resolveEndpointFull();
+}
+
+Future<Endpoint> _resolveEndpointFull() async {
   final candidates = <Endpoint>[];
   final allowedHosts = endpointAllowedHosts(supabaseUrl, _endpointAllowedHosts);
   void add(Endpoint? ep) {
@@ -190,7 +210,8 @@ int _intParam(GoRouterState s, String key) =>
 @visibleForTesting
 String? authGateFor(String path, {required bool signedIn}) {
   if (signedIn) return null;
-  return path == '/' || path == '/login' ? null : '/login';
+  // '/lunar': lịch âm không cần tài khoản (khung lịch hiện cả khi chưa đăng nhập)
+  return path == '/' || path == '/login' || path == '/lunar' ? null : '/login';
 }
 
 String? _authGate(BuildContext _, GoRouterState s) =>
@@ -232,6 +253,10 @@ final _router = GoRouter(redirect: _authGate, refreshListenable: _AuthGateNotifi
   GoRoute(
       path: '/guide',
       pageBuilder: (_, s) => inkPage(key: s.pageKey, child: const GuideScreen())),
+  GoRoute(
+      path: '/lunar',
+      pageBuilder: (_, s) =>
+          inkPage(key: s.pageKey, child: const LunarCalendarScreen())),
   GoRoute(
       path: '/queue',
       pageBuilder: (_, s) => inkPage(key: s.pageKey, child: const QueueScreen())),
@@ -305,9 +330,13 @@ final _router = GoRouter(redirect: _authGate, refreshListenable: _AuthGateNotifi
             child: child,
           );
         },
-        child: ReaderScreen(
-          novelId: _intParam(s, 'id'),
-          chapterIndex: _intParam(s, 'index'),
+        // mở chương bằng link: Back về trang truyện (khớp nút mũi tên của reader)
+        child: BackToFallback(
+          fallback: '/novel/${_intParam(s, 'id')}',
+          child: ReaderScreen(
+            novelId: _intParam(s, 'id'),
+            chapterIndex: _intParam(s, 'index'),
+          ),
         ),
       );
     },

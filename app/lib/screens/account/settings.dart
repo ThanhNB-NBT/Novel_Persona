@@ -8,6 +8,7 @@ import '../../data.dart';
 import '../../theme.dart';
 import '../../update.dart';
 import '../../widgets.dart';
+import 'lunar_calendar.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -25,9 +26,9 @@ class SettingsScreen extends ConsumerWidget {
         child: Column(children: [
           // header editorial đồng bộ các tab (thay AppBar phẳng)
           const PageHeader('', 'Tôi', seal: '我'),
-          Expanded(
+          FadedExpanded(
               child: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 110), // chừa chỗ dock nổi
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 110), // trên: né vùng mờ FadedExpanded; dưới: chừa dock nổi
             children: [
           // Chưa đăng nhập vẫn được vào Cài đặt: chỉ ẩn phần CẦN tài khoản.
           // Trước đây cả màn bị thay bằng một nút Đăng nhập, chôn theo cả nút đổi
@@ -66,6 +67,8 @@ class SettingsScreen extends ConsumerWidget {
               streak: liveStreak(profile),
             ),
           ],
+          const SizedBox(height: 12),
+          const LunarTodayCard(),
           const _SectionLabel('Giao diện'),
           _Segmented(
             value: mode,
@@ -74,7 +77,7 @@ class SettingsScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 12),
           _SetPicker(
-            kind: 'Bộ màu',
+            kind: 'Màu nhấn',
             names: [for (final a in accents) a.name],
             dots: (i, dark, surface) => [
               dark ? accents[i].dAccent : accents[i].accent,
@@ -85,13 +88,17 @@ class SettingsScreen extends ConsumerWidget {
             value: ref.watch(appAccentProvider),
             onChanged: (i) => ref.read(appAccentProvider.notifier).set(i),
           ),
-          const SizedBox(height: 12),
           _SetPicker(
             kind: 'Nền',
             names: [for (final p in papers) p.name],
+            // thẻ tô bằng chính giấy/mực của bộ nền → nhìn là thấy trước (chấm sáng
+            // trên thẻ sáng thì tàng hình, không phân biệt nổi Trắng ngà với Tuyết)
+            fill: (i, dark) => dark
+                ? (papers[i].dBg, papers[i].dInk)
+                : (papers[i].bg, papers[i].ink),
             dots: (i, dark, _) => dark
-                ? [papers[i].dBg, papers[i].dSurfaceAlt, papers[i].dInk]
-                : [papers[i].bg, papers[i].surfaceAlt, papers[i].ink],
+                ? [papers[i].dSurfaceAlt, papers[i].dInkSoft, papers[i].dInk]
+                : [papers[i].surfaceAlt, papers[i].inkSoft, papers[i].ink],
             value: ref.watch(appPaperProvider),
             onChanged: (i) => ref.read(appPaperProvider.notifier).set(i),
           ),
@@ -243,6 +250,8 @@ class _ReadingPanel extends StatelessWidget {
     final hot = streak > 0;
     final gold = cs.secondary; // Pal.gold/dGold — màu dành riêng cho streak/thành tựu
 
+    Widget divider() => Container(
+        width: 1, height: 30, color: cs.outlineVariant.withValues(alpha: 0.7));
     Widget stat(String v, String label) => Expanded(
           child: Column(children: [
             Text(v, style: monoStyle(context, size: 22, w: FontWeight.w600)),
@@ -252,49 +261,39 @@ class _ReadingPanel extends StatelessWidget {
           ]),
         );
 
+    // Thu gọn (trước là dải hero ~200px): một hàng 3 ô ngang nhau, streak giữ màu
+    // vàng + ngọn lửa để vẫn là điểm nhấn, nhường chỗ cho khung lịch âm bên dưới.
     return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12),
       decoration: BoxDecoration(
-        color: cs.surface,
-        borderRadius: BorderRadius.circular(20),
+        color: hot ? Color.alphaBlend(gold.withValues(alpha: 0.08), cs.surface) : cs.surface,
+        borderRadius: BorderRadius.circular(Rad.lg),
         border: Border.all(color: cs.outlineVariant),
       ),
-      clipBehavior: Clip.antiAlias, // dải gradient bo theo góc thẻ
-      child: Column(children: [
-        // Hero streak: nền vàng gradient nhạt khi còn chuỗi, phẳng lặng khi đã đứt.
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: hot
-                  ? [gold.withValues(alpha: 0.22), gold.withValues(alpha: 0.05)]
-                  : [Colors.transparent, Colors.transparent],
-            ),
+      child: Row(children: [
+        Expanded(
+          child: Semantics(
+            label: hot ? '$streak ngày đọc liên tiếp' : 'Chưa có chuỗi ngày đọc',
+            excludeSemantics: true,
+            child: Column(children: [
+              Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                Icon(Icons.local_fire_department_rounded,
+                    size: 20, color: hot ? gold : cs.onSurfaceVariant),
+                const SizedBox(width: 2),
+                Text('$streak',
+                    style: monoStyle(context, size: 22, w: FontWeight.w700,
+                        color: hot ? gold : cs.onSurface)),
+              ]),
+              const SizedBox(height: 3),
+              Text('NGÀY LIÊN TIẾP',
+                  style: t.labelSmall?.copyWith(letterSpacing: 0.8, fontSize: 10.5)),
+            ]),
           ),
-          child: Row(children: [
-            Icon(Icons.local_fire_department_rounded,
-                size: 42, color: hot ? gold : cs.onSurfaceVariant),
-            const SizedBox(width: 14),
-            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('$streak', style: monoStyle(context, size: 34, w: FontWeight.w700,
-                  color: hot ? gold : cs.onSurface)),
-              const SizedBox(height: 1),
-              Text(hot ? 'ngày đọc liên tiếp' : 'chưa có chuỗi — đọc hôm nay để bắt đầu',
-                  style: t.labelMedium?.copyWith(
-                      letterSpacing: 0.4, color: cs.onSurfaceVariant)),
-            ])),
-          ]),
         ),
-        const SizedBox(height: 4),
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 14),
-          child: Row(children: [
-            stat('$novels', 'đang đọc'),
-            Container(width: 1, height: 30,
-                color: cs.outlineVariant.withValues(alpha: 0.7)),
-            stat('$chapters', 'chương đã đọc'),
-          ]),
-        ),
+        divider(),
+        stat('$novels', 'đang đọc'),
+        divider(),
+        stat('$chapters', 'chương đã đọc'),
       ]),
     );
   }
@@ -306,12 +305,15 @@ class _SetPicker extends StatelessWidget {
   final String kind;
   final List<String> names;
   final List<Color> Function(int i, bool dark, Color surface) dots;
+  /// (nền thẻ, màu chữ) riêng cho từng ô; bỏ trống = thẻ theo theme
+  final (Color, Color) Function(int i, bool dark)? fill;
   final int value;
   final ValueChanged<int> onChanged;
   const _SetPicker({
     required this.kind,
     required this.names,
     required this.dots,
+    this.fill,
     required this.value,
     required this.onChanged,
   });
@@ -321,7 +323,12 @@ class _SetPicker extends StatelessWidget {
     final t = Theme.of(context).textTheme;
     final dark = Theme.of(context).brightness == Brightness.dark;
     // ô chia đều đúng bề ngang khối trên (không cuộn ngang: cuộn thì ô chạm mép màn)
-    return Row(children: [
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(4, 14, 0, 8),
+        child: Text(kind, style: t.labelMedium),
+      ),
+      Row(children: [
         for (var i = 0; i < names.length; i++) ...[
           if (i > 0) const SizedBox(width: 8),
           Expanded(child: Semantics(
@@ -334,7 +341,7 @@ class _SetPicker extends StatelessWidget {
                 duration: Motion.fast,
                 padding: const EdgeInsets.fromLTRB(4, 14, 4, 12),
                 decoration: BoxDecoration(
-                  color: cs.surface,
+                  color: fill?.call(i, dark).$1 ?? cs.surface,
                   borderRadius: BorderRadius.circular(Rad.md),
                   border: Border.all(
                     color: i == value ? cs.primary : cs.outlineVariant,
@@ -342,31 +349,34 @@ class _SetPicker extends StatelessWidget {
                   ),
                 ),
                 child: Column(children: [
-                  _Dots(dots(i, dark, cs.surface)),
+                  _Dots(dots(i, dark, cs.surface), ring: fill?.call(i, dark).$1),
                   const SizedBox(height: 8),
                   Text(names[i],
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: t.labelMedium?.copyWith(
-                          color: i == value ? cs.onSurface : cs.onSurfaceVariant,
+                          color: fill?.call(i, dark).$2 ??
+                              (i == value ? cs.onSurface : cs.onSurfaceVariant),
                           fontWeight: i == value ? FontWeight.w700 : null)),
                 ]),
               ),
             ),
           )),
         ],
-      ]);
+      ]),
+    ]);
   }
 }
 
 /// Chùm chấm tròn chồng mép nhau (như thẻ màu ColorOS).
 class _Dots extends StatelessWidget {
   final List<Color> colors;
-  const _Dots(this.colors);
+  final Color? ring; // viền quanh chấm = màu thẻ chứa nó
+  const _Dots(this.colors, {this.ring});
   @override
   Widget build(BuildContext context) {
     const d = 16.0, step = 10.0;
-    final ring = Theme.of(context).colorScheme.surface;
+    final ring = this.ring ?? Theme.of(context).colorScheme.surface;
     return SizedBox(
       width: d + step * (colors.length - 1),
       height: d,

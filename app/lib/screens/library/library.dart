@@ -46,7 +46,7 @@ class LibraryScreen extends ConsumerWidget {
         child: Column(
           children: [
             header,
-            Expanded(
+            FadedExpanded(
               child: reading.when(
                 loading: () => const SkeletonList(),
                 error: (e, _) =>
@@ -116,7 +116,7 @@ class ContinueCard extends StatelessWidget {
       child: ClipRRect(
         borderRadius: BorderRadius.circular(Rad.xl),
         child: Material(
-          color: const Color(0xFF1B2230),
+          color: Pal.dSurface, // lót tối dưới bìa mờ (chữ trắng đè lên), hợp tông mực
           child: InkWell(
             onTap: () => openNovel(context, n, 'libc'),
             child: Stack(children: [
@@ -260,7 +260,9 @@ class _ReadingRow extends ConsumerWidget {
                       Text(
                         read == null
                             ? 'Chưa đọc'
-                            : 'Đã đọc $cur${total > 0 ? '/$total' : ''}',
+                            // cur là CHƯƠNG đang đọc (vị trí), không phải số chương đã đọc —
+                            // ghi 'Đã đọc 2' cạnh 'Đã dịch 1' trông như đọc nhiều hơn dịch
+                            : 'Chương $cur${total > 0 ? '/$total' : ''}',
                         style: t.labelMedium?.copyWith(
                           color: cs.onSurfaceVariant,
                         ),

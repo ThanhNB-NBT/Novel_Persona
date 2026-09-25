@@ -40,6 +40,13 @@ List<String> splitBySentence(List<String> paras) {
   return out;
 }
 
+/// 【】 (lời hệ thống truyện game) → [ ]: ngoặc toàn khổ có sẵn khoảng trắng hai bên
+/// glyph → đoạn mở bằng 【 bị thụt nửa ô, giữa câu thì hở. Đổi 1 ký tự lấy 1 ký tự nên
+/// vị trí gạch chân thuật ngữ / highlight máy đọc tính trên đoạn vẫn khớp.
+String halfWidthBrackets(String s) => s.replaceAll('【', '[').replaceAll('】', ']');
+
 /// Danh sách đoạn NỘI DUNG như màn đọc hiển thị (KHÔNG gồm tiêu đề).
-List<String> contentParagraphs(String content) => splitBySentence(
-    content.split('\n').where((p) => p.trim().isNotEmpty).toList());
+List<String> contentParagraphs(String content) => splitBySentence(halfWidthBrackets(content)
+    .split('\n')
+    .where((p) => p.trim().isNotEmpty)
+    .toList());

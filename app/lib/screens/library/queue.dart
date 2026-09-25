@@ -20,7 +20,7 @@ class QueueScreen extends ConsumerWidget {
         child: Column(children: [
           // header editorial đồng bộ các tab (thay AppBar phẳng)
           const PageHeader('TIẾN ĐỘ', 'Hàng đợi dịch', seal: '譯'),
-          Expanded(child: _body(context, ref, q)),
+          FadedExpanded(child: _body(context, ref, q)),
         ]),
       ),
     );

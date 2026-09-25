@@ -2,8 +2,8 @@ import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-/// Hệ thiết kế "Thanh Tân" — sáng, trắng lạnh, nhấn XANH DƯƠNG, bo tròn nhiều.
-/// Ban đêm dùng bộ "Dạ Lam": nền xanh đêm, nhấn xanh băng.
+/// Hệ thiết kế 2.0 "Giấy dó" — nền giấy ngà, chữ mực nâu, nhấn son; ban đêm "Mực đêm".
+/// Nền/nhấn người dùng đổi được qua [papers] và [accents] (Tôi → Giao diện).
 /// Một họ chữ Plus Jakarta Sans (dấu tiếng Việt chuẩn) + mono cho SỐ LIỆU;
 /// phân cấp bằng đậm/cỡ. Tránh trắng/đen tuyền hoàn toàn.
 class Pal {

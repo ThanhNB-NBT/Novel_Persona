@@ -33,9 +33,13 @@ class PageHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final t = Theme.of(context).textTheme;
+    // là tab trong shell thì không lùi được; mở như trang riêng (Hàng đợi, Thông báo
+    // từ ngoài) thì phải có nút lùi — iOS chỉ còn vuốt mép, người không biết là kẹt
+    final canPop = ModalRoute.of(context)?.canPop ?? false;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 16, 8, 10),
+      padding: EdgeInsets.fromLTRB(canPop ? 4 : 20, 16, 8, 10),
       child: Row(children: [
+        if (canPop) const BackButton(),
         Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             // nhãn phụ chỉ khi NÓI THÊM được điều gì ('CÁ NHÂN' trên 'Tôi' là lặp) → '' thì bỏ
@@ -61,6 +65,26 @@ class PageHeader extends StatelessWidget {
       ]),
     );
   }
+}
+
+/// [Expanded] cho vùng cuộn nằm dưới [PageHeader]: mép trên mờ dần 18px, nội dung
+/// trôi vào dưới tiêu đề thay vì bị cắt ngang một đường cứng.
+class FadedExpanded extends StatelessWidget {
+  final Widget child;
+  const FadedExpanded({super.key, required this.child});
+  @override
+  Widget build(BuildContext context) => Expanded(
+        child: ShaderMask(
+          blendMode: BlendMode.dstIn,
+          shaderCallback: (r) => LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: const [Colors.transparent, Colors.black],
+            stops: [0, r.height <= 0 ? 0 : (18 / r.height).clamp(0.0, 1.0)],
+          ).createShader(r),
+          child: child,
+        ),
+      );
 }
 
 /// Dấu triện son — điểm nhấn cổ phong DUY NHẤT được phép trên khung (GĐ7). Chỉ đặt

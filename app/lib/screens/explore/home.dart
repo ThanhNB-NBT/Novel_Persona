@@ -9,7 +9,7 @@ import '../../ambient.dart';
 import '../../cultivation.dart';
 import '../../data.dart';
 import '../../endpoint.dart';
-import '../../theme.dart' show Rad;
+import '../../theme.dart' show Pal, Rad;
 import '../../widgets.dart';
 import '../shell.dart';
 import 'filter.dart';
@@ -566,7 +566,7 @@ class _HeroCard extends ConsumerWidget {
                       style: FilledButton.styleFrom(
                         backgroundColor: accent,
                         foregroundColor: accent.computeLuminance() > 0.45
-                            ? const Color(0xFF1D2129)
+                            ? Pal.ink
                             : Colors.white,
                         padding: const EdgeInsets.symmetric(
                           horizontal: 26,

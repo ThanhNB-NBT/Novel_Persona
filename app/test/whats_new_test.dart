@@ -28,15 +28,29 @@ void main() {
   testWidgets('người nâng cấp thấy 1 lần, lần sau không', (tester) async {
     await prefs.setBool('guide_offered', true);
     await _pump(tester);
-    expect(find.text('Gác Truyện 2.0'), findsOneWidget);
+    expect(find.text('Gác Truyện 2.0.2'), findsOneWidget);
     await tester.tap(find.text('Vào đọc thôi'));
     await tester.pumpAndSettle();
     await _pump(tester);
-    expect(find.text('Gác Truyện 2.0'), findsNothing);
+    expect(find.text('Gác Truyện 2.0.2'), findsNothing);
   });
 
   testWidgets('người cài mới không thấy', (tester) async {
     await _pump(tester);
-    expect(find.text('Gác Truyện 2.0'), findsNothing);
+    expect(find.text('Gác Truyện 2.0.2'), findsNothing);
+  });
+
+  testWidgets('đã xem 2.0 → chỉ thấy mục của bản sau, không lặp lại 2.0', (tester) async {
+    await prefs.setString('whats_new_seen', '2.0');
+    await _pump(tester);
+    expect(find.text('Gác Truyện 2.0.2'), findsOneWidget);
+    expect(find.text('Chọn nền cho cả app'), findsOneWidget);
+    expect(find.text('Tu Tiên thật'), findsNothing);
+  });
+
+  test('unseenReleases: lên thẳng từ 1.x thấy tất cả, bản lạ cũng coi như chưa xem', () {
+    expect(unseenReleases(null).length, releases.length);
+    expect(unseenReleases('1.9').length, releases.length);
+    expect(unseenReleases(releases.last.$1), isEmpty);
   });
 }

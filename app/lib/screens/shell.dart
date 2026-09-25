@@ -542,6 +542,18 @@ class _DockState extends State<_Dock> with TickerProviderStateMixin {
   }
 }
 
+/// Ma trận độ bão hoà (0 = xám, 1 = nguyên màu), hệ số độ sáng Rec. 709.
+ColorFilter _saturation(double s) {
+  const r = 0.2126, g = 0.7152, b = 0.0722;
+  final i = 1 - s;
+  return ColorFilter.matrix([
+    r * i + s, g * i, b * i, 0, 0,
+    r * i, g * i + s, b * i, 0, 0,
+    r * i, g * i, b * i + s, 0, 0,
+    0, 0, 0, 1, 0,
+  ]);
+}
+
 /// Ô giữa: Biểu tượng Tu Tiên đồng bộ thuần túy với các tab còn lại
 class _Emblem extends ConsumerWidget {
   final double proximity; // 0..1
@@ -562,7 +574,12 @@ class _Emblem extends ConsumerWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            PixelIcon(emblem, grade: near > 0.5 ? 5 : 1, size: 24),
+            // vật phẩm người dùng chọn làm emblem thì đủ màu; lúc tab CHƯA chọn mà để
+            // rực thì lạc giữa 4 icon nét đơn sắc → nhạt màu, tới gần mới hiện đủ
+            ColorFiltered(
+              colorFilter: _saturation(0.2 + 0.8 * near),
+              child: PixelIcon(emblem, grade: near > 0.5 ? 5 : 1, size: 24),
+            ),
             const SizedBox(height: 2),
             Text(
               'Tu Tiên',
@@ -638,7 +655,7 @@ class _AppSplashIntroState extends State<AppSplashIntro>
         final fadeOut = ((val - 0.88) / 0.12).clamp(0.0, 1.0);
         final overallOpacity = (1.0 - fadeOut).clamp(0.0, 1.0);
 
-        final inkColor = isDark ? const Color(0xFFE2E8F0) : const Color(0xFF1E242B);
+        final inkColor = Theme.of(context).colorScheme.onSurface;
         final logoAsset = isDark ? 'assets/icon/gt_white.png' : 'assets/icon/gt_ink.png';
 
         return Opacity(

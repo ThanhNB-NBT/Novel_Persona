@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../chapter_paras.dart';
 import '../../ambient.dart';
 import '../../data.dart';
 import '../../endpoint.dart';
@@ -125,7 +126,8 @@ class _Header extends StatelessWidget {
           Row(children: [
             IconButton(
               icon: const Icon(Icons.arrow_back_rounded, color: onDark),
-              onPressed: () => context.pop(),
+              // mở bằng link thì không có gì để pop → về trang chủ thay vì lỗi
+              onPressed: () => context.canPop() ? context.pop() : context.go('/'),
             ),
             const Spacer(),
             _DownloadButton(n),
@@ -252,8 +254,8 @@ class _IntroTab extends StatelessWidget {
         ],
         const SizedBox(height: 22),
         label('Giới thiệu'),
-        Text(n['description_vi'] ?? 'Chưa có giới thiệu.',
-            textAlign: TextAlign.justify, // căn đều 2 bên cho gọn mắt
+        Text(halfWidthBrackets(n['description_vi'] ?? 'Chưa có giới thiệu.'),
+            textAlign: TextAlign.start, // căn đều giãn khoảng trắng to với chữ Việt ngắn
             style: t.bodyLarge?.copyWith(height: 1.65)),
       ],
     );

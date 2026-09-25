@@ -64,7 +64,11 @@ const readerFonts = {
 };
 
 /// Font đã đóng gói sẵn trong asset (an toàn tuyệt đối khi offline).
-const offlineBundledFonts = {'jakarta'};
+/// Đủ 4 font có chân (Literata là MẶC ĐỊNH — người mới mở chương đầu lúc mất mạng
+/// không bị rơi về font hệ thống) + Be Vietnam Pro; mỗi font Regular + Bold (tiêu đề).
+const offlineBundledFonts = {
+  'jakarta', 'literata', 'lora', 'merriweather', 'playfair', 'bevietnam',
+};
 
 /// Độ sáng hiệu lực của app: theo Cài đặt app (0=hệ thống→OS, 1=sáng, 2=tối).
 /// Reader lấy cái này làm mốc cho chế độ màu "Hệ thống".
@@ -135,7 +139,7 @@ class ReaderSettings {
     this.lightColor = 0,
     this.darkColor = 5,
     this.colorMode = 0,
-    this.justify = true,
+    this.justify = false,
     this.lineHeight = 1.7,
     this.sideMargin = 20,
     this.pageMode = false,
@@ -190,7 +194,9 @@ class ReaderSettingsNotifier extends Notifier<ReaderSettings> {
     lightColor: prefs.getInt('rd_light') ?? 13, // Giấy cũ
     darkColor: prefs.getInt('rd_dark') ?? 14, // Mực đêm
     colorMode: prefs.getInt('rd_mode') ?? 0,
-    justify: prefs.getBool('rd_justify') ?? true,
+    // mặc định căn trái: tiếng Việt toàn từ 1 âm tiết ngắn → căn đều trên màn hẹp
+    // giãn khoảng trắng rất to. Ai đã chọn thì giữ (key đã lưu).
+    justify: prefs.getBool('rd_justify') ?? false,
     lineHeight: prefs.getDouble('rd_lh') ?? 1.7,
     sideMargin: prefs.getDouble('rd_margin') ?? 20,
     pageMode: prefs.getBool('rd_page') ?? false,
@@ -267,6 +273,29 @@ void showReaderSettingsSheet(
           ]),
         );
 
+        // Bật/tắt: tên + một dòng nói nó làm gì, công tắc bên phải. Chạm cả dòng cũng đổi.
+        Widget toggle(String lbl, String hint, bool v, ValueChanged<bool> onCh) =>
+            MergeSemantics(
+              child: InkWell(
+                onTap: () => onCh(!v),
+                borderRadius: BorderRadius.circular(10),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(0, 8, 0, 8),
+                  child: Row(children: [
+                    Expanded(
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text(lbl, style: t.labelLarge),
+                        const SizedBox(height: 2),
+                        Text(hint, style: t.bodySmall),
+                      ]),
+                    ),
+                    const SizedBox(width: 12),
+                    Switch.adaptive(value: v, onChanged: onCh),
+                  ]),
+                ),
+              ),
+            );
+
         // Slider gọn: nhãn + giá trị mono cùng hàng, track mảnh.
         Widget slider(String lbl, String value, double v, double min, double max,
                 int divisions, ValueChanged<double> onCh) =>
@@ -329,39 +358,27 @@ void showReaderSettingsSheet(
                   _PreviewCard(s: s, col: col),
 
                   label('Màu nền', editingDark ? 'đang chỉnh nền tối' : 'đang chỉnh nền sáng'),
-                  Row(children: [
-                    SizedBox(
-                      width: 150,
-                      child: seg(
-                        context,
-                        ['Auto', 'Sáng', 'Tối'],
-                        s.colorMode,
-                        (i) => n.update(s.copyWith(colorMode: i)),
-                      ),
+                  SizedBox(
+                    width: 210,
+                    child: seg(
+                      context,
+                      ['Tự động', 'Sáng', 'Tối'],
+                      s.colorMode,
+                      (i) => n.update(s.copyWith(colorMode: i)),
                     ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: SizedBox(
-                        height: 38,
-                        child: ListView(
-                          scrollDirection: Axis.horizontal,
-                          children: [
-                            for (var i = 0; i < readerColors.length; i++)
-                              Padding(
-                                padding: const EdgeInsets.only(right: 8),
-                                child: _Swatch(
-                                  color: readerColors[i],
-                                  selected:
-                                      i == (editingDark ? s.darkColor : s.lightColor),
-                                  onTap: () => n.update(editingDark
-                                      ? s.copyWith(darkColor: i)
-                                      : s.copyWith(lightColor: i)),
-                                ),
-                              ),
-                          ],
-                        ),
+                  ),
+                  const SizedBox(height: 10),
+                  // lưới hiện đủ 15 màu: dải cuộn ngang giấu mất màu đang chọn
+                  // (mặc định Giấy cũ nằm thứ 14) và không lộ là còn màu phía sau
+                  Wrap(spacing: 8, runSpacing: 8, children: [
+                    for (var i = 0; i < readerColors.length; i++)
+                      _Swatch(
+                        color: readerColors[i],
+                        selected: i == (editingDark ? s.darkColor : s.lightColor),
+                        onTap: () => n.update(editingDark
+                            ? s.copyWith(darkColor: i)
+                            : s.copyWith(lightColor: i)),
                       ),
-                    ),
                   ]),
 
                   label('Phông chữ', serifFonts.containsKey(s.fontKey) ? 'font có chân (Serif)' : 'font không chân (Sans)'),
@@ -441,7 +458,7 @@ void showReaderSettingsSheet(
                       );
                     },
                   ),
-                  const SizedBox(height: 10),
+                  label('Trình bày'),
                   slider('Cỡ chữ', '${s.fontSize.round()}', s.fontSize, 15, 28, 13,
                       (v) => n.update(s.copyWith(fontSize: v))),
                   slider('Giãn dòng', '${s.lineHeight.toStringAsFixed(1)}×',
@@ -450,38 +467,13 @@ void showReaderSettingsSheet(
                           lineHeight: (v * 10).roundToDouble() / 10))),
                   slider('Viền 2 bên', '${s.sideMargin.round()}', s.sideMargin, 8, 48,
                       10, (v) => n.update(s.copyWith(sideMargin: v))),
-                  Row(children: [
-                    SizedBox(
-                        width: 86,
-                        child: Text('Căn lề',
-                            style:
-                                t.labelMedium?.copyWith(color: cs.onSurfaceVariant))),
-                    Expanded(
-                      child: seg(
-                        context,
-                        ['Trái', 'Đều 2 bên'],
-                        s.justify ? 1 : 0,
-                        (i) => n.update(s.copyWith(justify: i == 1)),
-                      ),
-                    ),
-                  ]),
+                  const SizedBox(height: 6),
+                  toggle('Căn đều 2 bên', 'Chữ thẳng cả mép phải, như sách in',
+                      s.justify, (v) => n.update(s.copyWith(justify: v))),
                   // Gạch chân chỗ đã được thuật ngữ của truyện áp vào — để soi xem
                   // "Áp cả truyện" có vá đúng chỗ không. Mặc định tắt cho đỡ rối mắt.
-                  Row(children: [
-                    SizedBox(
-                        width: 86,
-                        child: Text('Thuật ngữ',
-                            style:
-                                t.labelMedium?.copyWith(color: cs.onSurfaceVariant))),
-                    Expanded(
-                      child: seg(
-                        context,
-                        ['Ẩn', 'Gạch chân'],
-                        s.markGlossary ? 1 : 0,
-                        (i) => n.update(s.copyWith(markGlossary: i == 1)),
-                      ),
-                    ),
-                  ]),
+                  toggle('Gạch chân thuật ngữ', 'Đánh dấu tên riêng đã sửa theo bảng thuật ngữ',
+                      s.markGlossary, (v) => n.update(s.copyWith(markGlossary: v))),
 
                   if (onRetranslate != null) ...[
                     const SizedBox(height: 16),
@@ -571,24 +563,30 @@ class _Swatch extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        width: 36,
-        height: 36,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: color.bg,
-          shape: BoxShape.circle,
-          border: Border.all(
-            color: selected ? cs.primary : cs.outlineVariant,
-            width: selected ? 2.4 : 1,
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: 'Nền ${color.name}',
+      excludeSemantics: true,
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          width: 36,
+          height: 36,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: color.bg,
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: selected ? cs.primary : cs.outlineVariant,
+              width: selected ? 2.4 : 1,
+            ),
           ),
+          child: Text('A',
+              style: TextStyle(
+                  color: color.fg, fontSize: 14, fontWeight: FontWeight.w700)),
         ),
-        child: Text('A',
-            style: TextStyle(
-                color: color.fg, fontSize: 14, fontWeight: FontWeight.w700)),
       ),
     );
   }
