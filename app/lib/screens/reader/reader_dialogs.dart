@@ -303,3 +303,122 @@ Future<void> showChapterTocSheet(BuildContext context,
     },
   );
 }
+
+/// Dấu trang (2.1): đánh dấu chỗ đang đọc (kèm ghi chú tuỳ chọn) + danh sách dấu trang
+/// của cả truyện. Chạm một dấu → [onJump] (chương, %).
+Future<void> showBookmarksSheet(BuildContext context,
+    {required int novelId,
+    required int chapterIndex,
+    required double percent,
+    required String excerpt,
+    required void Function(int chapterIndex, double percent) onJump}) {
+  // ponytail: không dispose — sheet còn dựng TextField trong lúc trượt xuống sau khi
+  // future đóng, dispose ở whenComplete là "used after disposed". Controller trơn, GC dọn.
+  final note = TextEditingController();
+  return showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    showDragHandle: true,
+    builder: (context) => Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+      child: SizedBox(
+        height: MediaQuery.sizeOf(context).height * 0.6,
+        child: Consumer(builder: (context, ref, _) {
+          final cs = Theme.of(context).colorScheme;
+          final list = ref.watch(bookmarksProvider(novelId));
+          Future<void> add() async {
+            final messenger = ScaffoldMessenger.of(context);
+            try {
+              await addBookmark(novelId, chapterIndex, percent,
+                  excerpt: excerpt, note: note.text);
+              note.clear();
+              ref.invalidate(bookmarksProvider(novelId));
+            } catch (e) {
+              messenger.showSnackBar(SnackBar(content: Text(loiDeHieu(e))));
+            }
+          }
+
+          return Column(children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+              child: Row(children: [
+                Text('Dấu trang', style: Theme.of(context).textTheme.titleMedium),
+                const Spacer(),
+                Text('Chương $chapterIndex · ${(percent * 100).round()}%',
+                    style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12)),
+              ]),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: Row(children: [
+                Expanded(
+                  child: TextField(
+                    controller: note,
+                    decoration: const InputDecoration(
+                        hintText: 'Ghi chú (không bắt buộc)',
+                        isDense: true,
+                        border: OutlineInputBorder()),
+                    textInputAction: TextInputAction.done,
+                    onSubmitted: (_) => add(),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                FilledButton.icon(
+                  onPressed: add,
+                  icon: const Icon(Icons.bookmark_add_rounded, size: 18),
+                  label: const Text('Đánh dấu'),
+                ),
+              ]),
+            ),
+            Expanded(
+              child: list.when(
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (e, _) => AppError(e,
+                    onRetry: () => ref.invalidate(bookmarksProvider(novelId))),
+                data: (rows) => rows.isEmpty
+                    ? Center(
+                        child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Text('Chưa có dấu trang nào.\nBấm "Đánh dấu" để lưu chỗ đang đọc.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(color: cs.onSurfaceVariant)),
+                      ))
+                    : ListView.builder(
+                        itemCount: rows.length,
+                        itemBuilder: (context, i) {
+                          final b = rows[i];
+                          final idx = b['chapter_index'] as int;
+                          final pct = (b['percent'] as num).toDouble();
+                          final sub = [
+                            if (b['note'] != null) b['note'] as String,
+                            if (b['excerpt'] != null) '“${b['excerpt']}”',
+                          ].join('\n');
+                          return ListTile(
+                            leading: Icon(Icons.bookmark_rounded, color: cs.primary),
+                            title: Text('Chương $idx · ${(pct * 100).round()}%'),
+                            subtitle: sub.isEmpty
+                                ? null
+                                : Text(sub, maxLines: 3, overflow: TextOverflow.ellipsis),
+                            trailing: IconButton(
+                              tooltip: 'Xoá dấu trang',
+                              icon: const Icon(Icons.delete_outline_rounded),
+                              onPressed: () async {
+                                await deleteBookmark(b['id'] as int);
+                                ref.invalidate(bookmarksProvider(novelId));
+                              },
+                            ),
+                            onTap: () {
+                              Navigator.pop(context);
+                              onJump(idx, pct);
+                            },
+                          );
+                        },
+                      ),
+              ),
+            ),
+          ]);
+        }),
+      ),
+    ),
+  );
+}

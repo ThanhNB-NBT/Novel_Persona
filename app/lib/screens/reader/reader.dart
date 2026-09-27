@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -67,6 +68,13 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   Timer? _statusPoll; // chương chưa 'done' (đang dịch/hàng đợi) → refetch tới khi xong
   bool _showBars = true; // bật/tắt thanh công cụ (AppBar/Bottom controls)
 
+  // 2.1 tự cuộn (chế độ cuộn dọc). Chạy từng bước ngắn thay vì nhắm thẳng đáy:
+  // ListView.builder chỉ ƯỚC LƯỢNG maxScrollExtent (đoạn chưa dựng) nên đáy dời dần.
+  // Hết chương → chương sau cuộn tiếp qua cờ tĩnh (_goChapter tạo State mới).
+  bool _auto = false;
+  bool _autoRunning = false;
+  static bool _autoCarry = false;
+
   // Bộ nhớ đệm phân trang (chế độ lật trang) — tính lại khi nội dung/cỡ chữ/kích thước đổi.
   List<String>? _pages;
   int? _pageKey;
@@ -101,6 +109,12 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     // ponytail: gắn theo vòng đời reader; chuyển chương (pushReplacement) enable lại
     // ngay ở initState mới nên khoảng hở dưới giây, thừa dưới ngưỡng tắt màn ~30s.
     WakelockPlus.enable();
+    if (_autoCarry) {
+      _autoCarry = false;
+      _auto = true;
+      _showBars = false;
+    }
+    HardwareKeyboard.instance.addHandler(_onKey);
   }
 
   /// Ghi chương đang đọc rồi làm mới các provider — novel_detail nằm dưới reader
@@ -128,6 +142,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     _ai.dispose();
     _localTtsPara.dispose();
     WakelockPlus.disable();
+    HardwareKeyboard.instance.removeHandler(_onKey);
     super.dispose();
   }
 
@@ -188,6 +203,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   /// NHẤN GIỮ 1 từ trong đoạn → chọn từ đó + mở form sửa. Chạm thường chỉ bật/tắt thanh
   /// công cụ ([_onTapContent]) — 1.x mở form + bàn phím mỗi lần chạm, người đọc bực.
   void _onTapWord(String block, int offset, Offset globalPos) {
+    if (_auto) _setAuto(false); // đang sửa chữ mà trang vẫn trôi thì mất chỗ
     if (sb.auth.currentUser == null) {
       context.push('/login');
       return;
@@ -472,6 +488,26 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                   ),
                 ),
                 IconButton(
+                  tooltip: 'Dấu trang',
+                  icon: const Icon(Icons.bookmark_border_rounded, size: 19),
+                  onPressed: () {
+                    if (sb.auth.currentUser == null) {
+                      context.push('/login');
+                      return;
+                    }
+                    final n = _renderedParas.length;
+                    final para = n == 0
+                        ? ''
+                        : _renderedParas[(_percent.value * n).floor().clamp(0, n - 1)];
+                    showBookmarksSheet(context,
+                        novelId: novelId,
+                        chapterIndex: chapterIndex,
+                        percent: _percent.value,
+                        excerpt: para.length > 120 ? '${para.substring(0, 120)}…' : para,
+                        onJump: _jumpToBookmark);
+                  },
+                ),
+                IconButton(
                   tooltip: 'Mục lục',
                   icon: const Icon(Icons.format_list_bulleted_rounded, size: 19),
                   onPressed: () => showChapterTocSheet(context,
@@ -480,7 +516,11 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                 IconButton(
                   tooltip: 'Cài đặt đọc',
                   icon: const Icon(Icons.text_fields_rounded, size: 19),
-                  onPressed: () => showReaderSettingsSheet(context, ref, onRetranslate: _retranslate),
+                  // dịch lại chương đã có bản dịch: chỉ admin (migration 126 chặn ở server)
+                  onPressed: () => showReaderSettingsSheet(context, ref,
+                      onRetranslate:
+                          ref.read(isAdminProvider).value == true ? _retranslate : null,
+                      onAutoScroll: () => _setAuto(true)),
                 ),
                 const SizedBox(width: 2),
               ],
@@ -603,6 +643,85 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   /// Chương này còn quà tu tiên chưa nhận không (công thức md5 + bảng claims).
   void _toggleBars() => setState(() => _showBars = !_showBars);
 
+  /// Phím âm lượng (Android, bật trong Cài đặt đọc): giảm = tiến, tăng = lùi. Trả true =
+  /// đã xử lý → Flutter không trả phím về hệ thống nên âm lượng không đổi. Nuốt cả
+  /// KeyUp cho cặp phím khớp nhau. Đang nghe truyện này thì để phím chỉnh tiếng như thường.
+  bool _onKey(KeyEvent e) {
+    final k = e.logicalKey;
+    if (k != LogicalKeyboardKey.audioVolumeDown && k != LogicalKeyboardKey.audioVolumeUp) {
+      return false;
+    }
+    if (!mounted || !ref.read(readerSettingsProvider).volumeKeys) return false;
+    final ts = TtsPlayer.i.state.value;
+    if (ts.novelId == novelId && ts.playing) return false;
+    if (e is KeyUpEvent) return true;
+    _turn(k == LogicalKeyboardKey.audioVolumeDown ? 1 : -1);
+    return true;
+  }
+
+  /// Sang trang (dir 1) / lùi trang (dir -1): lật trang thì đổi trang (trang đệm 2 đầu tự
+  /// đổi chương), cuộn dọc thì cuộn ~1 màn, ở sát mép thì đổi chương.
+  void _turn(int dir) {
+    if (ref.read(readerSettingsProvider).pageMode) {
+      if (!_pageCtrl.hasClients) return;
+      const d = Duration(milliseconds: 220);
+      dir > 0
+          ? _pageCtrl.nextPage(duration: d, curve: Curves.easeOutCubic)
+          : _pageCtrl.previousPage(duration: d, curve: Curves.easeOutCubic);
+      return;
+    }
+    if (!_scroll.hasClients) return;
+    final p = _scroll.position;
+    if (dir > 0 && p.pixels >= p.maxScrollExtent - 1) return _goChapter(chapterIndex + 1);
+    if (dir < 0 && p.pixels <= p.minScrollExtent + 1) return _goChapter(chapterIndex - 1);
+    _scroll.animateTo(
+        (p.pixels + dir * p.viewportDimension * 0.9).clamp(p.minScrollExtent, p.maxScrollExtent),
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutCubic);
+  }
+
+  void _setAuto(bool on) {
+    setState(() {
+      _auto = on;
+      if (on) _showBars = false;
+    });
+    if (on && !_autoRunning) _runAuto();
+  }
+
+  Future<void> _runAuto() async {
+    _autoRunning = true;
+    // mở chương mới: chờ khôi phục vị trí đọc xong đã, không thì cuộn từ đầu rồi bị nhảy
+    for (var i = 0; !_restored && i < 40; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    }
+    while (mounted && _auto && _scroll.hasClients) {
+      final p = _scroll.position;
+      final left = p.maxScrollExtent - p.pixels;
+      if (left <= 1) {
+        if (!_navigating) _autoCarry = true;
+        _goChapter(chapterIndex + 1);
+        break;
+      }
+      final speed = ref.read(readerSettingsProvider).autoScrollSpeed;
+      final step = math.min(left, 240.0);
+      await _scroll.animateTo(p.pixels + step,
+          duration: Duration(milliseconds: (step / speed * 1000).round()),
+          curve: Curves.linear);
+    }
+    _autoRunning = false;
+  }
+
+  /// Nhảy tới dấu trang: lưu % rồi dùng đúng đường khôi phục vị trí đọc sẵn có.
+  void _jumpToBookmark(int idx, double pct) {
+    saveChapterPercent(novelId, idx, pct);
+    if (idx != chapterIndex) return _goChapter(idx);
+    setState(() {
+      _pageKey = null; // lật trang: phân trang lại → jumpToPage theo % vừa lưu
+      _restored = false; // cuộn dọc: _restoreScroll chạy lại trong build
+      _restoreTries = 0;
+    });
+  }
+
   /// Chạm vào nội dung (cả chế độ cuộn lẫn vùng giữa chế độ lật trang):
   /// đang sửa thì đóng form, không thì bật/tắt thanh công cụ.
   void _onTapContent() {
@@ -626,6 +745,10 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   Widget _buildScroll(BuildContext context, ReaderSettings s, ReaderColor col,
       String title, List<String> paras, TextStyle textStyle) {
     _restoreScroll();
+    if (_auto && !_autoRunning) {
+      _autoRunning = true; // chặn build sau xếp thêm lượt trước khi lượt này kịp chạy
+      WidgetsBinding.instance.addPostFrameCallback((_) => _runAuto());
+    }
     // quà chèn CUỐI đoạn thứ hash%n — tất định, mỗi user mỗi chỗ khác nhau
     final giftAfter = _hasGift()
         ? giftHash(sb.auth.currentUser!.id, novelId, chapterIndex) % paras.length
@@ -634,7 +757,16 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
             fontSize: s.fontSize + 4, height: 1.3, color: col.fg)
         .copyWith(fontWeight: FontWeight.w700);
     final hint = TextStyle(color: col.fg.withValues(alpha: 0.5), fontSize: 13);
-    return NotificationListener<ScrollNotification>(
+    // Chạm/kéo khi đang tự cuộn → dừng + hiện thanh công cụ. Phải là Listener BỌC NGOÀI:
+    // lúc list đang animateTo, Scrollable bật IgnorePointer cho con nên onTap của đoạn
+    // không bao giờ tới, cú chạm chỉ "giữ" animation rồi vòng tự cuộn chạy tiếp.
+    return Listener(
+      onPointerDown: (_) {
+        if (!_auto) return;
+        _setAuto(false);
+        setState(() => _showBars = true);
+      },
+      child: NotificationListener<ScrollNotification>(
       onNotification: (n) {
         // Cuộn hết rồi vuốt tiếp (overscroll) → nhảy chương; kéo quá đỉnh → chương trước.
         if (n is ScrollStartNotification) {
@@ -711,9 +843,9 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
             ),
             const SizedBox(height: 16),
             EndPanel(novelId: novelId, chapterIndex: chapterIndex, fg: col.fg),
-            CommentsPanel(novelId: novelId, chapterIndex: chapterIndex, fg: col.fg),
           ]);
         },
+      ),
       ),
     );
   }

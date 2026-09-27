@@ -125,6 +125,33 @@ final pendingJobCountProvider = FutureProvider.autoDispose<int>((ref) async {
   return res.count;
 });
 
+/// Lỗi app gửi từ máy người dùng (bảng client_errors, 2.1) — RLS chỉ cho admin đọc,
+/// user thường nhận danh sách rỗng. Đổi sang dạng {time, message, stack} như log local.
+final clientErrorsProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
+  final rows = await sb
+      .from('client_errors')
+      .select('user_id, created_at, app_version, platform, message, stack')
+      .order('created_at') // mặc định giảm dần = mới nhất trước
+      .limit(100);
+  // user_id trỏ auth.users (không phải profiles) nên PostgREST không embed được → tra riêng
+  final ids = {for (final r in rows) if (r['user_id'] != null) r['user_id'] as String};
+  final names = {
+    for (final p in ids.isEmpty
+        ? const <Rec>[]
+        : await sb.from('profiles').select('id, display_name').inFilter('id', ids.toList()))
+      p['id'] as String: p['display_name'],
+  };
+  return [
+    for (final r in rows)
+      {
+        'time': r['created_at'],
+        'message': '[${names[r['user_id']] ?? '?'} · '
+            '${r['app_version'] ?? '?'} · ${r['platform'] ?? '?'}] ${r['message']}',
+        'stack': r['stack'] ?? '',
+      },
+  ];
+});
+
 /// Job đáng chú ý: đang chạy / lỗi / chờ (bỏ done). Kèm tên truyện + số chương.
 final adminJobsProvider = FutureProvider.autoDispose<List<Rec>>((ref) async {
   final jobs = List<Rec>.from(

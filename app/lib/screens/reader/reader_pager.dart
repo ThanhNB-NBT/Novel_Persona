@@ -76,7 +76,6 @@ extension _ReaderPager on _ReaderScreenState {
                 if (hasGift)
                   GiftButton(novelId: novelId, chapterIndex: chapterIndex, fg: col.fg),
                 EndPanel(novelId: novelId, chapterIndex: chapterIndex, fg: col.fg),
-                CommentsPanel(novelId: novelId, chapterIndex: chapterIndex, fg: col.fg),
                 const SizedBox(height: 16),
                 Center(
                   child: Text('vuốt tiếp để sang chương sau →',

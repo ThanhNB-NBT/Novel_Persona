@@ -213,3 +213,32 @@ final unreadNotifCountProvider = FutureProvider.autoDispose<int>((ref) async {
 /// Gọi khi mở màn Thông báo — đánh dấu đã đọc (badge về 0).
 Future<void> markNotificationsSeen() =>
     prefs.setString('notify_seen_at', DateTime.now().toUtc().toIso8601String());
+
+/// Dấu trang của 1 truyện (2.1, bảng bookmarks) — mới nhất trước. Vị trí = % chương,
+/// cùng đơn vị với [saveChapterPercent] nên nhảy tới = lưu % rồi mở chương như thường.
+final bookmarksProvider = FutureProvider.autoDispose.family<List<Rec>, int>((
+  ref,
+  novelId,
+) async {
+  ref.watch(authStateProvider);
+  final uid = sb.auth.currentUser?.id;
+  if (uid == null) return const [];
+  return List<Rec>.from(await sb
+      .from('bookmarks')
+      .select('id, chapter_index, percent, excerpt, note')
+      .eq('user_id', uid)
+      .eq('novel_id', novelId)
+      .order('created_at'));
+});
+
+Future<void> addBookmark(int novelId, int chapterIndex, double percent,
+        {String? excerpt, String? note}) =>
+    sb.rpc('add_bookmark', params: {
+      'p_novel_id': novelId,
+      'p_chapter_index': chapterIndex,
+      'p_percent': percent,
+      'p_excerpt': excerpt,
+      'p_note': note,
+    });
+
+Future<void> deleteBookmark(int id) => sb.rpc('delete_bookmark', params: {'p_id': id});

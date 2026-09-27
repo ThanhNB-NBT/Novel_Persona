@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -132,6 +133,9 @@ class ReaderSettings {
   // Tô dấu chỗ bản dịch đã được glossary áp vào. MẶC ĐỊNH TẮT: truyện dày đặc tên,
   // gạch chân hết thì rối mắt — ai muốn soi glossary mới bật.
   final bool markGlossary;
+  // 2.1: phím âm lượng lật trang/cuộn (chỉ Android — iOS không giao phím âm lượng cho app)
+  final bool volumeKeys;
+  final double autoScrollSpeed; // px/giây cho nút tự cuộn (chế độ cuộn dọc), 15..120
 
   const ReaderSettings({
     this.fontSize = 18,
@@ -144,6 +148,8 @@ class ReaderSettings {
     this.sideMargin = 20,
     this.pageMode = false,
     this.markGlossary = false,
+    this.volumeKeys = false,
+    this.autoScrollSpeed = 40,
   });
 
   ReaderSettings copyWith({
@@ -157,6 +163,8 @@ class ReaderSettings {
     double? sideMargin,
     bool? pageMode,
     bool? markGlossary,
+    bool? volumeKeys,
+    double? autoScrollSpeed,
   }) => ReaderSettings(
     fontSize: fontSize ?? this.fontSize,
     fontKey: fontKey ?? this.fontKey,
@@ -168,6 +176,8 @@ class ReaderSettings {
     sideMargin: sideMargin ?? this.sideMargin,
     pageMode: pageMode ?? this.pageMode,
     markGlossary: markGlossary ?? this.markGlossary,
+    volumeKeys: volumeKeys ?? this.volumeKeys,
+    autoScrollSpeed: autoScrollSpeed ?? this.autoScrollSpeed,
   );
 
   /// Màu nền/chữ đã giải quyết: chế độ quyết định lấy nền sáng hay tối,
@@ -201,6 +211,8 @@ class ReaderSettingsNotifier extends Notifier<ReaderSettings> {
     sideMargin: prefs.getDouble('rd_margin') ?? 20,
     pageMode: prefs.getBool('rd_page') ?? false,
     markGlossary: prefs.getBool('rd_mark_gloss') ?? false,
+    volumeKeys: prefs.getBool('rd_volume_keys') ?? false,
+    autoScrollSpeed: prefs.getDouble('rd_auto_speed') ?? 40,
   );
 
   void _save() {
@@ -214,6 +226,8 @@ class ReaderSettingsNotifier extends Notifier<ReaderSettings> {
     prefs.setDouble('rd_margin', state.sideMargin);
     prefs.setBool('rd_page', state.pageMode);
     prefs.setBool('rd_mark_gloss', state.markGlossary);
+    prefs.setBool('rd_volume_keys', state.volumeKeys);
+    prefs.setDouble('rd_auto_speed', state.autoScrollSpeed);
   }
 
   void update(ReaderSettings s) {
@@ -235,6 +249,7 @@ void showReaderSettingsSheet(
   BuildContext context,
   WidgetRef ref, {
   VoidCallback? onRetranslate,
+  VoidCallback? onAutoScroll,
 }) {
   showModalBottomSheet(
     context: context,
@@ -474,6 +489,24 @@ void showReaderSettingsSheet(
                   // "Áp cả truyện" có vá đúng chỗ không. Mặc định tắt cho đỡ rối mắt.
                   toggle('Gạch chân thuật ngữ', 'Đánh dấu tên riêng đã sửa theo bảng thuật ngữ',
                       s.markGlossary, (v) => n.update(s.copyWith(markGlossary: v))),
+                  if (defaultTargetPlatform == TargetPlatform.android)
+                    toggle('Phím âm lượng lật trang', 'Giảm = trang sau, tăng = trang trước',
+                        s.volumeKeys, (v) => n.update(s.copyWith(volumeKeys: v))),
+                  if (!s.pageMode && onAutoScroll != null) ...[
+                    slider('Tự cuộn', '${s.autoScrollSpeed.round()}', s.autoScrollSpeed,
+                        15, 120, 21, (v) => n.update(s.copyWith(autoScrollSpeed: v))),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        icon: const Icon(Icons.play_arrow_rounded, size: 18),
+                        label: const Text('Bắt đầu tự cuộn (chạm màn hình để dừng)'),
+                        onPressed: () {
+                          Navigator.pop(context);
+                          onAutoScroll();
+                        },
+                      ),
+                    ),
+                  ],
 
                   if (onRetranslate != null) ...[
                     const SizedBox(height: 16),

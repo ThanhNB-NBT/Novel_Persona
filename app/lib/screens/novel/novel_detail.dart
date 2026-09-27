@@ -562,6 +562,8 @@ class _ChapterListTabState extends ConsumerState<_ChapterListTab> {
                       icon: const Icon(Icons.playlist_add_rounded, size: 18),
                       label: const Text('Dịch'),
                     ),
+                    // dịch lại chương đã dịch: chỉ admin (migration 126 chặn ở server)
+                    if (ref.watch(isAdminProvider).value == true)
                     IconButton(
                       tooltip: 'Dịch lại — chọn chương',
                       icon: const Icon(Icons.restart_alt_rounded, size: 20),

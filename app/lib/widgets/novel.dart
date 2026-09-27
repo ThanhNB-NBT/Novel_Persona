@@ -173,6 +173,11 @@ class NovelListRow extends StatelessWidget {
                   // đáy: ngang chân ảnh — số chương + nguồn crawl (nếu có)
                   Row(children: [
                     IconStat(Icons.menu_book_rounded, '${n['chapter_count_source'] ?? 0}'),
+                    // chưa chương nào dịch: mở ra là phải chờ dịch ~20 giây — báo trước
+                    if (notTranslated(n)) ...[
+                      const SizedBox(width: 10),
+                      Text('Chưa dịch', style: t.labelSmall?.copyWith(color: cs.tertiary)),
+                    ],
                     if (sourceName(n).isNotEmpty) ...[
                       const SizedBox(width: 10),
                       Flexible(
@@ -295,7 +300,7 @@ class PosterTile extends StatelessWidget {
                 style: t.labelLarge?.copyWith(
                     color: Colors.white, fontWeight: FontWeight.w700, height: 1.2)),
             const SizedBox(height: 2),
-            Text('${n['chapter_count_source'] ?? 0} chương',
+            Text('${n['chapter_count_source'] ?? 0} chương${notTranslated(n) ? ' · chưa dịch' : ''}',
                 style: t.labelSmall
                     ?.copyWith(color: Colors.white.withValues(alpha: 0.8))),
           ]),
@@ -311,3 +316,7 @@ class PosterTile extends StatelessWidget {
     );
   }
 }
+
+/// Truyện chưa có chương nào dịch xong (bộ đếm chapter_count_translated). Thiếu cột
+/// (query không chọn) thì coi như đã dịch — không gắn nhãn sai.
+bool notTranslated(Rec n) => (n['chapter_count_translated'] ?? 1) == 0;

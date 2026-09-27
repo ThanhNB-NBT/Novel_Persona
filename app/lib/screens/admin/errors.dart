@@ -6,7 +6,8 @@ import '../../data.dart';
 import '../../errorlog.dart';
 
 /// Nhật ký lỗi: LỖI WORKER (job dịch/crawl failed — đọc từ server, như màn Quản trị)
-/// + lỗi runtime của app (bắt tại chỗ, lưu local).
+/// + lỗi app máy người dùng gửi về (client_errors, chỉ admin đọc được)
+/// + lỗi runtime của app trên máy này (lưu local).
 class ErrorLogScreen extends ConsumerWidget {
   const ErrorLogScreen({super.key});
 
@@ -16,6 +17,7 @@ class ErrorLogScreen extends ConsumerWidget {
     final t = Theme.of(context).textTheme;
     final jobs = ref.watch(adminJobsProvider).value ?? const <Rec>[];
     final failed = [for (final j in jobs) if (j['status'] == 'failed') j];
+    final remote = ref.watch(clientErrorsProvider).value ?? const <Map<String, dynamic>>[];
     return Scaffold(
       appBar: AppBar(
         title: const Text('Nhật ký lỗi'),
@@ -28,11 +30,14 @@ class ErrorLogScreen extends ConsumerWidget {
         ],
       ),
       body: RefreshIndicator(
-        onRefresh: () async => ref.invalidate(adminJobsProvider),
+        onRefresh: () async {
+          ref.invalidate(adminJobsProvider);
+          ref.invalidate(clientErrorsProvider);
+        },
         child: ValueListenableBuilder<List<Map<String, dynamic>>>(
           valueListenable: AppErrorLog.entries,
           builder: (context, list, _) {
-            if (list.isEmpty && failed.isEmpty) {
+            if (list.isEmpty && failed.isEmpty && remote.isEmpty) {
               return ListView(children: [
                 const SizedBox(height: 160),
                 Icon(Icons.check_circle_outline_rounded,
@@ -47,6 +52,10 @@ class ErrorLogScreen extends ConsumerWidget {
                 if (failed.isNotEmpty) ...[
                   _sectionLabel(context, 'Lỗi worker (dịch / crawl)'),
                   for (final j in failed) _JobErrorTile(j),
+                ],
+                if (remote.isNotEmpty) ...[
+                  _sectionLabel(context, 'Lỗi app (máy người dùng gửi về)'),
+                  for (final e in remote) _ErrorTile(e),
                 ],
                 if (list.isNotEmpty) ...[
                   _sectionLabel(context, 'Lỗi app (trên máy này)'),

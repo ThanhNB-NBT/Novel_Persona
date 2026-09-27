@@ -33,6 +33,16 @@ const releases = <(String, List<WhatsNewItem>)>[
     (Icons.cloud_off_rounded, 'Font đọc có sẵn, không cần mạng',
         'Literata, Lora, Merriweather, Playfair Display, Be Vietnam Pro đã nằm trong app.'),
   ]),
+  ('2.1', [
+    (Icons.bookmark_rounded, 'Dấu trang + ghi chú',
+        'Nút dấu trang trên thanh đọc: lưu chỗ đang đọc kèm ghi chú, chạm để quay lại đúng chỗ.'),
+    (Icons.play_circle_outline_rounded, 'Tự cuộn',
+        'Aa → Bắt đầu tự cuộn (chế độ cuộn dọc), chỉnh được tốc độ. Hết chương tự sang chương sau.'),
+    (Icons.volume_down_rounded, 'Lật trang bằng phím âm lượng',
+        'Bật ở Aa (Android). Giảm = trang sau, tăng = trang trước.'),
+    (Icons.translate_rounded, 'Nhãn "Chưa dịch"',
+        'Truyện chưa có chương nào dịch được đánh dấu — mở ra sẽ phải chờ dịch một lúc.'),
+  ]),
 ];
 
 /// Các bản phát hành máy này CHƯA xem, cũ trước mới sau. [seen] null = chưa xem bản nào.
