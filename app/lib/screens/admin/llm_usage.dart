@@ -164,8 +164,12 @@ class _LlmUsageScreenState extends ConsumerState<LlmUsageScreen> {
             _GeminiQuota(
               models: parseGeminiModels(geminiRaw),
               dayRows: of(day, 'gemini').toList(),
-              keys: {for (final r in rows.where((r) => r['provider'] == 'gemini')) '${r['key_label']}'}
-                  .toList()
+              // chỉ nhãn "gemini#N" của pool xoay key mới là key; nhãn "gemini" trơn là lượt gọi
+              // lẻ (script thăm dò model) — đếm nó thành key làm trần RPD dư 1 key (2.500 thay 2.000)
+              keys: {
+                for (final r in rows.where((r) => r['provider'] == 'gemini'))
+                  if (RegExp(r'^gemini#\d+$').hasMatch('${r['key_label']}')) '${r['key_label']}'
+              }.toList()
                 ..sort(),
             )),
 
