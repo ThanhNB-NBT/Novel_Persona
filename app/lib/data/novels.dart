@@ -71,6 +71,8 @@ String sourceLabel(String code) => switch (code) {
       'xslou' => 'Tiểu Thuyết Lâu',
       'qiushubang' => 'Cầu Thư Bang',
       '123bqg' => 'Bút Thú Các',
+      'twkan' => 'Đài Loan Tiểu Thuyết', // 台湾小说网
+      'ixdzs8' => 'Ái Hạ Thư', // 爱下电子书, gọi tắt 爱下书
       '' => '',
       _ => code[0].toUpperCase() + code.substring(1), // nguồn mới: ít ra không viết thường
     };
