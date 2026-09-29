@@ -22,7 +22,7 @@ final isAdminProvider = FutureProvider.autoDispose<bool>((ref) async {
 /// kéo về mà không ai dùng (updated_at chỉ để sắp xếp — máy chủ tự lo, khỏi tải).
 const _kAdminNovelCols =
     'id, title_vi, title_zh, author_vi, status, hidden, source_id, genres, '
-    'last_chapter_at, chapter_count_source, chapter_count_translated, cover_url, sources(name)';
+    'last_chapter_at, chapter_count_source, chapter_count_translated, cover_url, sources(name, label)';
 
 /// Bộ lọc tab Truyện. tab: 0 = tất cả, 1 = đang hiển thị, 2 = đã ẩn.
 typedef AdminNovelFilter = ({String q, int tab});
@@ -159,7 +159,7 @@ final adminJobsProvider = FutureProvider.autoDispose<List<Rec>>((ref) async {
         .from('translation_jobs')
         .select(
           'id, type, status, priority, attempts, error, created_at, started_at, '
-          'novel_id, chapter_id, novels(title_vi, title_zh, sources(name, enabled)), '
+          'novel_id, chapter_id, novels(title_vi, title_zh, sources(name, label, enabled)), '
           'chapters(chapter_index)',
         )
         .inFilter('status', ['running', 'failed', 'pending'])
@@ -456,7 +456,7 @@ final newNovels24hProvider = FutureProvider.autoDispose<List<Rec>>((ref) async {
   return List<Rec>.from(await sb
       .from('novels')
       .select('id, title_vi, title_zh, cover_url, created_at, source_rank, '
-          'chapter_count_source, status, sources(name)')
+          'chapter_count_source, status, sources(name, label)')
       .gte('created_at', since)
       .order('created_at', ascending: false));
 });

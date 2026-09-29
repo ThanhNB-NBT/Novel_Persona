@@ -31,6 +31,19 @@ void main() {
     expect(sourceName({'title_vi': 'B'}), '');
   });
 
+  test('sources.label ở DB thắng bảng dự phòng trong code', () {
+    Rec n(Map s) => {'title_vi': 'A', 'sources': s};
+    // nguồn mới chỉ có label ở DB, không có dòng trong code
+    expect(sourceName(n({'name': 'twkan', 'label': 'Đài Loan Tiểu Thuyết'})), 'Đài Loan Tiểu Thuyết');
+    // DB đổi tên thì app theo DB, không cần phát hành lại
+    expect(sourceName(n({'name': 'ptwxz', 'label': 'Phiêu Thiên Văn Học'})), 'Phiêu Thiên Văn Học');
+    // label NULL/rỗng (cache offline cũ, nguồn chưa đặt tên) → bảng dự phòng → mã thô
+    expect(sourceName(n({'name': 'ptwxz', 'label': null})), 'Phiêu Thiên');
+    expect(sourceName(n({'name': 'xyetianlian', 'label': ' '})), 'Xyetianlian');
+    expect(sourceDisplay({'id': 1, 'name': 'twkan', 'label': 'Đài Loan Tiểu Thuyết'}),
+        'Đài Loan Tiểu Thuyết'); // dòng bảng sources (bộ lọc nguồn)
+  });
+
   testWidgets('render badge nguồn ra PNG', (tester) async {
     await tester.binding.setSurfaceSize(const Size(440, 400));
     final key = GlobalKey();

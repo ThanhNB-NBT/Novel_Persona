@@ -31,7 +31,7 @@ final translateQueueProvider = FutureProvider.autoDispose<QueueState>((
   const jobCols = 'priority, status, novel_id, chapter_id, created_at, '
       'chapters(chapter_index, title_vi, title_zh), '
       'novels(title_vi, title_zh, cover_url, chapter_count_translated, '
-      'chapter_count_source, sources(name, enabled))';
+      'chapter_count_source, sources(name, label, enabled))';
   // Job RUNNING lấy riêng (chỉ vài dòng): worker chọn job theo lane riêng nên job
   // đang chạy có thể priority CAO HƠN 200 job pending đầu → dính limit là "mất tích".
   final running = List<Rec>.from(

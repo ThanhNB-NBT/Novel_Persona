@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core.dart';
 
 /// Cột SELECT chung cho mọi query truyện (Khám phá, Tủ sách, Tìm kiếm…).
-/// Kèm source_id + sources(name) để hiện badge nguồn và trộn nguồn (round-robin).
+/// Kèm source_id + sources(name, label) để hiện badge nguồn và trộn nguồn (round-robin).
 ///
 /// KHÔNG có description_vi: chỉ màn chi tiết cần, mà màn đó select('*') riêng rồi.
 /// Nó chiếm ~65% khối lượng mọi danh sách (đo trên hồ 240 truyện: 362KB → 128KB),
@@ -11,7 +11,7 @@ import 'core.dart';
 const novelCols =
     'id, title_vi, title_zh, author_vi, author_zh, cover_url, status, '
     'chapter_count_source, chapter_count_translated, genres, '
-    'last_chapter_at, source_rank, source_id, sources(name)';
+    'last_chapter_at, source_rank, source_id, sources(name, label)';
 
 /// Cột tối thiểu đủ để TRỘN NGUỒN + phân trang, chưa cần vẽ gì. Hồ 240 truyện với
 /// bộ cột này là ~24KB thay vì 362KB.
@@ -25,7 +25,7 @@ final novelsProvider = FutureProvider.autoDispose<List<Rec>>((ref) async {
         .select(
           'id, title_vi, title_zh, author_vi, author_zh, cover_url, status, '
           'chapter_count_source, chapter_count_translated, genres, description_vi, '
-          'source_id, sources(name)',
+          'source_id, sources(name, label)',
         )
         .eq('hidden', false)
         .eq(
@@ -41,7 +41,7 @@ final novelProvider = FutureProvider.autoDispose.family<Rec, int>((
   ref,
   id,
 ) async {
-  return await sb.from('novels').select('*, sources(name)').eq('id', id).single();
+  return await sb.from('novels').select('*, sources(name, label)').eq('id', id).single();
 });
 
 /// Nhãn tiếng Việt cho trạng thái truyện; trạng thái lạ (crawl mới) hiện nguyên văn.
@@ -52,13 +52,18 @@ const _statusLabels = {
 };
 String statusLabel(String s) => _statusLabels[s] ?? s;
 
-/// Tên nguồn crawl (slug) để hiện badge; rỗng nếu chưa join sources.
-String sourceName(Rec n) =>
-    sourceLabel(((n['sources'] as Map?)?['name'] as String?)?.trim() ?? '');
+/// Tên nguồn hiện trên badge; rỗng nếu chưa join sources.
+String sourceName(Rec n) => sourceDisplay(n['sources'] as Map?);
 
-/// Mã nguồn crawl (`sources.name`: xslou, ptwxz…) → tên trang người đọc nhận ra
-/// (Hán-Việt tên site). 1.x in thẳng mã thô lên bìa. Nguồn mới chưa có ở đây thì
-/// hiện mã viết hoa chữ đầu — thêm một dòng khi bật nguồn mới.
+/// Dòng `sources` (name, label) → tên người đọc nhận ra. `label` đặt ở DB (backend migration
+/// 134): thêm/đổi nguồn không phải phát hành lại app.
+String sourceDisplay(Map? s) {
+  final label = (s?['label'] as String?)?.trim() ?? '';
+  return label.isNotEmpty ? label : sourceLabel((s?['name'] as String?)?.trim() ?? '');
+}
+
+/// DỰ PHÒNG khi dòng không có `label`: truyện lưu offline trước migration 134, hoặc nguồn
+/// chưa được đặt tên ở DB. Nguồn mới thì đặt `sources.label`, KHÔNG thêm dòng vào đây.
 String sourceLabel(String code) => switch (code) {
       'qidian' => 'Khởi Điểm',
       'jjwxc' => 'Tấn Giang',
@@ -71,8 +76,6 @@ String sourceLabel(String code) => switch (code) {
       'xslou' => 'Tiểu Thuyết Lâu',
       'qiushubang' => 'Cầu Thư Bang',
       '123bqg' => 'Bút Thú Các',
-      'twkan' => 'Đài Loan Tiểu Thuyết', // 台湾小说网
-      'ixdzs8' => 'Ái Hạ Thư', // 爱下电子书, gọi tắt 爱下书
       '' => '',
       _ => code[0].toUpperCase() + code.substring(1), // nguồn mới: ít ra không viết thường
     };
@@ -180,10 +183,10 @@ final genresProvider = FutureProvider.autoDispose<List<String>>((ref) async {
 final filterSourcesProvider = FutureProvider.autoDispose<List<(int, String)>>((ref) async {
   final rows = List<Rec>.from(await sb
       .from('sources')
-      .select('id, name')
+      .select('id, name, label')
       .eq('enabled', true)
       .order('name'));
-  return [for (final r in rows) (r['id'] as int, sourceLabel('${r['name']}'))];
+  return [for (final r in rows) (r['id'] as int, sourceDisplay(r))];
 });
 
 // ---------- Trang chủ ----------
