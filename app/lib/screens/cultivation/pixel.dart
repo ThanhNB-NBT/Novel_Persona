@@ -426,16 +426,92 @@ const _sprites = <String, List<String>>{
 };
 // (nhân vật giờ vẽ vector trong cultivation.dart — _HumanPainter, không dùng sprite nữa)
 
+/// Bản phối màu riêng theo MÃ vật phẩm → `assets/cult_items/<key>_<phối>.webp`
+/// (sinh bằng `app/tool/recolor_items.py` từ minh hoạ gốc cùng key). Catalog server vẫn
+/// giữ `pixel` = key gốc, nên bản app cũ chỉ thấy hình gốc chứ không vỡ. Món không có
+/// trong map dùng hình gốc. Phối: xich đỏ · tu tím · bich lục · kim hổ phách · bang băng lam ·
+/// huyen hắc · bach bạch ngân · tho nâu đất · lam lam.
+const itemArt = <String, String>{
+  // y phục
+  'yp_tho_bo': 'robe_tho', 'yp_huyen_vu': 'robe_huyen', 'yp_thanh_giao': 'robe_bang',
+  'yp_tu_van': 'robe_tu', 'yp_bach_lan': 'robe_bach', 'yp_bich_lan': 'robe_bich',
+  'yp_kim_tam': 'robe_kim', 'yp_thien_tinh': 'celestial_robe_kim',
+  'yp_vo_cau': 'celestial_robe_bang', 'yp_bat_diet': 'robe_xich',
+  'yp_hon_nguyen': 'celestial_robe_tu',
+  'yp_chu_tuoc': 'celestial_robe_xich', 'yp_huyen_minh': 'celestial_robe_huyen',
+  // giày
+  'gi_bo_ngoa': 'boot_tho', 'gi_thao_hai': 'boot_bich', 'gi_truy_phong': 'boot_bang',
+  'gi_van_tung': 'boot_bach', 'gi_lang_ba': 'boot_lam', 'gi_liet_hoa_hai': 'boot_xich',
+  'gi_dap_van': 'boot_kim', 'gi_hu_khong': 'boot_huyen', 'gi_tung_dia': 'boot_tho',
+  'gi_thuan_thien': 'boot_tu', 'gi_luu_tinh': 'boot_tu',
+  // đan tăng tốc (hồ lô)
+  'dd_tu_khi': 'gourd_bich', 'dd_ngung_khi': 'gourd_tho', 'dd_linh_luc': 'gourd_bang',
+  'dd_thanh_tam': 'gourd_bach', 'dd_tinh_nguyen': 'gourd_kim', 'dd_dao_nguyen': 'gourd_huyen',
+  'dd_long_ho': 'gourd_xich', 'dd_tu_phu': 'gourd_tu', 'dd_cuu_duong': 'void_pill_xich',
+  'dd_thai_at': 'void_pill_kim', 'dd_tien_nguyen': 'void_pill_bach', 'pb_ho_lo': 'gourd_kim',
+  'dd_phan_thien': 'void_pill_tu',
+  // đan luyện căn / chuyển hệ
+  'dd_ngung_linh': 'pill_bang', 'dd_chuyen_linh': 'pill_tu', 'dd_ngoc_dich': 'pill_bach',
+  'dd_thien_linh': 'pill_kim', 'dd_cuu_tay_linh': 'pill_xich', 'dd_tao_hoa': 'orb_tu',
+  'dd_long_tuy': 'pill_huyen',
+  // đan hộ thân
+  'dd_ho_tam': 'shield_pill_xich', 'dd_dinh_than': 'shield_pill_bang',
+  'dd_co_ban': 'shield_pill_tho', 'dd_pha_canh': 'shield_pill_tu', 'dd_do_ach': 'shield_pill_kim',
+  'dd_tien_van': 'shield_pill_bach', 'dd_bo_de': 'shield_pill_huyen',
+  // linh thạch
+  'lt_ha_pham': 'stone_tho', 'lt_linh_tinh': 'stone_kim', 'lt_trung_pham': 'stone_bang',
+  'lt_thuong_pham': 'stone_tu', 'lt_cuc_pham': 'stone_xich', 'lt_tien_thach': 'stone_bach',
+  'lt_thuy_linh': 'stone_lam', 'lt_loi_linh': 'stone_huyen',
+  // công pháp
+  'cp_tho_nap': 'book_tho', 'cp_huyen_thien': 'book_bang', 'cp_kim_cang_co': 'book_kim',
+  'cp_thanh_moc': 'book_bich', 'cp_thai_co': 'book_huyen', 'cp_loi_dinh': 'book_tu',
+  'cp_hoa_chung': 'scroll_xich', 'cp_luyen_the': 'scroll_tho', 'cp_liet_hoa': 'scroll_kim',
+  'cp_dia_sat': 'scroll_huyen', 'cp_thuong_hai': 'scroll_bang', 'cp_xich_diem': 'scroll_xich',
+  'cp_hon_don': 'scroll_tu', 'cp_van_moc': 'scroll_bich', 'cp_hau_tho': 'scroll_tho',
+  'cp_huyen_bang': 'slip_bang', 'cp_cuu_chuyen': 'slip_kim', 'cp_dai_dien': 'slip_tu',
+  'cp_thanh_van_moc': 'slip_bich', 'cp_bang_tam': 'slip_bach',
+  'cp_ngu_phong': 'fan_bich',
+  // pháp chú
+  'pc_kim_cang': 'seal_kim', 'pc_tran_hon': 'seal_huyen', 'pc_thai_thuong': 'seal_lam',
+  'pc_thien_loi': 'seal_tu', 'pc_tien_van': 'seal_bach', 'pc_thanh_moc': 'seal_bich',
+  'pc_han_nguyet': 'seal_bang',
+  'pc_tinh_tam': 'talisman_bang', 'pc_ngu_loi': 'talisman_tu', 'pc_pha_gioi': 'talisman_xich',
+  'pc_cuu_thien': 'talisman_bach', 'pc_hoi_xuan': 'talisman_bich', 'pc_am_sat': 'talisman_huyen',
+  // vũ khí
+  'vk_han_bang': 'sword_bang', 'vk_thanh_phong': 'sword_bich', 'vk_long_tuyen': 'sword_kim',
+  'vk_thien_tinh': 'sword_tu', 'vk_tien_thien': 'sword_bach', 'vk_huyen_thiet': 'sword_huyen',
+  'vk_xich_tieu': 'sword_xich',
+  'vk_tu_kim': 'spear_tu', 'vk_pha_quan': 'spear_xich', 'vk_thi_than': 'spear_huyen',
+  'vk_kim_o': 'spear_kim',
+  'vk_dong_dao': 'saber_tho', 'vk_lieu_diep': 'saber_bich', 'vk_huyet_mang': 'saber_xich',
+  'vk_thanh_long': 'saber_bang',
+  'vk_chu_tuoc': 'bow_xich', 'vk_cuu_u': 'bow_huyen', 'vk_bang_phach': 'bow_bang',
+  'vk_lac_nhat': 'bow_kim', 'vk_tu_ma': 'demonic_saber_tu',
+  // pháp bảo
+  'pb_vong_nguyet': 'halo_bach', 'pb_vong_tinh': 'halo_bang', 'pb_vong_loi': 'halo_tu',
+  'pb_tu_kim_bat': 'cauldron_tu', 'pb_kim_quang': 'mirror_kim', 'pb_tinh_than_do': 'array_tu',
+  'pb_bang_tam_kinh': 'mirror_bang', 'pb_huyet_ngoc': 'jade_xich', 'pb_ngu_loi_thap': 'pagoda_tu',
+  'pb_dinh_hai_chau': 'orb_bang', 'pb_am_duong_ban': 'compass_huyen',
+  'pb_hac_sat_phien': 'fan_huyen', 'pb_van_bao_nang': 'pouch_xich',
+  'pb_cuu_long_hoa': 'dragon_cauldron_xich', 'pb_chu_thien_ban': 'array_kim',
+};
+
+/// Ảnh hiển thị cho vật phẩm: bản phối theo [code] nếu có, không thì hình gốc [pixel].
+String itemArtKey(String? code, String pixel) =>
+    itemArt[code] ?? (pixel == 'gourd_big' ? 'gourd' : pixel);
+
 /// Icon vật phẩm minh hoạ riêng; fallback pixel giữ được catalog cũ nếu server trả key lạ.
 class PixelIcon extends StatelessWidget {
   final String sprite;
+  final String? code; // mã vật phẩm → bản phối màu riêng ([itemArt])
   final int grade; // 1..5, đổi tông A/B/C
   final double size;
-  const PixelIcon(this.sprite, {super.key, this.grade = 1, this.size = 40});
+  const PixelIcon(this.sprite,
+      {super.key, this.code, this.grade = 1, this.size = 40});
 
   @override
   Widget build(BuildContext context) {
-    final key = sprite == 'gourd_big' ? 'gourd' : sprite;
+    final key = itemArtKey(code, sprite);
     return Image.asset(
       'assets/cult_items/$key.webp',
       width: size,

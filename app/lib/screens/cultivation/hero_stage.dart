@@ -7,6 +7,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../cultivation.dart';
 import '../../data.dart';
+import 'dialog_advance.dart';
 import 'pixel.dart';
 import 'preview.dart';
 
@@ -41,6 +42,11 @@ class HeroStage extends ConsumerWidget {
   final Rec st;
   final double topPad; // chiều cao status bar — trời loang phủ luôn dải này
   const HeroStage({super.key, required this.st, this.topPad = 0});
+
+  /// Ảnh món đang đeo bay quanh người — bản phối theo mã, như ô trang bị.
+  static String? _art(dynamic it) => it == null
+      ? null
+      : itemArtKey(it['code'] as String?, it['pixel'] as String);
 
   /// Sheet admin: đổi tộc/giới tính tự do (server chỉ cho profiles.is_admin).
   void _avatarSheet(BuildContext context, WidgetRef ref) {
@@ -122,6 +128,41 @@ class HeroStage extends ConsumerWidget {
                   _devChip(ctx, ref, 'Độ Kiếp 9 (Phi Thăng)', 9, 9),
                 ],
               ),
+              const SizedBox(height: 8),
+              // Xem thử hiệu ứng với kết quả GIẢ — không gọi RPC, không đổi tu vi thật.
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final (label, major, ok) in const [
+                    ('Xem: lên tầng', false, true),
+                    ('Xem: tầng thất bại', false, false),
+                    ('Xem: đại cảnh giới', true, true),
+                    ('Xem: kiếp bại', true, false),
+                  ])
+                    ActionChip(
+                      label: Text(label),
+                      onPressed: () => showGeneralDialog<void>(
+                        context: ctx,
+                        barrierDismissible: true,
+                        barrierLabel: 'xem thử',
+                        barrierColor: Colors.black.withValues(alpha: 0.72),
+                        pageBuilder: (_, _, _) => AdvanceFxDialog(
+                          result: {
+                            'success': ok,
+                            'realm': st['realm'],
+                            'stage': st['stage'],
+                            'chance': 50,
+                            if (major) 'tamma': {'win': ok, 'chance': 60},
+                          },
+                          major: major,
+                          race: st['race'] as String?,
+                          gender: st['gender'] as String?,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ],
           ],
         ),
@@ -190,8 +231,8 @@ class HeroStage extends ConsumerWidget {
                     element: st['element'] as String?,
                     elements: (st['elements'] as List?)?.cast<String>() ?? const [],
                     halo: eq['phapbao']?['effect']?['halo'] as String?,
-                    weaponSprite: eq['vukhi']?['pixel'] as String?,
-                    phapbaoSprite: eq['phapbao']?['pixel'] as String?,
+                    weaponSprite: _art(eq['vukhi']),
+                    phapbaoSprite: _art(eq['phapbao']),
                     tienTier: ascended ? tienTier : -1,
                     haloWorn: st['halo_worn'] as String?,
                   );

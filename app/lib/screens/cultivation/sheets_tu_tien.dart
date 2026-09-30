@@ -103,7 +103,8 @@ class _CollectionTile extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final grade = it['grade'] as int;
     final gc = gradeColor(grade);
-    final icon = PixelIcon(it['pixel'] as String, grade: grade, size: 38);
+    final icon = PixelIcon(it['pixel'] as String,
+        code: it['code'] as String?, grade: grade, size: 38);
     return Tooltip(
       message: owned ? it['name'] as String : '??? (chưa thu thập)',
       child: Container(

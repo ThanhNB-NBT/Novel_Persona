@@ -1,7 +1,7 @@
 name: novel_reader
 description: "Gac Truyen - doc tieu thuyet mang Trung Quoc dich sang tieng Viet bang LLM."
 publish_to: 'none'
-version: 2.1.0+36
+version: 2.2.0+37
 
 environment:
   sdk: ^3.12.2
@@ -29,7 +29,6 @@ dependencies:
   # Cập nhật trong app: so version với GitHub Releases + mở link tải APK
   package_info_plus: ^9.0.1
   url_launcher: ^6.3.1
-  lottie: ^3.5.1
   wakelock_plus: ^1.5.2
   open_filex: ^4.7.0
   path_provider: ^2.1.6
@@ -75,3 +74,5 @@ flutter:
   # Fragment shader hiệu ứng Độ Kiếp/đại cảnh giới (nấc 2 — bloom + godray)
   shaders:
     - shaders/breakthrough.frag
+    - shaders/tamma.frag
+    - shaders/storm.frag

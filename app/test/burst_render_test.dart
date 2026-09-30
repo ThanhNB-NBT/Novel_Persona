@@ -63,11 +63,12 @@ void main() {
         key: key,
         child: Column(
           children: [
-            row('Độ Kiếp', const [0.06, 0.22, 0.49, 0.76, 0.94],
+            row('Độ Kiếp', const [0.22, 0.76, 0.87, 0.90, 0.95],
                 major: true, loi: true),
-            row('Đại c.giới', const [0.12, 0.30, 0.42, 0.60, 0.85], major: true),
+            // major chỉ vẽ sau advanceResultStart (0.86) — khung trước đó trống
+            row('Đại c.giới', const [0.865, 0.88, 0.91, 0.94, 0.98], major: true),
             row('Lên tầng', const [0.05, 0.18, 0.45, 0.80], major: false, color: jade),
-            row('Kiếp bại', const [0.22, 0.49, 0.76],
+            row('Kiếp bại', const [0.87, 0.91, 0.96],
                 major: true, ok: false, loi: true, color: red),
           ],
         ),

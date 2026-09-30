@@ -156,7 +156,7 @@ class _AnimatedCultivatorState extends State<AnimatedCultivator>
     if (key == null) return null;
     try {
       final data = await rootBundle.load(
-        'assets/cult_items/${key == 'gourd_big' ? 'gourd' : key}.webp',
+        'assets/cult_items/${itemArtKey(null, key)}.webp',
       );
       return await decodeImageFromList(data.buffer.asUint8List());
     } catch (_) {
@@ -228,6 +228,8 @@ class _AnimatedCultivatorState extends State<AnimatedCultivator>
               style,
               weaponImg: _weaponImg,
               phapbaoImg: _phapbaoImg,
+              elements: widget.elements,
+              elementTime: _elementTurn + _ctrl.value,
             ),
             child: Center(
               // Ảnh chibi 1 tấm không có layer riêng → giả chuyển động bằng
@@ -357,41 +359,4 @@ class BurstPreview extends StatelessWidget {
     painter: BurstPainter(t, color, ok, loi, major: major),
     child: const SizedBox.expand(),
   );
-}
-
-/// Asset kiếp lôi động dùng chung giữa dialog thật và render test trên khung điện thoại.
-class TribulationPreview extends StatefulWidget {
-  const TribulationPreview({super.key});
-
-  @override
-  State<TribulationPreview> createState() => _TribulationPreviewState();
-}
-
-class _TribulationPreviewState extends State<TribulationPreview> {
-  MemoryImage? _img;
-
-  @override
-  void initState() {
-    super.initState();
-    rootBundle.load('assets/cult_fx/tribulation_sequence.webp').then((data) {
-      if (!mounted) return;
-      // Copy byte để MemoryImage có identity mới: mỗi lần đột phá luôn phát lại từ frame 0.
-      setState(
-        () => _img = MemoryImage(Uint8List.fromList(data.buffer.asUint8List())),
-      );
-    });
-  }
-
-  @override
-  void dispose() {
-    // identity mới mỗi lần mở → phải tự nhả, không thì mỗi lần đột phá
-    // đọng thêm một codec webp ~1.2MB trong imageCache
-    _img?.evict();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => _img == null
-      ? const SizedBox.expand()
-      : Image(image: _img!, fit: BoxFit.cover, gaplessPlayback: true);
 }

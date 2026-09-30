@@ -10,6 +10,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:novel_reader/cultivation.dart';
 import 'package:novel_reader/screens/cultivation/cultivation.dart';
+import 'package:novel_reader/screens/cultivation/pixel.dart';
 
 void main() {
   test('nền Tu Tiên đổi đúng theo sáng/tối', () {
@@ -27,18 +28,7 @@ void main() {
   });
 
   testWidgets('render cảnh tu luyện ra PNG', (tester) async {
-    await tester.binding.setSurfaceSize(const Size(640, 1040));
-    final key = GlobalKey();
-    await tester.pumpWidget(MaterialApp(
-      debugShowCheckedModeBanner: false,
-      home: RepaintBoundary(
-        key: key,
-        child: Container(
-          color: const Color(0xFF10141F), // nền tối "Dạ Lam" ước lệ
-          child: GridView.count(
-            crossAxisCount: 2,
-            childAspectRatio: 320 / 170,
-            children: const [
+    await _renderGrid(tester, 'build/scene_preview.png', const [
               // Ngũ Hành Tạp Căn: 5 hệ → 5 dải sương ngũ sắc quấn quýt
               CultivatorPreview(
                   realm: 2, race: 'nhan', gender: 'nam',
@@ -63,24 +53,68 @@ void main() {
               CultivatorPreview(
                   realm: 9, race: 'nhan', gender: 'nam', tienTier: 14,
                   elements: ['hoa'], haloWorn: 'bach_ngan'),
-            ],
-          ),
+    ]);
+  });
+
+  // 9 kiểu hiệu ứng công pháp (AuraPainter) — mỗi ô một code công pháp có kiểu riêng.
+  // → build/aura_preview.png
+  testWidgets('render 9 hiệu ứng công pháp ra PNG', (tester) async {
+    await _renderGrid(tester, 'build/aura_preview.png', const [
+      CultivatorPreview(realm: 3, cpCode: 'cp_huyen_thien'), // qi
+      CultivatorPreview(realm: 3, cpCode: 'cp_huyen_bang'), // ice
+      CultivatorPreview(realm: 3, cpCode: 'cp_ngu_phong'), // wind
+      CultivatorPreview(realm: 3, cpCode: 'cp_dia_sat'), // earth
+      CultivatorPreview(realm: 3, cpCode: 'cp_thien_cang'), // sword
+      CultivatorPreview(realm: 3, cpCode: 'cp_cuu_chuyen'), // gold
+      CultivatorPreview(realm: 3, cpCode: 'cp_dai_dien'), // star
+      CultivatorPreview(realm: 3, cpCode: 'cp_liet_hoa'), // fire
+      CultivatorPreview(realm: 3, cpCode: 'cp_thanh_moc'), // leaf
+    ], cols: 3);
+  });
+
+  // Bản phối màu vật phẩm: mọi giá trị trong itemArt phải có file webp thật
+  // (sinh bằng tool/recolor_items.py), không thì icon rơi về sprite pixel xấu.
+  test('mọi bản phối itemArt có ảnh webp', () {
+    for (final art in itemArt.values.toSet()) {
+      expect(File('assets/cult_items/$art.webp').existsSync(), isTrue,
+          reason: art);
+    }
+    expect(itemArtKey('khong_co', 'gourd_big'), 'gourd');
+    expect(itemArtKey('yp_tho_bo', 'robe'), 'robe_tho');
+  });
+}
+
+Future<void> _renderGrid(WidgetTester tester, String out, List<Widget> cells,
+    {int cols = 2}) async {
+  final rows = (cells.length + cols - 1) ~/ cols;
+  await tester.binding.setSurfaceSize(Size(cols * 320, rows * 170));
+  final key = GlobalKey();
+  await tester.pumpWidget(MaterialApp(
+    debugShowCheckedModeBanner: false,
+    home: RepaintBoundary(
+      key: key,
+      child: Container(
+        color: const Color(0xFF10141F), // nền tối "Dạ Lam" ước lệ
+        child: GridView.count(
+          crossAxisCount: cols,
+          childAspectRatio: 320 / 170,
+          children: cells,
         ),
       ),
-    ));
-    // đợi ảnh nhân vật decode thật (I/O nằm ngoài fake async của tester)
-    await tester.runAsync(() => Future.delayed(const Duration(seconds: 1)));
-    await tester.pump(const Duration(milliseconds: 1400)); // giữa vòng loop 4s
+    ),
+  ));
+  // đợi ảnh nhân vật decode thật (I/O nằm ngoài fake async của tester)
+  await tester.runAsync(() => Future.delayed(const Duration(seconds: 1)));
+  await tester.pump(const Duration(milliseconds: 1400)); // giữa vòng loop 4s
 
-    await tester.runAsync(() async {
-      final boundary =
-          key.currentContext!.findRenderObject() as RenderRepaintBoundary;
-      final img = await boundary.toImage(pixelRatio: 2);
-      final bytes = await img.toByteData(format: ui.ImageByteFormat.png);
-      File('build/scene_preview.png')
-        ..createSync(recursive: true)
-        ..writeAsBytesSync(bytes!.buffer.asUint8List());
-    });
-    expect(File('build/scene_preview.png').lengthSync(), greaterThan(10000));
+  await tester.runAsync(() async {
+    final boundary =
+        key.currentContext!.findRenderObject() as RenderRepaintBoundary;
+    final img = await boundary.toImage(pixelRatio: 2);
+    final bytes = await img.toByteData(format: ui.ImageByteFormat.png);
+    File(out)
+      ..createSync(recursive: true)
+      ..writeAsBytesSync(bytes!.buffer.asUint8List());
   });
+  expect(File(out).lengthSync(), greaterThan(10000));
 }

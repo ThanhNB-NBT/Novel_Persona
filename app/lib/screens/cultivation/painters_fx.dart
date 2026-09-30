@@ -10,74 +10,6 @@ import 'package:flutter/material.dart';
 /// Phần trăm timeline dialog mà tại đó kết quả (thành/bại) được lộ ra.
 const advanceResultStart = 0.86;
 
-/// Chớp sáng + 2 vòng xung kích + 12 tia lan ra (thành công); quầng đỏ tắt dần (bại).
-/// loi = lôi kiếp: thiên lôi vàng giáng từ trên xuống trong nửa đầu hoạt ảnh.
-/// Lớp khí tượng chạy sau WebP: mây không đứng yên và từng đạo lôi có dư quang
-/// riêng, còn tia chính vẫn do asset `tribulation_sequence.webp` đảm nhiệm.
-class TribulationAtmospherePainter extends CustomPainter {
-  final double t;
-  const TribulationAtmospherePainter(this.t);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final s = size.shortestSide;
-    final sky = Rect.fromLTWH(0, 0, size.width, size.height * 0.48);
-    canvas.drawRect(
-      sky,
-      Paint()
-        ..shader = LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            const Color(0xFF02050D).withValues(alpha: 0.62),
-            const Color(0xFF11162A).withValues(alpha: 0.28),
-            Colors.transparent,
-          ],
-        ).createShader(sky),
-    );
-
-    final cloud = Paint()
-      ..color = const Color(0xFF171B2A).withValues(alpha: 0.42)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 18);
-    for (var i = 0; i < 9; i++) {
-      final drift = math.sin(t * math.pi * 2 + i * 1.71) * s * 0.035;
-      final x = (i + 0.35) * size.width / 9 + drift;
-      final y = s * (0.045 + (i % 3) * 0.045) +
-          math.cos(t * math.pi * 2.4 + i) * s * 0.014;
-      final w = s * (0.30 + (i % 3) * 0.055);
-      canvas.drawOval(
-        Rect.fromCenter(center: Offset(x, y), width: w, height: w * 0.45),
-        cloud,
-      );
-    }
-
-    for (final (i, hit) in [0.29, 0.56, 0.82].indexed) {
-      final d = (t - hit).abs();
-      if (d >= 0.055) continue;
-      final flash = 1 - d / 0.055;
-      final x = size.width * (0.34 + i * 0.16);
-      final bolt = Path()
-        ..moveTo(x, 0)
-        ..lineTo(x - s * 0.026, s * 0.11)
-        ..lineTo(x + s * 0.018, s * 0.18)
-        ..lineTo(x - s * 0.045, s * 0.28);
-      canvas.drawPath(
-        bolt,
-        Paint()
-          ..color = const Color(0xFFD7E7FF).withValues(alpha: flash * 0.42)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.1 + i * 0.35
-          ..strokeCap = StrokeCap.round
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2),
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant TribulationAtmospherePainter oldDelegate) =>
-      oldDelegate.t != t;
-}
-
 /// Ma khí bện quanh linh thể thay vì để riêng một sprite tĩnh giữa màn hình.
 class TammaPainter extends CustomPainter {
   final double t;
@@ -129,6 +61,63 @@ class TammaPainter extends CustomPainter {
       oldDelegate.t != t || oldDelegate.subdued != subdued;
 }
 
+/// Vẽ [shader] vào [dst] ở độ phân giải LOGIC/[k] rồi phóng lên (bilinear). Khói/mây
+/// ray-march vốn mềm nên phóng không lộ, mà rẻ hơn ~(dpr·k)² lần so với chạy shader
+/// trên từng px vật lý — máy yếu/giả lập mới giữ được khung hình.
+/// [setUniforms] nhận k: toạ độ uniform tính theo px ảnh nhỏ, gốc tại dst.topLeft.
+void paintShaderLowRes(Canvas canvas, Rect dst, ui.FragmentShader shader, double k,
+    void Function(double k) setUniforms) {
+  final w = math.max(1, (dst.width / k).ceil());
+  final h = math.max(1, (dst.height / k).ceil());
+  setUniforms(k);
+  final rec = ui.PictureRecorder();
+  Canvas(rec).drawRect(Rect.fromLTWH(0, 0, w.toDouble(), h.toDouble()), Paint()..shader = shader);
+  final pic = rec.endRecording();
+  // ponytail: ảnh mỗi khung để GC dọn (không dispose được khi layer còn giữ); cache
+  // theo khung nếu hồ sơ bộ nhớ thấy áp lực.
+  final img = pic.toImageSync(w, h);
+  pic.dispose();
+  canvas.drawImageRect(img, Rect.fromLTWH(0, 0, w.toDouble(), h.toDouble()), dst,
+      Paint()..filterQuality = FilterQuality.low);
+}
+
+/// Tâm Ma 3D (shaders/tamma.frag): khối ma khí thể tích quanh [center]. Vẽ 2 lượt
+/// — front=false sau ảnh mặt quỷ (có lõi sáng), front=true trước ảnh (khói mỏng).
+/// Cả hai lượt dùng CHUNG một FragmentShader: uniform đặt ngay trước mỗi drawRect.
+class TammaVolumePainter extends CustomPainter {
+  final ui.FragmentShader shader;
+  final double v; // tiến trình pha Tâm Ma 0..1
+  final double time; // giây
+  final bool win;
+  final bool front;
+  final double radius;
+  const TammaVolumePainter(this.shader, this.v, this.time, this.win,
+      {required this.front, this.radius = 130});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final c = size.center(Offset.zero);
+    final box = Rect.fromCircle(center: c, radius: radius * 1.5);
+    paintShaderLowRes(canvas, box, shader, 1.2, (k) {
+      shader
+        ..setFloat(0, box.width / k)
+        ..setFloat(1, box.height / k)
+        ..setFloat(2, box.width / 2 / k)
+        ..setFloat(3, box.height / 2 / k)
+        ..setFloat(4, radius / k)
+        ..setFloat(5, time)
+        ..setFloat(6, v)
+        ..setFloat(7, win ? 1 : 0)
+        ..setFloat(8, front ? 1 : 0);
+    });
+  }
+
+  @override
+  bool shouldRepaint(TammaVolumePainter old) => old.v != v || old.time != time;
+}
+
+/// Chớp sáng + vòng xung kích + tia lan ra (thành công); quầng đỏ + vết nứt (bại).
+/// loi = lôi kiếp: mây đen tụ từ hai mép (thân sét vẽ ở painters_lightning.dart).
 class BurstPainter extends CustomPainter {
   final double t; // 0..1
   final Color color;
@@ -149,6 +138,34 @@ class BurstPainter extends CustomPainter {
   Offset _spoke(Offset c, int i, int count, double radius, double ang0) {
     final ang = ang0 + i * (math.pi * 2 / count);
     return c + Offset(math.cos(ang), math.sin(ang)) * radius;
+  }
+
+  /// Hạt sáng: quầng gradient + lõi pha trắng (không blur — vẽ mỗi khung).
+  static void _glow(Canvas canvas, Offset p, double r, Color col, double a) {
+    if (a <= 0.01) return;
+    canvas.drawCircle(
+      p,
+      r * 3,
+      Paint()
+        ..shader = RadialGradient(colors: [
+          col.withValues(alpha: a * 0.45),
+          col.withValues(alpha: 0),
+        ]).createShader(Rect.fromCircle(center: p, radius: r * 3)),
+    );
+    canvas.drawCircle(
+        p, r, Paint()..color = Color.lerp(col, Colors.white, 0.45)!.withValues(alpha: a));
+  }
+
+  /// Đuôi thon nối các điểm [pts] (đầu → đuôi), mảnh + mờ dần về cuối.
+  static void _tail(Canvas canvas, List<Offset> pts, double w, Color col, double a) {
+    final paint = Paint()..strokeCap = StrokeCap.round;
+    for (var k = 1; k < pts.length; k++) {
+      final f = 1 - k / pts.length;
+      paint
+        ..strokeWidth = w * f + 0.3
+        ..color = col.withValues(alpha: a * f * f);
+      canvas.drawLine(pts[k - 1], pts[k], paint);
+    }
   }
 
   @override
@@ -215,14 +232,44 @@ class BurstPainter extends CustomPainter {
             ],
           ).createShader(failHaze),
       );
-      final ash = Paint()..color = color.withValues(alpha: (1 - resultT) * 0.6);
-      for (var i = 0; i < 10; i++) {
-        final p = _spoke(c, i, 10, s * 0.08 + resultT * s * 0.12, i.toDouble());
-        canvas.drawCircle(
-          Offset(p.dx, p.dy + resultT * s * 0.18),
-          (1 - resultT) * 2.4,
-          ash,
-        );
+      // tâm mạch nứt: 8 tia gãy khúc lóe ra từ tâm rồi tắt trong nửa đầu
+      final crack = (1 - resultT * 1.8).clamp(0.0, 1.0);
+      if (crack > 0) {
+        final cp = Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round;
+        for (var i = 0; i < 8; i++) {
+          final dir0 = i * math.pi / 4 + 0.3;
+          var ang = dir0;
+          var q = c;
+          final path = Path()..moveTo(q.dx, q.dy);
+          for (var k = 0; k < 6; k++) {
+            // gãy khúc tất định nhưng luôn kéo về hướng gốc → tia nứt, không thành cành cây
+            ang = dir0 + ((i * 7 + k * 5) % 5 - 2) * 0.16;
+            q += Offset(math.cos(ang), math.sin(ang)) * s * (0.03 + 0.006 * (i % 3));
+            path.lineTo(q.dx, q.dy);
+          }
+          cp
+            ..strokeWidth = 3.5
+            ..color = color.withValues(alpha: crack * 0.35);
+          canvas.drawPath(path, cp);
+          cp
+            ..strokeWidth = 1.1
+            ..color = Color.lerp(color, Colors.white, 0.5)!.withValues(alpha: crack * 0.9);
+          canvas.drawPath(path, cp);
+        }
+      }
+      // tàn đỏ bắn ra rồi rơi xuống theo trọng lực, có đuôi
+      for (var i = 0; i < 14; i++) {
+        final ang = i * math.pi * 2 / 14 + i * 0.37;
+        final v0 = s * (0.18 + (i % 4) * 0.05);
+        Offset at(double u) => c +
+            Offset(math.cos(ang) * v0 * u, math.sin(ang) * v0 * u * 0.6 + s * 0.35 * u * u);
+        final u = resultT;
+        _tail(canvas, [for (var k = 0; k < 6; k++) at(math.max(0, u - k * 0.03))],
+            1.8, color, (1 - u) * 0.7);
+        _glow(canvas, at(u), 1.4, color, (1 - u) * 0.9);
       }
       return;
     }
@@ -237,33 +284,24 @@ class BurstPainter extends CustomPainter {
                   (1 - advanceResultStart))
               .clamp(0.0, 1.0)
         : t;
-    // 1) HỘI TỤ linh khí: hạt xoáy vào tâm, sáng dần trước va chạm (cả lên tầng)
+    // 1) HỘI TỤ linh khí: dải khí xoắn ốc hút vào tâm (đuôi thon chỉ hướng bay),
+    // tâm sáng dần trước va chạm. Major không có pha này (kết quả lộ sau kiếp).
     final gatherEnd = major ? 0.10 : 0.28;
-    if (t < gatherEnd) {
+    if (!major && t < gatherEnd) {
       final g = t / gatherEnd;
-      final n = major ? 16 : 12;
-      final gp = Paint();
+      const n = 12;
       for (var i = 0; i < n; i++) {
-        final p = _spoke(
-          c,
-          i,
-          n,
-          (1 - g) * s * (major ? 0.42 : 0.30) + 8,
-          g * 3 + i.toDouble(),
-        );
-        gp.color = color.withValues(alpha: g * 0.9);
-        canvas.drawCircle(p, 1.5 + g * 1.6, gp);
+        Offset at(double gg) {
+          final ang = gg * 3.2 + i * math.pi * 2 / n;
+          final r = (1 - gg) * s * 0.34 + 6;
+          return c + Offset(math.cos(ang), math.sin(ang) * 0.8) * r;
+        }
+
+        _tail(canvas, [for (var k = 0; k < 7; k++) at(math.max(0, g - k * 0.035))],
+            2.4, color, 0.25 + g * 0.6);
+        _glow(canvas, at(g), 1.3 + g * 0.8, color, 0.3 + g * 0.6);
       }
-      if (!major) {
-        canvas.drawCircle(
-          c,
-          s * 0.32 * (1 - g),
-          Paint()
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = 2
-            ..color = color.withValues(alpha: g * 0.4),
-        );
-      }
+      _glow(canvas, c, 3 + g * 6, color, g * 0.8);
     }
 
     // Tiểu cảnh giới: linh văn xoay khép trận và sóng tu vi dâng lên, không dùng kiếp lôi.
@@ -282,15 +320,38 @@ class BurstPainter extends CustomPainter {
           runePaint,
         );
       }
+      // 8 quẻ bát quái xoay quanh (mỗi quẻ 3 hào: liền = dương, đứt = âm), đặt
+      // tiếp tuyến vòng trận + quầng sáng mờ — thay cho ô vuông trơn.
+      final yao = Paint()
+        ..strokeCap = StrokeCap.round
+        ..strokeWidth = 1.6
+        ..color = Color.lerp(color, Colors.white, 0.35)!
+            .withValues(alpha: (1 - t) * 0.9);
       for (var i = 0; i < 8; i++) {
+        final ang = spin + i * math.pi / 4;
         final p = _spoke(c, i, 8, s * (0.20 + 0.05 * t), spin);
+        canvas.drawCircle(
+          p,
+          9,
+          Paint()
+            ..shader = RadialGradient(colors: [
+              color.withValues(alpha: (1 - t) * 0.35),
+              color.withValues(alpha: 0),
+            ]).createShader(Rect.fromCircle(center: p, radius: 9)),
+        );
         canvas.save();
         canvas.translate(p.dx, p.dy);
-        canvas.rotate(spin + i);
-        canvas.drawRect(
-          Rect.fromCenter(center: Offset.zero, width: 5, height: 5),
-          runePaint,
-        );
+        canvas.rotate(ang + math.pi / 2);
+        final bits = 7 - i; // Càn ☰ … Khôn ☷
+        for (var j = 0; j < 3; j++) {
+          final y = (j - 1) * 2.8;
+          if ((bits >> j) & 1 == 1) {
+            canvas.drawLine(Offset(-3.6, y), Offset(3.6, y), yao);
+          } else {
+            canvas.drawLine(Offset(-3.6, y), Offset(-0.9, y), yao);
+            canvas.drawLine(Offset(0.9, y), Offset(3.6, y), yao);
+          }
+        }
         canvas.restore();
       }
       final waveY = c.dy + s * 0.18 - t * s * 0.48;
@@ -304,25 +365,33 @@ class BurstPainter extends CustomPainter {
       );
     }
 
-    // 2) CHỚP va chạm — major nổ trắng to, lên tầng lóe MÀU dịu (không chói)
+    // 2) CHỚP va chạm — major nổ trắng to, lên tầng lóe MÀU dịu (không chói);
+    // kèm vệt sáng ngang mảnh (lens streak) cho cảm giác chói lóa thật.
     const flashLen = 0.16;
     if (bt < flashLen) {
       final ft = bt / flashLen;
       final r = s * (major ? 0.5 : 0.34);
+      final hot = Color.lerp(color, Colors.white, major ? 0.75 : 0.55)!;
       canvas.drawCircle(
         c,
         r,
         Paint()
           ..shader = RadialGradient(
             colors: [
-              Color.lerp(
-                color,
-                Colors.white,
-                major ? 0.75 : 0.55,
-              )!.withValues(alpha: (1 - ft) * (major ? 0.85 : 0.7)),
+              hot.withValues(alpha: (1 - ft) * (major ? 0.85 : 0.7)),
               color.withValues(alpha: 0),
             ],
           ).createShader(Rect.fromCircle(center: c, radius: r)),
+      );
+      final streak = Rect.fromCenter(
+          center: c, width: s * (major ? 1.6 : 1.0) * (0.5 + ft), height: 6 + (1 - ft) * 6);
+      canvas.drawOval(
+        streak,
+        Paint()
+          ..shader = RadialGradient(colors: [
+            Colors.white.withValues(alpha: (1 - ft) * 0.9),
+            hot.withValues(alpha: 0),
+          ]).createShader(streak),
       );
     }
 
@@ -396,73 +465,152 @@ class BurstPainter extends CustomPainter {
       }
     }
 
-    // 4) TRỤ SÁNG dựng lên — major cao vút, lên tầng cột ngắn nhẹ
+    // 4) TRỤ SÁNG — cột THON (gốc rộng, ngọn nhỏ) dựng từ 3 lớp lồng nhau (rộng mờ →
+    // hẹp đậm → lõi trắng) cho mép mềm, mỗi lớp tan dần lên ngọn; major cao vút.
     {
       final pt = (bt / (major ? 0.4 : 0.6)).clamp(0.0, 1.0);
-      final h =
-          (major ? size.height * 0.85 : s * 0.55) *
-          Curves.easeOut.transform(pt);
-      final w =
-          ((major ? 32.0 : 16.0) + (major ? 18 : 9) * math.sin(bt * 30).abs()) *
+      final h = (major ? size.height * 0.85 : s * 0.55) * Curves.easeOut.transform(pt);
+      final fade = 1 - bt;
+      final w0 = ((major ? 44.0 : 22.0) + (major ? 14 : 7) * math.sin(bt * 30).abs()) *
           (1 - pt * 0.3);
-      final rect = Rect.fromLTWH(c.dx - w / 2, c.dy - h, w, h + 20);
-      canvas.drawRect(
-        rect,
-        Paint()
-          ..shader = LinearGradient(
-            begin: Alignment.bottomCenter,
-            end: Alignment.topCenter,
-            colors: [
-              color.withValues(alpha: (1 - bt) * (major ? 0.85 : 0.6)),
-              color.withValues(alpha: 0),
-            ],
-          ).createShader(rect)
-          ..maskFilter = MaskFilter.blur(BlurStyle.normal, major ? 8 : 5),
-      );
-    }
-
-    // 5) VÒNG XUNG KÍCH (glow, scale theo màn — major lan rộng hơn)
-    for (final delay in const [0.0, 0.22]) {
-      final v = ((bt - delay) / (1 - delay)).clamp(0.0, 1.0);
-      if (v <= 0) continue;
-      canvas.drawCircle(
-        c,
-        s * 0.05 + v * s * (major ? 0.52 : 0.36),
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = (1 - v) * 5 + 0.6
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2)
-          ..color = color.withValues(alpha: (1 - v) * 0.8),
-      );
-    }
-
-    // 6) TIA SÁNG phóng ra
-    {
-      final ray = Paint()
-        ..strokeWidth = major ? 2.2 : 1.8
-        ..strokeCap = StrokeCap.round
-        ..color = color.withValues(alpha: (1 - bt) * 0.85);
-      for (var i = 0; i < 14; i++) {
-        final ang = i * math.pi * 2 / 14 + 0.26;
-        final dir = Offset(math.cos(ang), math.sin(ang));
-        canvas.drawLine(
-          c + dir * (s * 0.08 + bt * s * (major ? 0.36 : 0.28)),
-          c + dir * (s * 0.12 + bt * s * (major ? 0.44 : 0.34)),
-          ray,
+      final base = c.dy + 20;
+      for (final (wk, col, a) in [
+        (1.0, color, 0.22),
+        (0.55, color, 0.4),
+        (0.22, Colors.white, 0.75),
+      ]) {
+        final w = w0 * wk;
+        final path = Path()
+          ..moveTo(c.dx - w / 2, base)
+          ..lineTo(c.dx - w * 0.15, base - h)
+          ..lineTo(c.dx + w * 0.15, base - h)
+          ..lineTo(c.dx + w / 2, base)
+          ..close();
+        canvas.drawPath(
+          path,
+          Paint()
+            ..shader = LinearGradient(
+              begin: Alignment.bottomCenter,
+              end: Alignment.topCenter,
+              colors: [
+                col.withValues(alpha: fade * a * (major ? 1 : 0.8)),
+                col.withValues(alpha: fade * a * 0.6),
+                col.withValues(alpha: 0),
+              ],
+              stops: const [0, 0.55, 1],
+            ).createShader(Rect.fromLTWH(c.dx - w / 2, base - h, w, math.max(h, 1))),
         );
       }
     }
 
-    // 7) ĐỐM LINH KHÍ bay lên
-    final emberN = major ? 20 : 12;
-    final ember = Paint();
+    // 5) VÒNG XUNG KÍCH: dải sáng có bề dày (gradient viền mờ hai phía) thay vòng
+    // nét mảnh + vòng sóng phẳng dưới chân lan theo phối cảnh.
+    for (final delay in const [0.0, 0.22]) {
+      final v = ((bt - delay) / (1 - delay)).clamp(0.0, 1.0);
+      if (v <= 0 || v >= 1) continue;
+      final r = s * 0.05 + Curves.easeOut.transform(v) * s * (major ? 0.52 : 0.36);
+      final band = 4 + (1 - v) * (major ? 14 : 9);
+      canvas.drawCircle(
+        c,
+        r + band,
+        Paint()
+          ..shader = RadialGradient(
+            colors: [
+              color.withValues(alpha: 0),
+              Color.lerp(color, Colors.white, 0.4)!.withValues(alpha: (1 - v) * 0.75),
+              color.withValues(alpha: 0),
+            ],
+            stops: [
+              ((r - band) / (r + band)).clamp(0.0, 1.0),
+              (r / (r + band)).clamp(0.0, 1.0),
+              1,
+            ],
+          ).createShader(Rect.fromCircle(center: c, radius: r + band)),
+      );
+      final ground = Rect.fromCenter(
+        center: Offset(c.dx, c.dy + s * 0.2),
+        width: r * 2.2,
+        height: r * 0.5,
+      );
+      canvas.drawOval(
+        ground,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = (1 - v) * 3 + 0.5
+          ..color = color.withValues(alpha: (1 - v) * 0.5),
+      );
+    }
+
+    // 6) TIA SÁNG phóng ra — hình nêm gradient, dài/ngắn xen kẽ, không còn là vạch.
+    {
+      final n = major ? 18 : 12;
+      for (var i = 0; i < n; i++) {
+        final ang = i * math.pi * 2 / n + 0.26;
+        final long = i.isEven ? 1.0 : 0.6;
+        final r0 = s * 0.06 + bt * s * 0.1;
+        final r1 = r0 + (s * (major ? 0.42 : 0.3)) * long * Curves.easeOut.transform(bt);
+        const wid = 0.05;
+        final ray = Path()
+          ..moveTo(c.dx + math.cos(ang - wid) * r0, c.dy + math.sin(ang - wid) * r0)
+          ..lineTo(c.dx + math.cos(ang) * r1, c.dy + math.sin(ang) * r1)
+          ..lineTo(c.dx + math.cos(ang + wid) * r0, c.dy + math.sin(ang + wid) * r0)
+          ..close();
+        canvas.drawPath(
+          ray,
+          Paint()
+            ..shader = RadialGradient(colors: [
+              Color.lerp(color, Colors.white, 0.5)!.withValues(alpha: (1 - bt) * 0.8),
+              color.withValues(alpha: 0),
+            ]).createShader(Rect.fromCircle(center: c, radius: math.max(r1, 1))),
+        );
+      }
+    }
+
+    // 7) TÀN QUANG bay lên: hạt sáng có đuôi, lắc ngang nhẹ, nhấp nháy lệch pha.
+    final emberN = major ? 22 : 12;
     for (var i = 0; i < emberN; i++) {
       final seed = (i * 53) % 100 / 100.0;
-      final x = c.dx + ((i * 37 % 200) - 100) / 100.0 * s * 0.4 * (0.4 + seed);
-      final y = c.dy + s * 0.1 - bt * s * (major ? 0.7 : 0.5) * (0.6 + seed);
-      final a = (1 - bt) * 0.9 * (bt > 0.15 ? 1.0 : bt / 0.15);
-      ember.color = color.withValues(alpha: a);
-      canvas.drawCircle(Offset(x, y), (1 - bt) * 2.4 + 0.6, ember);
+      Offset at(double u) => Offset(
+            c.dx +
+                ((i * 37 % 200) - 100) / 100.0 * s * 0.4 * (0.4 + seed) +
+                math.sin(u * 9 + i) * 6,
+            c.dy + s * 0.1 - u * s * (major ? 0.7 : 0.5) * (0.6 + seed),
+          );
+      final a = (1 - bt) * (bt > 0.15 ? 1.0 : bt / 0.15) *
+          (0.6 + 0.4 * math.sin(bt * 40 + i));
+      _tail(canvas, [for (var k = 0; k < 5; k++) at(math.max(0, bt - k * 0.02))], 1.6,
+          color, a * 0.6);
+      _glow(canvas, at(bt), (1 - bt) * 1.6 + 0.7, color, a);
+    }
+
+    // 7b) Major: cánh hoa ánh sáng rơi xoay chậm — "thiên hoa loạn trụy" chúc mừng phá cảnh.
+    if (major && bt > 0.2) {
+      final pt = (bt - 0.2) / 0.8;
+      final petal = Color.lerp(color, const Color(0xFFFFF3BF), 0.6)!;
+      for (var i = 0; i < 20; i++) {
+        final seed = (i * 29 % 100) / 100;
+        final x = (i + 0.5) / 20 * size.width + math.sin(pt * 6 + i) * 14;
+        final y = -10 + (pt * (0.7 + seed * 0.5) + seed * 0.3) * size.height * 0.8;
+        final a = math.sin(math.min(pt * 1.4, 1) * math.pi) * 0.75;
+        canvas.save();
+        canvas.translate(x, y);
+        canvas.rotate(pt * 8 + i);
+        final k = s / 260; // cỡ cánh theo màn — màn thật ~400dp, 5px là mất hút
+        canvas.scale(k, k * (0.4 + 0.6 * math.cos(pt * 10 + i).abs())); // lật cánh
+        final path = Path()
+          ..moveTo(0, -5)
+          ..quadraticBezierTo(3.4, 0, 0, 5)
+          ..quadraticBezierTo(-3.4, 0, 0, -5);
+        canvas.drawPath(
+          path,
+          Paint()
+            ..shader = RadialGradient(colors: [
+              Colors.white.withValues(alpha: a),
+              petal.withValues(alpha: a * 0.7),
+            ]).createShader(const Rect.fromLTRB(-4, -5, 4, 5)),
+        );
+        canvas.restore();
+      }
     }
 
     // 8) NẤC 2: shader godray + bloom phủ additive lên trên (chỉ major, sau hội tụ)

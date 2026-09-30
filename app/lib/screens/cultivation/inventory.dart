@@ -57,6 +57,7 @@ class EquipRow extends ConsumerWidget {
               it != null
                   ? PixelIcon(
                       it['pixel'] as String,
+                      code: it['code'] as String?,
                       grade: it['grade'] as int,
                       size: 28,
                     )
@@ -230,6 +231,7 @@ class _InventoryGridState extends ConsumerState<InventoryGrid> {
                         Center(
                           child: PixelIcon(
                             it['pixel'] as String,
+                            code: it['code'] as String?,
                             grade: grade,
                             size: 32,
                           ),
@@ -355,7 +357,8 @@ Future<void> _showItemPopup(
             children: [
               Row(
                 children: [
-                  PixelIcon(it['pixel'] as String, grade: grade, size: 30),
+                  PixelIcon(it['pixel'] as String,
+                      code: it['code'] as String?, grade: grade, size: 30),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Column(

@@ -3,12 +3,14 @@ import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
-import 'package:lottie/lottie.dart';
 
 import '../../cultivation.dart';
 import '../../data.dart';
 import 'painters_fx.dart';
+import 'painters_lightning.dart';
+import 'painters_qi.dart';
 import 'pixel.dart';
 import 'preview.dart';
 
@@ -34,7 +36,7 @@ class AdvanceFxDialog extends StatefulWidget {
 }
 
 class _AdvanceFxDialogState extends State<AdvanceFxDialog>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   static const _cloudEnd = 0.18;
   // mốc lộ kết quả — hằng dùng chung với BurstPainter (painters_fx.dart)
   static const _resultStart = advanceResultStart;
@@ -44,9 +46,15 @@ class _AdvanceFxDialogState extends State<AdvanceFxDialog>
     // Đại cảnh giới cần đủ nhịp tụ mây → ba đạo lôi → dư chấn; tiểu cảnh giới gọn hơn.
     duration: Duration(milliseconds: widget.major ? 8000 : 1250),
   )..forward();
+  // Đồng hồ liên tục (đơn vị vòng 4s) cho linh khí quấn quanh — không reset như _ctrl.
+  final _qiTime = ValueNotifier<double>(0);
+  late final Ticker _qiTicker; // tạo + chạy trong initState (late lười sẽ không bao giờ start)
   bool _tammaPhase = false; // pha Tâm Ma trước khi lộ kết quả đột phá
   Timer? _tammaTimer;
   ui.FragmentShader? _shader; // nấc 2 (major); null = fallback về nấc 1
+  // Tâm Ma 3D: 2 bản shader (sau/trước ảnh) — null = TammaPainter canvas cũ
+  (ui.FragmentShader, ui.FragmentShader)? _tammaShaders;
+  ui.FragmentShader? _storm; // trần mây kiếp 3D — null = mây canvas
 
   Future<void> _loadShader() async {
     try {
@@ -57,11 +65,26 @@ class _AdvanceFxDialogState extends State<AdvanceFxDialog>
     } catch (_) {
       // shader lỗi/thiết bị không hỗ trợ → giữ nguyên hiệu ứng nấc 1
     }
+    try {
+      final prog = await ui.FragmentProgram.fromAsset('shaders/storm.frag');
+      if (mounted) setState(() => _storm = prog.fragmentShader());
+    } catch (_) {}
+  }
+
+  Future<void> _loadTammaShader() async {
+    try {
+      final prog = await ui.FragmentProgram.fromAsset('shaders/tamma.frag');
+      if (mounted) {
+        setState(() => _tammaShaders = (prog.fragmentShader(), prog.fragmentShader()));
+      }
+    } catch (_) {}
   }
 
   @override
   void initState() {
     super.initState();
+    _qiTicker = createTicker((e) => _qiTime.value = e.inMicroseconds / 4e6)
+      ..start();
     _ctrl.addStatusListener((status) {
       if (status == AnimationStatus.completed) _impactHaptic();
     });
@@ -69,6 +92,7 @@ class _AdvanceFxDialogState extends State<AdvanceFxDialog>
     // đại cảnh giới có Tâm Ma → diễn ~1.9s rồi mới sang kết quả đột phá
     if (widget.result['tamma'] != null) {
       _tammaPhase = true;
+      _loadTammaShader();
       HapticFeedback.mediumImpact(); // vào khảo nghiệm
       _tammaTimer = Timer(const Duration(milliseconds: 2200), () {
         if (mounted) {
@@ -95,7 +119,12 @@ class _AdvanceFxDialogState extends State<AdvanceFxDialog>
   @override
   void dispose() {
     _tammaTimer?.cancel();
+    _qiTicker.dispose();
+    _qiTime.dispose();
     _shader?.dispose();
+    _storm?.dispose();
+    _tammaShaders?.$1.dispose();
+    _tammaShaders?.$2.dispose();
     _ctrl.dispose();
     super.dispose();
   }
@@ -104,7 +133,15 @@ class _AdvanceFxDialogState extends State<AdvanceFxDialog>
   Widget build(BuildContext context) {
     final t = Theme.of(context).textTheme;
     final r = widget.result;
-    if (_tammaPhase) return _tammaView(t, r['tamma'] as Rec);
+    if (_tammaPhase) {
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          _backdrop(false, const Color(0xFF7048E8)),
+          _tammaView(t, r['tamma'] as Rec),
+        ],
+      );
+    }
     final ok = r['success'] == true;
     final realm = r['realm'] as int;
     final grade = (realm + 1) ~/ 2;
@@ -119,6 +156,7 @@ class _AdvanceFxDialogState extends State<AdvanceFxDialog>
     return Stack(
       fit: StackFit.expand,
       children: [
+        if (widget.major) _backdrop(ok, color),
         // FX phủ TOÀN MÀN HÌNH → vụ nổ tan vào bóng tối, không chạm mép hộp thoại
         Positioned.fill(
           child: RepaintBoundary(
@@ -139,7 +177,6 @@ class _AdvanceFxDialogState extends State<AdvanceFxDialog>
         ),
         // Asset kiếp lôi động phủ lên thiên tượng Canvas, kết thúc đúng điểm nhân vật.
         ..._tribulationOverlays(loi),
-        ..._residualOverlays(ok),
         if (widget.major)
           AnimatedBuilder(
             animation: _ctrl,
@@ -151,11 +188,11 @@ class _AdvanceFxDialogState extends State<AdvanceFxDialog>
                 child: Center(
                   child: Material(
                     color: Colors.transparent,
-                    child: AnimatedCultivator(
+                    child: _hero(AnimatedCultivator(
                       realm: realm,
                       race: widget.race,
                       gender: widget.gender,
-                    ),
+                    )),
                   ),
                 ),
               ),
@@ -205,11 +242,30 @@ class _AdvanceFxDialogState extends State<AdvanceFxDialog>
                         curve: const Interval(0.15, 0.6, curve: Curves.easeOut),
                       ),
                       child: ok
-                          ? AnimatedCultivator(
-                              realm: realm,
-                              race: widget.race,
-                              gender: widget.gender,
-                            )
+                          ? _hero(AnimatedBuilder(
+                              animation: Listenable.merge([_ctrl, _qiTime]),
+                              // linh khí quấn quanh người: pháp trận + dải + hạt,
+                              // lớp sau dưới nhân vật, lớp trước đè lên (painters_qi)
+                              builder: (_, child) {
+                                final intro = widget.major
+                                    ? (_ctrl.value - _resultStart) / 0.1
+                                    : _ctrl.value / 0.7;
+                                return CustomPaint(
+                                  painter: QiVortexPainter(
+                                    _qiTime.value, intro, color,
+                                    front: false, major: widget.major),
+                                  foregroundPainter: QiVortexPainter(
+                                    _qiTime.value, intro, color,
+                                    front: true, major: widget.major),
+                                  child: child,
+                                );
+                              },
+                              child: AnimatedCultivator(
+                                realm: realm,
+                                race: widget.race,
+                                gender: widget.gender,
+                              ),
+                            ))
                           : Image.asset(
                               'assets/cult_fx/heart_demon.webp',
                               width: 126,
@@ -217,7 +273,8 @@ class _AdvanceFxDialogState extends State<AdvanceFxDialog>
                               fit: BoxFit.contain,
                             ),
                     ),
-                    const SizedBox(height: 10),
+                    // chừa chỗ cho pháp trận dưới chân (QiVortexPainter) khỏi đè tiêu đề
+                    SizedBox(height: ok ? 24 : 10),
                     // major thành công: tên "slam" vào (phóng to → co về, nảy) sau va chạm
                     FadeTransition(
                       opacity: widget.major && ok
@@ -239,7 +296,9 @@ class _AdvanceFxDialogState extends State<AdvanceFxDialog>
                                 ),
                               )
                             : const AlwaysStoppedAnimation(1.0),
-                        child: Text(
+                        child: widget.major && ok && !widget.ascend
+                            ? _realmTitle(t, realm, loi)
+                            : Text(
                           widget.ascend
                               ? (ok
                                     ? 'PHI THĂNG THÀNH CÔNG'
@@ -320,25 +379,30 @@ class _AdvanceFxDialogState extends State<AdvanceFxDialog>
     );
   }
 
-  /// WebP động chứa trọn ba đạo kiếp lôi, tự giữ đúng nhịp và điểm chạm nhân vật.
+  /// Lôi kiếp vẽ thủ tục (painters_lightning.dart): tia dẫn → cú đánh chớp lại →
+  /// tàn sáng, lóe trời, hồ quang + tia lửa tại điểm chạm (đầu nhân vật giữa màn).
   List<Widget> _tribulationOverlays(bool loi) {
     if (!loi) return const [];
     return [
       Positioned.fill(
-        child: AnimatedBuilder(
-          animation: _ctrl,
-          builder: (_, _) {
-            final active = _ctrl.value >= _cloudEnd && _ctrl.value < _resultStart;
-            if (!active) return const SizedBox.shrink();
-            final stormT =
-                ((_ctrl.value - _cloudEnd) / (_resultStart - _cloudEnd))
-                    .clamp(0.0, 1.0)
-                    .toDouble();
-            return CustomPaint(
-              painter: TribulationAtmospherePainter(stormT),
-              child: const TribulationPreview(),
-            );
-          },
+        child: IgnorePointer(
+          child: RepaintBoundary(
+            child: LayoutBuilder(
+              builder: (_, box) => AnimatedBuilder(
+                animation: _ctrl,
+                builder: (_, _) => CustomPaint(
+                  painter: LightningStormPainter(
+                    _ctrl.value,
+                    from: _cloudEnd,
+                    to: _resultStart,
+                    target: Offset(box.maxWidth / 2, box.maxHeight / 2 - 58),
+                    cloud: _storm,
+                    seconds: _ctrl.value * 8,
+                  ),
+                ),
+              ),
+            ),
+          ),
         ),
       ),
     ];
@@ -347,7 +411,7 @@ class _AdvanceFxDialogState extends State<AdvanceFxDialog>
   /// Rung màn theo từng đạo lôi chạm đất, đạo sau mạnh hơn đạo trước.
   Offset _strikeShake(double v) {
     var dx = 0.0, dy = 0.0;
-    for (final (i, hit) in [0.38, 0.56, 0.74].indexed) {
+    for (final (i, hit) in tribulationHits.indexed) {
       final d = v - hit;
       if (d >= 0 && d < 0.09) {
         final sh = (1 - d / 0.09) * (4 + i * 2.5);
@@ -358,68 +422,78 @@ class _AdvanceFxDialogState extends State<AdvanceFxDialog>
     return Offset(dx, dy);
   }
 
-  /// Hào quang + sét tàn dư chỉ xuất hiện SAU khi thành công.
-  /// major: mount lúc lộ kết quả (mount muộn để Lottie tự chạy đúng lúc);
-  /// minor: mount ngay từ đầu.
-  List<Widget> _residualOverlays(bool ok) {
-    if (!ok) return const [];
-    final phase = CurvedAnimation(
-      parent: _ctrl,
-      curve: const Interval(_resultStart, 1, curve: Curves.easeOut),
-    );
-    return [
-      // aura linh khí xoáy quanh nhân vật — mọi lần thành công, xoay lặp
-      // liên tục tới khi đóng dialog
-      Positioned.fill(
-        child: AnimatedBuilder(
-          animation: _ctrl,
-          builder: (_, child) =>
-              !widget.major || _ctrl.value >= _resultStart
-              ? child!
-              : const SizedBox.shrink(),
-          child: Align(
-            alignment: const Alignment(0, -0.18),
-            child: FractionallySizedBox(
-              widthFactor: widget.major ? 0.9 : 0.6,
-              child: AspectRatio(
-                aspectRatio: 1,
-                child: Lottie.asset(
-                  'assets/cult_fx/fx_aura.json',
-                  repeat: true,
-                  fit: BoxFit.contain,
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-      if (widget.major)
-        Positioned.fill(
-          child: AnimatedBuilder(
-            animation: _ctrl,
-            builder: (_, child) => Offstage(
-              offstage: _ctrl.value < _resultStart,
-              child: child,
-            ),
-            child: Align(
-              alignment: const Alignment(0, -0.45),
-              child: FractionallySizedBox(
-                widthFactor: 0.95,
-                child: Lottie.asset(
-                  'assets/cult_fx/fx_lightning.json',
-                  controller: phase,
-                  repeat: false,
-                  fit: BoxFit.contain,
-                ),
-              ),
-            ),
-          ),
-        ),
-    ];
-  }
-
   /// Pha Tâm Ma (~1.9s, tự chuyển sang kết quả): linh thể co giãn và trôi nhẹ,
   /// tím đạo nếu áp chế được, đỏ ma + rung nếu bị quấy nhiễu.
+  /// Phông nền điện ảnh phủ kín (chỉ đại cảnh giới) — che UI app phía sau.
+  Widget _backdrop(bool ok, Color color) => Positioned.fill(
+        child: IgnorePointer(
+          child: RepaintBoundary(
+            child: AnimatedBuilder(
+              animation: Listenable.merge([_ctrl, _qiTime]),
+              builder: (_, _) => CustomPaint(
+                painter: MajorBackdropPainter(
+                  _tammaPhase ? 0.05 : _ctrl.value,
+                  _qiTime.value,
+                  color,
+                  ok: ok && !_tammaPhase,
+                  resultStart: _resultStart,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+  /// Đại cảnh giới: nhân vật là tâm điểm — phóng 1.6× (FittedBox giữ đúng layout,
+  /// painter tràn khung vẫn vẽ). Lên tầng giữ cỡ gốc.
+  Widget _hero(Widget cultivator) => widget.major
+      ? SizedBox(
+          width: 150 * 1.6,
+          height: 145 * 1.6,
+          child: FittedBox(clipBehavior: Clip.none, child: cultivator),
+        )
+      : cultivator;
+
+  /// Tiêu đề phá cảnh: dòng nhỏ giãn chữ + TÊN CẢNH GIỚI MỚI cỡ lớn, vàng chuyển sắc
+  /// có quầng sáng — thay dòng chữ nhỏ cũ lẫn vào nền.
+  Widget _realmTitle(TextTheme t, int realm, bool loi) {
+    const gold = [Color(0xFFFFF3BF), Color(0xFFFFD25A), Color(0xFFE8A80C)];
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          loi ? 'VƯỢT LÔI KIẾP · ĐỘT PHÁ' : 'ĐỘT PHÁ ĐẠI CẢNH GIỚI',
+          style: t.labelLarge?.copyWith(
+            color: const Color(0xFFFFE8A3),
+            letterSpacing: 4,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 4),
+        ShaderMask(
+          shaderCallback: (b) => const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: gold,
+          ).createShader(b),
+          child: Text(
+            realmNames[realm - 1].toUpperCase(),
+            textAlign: TextAlign.center,
+            style: t.displaySmall?.copyWith(
+              color: Colors.white,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 6,
+              shadows: const [
+                Shadow(color: Color(0xCCFFB300), blurRadius: 18),
+                Shadow(color: Color(0x88FF8F00), blurRadius: 36),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _tammaView(TextTheme t, Rec tm) {
     final win = tm['win'] == true;
     final color = win ? const Color(0xFF7048E8) : const Color(0xFFC92A2A);
@@ -434,7 +508,7 @@ class _AdvanceFxDialogState extends State<AdvanceFxDialog>
             return Transform.translate(
               offset: Offset(dx, 0),
               child: CustomPaint(
-                painter: TammaPainter(v, win),
+                painter: _tammaShaders == null ? TammaPainter(v, win) : null,
                 foregroundPainter: BurstPainter(v, color, win, false),
                 child: child,
               ),
@@ -445,22 +519,7 @@ class _AdvanceFxDialogState extends State<AdvanceFxDialog>
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                AnimatedBuilder(
-                  animation: _ctrl,
-                  builder: (_, child) {
-                    final pulse = 1 + math.sin(_ctrl.value * math.pi * 5) * 0.06;
-                    return Transform.translate(
-                      offset: Offset(0, math.sin(_ctrl.value * math.pi * 3) * 7),
-                      child: Transform.scale(scale: pulse, child: child),
-                    );
-                  },
-                  child: Image.asset(
-                    'assets/cult_fx/heart_demon.webp',
-                    width: 126,
-                    height: 126,
-                    fit: BoxFit.contain,
-                  ),
-                ),
+                _tammaHeart(win),
                 const SizedBox(height: 10),
                 Text(
                   'TÂM MA KHẢO NGHIỆM',
@@ -489,6 +548,43 @@ class _AdvanceFxDialogState extends State<AdvanceFxDialog>
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  /// Mặt quỷ: xoay phối cảnh 3D (lắc Y + gật X) giữa hai lớp khói thể tích.
+  Widget _tammaHeart(bool win) {
+    return AnimatedBuilder(
+      animation: _ctrl,
+      builder: (_, child) {
+        final v = _ctrl.value;
+        final sec = v * _ctrl.duration!.inMilliseconds / 1000;
+        final pulse = 1 + math.sin(v * math.pi * 5) * 0.06;
+        final face = Transform(
+          alignment: Alignment.center,
+          transform: Matrix4.identity()
+            ..setEntry(3, 2, 0.0022)
+            ..translateByDouble(0, math.sin(v * math.pi * 3) * 7, 0, 1)
+            ..rotateY(math.sin(sec * 1.7) * 0.55)
+            ..rotateX(math.sin(sec * 1.1) * 0.22)
+            ..scaleByDouble(pulse, pulse, 1, 1),
+          child: child,
+        );
+        final sh = _tammaShaders;
+        if (sh == null) return face;
+        // tiến trình trong pha Tâm Ma (2.2s đầu của timeline)
+        final p = (sec / 2.2).clamp(0.0, 1.0);
+        return CustomPaint(
+          painter: TammaVolumePainter(sh.$1, p, sec, win, front: false),
+          foregroundPainter: TammaVolumePainter(sh.$2, p, sec, win, front: true),
+          child: face,
+        );
+      },
+      child: Image.asset(
+        'assets/cult_fx/heart_demon.webp',
+        width: 126,
+        height: 126,
+        fit: BoxFit.contain,
       ),
     );
   }

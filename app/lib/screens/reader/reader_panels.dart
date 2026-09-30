@@ -272,7 +272,8 @@ class _GiftButtonState extends ConsumerState<GiftButton> {
                     fontStyle: FontStyle.italic,
                     color: Theme.of(ctx).colorScheme.onSurfaceVariant)),
             const SizedBox(height: 12),
-            PixelIcon(it['pixel'] as String, grade: grade, size: 72),
+            PixelIcon(it['pixel'] as String,
+                code: it['code'] as String?, grade: grade, size: 72),
             const SizedBox(height: 10),
             Text(it['name'] as String,
                 style: Theme.of(ctx)

@@ -52,6 +52,7 @@ class CultTab extends ConsumerWidget {
                       padding: const EdgeInsets.fromLTRB(10, 8, 12, 8),
                       child: Row(children: [
                         PixelIcon(it['pixel'] as String,
+                            code: it['code'] as String?,
                             grade: it['grade'] as int, size: 36),
                         const SizedBox(width: 10),
                         Expanded(
