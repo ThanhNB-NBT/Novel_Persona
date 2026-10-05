@@ -152,6 +152,7 @@ class _LlmUsageScreenState extends ConsumerState<LlmUsageScreen> {
               Text(
                 'Gemini ${fmtThousands(sum(of(day, 'gemini'), 'requests'))} · '
                 'NVIDIA ${fmtThousands(sum(of(day, 'nvidia'), 'requests'))} · '
+                'Clef ${fmtThousands(sum(of(day, 'cloudflare'), 'requests'))} · '
                 '429: ${sum(today, 'rate_limited')} · lỗi khác: ${sum(today, 'failed')}\n'
                 'token vào ${fmtThousands(sum(today, 'prompt_tokens'))} · '
                 'ra ${fmtThousands(sum(today, 'completion_tokens'))}',
@@ -176,6 +177,13 @@ class _LlmUsageScreenState extends ConsumerState<LlmUsageScreen> {
         if (of(day, 'nvidia').isNotEmpty)
           section('nvidia', Icons.swap_horiz_rounded, 'NVIDIA DỰ PHÒNG',
               Column(children: [for (final r in of(day, 'nvidia')) _usageRow(context, r)])),
+
+        // worker soat_nguoi_ma: Clef chấm dòng nghi gọi nhầm tên người. Trần ngày = knob
+        // soat_ten_rpd, đếm theo ngày UTC (reset 07:00 VN, khác mốc Gemini 14:00).
+        if (of(day, 'cloudflare').isNotEmpty)
+          section('cloudflare', Icons.fact_check_outlined, 'CLEF · SOÁT TÊN',
+              trailing: 'reset 07:00 VN',
+              Column(children: [for (final r in of(day, 'cloudflare')) _usageRow(context, r)])),
 
         if (healthRows.isNotEmpty)
           section('health', Icons.monitor_heart_outlined, 'SỨC KHỎE MODEL',
