@@ -351,8 +351,13 @@ class _CrawlTabState extends ConsumerState<CrawlTab> {
   // Chuỗi model: chọn trong danh mục thay vì gõ chuỗi 'tên RPM/TPM/RPD,…' (không ai nhớ nổi).
   Future<void> _pickModels(BuildContext context, WidgetRef ref, Rec s) async {
     final key = '${s['key']}';
+    final kind = modelListKindOf(key)!;
+    final settings = ref.read(crawlSettingsProvider).value ?? const <Rec>[];
     final v = await showModelPicker(context,
-        kind: modelListKindOf(key)!,
+        kind: kind,
+        catalog: kind == ModelListKind.nvidia
+            ? catalogFrom(settings, 'nvidia_catalog', nvidiaCatalogItems)
+            : catalogFrom(settings, 'gemini_catalog', geminiCatalog),
         title: _transLabels[key]?.$1 ?? key,
         value: '${s['value']}');
     if (v == null || v == s['value']) return;

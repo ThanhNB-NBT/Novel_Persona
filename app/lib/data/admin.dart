@@ -320,6 +320,42 @@ const nvidiaCatalog = <({String id, String note})>[
   (id: 'openai/gpt-oss-20b', note: 'Chưa đo'),
 ];
 
+/// Danh mục model sửa được từ app, khỏi phát hành bản mới khi có model mới: knob
+/// `gemini_catalog` / `nvidia_catalog` (worker_settings), mỗi model một dòng
+/// `id | RPM/TPM/RPD | ghi chú` (nvidia để trống trần). Knob trống/thiếu → danh mục ghi cứng.
+/// Knob nhiều dòng `a | b | c` → các dòng đã cắt cột, bỏ dòng trống.
+List<List<String>> _rows(String raw) => [
+      for (final line in raw.split('\n'))
+        if (line.trim().isNotEmpty) line.split('|').map((x) => x.trim()).toList(),
+    ];
+
+List<LlmCatalogItem> catalogFrom(List<Rec> settings, String key, List<LlmCatalogItem> fallback) {
+  final raw = '${settings.where((s) => s['key'] == key).firstOrNull?['value'] ?? ''}';
+  final out = <LlmCatalogItem>[];
+  for (final p in _rows(raw)) {
+    final lim = parseGeminiModels('${p.first} ${p.length > 1 ? p[1] : ''}').first;
+    out.add((id: p.first, note: p.length > 2 ? p[2] : '', rpm: lim.rpm, tpm: lim.tpm, rpd: lim.rpd));
+  }
+  return out.isEmpty ? fallback : out;
+}
+
+List<LlmCatalogItem> get nvidiaCatalogItems =>
+    [for (final m in nvidiaCatalog) (id: m.id, note: m.note, rpm: 40, tpm: 0, rpd: 0)];
+
+/// Nhãn provider cho màn Thống kê API — knob `thong_ke_provider`, mỗi dòng
+/// `provider | Nhãn | ghi chú phải`. Provider mới (worker ghi sổ llm_usage) tự hiện mục riêng;
+/// chưa khai nhãn thì hiện tên provider viết hoa.
+Map<String, ({String label, String? note})> providerLabels(List<Rec> settings) {
+  final raw = '${settings.where((s) => s['key'] == 'thong_ke_provider').firstOrNull?['value'] ?? ''}';
+  return {
+    for (final p in _rows(raw))
+      p.first: (
+        label: p.length > 1 && p[1].isNotEmpty ? p[1] : p.first,
+        note: p.length > 2 && p[2].isNotEmpty ? p[2] : null,
+      ),
+  };
+}
+
 /// Báo cáo term dịch sai chưa xử lý (góp ý auto-duyệt, chỉ soi khi bị báo cáo).
 final reportsProvider = FutureProvider.autoDispose<List<Rec>>((ref) async {
   return List<Rec>.from(

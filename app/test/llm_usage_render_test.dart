@@ -39,6 +39,8 @@ void main() {
         row(b, 'gemini', 'gemini#1', 'gemini-3.5-flash-lite', 120 + b * 10, rl: b == 3 ? 4 : 0),
         row(b, 'gemini', 'gemini#2', 'gemma-4-26b-a4b-it', 60),
         if (b % 3 == 0) row(b, 'nvidia', 'nvidia#1', 'google/gemma-4-31b-it', 140 - b * 5, f: 6),
+        // provider mới không có trong code app: phải tự hiện mục riêng, nhãn lấy từ knob
+        row(b, 'cloudflare', 'cloudflare#1', 'clef', 40 + b),
       ],
     ];
     await tester.pumpWidget(ProviderScope(
@@ -52,6 +54,10 @@ void main() {
                 'key': 'gemini_models',
                 'value': 'gemini-3.1-flash-lite 15/250000/500,gemini-3.5-flash-lite 15/250000/500,'
                     'gemma-4-26b-a4b-it 30/16000/14400,gemma-4-31b-it 30/16000/14400',
+              },
+              {
+                'key': 'thong_ke_provider',
+                'value': 'nvidia | NVIDIA dự phòng\ncloudflare | Clef · soát tên | reset 07:00 VN',
               },
             ]),
         tokenUsageProvider.overrideWith((ref) async => [

@@ -71,12 +71,22 @@ class _LlmUsageScreenState extends ConsumerState<LlmUsageScreen> {
     final settings = ref.watch(crawlSettingsProvider).value ?? const <Rec>[];
     final geminiRaw = '${settings.where((s) => s['key'] == 'gemini_models').firstOrNull?['value'] ?? ''}';
     final tokens = ref.watch(tokenUsageProvider).value ?? const <Rec>[];
+    // Provider lấy từ CHÍNH dữ liệu (worker ghi sổ provider mới là tự hiện), nhãn từ knob
+    // thong_ke_provider — thêm nguồn LLM mới không phải phát hành app.
+    final labels = providerLabels(settings);
+    String label(String p) => labels[p]?.label ?? p.toUpperCase();
 
     int sum(Iterable<Rec> rs, String f) => rs.fold(0, (a, r) => a + ((r[f] ?? 0) as int));
     Iterable<Rec> of(String dd, [String? provider]) =>
         rows.where((r) => r['day'] == dd && (provider == null || r['provider'] == provider));
 
     final today = of(day).toList();
+    final providers = {for (final r in rows) '${r['provider']}'}.toList()
+      ..sort((a, b) => a == 'gemini'
+          ? -1
+          : b == 'gemini'
+              ? 1
+              : sum(of(day, b), 'requests').compareTo(sum(of(day, a), 'requests')));
     final req = sum(today, 'requests');
     final ok = sum(today, 'ok');
 
@@ -124,7 +134,7 @@ class _LlmUsageScreenState extends ConsumerState<LlmUsageScreen> {
           Row(children: [
             _legend(context, cs.primary, 'Gemini'),
             const SizedBox(width: 14),
-            _legend(context, cs.tertiary, 'NVIDIA'),
+            _legend(context, cs.tertiary, 'Khác'),
             const Spacer(),
             Text('reset 14:00 VN',
                 style: t.labelSmall?.copyWith(color: cs.onSurfaceVariant)),
@@ -134,7 +144,7 @@ class _LlmUsageScreenState extends ConsumerState<LlmUsageScreen> {
             days: days.reversed.toList(),
             selected: day,
             gemini: (dd) => sum(of(dd, 'gemini'), 'requests'),
-            nvidia: (dd) => sum(of(dd, 'nvidia'), 'requests'),
+            nvidia: (dd) => sum(of(dd), 'requests') - sum(of(dd, 'gemini'), 'requests'),
             onTap: (dd) => setState(() => _day = dd == days.first ? null : dd),
           ),
         ])),
@@ -150,9 +160,7 @@ class _LlmUsageScreenState extends ConsumerState<LlmUsageScreen> {
               ]),
               const SizedBox(height: 10),
               Text(
-                'Gemini ${fmtThousands(sum(of(day, 'gemini'), 'requests'))} · '
-                'NVIDIA ${fmtThousands(sum(of(day, 'nvidia'), 'requests'))} · '
-                'Clef ${fmtThousands(sum(of(day, 'cloudflare'), 'requests'))} · '
+                '${[for (final p in providers) '${label(p)} ${fmtThousands(sum(of(day, p), 'requests'))}'].join(' · ')} · '
                 '429: ${sum(today, 'rate_limited')} · lỗi khác: ${sum(today, 'failed')}\n'
                 'token vào ${fmtThousands(sum(today, 'prompt_tokens'))} · '
                 'ra ${fmtThousands(sum(today, 'completion_tokens'))}',
@@ -174,16 +182,12 @@ class _LlmUsageScreenState extends ConsumerState<LlmUsageScreen> {
                 ..sort(),
             )),
 
-        if (of(day, 'nvidia').isNotEmpty)
-          section('nvidia', Icons.swap_horiz_rounded, 'NVIDIA DỰ PHÒNG',
-              Column(children: [for (final r in of(day, 'nvidia')) _usageRow(context, r)])),
-
-        // worker soat_nguoi_ma: Clef chấm dòng nghi gọi nhầm tên người. Trần ngày = knob
-        // soat_ten_rpd, đếm theo ngày UTC (reset 07:00 VN, khác mốc Gemini 14:00).
-        if (of(day, 'cloudflare').isNotEmpty)
-          section('cloudflare', Icons.fact_check_outlined, 'CLEF · SOÁT TÊN',
-              trailing: 'reset 07:00 VN',
-              Column(children: [for (final r in of(day, 'cloudflare')) _usageRow(context, r)])),
+        // mọi provider khác Gemini (Gemini có mục lượt-theo-key riêng ở trên)
+        for (final p in providers)
+          if (p != 'gemini' && of(day, p).isNotEmpty)
+            section(p, Icons.hub_outlined, label(p).toUpperCase(),
+                trailing: labels[p]?.note,
+                Column(children: [for (final r in of(day, p)) _usageRow(context, r)])),
 
         if (healthRows.isNotEmpty)
           section('health', Icons.monitor_heart_outlined, 'SỨC KHỎE MODEL',

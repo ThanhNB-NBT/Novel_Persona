@@ -25,7 +25,10 @@ typedef _Pick = ({String id, int rpm, int tpm, int rpd});
 /// (có ghi chú + trần theo nhà cung cấp), bấm trần để sửa số. Trả chuỗi đúng định dạng worker
 /// đọc (ngăn phẩy; gemini kèm `RPM/TPM/RPD`) hoặc null nếu huỷ.
 Future<String?> showModelPicker(BuildContext context,
-    {required ModelListKind kind, required String title, required String value}) {
+    {required ModelListKind kind,
+    required String title,
+    required String value,
+    required List<LlmCatalogItem> catalog}) {
   return showModalBottomSheet<String>(
     context: context,
     isScrollControlled: true,
@@ -33,7 +36,7 @@ Future<String?> showModelPicker(BuildContext context,
     showDragHandle: true,
     builder: (_) => FractionallySizedBox(
       heightFactor: 0.92,
-      child: _ModelPicker(kind: kind, title: title, value: value),
+      child: _ModelPicker(kind: kind, title: title, value: value, catalog: catalog),
     ),
   );
 }
@@ -41,7 +44,9 @@ Future<String?> showModelPicker(BuildContext context,
 class _ModelPicker extends StatefulWidget {
   final ModelListKind kind;
   final String title, value;
-  const _ModelPicker({required this.kind, required this.title, required this.value});
+  final List<LlmCatalogItem> catalog; // từ knob gemini_catalog / nvidia_catalog (catalogFrom)
+  const _ModelPicker(
+      {required this.kind, required this.title, required this.value, required this.catalog});
 
   @override
   State<_ModelPicker> createState() => _ModelPickerState();
@@ -64,8 +69,8 @@ class _ModelPickerState extends State<_ModelPicker> {
 
   // danh mục theo loại: (id, ghi chú, trần nếu là Gemini)
   List<({String id, String note, LlmCatalogItem? g})> get _catalog => switch (widget.kind) {
-        ModelListKind.nvidia => [for (final m in nvidiaCatalog) (id: m.id, note: m.note, g: null)],
-        _ => [for (final m in geminiCatalog) (id: m.id, note: m.note, g: m)],
+        ModelListKind.nvidia => [for (final m in widget.catalog) (id: m.id, note: m.note, g: null)],
+        _ => [for (final m in widget.catalog) (id: m.id, note: m.note, g: m)],
       };
 
   String? _noteOf(String id) => _catalog.where((c) => c.id == id).firstOrNull?.note;
@@ -75,7 +80,7 @@ class _ModelPickerState extends State<_ModelPicker> {
       .join(',');
 
   void _add(String id) {
-    final g = geminiCatalog.where((c) => c.id == id).firstOrNull;
+    final g = widget.catalog.where((c) => c.id == id).firstOrNull;
     setState(() => _picked.add((
           id: id,
           rpm: g?.rpm ?? 5,
