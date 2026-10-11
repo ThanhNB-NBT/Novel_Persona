@@ -6,8 +6,8 @@ riêng.
 
 ## 📱 Tải app
 
-**<https://novel-backend.novelnbt.workers.dev/tai-app/>** — trang tải, tự lấy bản phát hành mới nhất
-qua GitHub API nên không phải sửa tay mỗi lần tag. Đọc trên web: <https://novel-backend.novelnbt.workers.dev>.
+**<https://novel.120203.xyz/tai-app/>** — trang tải, tự lấy bản phát hành mới nhất
+qua GitHub API nên không phải sửa tay mỗi lần tag. Đọc trên web: <https://novel.120203.xyz>.
 
 Cài trực tiếp APK từ [Releases](https://github.com/ThanhNB-NBT/Novel_Persona/releases) cũng
 được; iOS thì xem [`app/IPHONE.md`](app/IPHONE.md).
