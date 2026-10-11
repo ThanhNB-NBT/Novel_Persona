@@ -60,9 +60,41 @@ void main() {
   });
 
   group('splitBySentence — tách đoạn dài thành câu dễ đọc', () {
-    test('contentParagraphs đổi 【】 thành [ ] (hết thụt nửa ô đầu đoạn)', () {
-      expect(contentParagraphs('【Haiz, phải nói sao đây?】\n\nHắn cười.'),
-          ['[Haiz, phải nói sao đây?]', 'Hắn cười.']);
+    test('contentParagraphs giữ 【】 gốc; [ ] chỉ áp lúc vẽ, cùng độ dài', () {
+      final paras = contentParagraphs('【Haiz, phải nói sao đây?】\n\nHắn cười.');
+      expect(paras, ['【Haiz, phải nói sao đây?】', 'Hắn cười.']);
+      expect(halfWidthBrackets(paras[0]), '[Haiz, phải nói sao đây?]');
+      expect(halfWidthBrackets(paras[0]).length, paras[0].length);
+    });
+
+    // Khối gửi làm p_para (edit_chapter_vi) / p_old (edit_chapter_para): không phải chuỗi
+    // con của content_vi thì server thay từ trên CẢ chương (migration 127).
+    test('mọi khối của contentParagraphs là chuỗi con của content', () {
+      const content = '【Hệ thống: nhiệm vụ hoàn thành, thưởng một trăm điểm.】 Em cười.\n'
+          'Ừ. Đi thôi.\n'
+          'Hắn đứng dậy rồi bước ra khỏi phòng thật chậm rãi. Em theo sau.\n'
+          'Ngắn. Cũng ngắn.  Hai khoảng trắng vẫn phải là chuỗi con nhé bạn.\n'
+          '  Đoạn thụt lề một câu.  ';
+      final paras = contentParagraphs(content);
+      expect(paras, isNotEmpty);
+      for (final b in paras) {
+        expect(content.contains(b), isTrue, reason: 'khối không nằm trong content: "$b"');
+        expect(b.contains('\n'), isFalse, reason: 'khối vắt qua dòng: "$b"');
+      }
+      // mẩu lẻ "Em cười." / "Em theo sau." ở lại khối của CHÍNH đoạn nó
+      expect(paras[0], endsWith('Em cười.'));
+      expect(paras[1], 'Ừ. Đi thôi.'); // đoạn 2 câu ngắn không bị nối lên đoạn trên
+      expect(paras[2], startsWith('Hắn đứng dậy'));
+    });
+
+    test('blockAt: khối chứa vùng chọn, kể cả khi đang ở trang lật', () {
+      final paras = ['Khối một đây.', '【Khối】 hai đây.', 'Khối ba.'];
+      expect(blockAt(paras, paras[1], 3), paras[1]); // chế độ cuộn
+      final page = paras.join('\n\n').substring(5).trim(); // trang bắt đầu giữa khối 1
+      final at = page.indexOf('hai'); // chạm "hai"
+      expect(blockAt(paras, page, at), paras[1]);
+      expect(blockAt(paras, page, page.indexOf('ba')), paras[2]);
+      expect(blockAt(paras, 'không có', 0), isNull);
     });
 
     test('đoạn 1 câu giữ nguyên (trim)', () {

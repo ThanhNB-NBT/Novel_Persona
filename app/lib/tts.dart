@@ -306,7 +306,7 @@ class TtsPlayer {
         paraAt.value = _at - _lead; // đọc tiêu đề → -1; đoạn nội dung → khớp reader
         try {
           // flutter_tts: 1 = ok, 0 = engine từ chối (thiếu giọng/engine chết)
-          final r = await _tts.speak(_paras[_at]);
+          final r = await _tts.speak(halfWidthBrackets(_paras[_at])); // khối gốc → đọc như chữ hiển thị
           if (r == 0) throw Exception('engine từ chối đọc');
         } catch (_) {
           await stop(); // engine TTS lỗi giữa chừng → tắt gọn thay vì kẹt im

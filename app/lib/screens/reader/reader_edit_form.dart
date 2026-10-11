@@ -421,7 +421,7 @@ extension _ReaderEditForm on _ReaderScreenState {
               width: double.infinity,
               // Câu tối nghĩa thì thay một từ không cứu được — mở luôn cả đoạn ra viết lại.
               child: OutlinedButton.icon(
-                onPressed: () => _editWholePara(block),
+                onPressed: _editWholePara,
                 icon: const Icon(Icons.notes_rounded),
                 label: const Text('Sửa cả đoạn'),
               ),

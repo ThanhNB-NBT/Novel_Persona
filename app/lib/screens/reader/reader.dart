@@ -61,6 +61,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   // Danh sách đoạn + tiêu đề đang render — để nút Nghe bắt đầu từ đoạn đang đọc, khớp
   // phân đoạn với máy đọc.
   List<String> _renderedParas = const [];
+  String _renderedContent = ''; // content_vi đang hiển thị — đối chiếu khối trước khi sửa
   String _renderedTitle = '';
 
   bool _restored = false;
@@ -348,9 +349,12 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     // string-replace, nên cặp từ thường ('em'→'muội') từng sinh ra "xmuội" khắp truyện.
     // Sửa từ thường vẫn có tác dụng — chỉ giới hạn trong chương đang đọc.
     final isName = _looksLikeName(w) && _looksLikeName(v);
+    final sel = _sel.value;
+    final para = sel == null ? null : _sourceBlock(sel);
+    if (para == null) return;
     try {
       // p_para = đoạn đang chạm → server chỉ sửa trong đoạn đó, chỗ khác trong chương yên
-      await editChapterText(novelId, chapterIndex, w, v, para: _sel.value?.block);
+      await editChapterText(novelId, chapterIndex, w, v, para: para);
       if (isName) await submitCorrection(novelId, w, v); // glossary cho chương dịch SAU
     } catch (e) {
       if (mounted) {
@@ -383,10 +387,24 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     }
   }
 
+  /// Khối GỐC chứa vùng chọn, gửi làm p_para/p_old. Chế độ lật trang thì sel.block là cả
+  /// trang → tra về khối thật. content_vi không chứa nguyên văn khối → KHÔNG gọi RPC:
+  /// edit_chapter_vi không tìm thấy p_para sẽ thay trên CẢ chương (migration 127).
+  String? _sourceBlock(Sel sel) {
+    final b = blockAt(_renderedParas, sel.block, sel.start);
+    if (b != null && _renderedContent.contains(b)) return b;
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Không xác định được đoạn này — tải lại chương rồi sửa.')));
+    return null;
+  }
+
   /// Viết lại NGUYÊN đoạn đang chạm — dialog nằm ở reader_dialogs.dart; lưu xong mới
   /// đóng form, refetch chương và báo "Đã sửa đoạn".
-  Future<void> _editWholePara(String block) async {
+  Future<void> _editWholePara() async {
     final messenger = ScaffoldMessenger.of(context);
+    final sel = _sel.value;
+    final block = sel == null ? null : _sourceBlock(sel);
+    if (block == null) return;
     final ok = await editWholeParaDialog(context,
         novelId: novelId, chapterIndex: chapterIndex, block: block);
     if (!ok) return;
@@ -594,6 +612,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
           final content = withoutLeadingPreviousEcho(
               (c['content_vi'] as String?) ?? '', previous?['content_vi'] as String?);
           final paras = contentParagraphs(content);
+          _renderedContent = (c['content_vi'] as String?) ?? '';
           _renderedParas = paras; // để nút Nghe bắt đầu từ ĐOẠN đang đọc, không từ đầu chương
           _renderedTitle = title;
           if (paras.isEmpty) {
@@ -946,7 +965,11 @@ class _TapPara extends StatelessWidget {
   /// Tách ra hàm riêng vì giờ phải cắt chuỗi theo NHIỀU mốc chứ không còn 3 mảnh.
   TextSpan _spans(ColorScheme cs, Sel? hl) {
     final marks = terms.isEmpty ? const <(int, int)>[] : glossaryRanges(para, terms);
-    if (marks.isEmpty && hl == null) return TextSpan(text: para, style: style);
+    // para là văn bản GỐC (khối gửi RPC); chỉ đổi ngoặc lúc vẽ — 1 ký tự lấy 1 ký tự nên
+    // các mốc cắt tính trên para dùng thẳng được.
+    if (marks.isEmpty && hl == null) {
+      return TextSpan(text: halfWidthBrackets(para), style: style);
+    }
 
     // Mốc cắt: đầu/cuối mọi vùng. Đi tuần tự, mỗi khúc tra xem nằm trong lớp nào.
     final cuts = <int>{0, para.length};
@@ -961,7 +984,7 @@ class _TapPara extends StatelessWidget {
       final inSel = hl != null && a >= hl.start && b <= hl.end;
       final inMark = marks.any((m) => a >= m.$1 && b <= m.$2);
       children.add(TextSpan(
-        text: para.substring(a, b),
+        text: halfWidthBrackets(para.substring(a, b)),
         style: inSel
             ? TextStyle(
                 backgroundColor: cs.error.withValues(alpha: 0.22),
@@ -999,7 +1022,7 @@ class _TapPara extends StatelessWidget {
               HapticFeedback.selectionClick();
               // đo lại layout chữ y hệt lúc render → vị trí chạm → chỉ số ký tự
               final tp = TextPainter(
-                text: TextSpan(text: para, style: style),
+                text: TextSpan(text: halfWidthBrackets(para), style: style),
                 textAlign: align,
                 textDirection: TextDirection.ltr,
                 textScaler: scaler,
