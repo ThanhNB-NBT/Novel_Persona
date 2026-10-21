@@ -103,7 +103,7 @@ class _JobStats extends ConsumerWidget {
             Text('$blocked job thiếu bản gốc, nguồn đang tắt',
                 style: t.labelSmall?.copyWith(color: cs.error)),
           ],
-          // Nói rõ danh sách bên dưới bị cắt — "đang crawl" cũng chỉ đếm trong cửa sổ này.
+          // Nói rõ danh sách bên dưới bị cắt — "chờ tải gốc" cũng chỉ đếm trong cửa sổ này.
           if (pending > shown) ...[
             const SizedBox(height: 8),
             Text('Danh sách hiển thị $shown job đầu hàng đợi',
@@ -283,7 +283,7 @@ class _JobRow extends StatelessWidget {
       if (j['source_unavailable'] == true)
         'nguồn không khả dụng'
       else if (status == 'pending' && j['downloading'] == true)
-        'đang crawl nguồn',
+        'chờ tải bản gốc',
       priorityLabel(j['priority'] as int),
       if ((j['attempts'] ?? 0) > 0) '${j['attempts']} lần thử',
       // Đang chạy → khoe thời gian đã chạy (token chỉ có khi dịch xong, ghi 1 lần ở cuối).

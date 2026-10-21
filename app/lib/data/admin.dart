@@ -174,7 +174,7 @@ final adminJobsProvider = FutureProvider.autoDispose<List<Rec>>((ref) async {
   // running/failed xen giữa cũng xếp theo cùng khoá — tab gộp theo truyện nên không lệch nghĩa
   sortLikeClaim(jobs);
   // Job pending mà chương CHƯA có content_zh = crawler đang tải nguồn → gắn cờ
-  // 'downloading' để tab Worker hiện "đang crawl" thay vì "chờ" chung chung.
+  // 'downloading' để tab Worker hiện "chờ tải gốc" thay vì "chờ" chung chung.
   final pendingIds = [
     for (final j in jobs)
       if (j['status'] == 'pending' && j['chapter_id'] != null) j['chapter_id'] as int
