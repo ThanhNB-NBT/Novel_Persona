@@ -93,7 +93,8 @@ class _JobStats extends ConsumerWidget {
         child: Column(children: [
           Row(children: [
             cell('$running', 'đang dịch', cs.primary),
-            cell('$crawling', 'đang crawl', crawling > 0 ? cs.tertiary : null),
+            // job dịch chờ tải bản gốc chương — KHÔNG phải crawler quét nguồn (xem tab Crawl)
+            cell('$crawling', 'chờ tải gốc', crawling > 0 ? cs.tertiary : null),
             cell('$pending', 'chờ dịch', null),
             cell('$failed', 'lỗi', failed > 0 ? cs.error : null),
           ]),
