@@ -998,7 +998,7 @@ packages:
     source: hosted
     version: "1.13.8"
   sherpa_onnx_android_armeabi:
-    dependency: "direct main"
+    dependency: transitive
     description:
       name: sherpa_onnx_android_armeabi
       sha256: fe81837bd12f67d136a456c6d2b39876caaba09edd77761cb527cb170dac2d2a

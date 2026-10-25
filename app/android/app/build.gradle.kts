@@ -64,6 +64,20 @@ android {
     }
 }
 
+android {
+    // Nén .so trong APK (mặc định để nguyên, onnxruntime ~21 MB); đổi lại lúc cài giải nén ra đĩa
+    packaging { jniLibs.useLegacyPackaging = true }
+}
+
+// Bản release chỉ có Dart arm64 (CI: --target-platform android-arm64) → bỏ .so kiến trúc khác
+// mà plugin kéo vào (sherpa x86_64/armeabi ~30 MB). Không dùng ndk.abiFilters: plugin Flutter
+// đặt sẵn danh sách mặc định và Gradle gộp hai danh sách chứ không thay thế.
+androidComponents {
+    onVariants(selector().withBuildType("release")) { v ->
+        v.packaging.jniLibs.excludes.addAll(listOf("lib/x86_64/**", "lib/x86/**", "lib/armeabi-v7a/**"))
+    }
+}
+
 kotlin {
     compilerOptions {
         jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
