@@ -62,6 +62,11 @@ COLORWAYS = {
     'bach': (None, 0.10, 2.10),  # bạch ngân — bạch, tiên, vô cấu
     'tho': (26, 0.65, 1.25),     # nâu đất — thổ, bố, thảo
     'lam': (218, 1.00, 1.00),    # lam gốc (cho hình gốc không phải lam: ấn, bùa)
+    'cam': (24, 1.20, 1.25),      # cam hỏa — hỏa, dương, viêm
+    'thanh': (168, 0.95, 1.10),   # thanh ngọc — kim lạnh, thanh khiết
+    'hong': (322, 0.85, 1.35),    # hồng đào — hỗn độn, mộng
+    'vang': (50, 1.10, 1.50),     # vàng chanh — hoàng, thổ sáng
+    'ngoc': (95, 1.00, 1.30),     # lục non — sinh cơ, thái cực
 }
 
 

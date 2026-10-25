@@ -462,6 +462,11 @@ const itemArt = <String, String>{
   'lt_ha_pham': 'stone_tho', 'lt_linh_tinh': 'stone_kim', 'lt_trung_pham': 'stone_bang',
   'lt_thuong_pham': 'stone_tu', 'lt_cuc_pham': 'stone_xich', 'lt_tien_thach': 'stone_bach',
   'lt_thuy_linh': 'stone_lam', 'lt_loi_linh': 'stone_huyen',
+  // 141 Luyện Đan Lô
+  'dd_hoi_xuan': 'pill_bich', 'dd_tay_tuy2': 'pill_tho', 'dd_hon_nguyen': 'pill_hong',
+  'dd_ho_than2': 'shield_pill_bich', 'dd_tu_dien': 'void_pill_lam', 'dd_thai_thanh': 'void_pill_bang',
+  'lt_hoang_linh': 'stone_vang', 'lt_moc_linh': 'stone_bich', 'lt_hoa_linh': 'stone_cam',
+  'lt_kim_linh': 'stone_thanh', 'lt_hon_don': 'stone_hong', 'lt_thai_cuc': 'stone_ngoc',
   // công pháp
   'cp_tho_nap': 'book_tho', 'cp_huyen_thien': 'book_bang', 'cp_kim_cang_co': 'book_kim',
   'cp_thanh_moc': 'book_bich', 'cp_thai_co': 'book_huyen', 'cp_loi_dinh': 'book_tu',
