@@ -1,7 +1,7 @@
 name: novel_reader
 description: "Gac Truyen - doc tieu thuyet mang Trung Quoc dich sang tieng Viet bang LLM."
 publish_to: 'none'
-version: 2.2.1+38
+version: 2.3.0+39
 
 environment:
   sdk: ^3.12.2
@@ -34,6 +34,10 @@ dependencies:
   path_provider: ^2.1.6
   share_plus: ^12.0.2
   cached_network_image: ^4.0.0
+  sherpa_onnx: 1.13.8
+  sherpa_onnx_android_armeabi: 1.13.8
+  audioplayers: 6.8.1
+  archive: ^4.5.2
 
 dev_dependencies:
   flutter_test:
@@ -41,6 +45,7 @@ dev_dependencies:
 
   flutter_lints: ^6.0.0
   flutter_launcher_icons: ^0.14.3
+  sherpa_onnx_android_x86_64: 1.13.8
 
 # Icon app "Gác Truyện" — GT thư pháp trên nền chàm. Sinh lại:
 #   flutter pub run flutter_launcher_icons

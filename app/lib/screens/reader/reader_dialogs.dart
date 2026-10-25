@@ -4,6 +4,7 @@ import '../../widgets.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../data.dart';
+import '../../offline_voice.dart';
 import '../../tts.dart';
 import 'reader_text.dart';
 
@@ -157,24 +158,45 @@ Future<void> showTtsVoiceSheet(
                     return Center(
                         child: CircularProgressIndicator(color: fg.withValues(alpha: 0.7)));
                   }
-                  final items = snapshot.data ?? const [];
                   selected ??= TtsPlayer.i.selectedVoiceKey;
-                  if (items.isEmpty) {
-                    return Center(
-                      child: Text(
-                        'Chưa tìm thấy giọng Tiếng Việt.\n'
-                        'Hãy tải voice Tiếng Việt trong cài đặt TTS/Trợ năng của máy.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: fg.withValues(alpha: 0.7), height: 1.5),
-                      ),
-                    );
-                  }
+                  return ValueListenableBuilder<Set<String>>(
+                    valueListenable: OfflineVoice.i.installed,
+                    builder: (_, _, _) {
+                  final offline = TtsPlayer.offlineVoices();
+                  // mỗi gói: đầu mục (tải/xoá) rồi tới các người đọc của gói; sau cùng là giọng của máy
+                  final rows = <Object>[
+                    for (final p in OfflineVoice.packs) ...[
+                      p,
+                      ...offline.where((v) =>
+                          v.key == OfflineVoice.idOf(p, 0) || v.key.startsWith('offline:${p.id}:')),
+                    ],
+                    ...?snapshot.data,
+                  ];
                   return ListView.separated(
-                    itemCount: items.length,
+                    itemCount: rows.length,
                     separatorBuilder: (_, _) =>
                         Divider(height: 1, color: fg.withValues(alpha: 0.1)),
                     itemBuilder: (_, index) {
-                      final voice = items[index];
+                      final row = rows[index];
+                      if (row is VoicePack) {
+                        return _OfflinePackTile(
+                          pack: row,
+                          fg: fg,
+                          onReady: () async {
+                            final v = TtsPlayer.offlineVoices()
+                                .firstWhere((v) => v.key == OfflineVoice.idOf(row, 0));
+                            await TtsPlayer.i.selectVoice(v);
+                            if (sheetContext.mounted) setLocal(() => selected = v.key);
+                          },
+                          onDelete: () async {
+                            await TtsPlayer.i.dropPack(row);
+                            if (sheetContext.mounted) {
+                              setLocal(() => selected = TtsPlayer.i.selectedVoiceKey);
+                            }
+                          },
+                        );
+                      }
+                      final voice = row as TtsVoice;
                       final active = selected == voice.key;
 
                       Future<void> choose({required bool preview}) async {
@@ -203,7 +225,9 @@ Future<void> showTtsVoiceSheet(
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(color: fg, fontWeight: FontWeight.w600)),
                         subtitle: Text(
-                          '${voice.qualityLabel}${voice.networkRequired ? ' · cần mạng' : ' · offline'}',
+                          OfflineVoice.isOffline(voice.key)
+                              ? 'Offline · đọc được ở mọi nơi'
+                              : '${voice.qualityLabel}${voice.networkRequired ? ' · cần mạng' : ' · offline'}',
                           style: TextStyle(color: fg.withValues(alpha: 0.58)),
                         ),
                         trailing: IconButton(
@@ -214,6 +238,8 @@ Future<void> showTtsVoiceSheet(
                         ),
                         onTap: () => choose(preview: false),
                       );
+                    },
+                  );
                     },
                   );
                 },
@@ -421,4 +447,80 @@ Future<void> showBookmarksSheet(BuildContext context,
       ),
     ),
   );
+}
+
+/// Đầu mục một gói giọng offline: tải (kèm tiến độ) hoặc xoá (hỏi lại trước khi xoá).
+class _OfflinePackTile extends StatelessWidget {
+  const _OfflinePackTile(
+      {required this.pack, required this.fg, required this.onReady, required this.onDelete});
+  final VoicePack pack;
+  final Color fg;
+  final Future<void> Function() onReady;
+  final Future<void> Function() onDelete;
+
+  @override
+  Widget build(BuildContext context) => ValueListenableBuilder<String?>(
+        valueListenable: OfflineVoice.i.downloading,
+        builder: (context, busy, _) => ValueListenableBuilder<double>(
+          valueListenable: OfflineVoice.i.progress,
+          builder: (context, p, _) {
+            final loading = busy == pack.id;
+            final has = OfflineVoice.i.installed.value.contains(pack.id);
+            final err = loading || has ? null : OfflineVoice.i.error;
+            return ListTile(
+              contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+              title: Text(pack.title, style: TextStyle(color: fg, fontWeight: FontWeight.w700)),
+              subtitle: Text(
+                loading
+                    ? 'Đang tải… ${(p * 100).round()}%'
+                    : has
+                        ? 'Offline · ~${pack.sizeMb} MB trên máy'
+                        : err ?? 'Tải một lần ~${pack.sizeMb} MB, sau đó đọc không cần mạng',
+                style: TextStyle(
+                    color: err != null
+                        ? Theme.of(context).colorScheme.error
+                        : fg.withValues(alpha: 0.58)),
+              ),
+              trailing: loading
+                  ? SizedBox.square(
+                      dimension: 24,
+                      child: CircularProgressIndicator(value: p, strokeWidth: 2.5, color: fg))
+                  : has
+                      ? IconButton(
+                          tooltip: 'Xoá ${pack.title}',
+                          icon: Icon(Icons.delete_outline_rounded,
+                              color: fg.withValues(alpha: 0.6)),
+                          onPressed: () async {
+                            final ok = await showDialog<bool>(
+                              context: context,
+                              builder: (c) => AlertDialog(
+                                title: Text('Xoá ${pack.title}?'),
+                                content: Text(
+                                    'Giải phóng ~${pack.sizeMb} MB. Cần nghe lại thì tải lại.'),
+                                actions: [
+                                  TextButton(
+                                      onPressed: () => Navigator.pop(c, false),
+                                      child: const Text('Huỷ')),
+                                  TextButton(
+                                      onPressed: () => Navigator.pop(c, true),
+                                      child: const Text('Xoá')),
+                                ],
+                              ),
+                            );
+                            if (ok == true) await onDelete();
+                          },
+                        )
+                      : IconButton(
+                          tooltip: 'Tải ${pack.title}',
+                          icon: Icon(Icons.download_rounded, color: fg.withValues(alpha: 0.7)),
+                          onPressed: busy != null
+                              ? null
+                              : () async {
+                                  if (await OfflineVoice.i.download(pack) == null) await onReady();
+                                },
+                        ),
+            );
+          },
+        ),
+      );
 }

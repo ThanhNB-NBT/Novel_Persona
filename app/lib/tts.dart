@@ -6,6 +6,7 @@ import 'package:flutter_tts/flutter_tts.dart';
 
 import 'chapter_paras.dart';
 import 'data.dart';
+import 'offline_voice.dart';
 
 class TtsVoice {
   final String name;
@@ -76,6 +77,17 @@ class TtsPlayer {
   static final TtsPlayer i = TtsPlayer._();
 
   final FlutterTts _tts = FlutterTts();
+
+  /// Giọng offline của các gói đã tải — đứng đầu danh sách.
+  static List<TtsVoice> offlineVoices() => [
+        for (final p in OfflineVoice.packs)
+          if (OfflineVoice.i.installed.value.contains(p.id))
+            for (final (sid, name) in p.voices)
+              TtsVoice(name: name, locale: 'vi-VN', identifier: OfflineVoice.idOf(p, sid), quality: 400),
+      ];
+  static const _previewText = 'Bạn đang nghe thử giọng đọc tiếng Việt của Gác Truyện.';
+  bool get _offline => OfflineVoice.isOffline(_selectedVoice?.key);
+  double get _speed => (rate * 2).clamp(0.5, 2.0); // rate 0.5 = 1× (thang flutter_tts)
   final ValueNotifier<TtsState> state = ValueNotifier(const TtsState());
 
   /// Đoạn NỘI DUNG đang đọc (khớp chỉ số đoạn màn hình reader hiển thị; -1 = đang đọc
@@ -105,27 +117,38 @@ class TtsPlayer {
     final selected = _chooseVoice(_voices);
     if (selected != null) {
       _selectedVoice = selected;
-      await _tts.setVoice(selected.selector);
+      if (!OfflineVoice.isOffline(selected.key)) await _tts.setVoice(selected.selector);
     }
     return List.unmodifiable(_voices);
   }
 
   Future<void> selectVoice(TtsVoice voice) async {
-    await _tts.setVoice(voice.selector);
+    if (!OfflineVoice.isOffline(voice.key)) await _tts.setVoice(voice.selector);
     await prefs.setString('tts_voice_key', voice.key);
     _selectedVoice = voice;
   }
 
   Future<void> previewVoice(TtsVoice voice) async {
     await _tts.stop();
+    await OfflineVoice.i.stop();
     await selectVoice(voice);
+    if (_offline) {
+      await OfflineVoice.i.say(voice.key, _previewText, _speed);
+      return;
+    }
     await _tts.setSpeechRate(rate);
-    await _tts.speak('Bạn đang nghe thử giọng đọc tiếng Việt của Gác Truyện.');
+    await _tts.speak(_previewText);
   }
 
   TtsVoice? _chooseVoice(List<TtsVoice> voices) {
-    if (voices.isEmpty) return null;
     final saved = prefs.getString('tts_voice_key');
+    // giọng offline: khi user đã chọn, hoặc máy không có giọng Việt nào khác
+    final offline = offlineVoices();
+    final pick = OfflineVoice.i.ready(saved)
+        ? saved
+        : (voices.isEmpty ? OfflineVoice.i.firstReady() : null);
+    if (pick != null) return offline.firstWhere((v) => v.key == pick);
+    if (voices.isEmpty) return null;
     return voices.where((voice) => voice.key == saved).firstOrNull ?? voices.first;
   }
 
@@ -156,6 +179,7 @@ class TtsPlayer {
   /// giọng vi-VN chứ không phải code, phải nói ra chứ đừng im.
   Future<String?> _init() async {
     if (_inited) return null;
+    await OfflineVoice.i.check();
     // Từng bước config bọc riêng: máy thiếu giọng vi-VN / lệnh không có trên nền
     // tảng đó thì vẫn đọc bằng giọng mặc định — đừng để chết im trước khi speak
     // (bug 2026-07-08: setIosAudioCategory gọi trên Android nổ → không ra tiếng).
@@ -177,9 +201,8 @@ class TtsPlayer {
           }
         }
         if (!ok) {
-          warn = 'Máy chưa có giọng đọc tiếng Việt. Cài "Giọng nói Google" '
-              '(Google TTS) rồi tải dữ liệu giọng Tiếng Việt trong '
-              'Cài đặt > Trợ năng > Chuyển văn bản thành giọng nói.';
+          warn = 'Máy chưa có giọng đọc tiếng Việt. Tải "Giọng Gác Truyện" (offline, '
+              '~20 MB) trong mục Giọng đọc, hoặc cài giọng Tiếng Việt của Google TTS.';
         }
       } catch (e) {
         warn = 'Không kiểm tra được engine TTS: $e';
@@ -190,16 +213,15 @@ class TtsPlayer {
     } catch (e) { debugPrint('TTS: bỏ qua lỗi cấu hình: $e'); }
     _voices = await _readVietnameseVoices();
     _selectedVoice = _chooseVoice(_voices);
-    if (_selectedVoice != null) {
+    if (_offline) {
+      warn = null; // giọng offline không cần engine/giọng của máy
+    } else if (_selectedVoice != null) {
       try {
         await _tts.setVoice(_selectedVoice!.selector);
       } catch (e) { debugPrint('TTS: bỏ qua lỗi cấu hình: $e'); }
     } else {
-      warn ??= !kIsWeb && Platform.isIOS
-          ? 'Máy chưa có giọng tiếng Việt. Vào Cài đặt > Trợ năng > Nội dung được đọc '
-              '> Giọng nói để tải giọng Tiếng Việt.'
-          : 'Máy chưa có giọng đọc tiếng Việt. Hãy tải dữ liệu giọng Tiếng Việt '
-              'trong phần Chuyển văn bản thành giọng nói của hệ thống.';
+      warn ??= 'Máy chưa có giọng đọc tiếng Việt. Tải "Giọng Gác Truyện" (offline, '
+          '~20 MB) trong mục Giọng đọc.';
     }
     try {
       await _tts.setSpeechRate(rate);
@@ -234,6 +256,7 @@ class TtsPlayer {
   Future<void> pause() async {
     _gen++; // vòng phát thoát sau utterance hiện tại
     await _tts.stop();
+    await OfflineVoice.i.stop();
     if (state.value.active) {
       state.value = TtsState(
           novelId: state.value.novelId,
@@ -251,9 +274,22 @@ class TtsPlayer {
     await _playLoop(gen, s.novelId!, s.chapterIndex, resumeAt: _at);
   }
 
+  /// Xoá gói giọng; đang đọc/chọn giọng của gói đó thì dừng + bỏ chọn (lần sau tự chọn lại).
+  Future<void> dropPack(VoicePack p) async {
+    final key = _selectedVoice?.key ?? '';
+    if (key == OfflineVoice.idOf(p, 0) || key.startsWith('offline:${p.id}:')) {
+      await stop();
+      _selectedVoice = null;
+      _inited = false;
+      await prefs.remove('tts_voice_key');
+    }
+    await OfflineVoice.i.delete(p);
+  }
+
   Future<void> stop() async {
     _gen++;
     await _tts.stop();
+    await OfflineVoice.i.stop();
     paraAt.value = -1;
     state.value = const TtsState();
   }
@@ -305,9 +341,15 @@ class TtsPlayer {
         if (gen != _gen) return;
         paraAt.value = _at - _lead; // đọc tiêu đề → -1; đoạn nội dung → khớp reader
         try {
-          // flutter_tts: 1 = ok, 0 = engine từ chối (thiếu giọng/engine chết)
-          final r = await _tts.speak(halfWidthBrackets(_paras[_at])); // khối gốc → đọc như chữ hiển thị
-          if (r == 0) throw Exception('engine từ chối đọc');
+          final text = halfWidthBrackets(_paras[_at]); // khối gốc → đọc như chữ hiển thị
+          if (_offline) {
+            final next = _at + 1 < _paras.length ? halfWidthBrackets(_paras[_at + 1]) : null;
+            if (!await _sayOffline(gen, text, next)) throw Exception('giọng offline lỗi');
+          } else {
+            // flutter_tts: 1 = ok, 0 = engine từ chối (thiếu giọng/engine chết)
+            final r = await _tts.speak(text);
+            if (r == 0) throw Exception('engine từ chối đọc');
+          }
         } catch (_) {
           await stop(); // engine TTS lỗi giữa chừng → tắt gọn thay vì kẹt im
           return;
@@ -319,4 +361,37 @@ class TtsPlayer {
       index += 1; // hết chương → đọc tiếp chương sau
     }
   }
+
+  /// Offline sinh xong cả khối mới phát → cắt khối ngắn cho đỡ chờ, sinh trước khối kế
+  /// (kể cả khối đầu đoạn sau) trong lúc khối này đang phát.
+  Future<bool> _sayOffline(int gen, String text, String? nextPara) async {
+    final cs = ttsChunks(text);
+    for (var k = 0; k < cs.length; k++) {
+      if (gen != _gen) return true;
+      final next = k + 1 < cs.length ? cs[k + 1] : (nextPara == null ? null : ttsChunks(nextPara).first);
+      final id = _selectedVoice!.key;
+      if (next != null) OfflineVoice.i.prefetch(id, next, _speed);
+      if (!await OfflineVoice.i.say(id, cs[k], _speed)) return false;
+    }
+    return true;
+  }
+}
+
+/// Cắt chuỗi dài thành khối ≤ [max] ký tự, ưu tiên cắt sau dấu câu.
+List<String> ttsChunks(String s, {int max = 300}) {
+  final out = <String>[];
+  var rest = s;
+  while (rest.length > max) {
+    final head = rest.substring(0, max);
+    var cut = -1;
+    for (final p in const ['.', '!', '?', '…', '”', ';', ',']) {
+      final i = head.lastIndexOf(p);
+      if (i > cut) cut = i;
+    }
+    if (cut < max ~/ 2) cut = max - 1;
+    out.add(rest.substring(0, cut + 1));
+    rest = rest.substring(cut + 1);
+  }
+  if (rest.trim().isNotEmpty || out.isEmpty) out.add(rest);
+  return out;
 }
