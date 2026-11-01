@@ -1,7 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show AuthException;
 
 import '../../data.dart';
+import '../../login_guard.dart';
 import '../../widgets.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -17,15 +21,40 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _busy = false;
   bool _obscure = true;
   String? _error;
+  Duration _wait = LoginGuard.read().wait();
+  Timer? _tick;
+
+  void _startTick() {
+    _tick?.cancel();
+    if (_wait == Duration.zero) return;
+    _tick = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      setState(() => _wait = LoginGuard.read().wait());
+      if (_wait == Duration.zero) _tick?.cancel();
+    });
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _startTick();
+  }
 
   @override
   void dispose() {
+    _tick?.cancel();
     _email.dispose();
     _password.dispose();
     super.dispose();
   }
 
   Future<void> _submit() async {
+    final left = LoginGuard.read().wait();
+    if (left > Duration.zero) {
+      setState(() => _wait = left); // đang khoá: không gọi API
+      _startTick();
+      return;
+    }
     final email = _email.text.trim();
     if (email.isEmpty || !email.contains('@')) {
       setState(() => _error = 'Nhập email hợp lệ');
@@ -41,6 +70,7 @@ class _LoginScreenState extends State<LoginScreen> {
     });
     try {
       await sb.auth.signInWithPassword(email: email, password: _password.text);
+      await LoginGuard.empty.save();
       // Tới màn này bằng 2 đường: push từ Cài đặt (pop về chỗ cũ), hoặc bị
       // _authGate đẩy tới — lúc đó ngăn xếp có thể rỗng, pop là kẹt màn trắng.
       // Provider phụ thuộc auth tự nạp lại (authStateProvider).
@@ -52,7 +82,14 @@ class _LoginScreenState extends State<LoginScreen> {
         }
       }
     } catch (e) {
-      setState(() => _error = loiDeHieu(e));
+      // Chỉ lỗi do thông tin sai / bị server giới hạn mới tính; mất mạng thì không phạt.
+      if (e is AuthException && (e.statusCode == '400' || e.statusCode == '429')) {
+        final g = LoginGuard.read().failed();
+        await g.save();
+        _wait = g.wait();
+        _startTick();
+      }
+      if (mounted) setState(() => _error = loiDeHieu(e));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -107,7 +144,13 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                   ),
-                  if (_error != null)
+                  if (_wait > Duration.zero)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 12),
+                      child: Text('Sai quá nhiều lần — thử lại sau ${_wait.inSeconds + 1} giây',
+                          style: t.bodySmall?.copyWith(color: cs.error)),
+                    )
+                  else if (_error != null)
                     Padding(
                       padding: const EdgeInsets.only(top: 12),
                       child: Row(children: [
@@ -120,7 +163,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   SizedBox(
                     height: 52,
                     child: FilledButton(
-                      onPressed: _busy ? null : _submit,
+                      onPressed: _busy || _wait > Duration.zero ? null : _submit,
                       child: _busy
                           ? SizedBox(width: 20, height: 20,
                               child: CircularProgressIndicator(strokeWidth: 2.4, color: cs.onPrimary))
